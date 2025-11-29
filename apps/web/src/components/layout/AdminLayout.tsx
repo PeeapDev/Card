@@ -151,7 +151,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto">
+          <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             {navSections.map((section, sectionIndex) => (
               <div key={sectionIndex}>
                 {section.title && (
