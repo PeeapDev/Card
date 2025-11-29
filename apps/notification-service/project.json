@@ -1,0 +1,48 @@
+{
+  "name": "notification-service",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/notification-service/src",
+  "projectType": "application",
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/notification-service",
+        "main": "apps/notification-service/src/main.ts",
+        "tsConfig": "apps/notification-service/tsconfig.app.json",
+        "webpackConfig": "apps/notification-service/webpack.config.js",
+        "generatePackageJson": true
+      },
+      "configurations": {
+        "development": {
+          "optimization": false,
+          "sourceMap": true
+        },
+        "production": {
+          "optimization": true,
+          "sourceMap": false
+        }
+      }
+    },
+    "serve": {
+      "executor": "@nx/js:node",
+      "defaultConfiguration": "development",
+      "options": {
+        "buildTarget": "notification-service:build"
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "notification-service:build:development"
+        },
+        "production": {
+          "buildTarget": "notification-service:build:production"
+        }
+      }
+    }
+  },
+  "tags": []
+}

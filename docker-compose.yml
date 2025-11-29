@@ -1,0 +1,356 @@
+services:
+  # ===========================================
+  # INFRASTRUCTURE SERVICES
+  # ===========================================
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: payment-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-payment_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-payment_secret_password}
+      POSTGRES_DB: ${POSTGRES_DB:-payment_system}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-payment_admin}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - payment-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: payment-redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_secret_password}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_secret_password}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - payment-network
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: payment-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-payment_mq}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-rabbitmq_secret_password}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./infrastructure/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ./infrastructure/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - payment-network
+    restart: unless-stopped
+
+  # ===========================================
+  # API GATEWAY
+  # ===========================================
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: apps/api-gateway/Dockerfile
+    container_name: payment-api-gateway
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=3000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_secret_password}
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key}
+      - IDENTITY_SERVICE_URL=http://identity-service:3001
+      - ACCOUNT_SERVICE_URL=http://account-service:3002
+      - CARD_SERVICE_URL=http://card-service:3003
+      - TRANSACTION_SERVICE_URL=http://transaction-service:3004
+      - MERCHANT_SERVICE_URL=http://merchant-service:3005
+      - DEVELOPER_SERVICE_URL=http://developer-service:3008
+    ports:
+      - "3000:3000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - payment-network
+    restart: unless-stopped
+
+  # ===========================================
+  # DOMAIN SERVICES
+  # ===========================================
+
+  identity-service:
+    build:
+      context: .
+      dockerfile: apps/identity-service/Dockerfile
+    container_name: payment-identity-service
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=3001
+      - DATABASE_URL=postgresql://identity_user:${IDENTITY_DB_PASSWORD:-identity_db_password}@postgres:5432/identity_db
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_secret_password}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-payment_mq}:${RABBITMQ_PASSWORD:-rabbitmq_secret_password}@rabbitmq:5672
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - payment-network
+    restart: unless-stopped
+
+  account-service:
+    build:
+      context: .
+      dockerfile: apps/account-service/Dockerfile
+    container_name: payment-account-service
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=3002
+      - GRPC_PORT=50051
+      - DATABASE_URL=postgresql://account_user:${ACCOUNT_DB_PASSWORD:-account_db_password}@postgres:5432/account_db
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_secret_password}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-payment_mq}:${RABBITMQ_PASSWORD:-rabbitmq_secret_password}@rabbitmq:5672
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - payment-network
+    restart: unless-stopped
+
+  card-service:
+    build:
+      context: .
+      dockerfile: apps/card-service/Dockerfile
+    container_name: payment-card-service
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=3003
+      - GRPC_PORT=50052
+      - DATABASE_URL=postgresql://card_user:${CARD_DB_PASSWORD:-card_db_password}@postgres:5432/card_db
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_secret_password}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-payment_mq}:${RABBITMQ_PASSWORD:-rabbitmq_secret_password}@rabbitmq:5672
+      - ENCRYPTION_MASTER_KEY=${ENCRYPTION_MASTER_KEY:-your-32-byte-encryption-key}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - payment-network
+    restart: unless-stopped
+
+  transaction-service:
+    build:
+      context: .
+      dockerfile: apps/transaction-service/Dockerfile
+    container_name: payment-transaction-service
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=3004
+      - DATABASE_URL=postgresql://transaction_user:${TRANSACTION_DB_PASSWORD:-transaction_db_password}@postgres:5432/transaction_db
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_secret_password}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-payment_mq}:${RABBITMQ_PASSWORD:-rabbitmq_secret_password}@rabbitmq:5672
+      - FRAUD_SERVICE_GRPC_URL=fraud-service:50053
+      - ACCOUNT_SERVICE_GRPC_URL=account-service:50051
+      - CARD_SERVICE_GRPC_URL=card-service:50052
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      fraud-service:
+        condition: service_started
+      account-service:
+        condition: service_started
+      card-service:
+        condition: service_started
+    networks:
+      - payment-network
+    restart: unless-stopped
+
+  merchant-service:
+    build:
+      context: .
+      dockerfile: apps/merchant-service/Dockerfile
+    container_name: payment-merchant-service
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=3005
+      - DATABASE_URL=postgresql://merchant_user:${MERCHANT_DB_PASSWORD:-merchant_db_password}@postgres:5432/merchant_db
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_secret_password}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-payment_mq}:${RABBITMQ_PASSWORD:-rabbitmq_secret_password}@rabbitmq:5672
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - payment-network
+    restart: unless-stopped
+
+  settlement-service:
+    build:
+      context: .
+      dockerfile: apps/settlement-service/Dockerfile
+    container_name: payment-settlement-service
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=3006
+      - DATABASE_URL=postgresql://settlement_user:${SETTLEMENT_DB_PASSWORD:-settlement_db_password}@postgres:5432/settlement_db
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_secret_password}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-payment_mq}:${RABBITMQ_PASSWORD:-rabbitmq_secret_password}@rabbitmq:5672
+      - ACCOUNT_SERVICE_GRPC_URL=account-service:50051
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - payment-network
+    restart: unless-stopped
+
+  fraud-service:
+    build:
+      context: .
+      dockerfile: apps/fraud-service/Dockerfile
+    container_name: payment-fraud-service
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=3007
+      - GRPC_PORT=50053
+      - DATABASE_URL=postgresql://fraud_user:${FRAUD_DB_PASSWORD:-fraud_db_password}@postgres:5432/fraud_db
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_secret_password}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-payment_mq}:${RABBITMQ_PASSWORD:-rabbitmq_secret_password}@rabbitmq:5672
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - payment-network
+    restart: unless-stopped
+
+  developer-service:
+    build:
+      context: .
+      dockerfile: apps/developer-service/Dockerfile
+    container_name: payment-developer-service
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=3008
+      - DATABASE_URL=postgresql://developer_user:${DEVELOPER_DB_PASSWORD:-developer_db_password}@postgres:5432/developer_db
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_secret_password}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-payment_mq}:${RABBITMQ_PASSWORD:-rabbitmq_secret_password}@rabbitmq:5672
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - payment-network
+    restart: unless-stopped
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: apps/notification-service/Dockerfile
+    container_name: payment-notification-service
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=3009
+      - DATABASE_URL=postgresql://notification_user:${NOTIFICATION_DB_PASSWORD:-notification_db_password}@postgres:5432/notification_db
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_secret_password}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-payment_mq}:${RABBITMQ_PASSWORD:-rabbitmq_secret_password}@rabbitmq:5672
+      - SMTP_HOST=${SMTP_HOST:-smtp.example.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-noreply@example.com}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-smtp_password}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - payment-network
+    restart: unless-stopped
+
+# ===========================================
+# VOLUMES
+# ===========================================
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+
+# ===========================================
+# NETWORKS
+# ===========================================
+
+networks:
+  payment-network:
+    driver: bridge
+    name: payment-network

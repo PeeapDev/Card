@@ -1,0 +1,48 @@
+{
+  "name": "settlement-service",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/settlement-service/src",
+  "projectType": "application",
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/settlement-service",
+        "main": "apps/settlement-service/src/main.ts",
+        "tsConfig": "apps/settlement-service/tsconfig.app.json",
+        "webpackConfig": "apps/settlement-service/webpack.config.js",
+        "generatePackageJson": true
+      },
+      "configurations": {
+        "development": {
+          "optimization": false,
+          "sourceMap": true
+        },
+        "production": {
+          "optimization": true,
+          "sourceMap": false
+        }
+      }
+    },
+    "serve": {
+      "executor": "@nx/js:node",
+      "defaultConfiguration": "development",
+      "options": {
+        "buildTarget": "settlement-service:build"
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "settlement-service:build:development"
+        },
+        "production": {
+          "buildTarget": "settlement-service:build:production"
+        }
+      }
+    }
+  },
+  "tags": []
+}

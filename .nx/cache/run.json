@@ -1,0 +1,21 @@
+{
+  "run": {
+    "command": "nx serve identity-service",
+    "startTime": "2025-11-29T08:10:08.030Z",
+    "endTime": "2025-11-29T08:13:18.692Z",
+    "inner": false
+  },
+  "tasks": [
+    {
+      "taskId": "identity-service:serve:development",
+      "target": "serve",
+      "projectName": "identity-service",
+      "hash": "2850596784233533702",
+      "startTime": "2025-11-29T08:10:08.033Z",
+      "endTime": "2025-11-29T08:13:18.692Z",
+      "params": "",
+      "cacheStatus": "cache-miss",
+      "status": 1
+    }
+  ]
+}

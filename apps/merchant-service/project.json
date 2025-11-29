@@ -1,0 +1,48 @@
+{
+  "name": "merchant-service",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/merchant-service/src",
+  "projectType": "application",
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/merchant-service",
+        "main": "apps/merchant-service/src/main.ts",
+        "tsConfig": "apps/merchant-service/tsconfig.app.json",
+        "webpackConfig": "apps/merchant-service/webpack.config.js",
+        "generatePackageJson": true
+      },
+      "configurations": {
+        "development": {
+          "optimization": false,
+          "sourceMap": true
+        },
+        "production": {
+          "optimization": true,
+          "sourceMap": false
+        }
+      }
+    },
+    "serve": {
+      "executor": "@nx/js:node",
+      "defaultConfiguration": "development",
+      "options": {
+        "buildTarget": "merchant-service:build"
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "merchant-service:build:development"
+        },
+        "production": {
+          "buildTarget": "merchant-service:build:production"
+        }
+      }
+    }
+  },
+  "tags": []
+}

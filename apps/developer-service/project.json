@@ -1,0 +1,48 @@
+{
+  "name": "developer-service",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/developer-service/src",
+  "projectType": "application",
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/developer-service",
+        "main": "apps/developer-service/src/main.ts",
+        "tsConfig": "apps/developer-service/tsconfig.app.json",
+        "webpackConfig": "apps/developer-service/webpack.config.js",
+        "generatePackageJson": true
+      },
+      "configurations": {
+        "development": {
+          "optimization": false,
+          "sourceMap": true
+        },
+        "production": {
+          "optimization": true,
+          "sourceMap": false
+        }
+      }
+    },
+    "serve": {
+      "executor": "@nx/js:node",
+      "defaultConfiguration": "development",
+      "options": {
+        "buildTarget": "developer-service:build"
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "developer-service:build:development"
+        },
+        "production": {
+          "buildTarget": "developer-service:build:production"
+        }
+      }
+    }
+  },
+  "tags": []
+}

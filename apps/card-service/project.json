@@ -1,0 +1,48 @@
+{
+  "name": "card-service",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/card-service/src",
+  "projectType": "application",
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/card-service",
+        "main": "apps/card-service/src/main.ts",
+        "tsConfig": "apps/card-service/tsconfig.app.json",
+        "webpackConfig": "apps/card-service/webpack.config.js",
+        "generatePackageJson": true
+      },
+      "configurations": {
+        "development": {
+          "optimization": false,
+          "sourceMap": true
+        },
+        "production": {
+          "optimization": true,
+          "sourceMap": false
+        }
+      }
+    },
+    "serve": {
+      "executor": "@nx/js:node",
+      "defaultConfiguration": "development",
+      "options": {
+        "buildTarget": "card-service:build"
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "card-service:build:development"
+        },
+        "production": {
+          "buildTarget": "card-service:build:production"
+        }
+      }
+    }
+  },
+  "tags": []
+}

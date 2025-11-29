@@ -1,0 +1,48 @@
+{
+  "name": "fraud-service",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/fraud-service/src",
+  "projectType": "application",
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/fraud-service",
+        "main": "apps/fraud-service/src/main.ts",
+        "tsConfig": "apps/fraud-service/tsconfig.app.json",
+        "webpackConfig": "apps/fraud-service/webpack.config.js",
+        "generatePackageJson": true
+      },
+      "configurations": {
+        "development": {
+          "optimization": false,
+          "sourceMap": true
+        },
+        "production": {
+          "optimization": true,
+          "sourceMap": false
+        }
+      }
+    },
+    "serve": {
+      "executor": "@nx/js:node",
+      "defaultConfiguration": "development",
+      "options": {
+        "buildTarget": "fraud-service:build"
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "fraud-service:build:development"
+        },
+        "production": {
+          "buildTarget": "fraud-service:build:production"
+        }
+      }
+    }
+  },
+  "tags": []
+}

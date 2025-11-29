@@ -1,0 +1,48 @@
+{
+  "name": "identity-service",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/identity-service/src",
+  "projectType": "application",
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/identity-service",
+        "main": "apps/identity-service/src/main.ts",
+        "tsConfig": "apps/identity-service/tsconfig.app.json",
+        "webpackConfig": "apps/identity-service/webpack.config.js",
+        "generatePackageJson": true
+      },
+      "configurations": {
+        "development": {
+          "optimization": false,
+          "sourceMap": true
+        },
+        "production": {
+          "optimization": true,
+          "sourceMap": false
+        }
+      }
+    },
+    "serve": {
+      "executor": "@nx/js:node",
+      "defaultConfiguration": "development",
+      "options": {
+        "buildTarget": "identity-service:build"
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "identity-service:build:development"
+        },
+        "production": {
+          "buildTarget": "identity-service:build:production"
+        }
+      }
+    }
+  },
+  "tags": []
+}

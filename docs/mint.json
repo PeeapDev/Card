@@ -1,0 +1,135 @@
+{
+  "$schema": "https://mintlify.com/schema.json",
+  "name": "PaymentSystem Documentation",
+  "logo": {
+    "dark": "/logo/dark.svg",
+    "light": "/logo/light.svg"
+  },
+  "favicon": "/favicon.svg",
+  "colors": {
+    "primary": "#2563EB",
+    "light": "#3B82F6",
+    "dark": "#1D4ED8",
+    "anchors": {
+      "from": "#2563EB",
+      "to": "#1D4ED8"
+    }
+  },
+  "topbarLinks": [
+    {
+      "name": "Support",
+      "url": "mailto:support@paymentsystem.com"
+    }
+  ],
+  "topbarCtaButton": {
+    "name": "Dashboard",
+    "url": "https://dashboard.paymentsystem.com"
+  },
+  "tabs": [
+    {
+      "name": "API Reference",
+      "url": "api-reference"
+    }
+  ],
+  "anchors": [
+    {
+      "name": "Documentation",
+      "icon": "book-open",
+      "url": "https://docs.paymentsystem.com"
+    },
+    {
+      "name": "GitHub",
+      "icon": "github",
+      "url": "https://github.com/paymentsystem"
+    }
+  ],
+  "navigation": [
+    {
+      "group": "Get Started",
+      "pages": [
+        "introduction",
+        "quickstart",
+        "authentication"
+      ]
+    },
+    {
+      "group": "Core Concepts",
+      "pages": [
+        "concepts/wallets",
+        "concepts/cards",
+        "concepts/transactions",
+        "concepts/kyc"
+      ]
+    },
+    {
+      "group": "API Reference",
+      "pages": [
+        "api-reference/introduction",
+        {
+          "group": "Authentication",
+          "pages": [
+            "api-reference/auth/register",
+            "api-reference/auth/login",
+            "api-reference/auth/refresh",
+            "api-reference/auth/logout"
+          ]
+        },
+        {
+          "group": "Wallets",
+          "pages": [
+            "api-reference/wallets/list",
+            "api-reference/wallets/create",
+            "api-reference/wallets/get",
+            "api-reference/wallets/deposit",
+            "api-reference/wallets/transfer"
+          ]
+        },
+        {
+          "group": "Cards",
+          "pages": [
+            "api-reference/cards/list",
+            "api-reference/cards/create",
+            "api-reference/cards/get",
+            "api-reference/cards/activate",
+            "api-reference/cards/block"
+          ]
+        },
+        {
+          "group": "Transactions",
+          "pages": [
+            "api-reference/transactions/list",
+            "api-reference/transactions/get",
+            "api-reference/transactions/authorize"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "SDKs",
+      "pages": [
+        "sdks/overview",
+        "sdks/javascript",
+        "sdks/python"
+      ]
+    },
+    {
+      "group": "Webhooks",
+      "pages": [
+        "webhooks/overview",
+        "webhooks/events",
+        "webhooks/signatures"
+      ]
+    }
+  ],
+  "footerSocials": {
+    "twitter": "https://twitter.com/paymentsystem",
+    "github": "https://github.com/paymentsystem",
+    "linkedin": "https://www.linkedin.com/company/paymentsystem"
+  },
+  "api": {
+    "baseUrl": "https://api.paymentsystem.com/v1",
+    "auth": {
+      "method": "bearer"
+    }
+  }
+}

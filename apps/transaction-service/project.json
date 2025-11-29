@@ -1,0 +1,48 @@
+{
+  "name": "transaction-service",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/transaction-service/src",
+  "projectType": "application",
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/transaction-service",
+        "main": "apps/transaction-service/src/main.ts",
+        "tsConfig": "apps/transaction-service/tsconfig.app.json",
+        "webpackConfig": "apps/transaction-service/webpack.config.js",
+        "generatePackageJson": true
+      },
+      "configurations": {
+        "development": {
+          "optimization": false,
+          "sourceMap": true
+        },
+        "production": {
+          "optimization": true,
+          "sourceMap": false
+        }
+      }
+    },
+    "serve": {
+      "executor": "@nx/js:node",
+      "defaultConfiguration": "development",
+      "options": {
+        "buildTarget": "transaction-service:build"
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "transaction-service:build:development"
+        },
+        "production": {
+          "buildTarget": "transaction-service:build:production"
+        }
+      }
+    }
+  },
+  "tags": []
+}

@@ -1,0 +1,48 @@
+{
+  "name": "account-service",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/account-service/src",
+  "projectType": "application",
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/account-service",
+        "main": "apps/account-service/src/main.ts",
+        "tsConfig": "apps/account-service/tsconfig.app.json",
+        "webpackConfig": "apps/account-service/webpack.config.js",
+        "generatePackageJson": true
+      },
+      "configurations": {
+        "development": {
+          "optimization": false,
+          "sourceMap": true
+        },
+        "production": {
+          "optimization": true,
+          "sourceMap": false
+        }
+      }
+    },
+    "serve": {
+      "executor": "@nx/js:node",
+      "defaultConfiguration": "development",
+      "options": {
+        "buildTarget": "account-service:build"
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "account-service:build:development"
+        },
+        "production": {
+          "buildTarget": "account-service:build:production"
+        }
+      }
+    }
+  },
+  "tags": []
+}
