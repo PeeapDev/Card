@@ -45,6 +45,7 @@ export function StandaloneDeveloperLayout({
     { path: `${basePath}/webhooks`, label: 'Webhooks', icon: Webhook },
     { path: `${basePath}/logs`, label: 'Request Logs', icon: Activity },
     { path: `${basePath}/sandbox`, label: 'Sandbox', icon: TestTube },
+    { path: `${basePath}/simulator`, label: 'Simulator', icon: Terminal },
     { path: `${basePath}/docs`, label: 'SDK & Libraries', icon: FileCode },
     { path: `${basePath}/settings`, label: 'Settings', icon: Settings },
   ];

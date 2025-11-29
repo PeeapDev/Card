@@ -51,7 +51,7 @@ const mockSDKs: SDKVersion[] = [
     size: '245 KB',
     downloads: 1234,
     updatedAt: '2024-01-15',
-    downloadUrl: '/sdk/softtouch-sdk-1.0.0.tgz',
+    downloadUrl: '/sdk/cardpay-sdk-1.0.0.tgz',
     isActive: true,
   },
   {
@@ -62,7 +62,7 @@ const mockSDKs: SDKVersion[] = [
     size: '180 KB',
     downloads: 856,
     updatedAt: '2024-01-15',
-    downloadUrl: '/sdk/softtouch-sdk-1.0.0.tar.gz',
+    downloadUrl: '/sdk/cardpay-sdk-1.0.0.tar.gz',
     isActive: true,
   },
   {
@@ -73,7 +73,7 @@ const mockSDKs: SDKVersion[] = [
     size: '156 KB',
     downloads: 432,
     updatedAt: '2024-01-15',
-    downloadUrl: '/sdk/softtouch-sdk-1.0.0.zip',
+    downloadUrl: '/sdk/cardpay-sdk-1.0.0.zip',
     isActive: true,
   },
   {
@@ -84,7 +84,7 @@ const mockSDKs: SDKVersion[] = [
     size: '312 KB',
     downloads: 287,
     updatedAt: '2024-01-10',
-    downloadUrl: '/sdk/softtouch-sdk-0.9.0.tar.gz',
+    downloadUrl: '/sdk/cardpay-sdk-0.9.0.tar.gz',
     isActive: false,
   },
 ];
@@ -139,7 +139,7 @@ export function DevelopersPage() {
   const copyInstallCommand = (language: string) => {
     const commands: Record<string, string> = {
       javascript: 'npm install @softtouch/sdk',
-      python: 'pip install softtouch-sdk',
+      python: 'pip install cardpay-sdk',
       php: 'composer require softtouch/sdk',
       go: 'go get github.com/softtouch/sdk-go',
     };

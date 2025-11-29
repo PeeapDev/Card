@@ -7,6 +7,7 @@ import {
   RequestLogsPanel,
   SandboxPanel,
   SDKDocsPanel,
+  SimulatorPanel,
 } from '@/components/developer/DeveloperPanel';
 
 export function AgentDeveloperPage() {
@@ -27,6 +28,7 @@ export function AgentDeveloperPage() {
           <Route path="webhooks" element={<WebhooksPanel />} />
           <Route path="logs" element={<RequestLogsPanel />} />
           <Route path="sandbox" element={<SandboxPanel />} />
+          <Route path="simulator" element={<SimulatorPanel />} />
           <Route path="docs" element={<SDKDocsPanel />} />
         </Routes>
       </div>

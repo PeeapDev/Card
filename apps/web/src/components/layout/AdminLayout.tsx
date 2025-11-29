@@ -49,6 +49,14 @@ const navSections: NavSection[] = [
     ],
   },
   {
+    title: 'User Management',
+    items: [
+      { path: '/admin/users', label: 'Users', icon: Users },
+      { path: '/admin/merchants', label: 'Merchants', icon: Wallet },
+      { path: '/admin/agents', label: 'Agents', icon: Layers },
+    ],
+  },
+  {
     title: 'Core',
     items: [
       { path: '/admin/accounts', label: 'Accounts', icon: Wallet },
@@ -66,10 +74,16 @@ const navSections: NavSection[] = [
     ],
   },
   {
+    title: 'Configuration',
+    items: [
+      { path: '/admin/fees', label: 'Fees & Pricing', icon: CreditCard },
+      { path: '/admin/subscriptions', label: 'Subscriptions', icon: Wallet },
+    ],
+  },
+  {
     title: 'Developer',
     items: [
-      { path: '/admin/developers', label: 'Developers', icon: Code2 },
-      { path: '/admin/simulator', label: 'Simulator', icon: TestTube },
+      { path: '/admin/developers', label: 'SDK Management', icon: Code2 },
       { path: '/admin/webhooks', label: 'Webhooks', icon: Webhook },
     ],
   },

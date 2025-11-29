@@ -17,7 +17,6 @@ import { ApiDocsPage } from '@/pages/ApiDocsPage';
 // Admin Pages
 import { AdminDashboard } from '@/pages/admin/AdminDashboard';
 import { AuthorizationPage } from '@/pages/admin/AuthorizationPage';
-import { SimulatorPage } from '@/pages/admin/SimulatorPage';
 import { WebhooksPage } from '@/pages/admin/WebhooksPage';
 import { CompliancePage } from '@/pages/admin/CompliancePage';
 import { CustomersPage } from '@/pages/admin/CustomersPage';
@@ -27,6 +26,11 @@ import { CardProgramsPage } from '@/pages/admin/CardProgramsPage';
 import { TransactionsPage as AdminTransactionsPage } from '@/pages/admin/TransactionsPage';
 import { DisputesPage } from '@/pages/admin/DisputesPage';
 import { DevelopersPage } from '@/pages/admin/DevelopersPage';
+import { UsersManagementPage } from '@/pages/admin/UsersManagementPage';
+import { MerchantsManagementPage } from '@/pages/admin/MerchantsManagementPage';
+import { AgentsManagementPage } from '@/pages/admin/AgentsManagementPage';
+import { FeesPage } from '@/pages/admin/FeesPage';
+import { SubscriptionsPage } from '@/pages/admin/SubscriptionsPage';
 
 // Merchant Pages
 import { MerchantDashboard } from '@/pages/merchant/MerchantDashboard';
@@ -168,10 +172,42 @@ function App() {
                 }
               />
               <Route
-                path="/admin/simulator"
+                path="/admin/users"
                 element={
                   <RoleBasedRoute allowedRoles={['admin']}>
-                    <SimulatorPage />
+                    <UsersManagementPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/admin/merchants"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin']}>
+                    <MerchantsManagementPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/admin/agents"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin']}>
+                    <AgentsManagementPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/admin/fees"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin']}>
+                    <FeesPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/admin/subscriptions"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin']}>
+                    <SubscriptionsPage />
                   </RoleBasedRoute>
                 }
               />
