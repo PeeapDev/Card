@@ -26,6 +26,7 @@ import { CardsPage as AdminCardsPage } from '@/pages/admin/CardsPage';
 import { CardProgramsPage } from '@/pages/admin/CardProgramsPage';
 import { TransactionsPage as AdminTransactionsPage } from '@/pages/admin/TransactionsPage';
 import { DisputesPage } from '@/pages/admin/DisputesPage';
+import { DevelopersPage } from '@/pages/admin/DevelopersPage';
 
 // Merchant Pages
 import { MerchantDashboard } from '@/pages/merchant/MerchantDashboard';
@@ -187,6 +188,14 @@ function App() {
                 element={
                   <RoleBasedRoute allowedRoles={['admin']}>
                     <CompliancePage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/admin/developers"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin']}>
+                    <DevelopersPage />
                   </RoleBasedRoute>
                 }
               />
