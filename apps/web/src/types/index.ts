@@ -8,9 +8,11 @@ export interface User {
   phone?: string;
   roles: UserRole[];
   kycStatus: 'PENDING' | 'SUBMITTED' | 'VERIFIED' | 'REJECTED' | 'APPROVED';
-  isActive: boolean;
+  kycTier?: number;
+  emailVerified?: boolean;
+  isActive?: boolean;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
 }
 
 export interface AuthTokens {

@@ -9,7 +9,7 @@ export function ProfilePage() {
   const { user } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
 
-  const kycStatusConfig = {
+  const kycStatusConfig: Record<string, { icon: typeof Clock; color: string; bg: string; label: string; description: string }> = {
     PENDING: {
       icon: Clock,
       color: 'text-yellow-600',
@@ -30,6 +30,13 @@ export function ProfilePage() {
       bg: 'bg-green-100',
       label: 'Verified',
       description: 'Your identity has been verified. You have full access to all features.',
+    },
+    APPROVED: {
+      icon: CheckCircle,
+      color: 'text-green-600',
+      bg: 'bg-green-100',
+      label: 'Approved',
+      description: 'Your identity has been approved. You have full access to all features.',
     },
     REJECTED: {
       icon: AlertCircle,
