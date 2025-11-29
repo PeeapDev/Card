@@ -85,6 +85,7 @@ async function seed() {
     database: process.env.DB_NAME || 'payment_system',
     synchronize: false,
     logging: false,
+    ssl: process.env.DB_HOST?.includes('supabase') ? { rejectUnauthorized: false } : false,
   });
 
   await dataSource.initialize();
