@@ -152,6 +152,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    // Clear demo user from localStorage first
+    localStorage.removeItem('demoUser');
     await authService.logout();
     setUser(null);
   };
