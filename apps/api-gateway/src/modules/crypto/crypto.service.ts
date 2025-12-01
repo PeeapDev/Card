@@ -27,7 +27,7 @@ interface SignedPayload {
 }
 
 interface TokenPayload {
-  cardId: string;
+  cardId?: string;
   merchantId?: string;
   amount?: number;
   currency?: string;
@@ -35,7 +35,12 @@ interface TokenPayload {
   nonce: string;
   expiresAt: number;
   deviceFingerprint?: string;
-  type: 'nfc' | 'qr' | 'session';
+  type: 'nfc' | 'qr' | 'session' | 'p2p_transfer' | 'transfer_link';
+  // P2P transfer fields
+  senderId?: string;
+  recipientId?: string;
+  recipientWalletId?: string;
+  note?: string;
 }
 
 @Injectable()

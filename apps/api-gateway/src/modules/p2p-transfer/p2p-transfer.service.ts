@@ -327,6 +327,9 @@ export class P2PTransferService {
           currency: request.currency,
           senderId: request.senderId,
           recipientId: recipientId!,
+          timestamp: Date.now(),
+          nonce: this.cryptoService.generateNonce(),
+          expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes
         }),
       },
     };
@@ -430,6 +433,8 @@ export class P2PTransferService {
       senderId,
       amount,
       currency,
+      timestamp: Date.now(),
+      nonce: this.cryptoService.generateNonce(),
       expiresAt: Date.now() + expiresIn * 1000,
     });
 
