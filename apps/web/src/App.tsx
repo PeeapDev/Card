@@ -32,9 +32,11 @@ import { UsersManagementPage } from '@/pages/admin/UsersManagementPage';
 import { MerchantsManagementPage } from '@/pages/admin/MerchantsManagementPage';
 import { AgentsManagementPage } from '@/pages/admin/AgentsManagementPage';
 import { FeesPage } from '@/pages/admin/FeesPage';
+import { FeeSettingsPage } from '@/pages/admin/FeeSettingsPage';
 import { SubscriptionsPage } from '@/pages/admin/SubscriptionsPage';
 import { RolesManagementPage } from '@/pages/admin/RolesManagementPage';
 import { PaymentCheckoutPage } from '@/pages/PaymentCheckoutPage';
+import { PayPage } from '@/pages/PayPage';
 
 // Merchant Pages
 import { MerchantDashboard } from '@/pages/merchant/MerchantDashboard';
@@ -71,6 +73,9 @@ function App() {
               {/* Payment Checkout Routes (NFC/QR) */}
               <Route path="/t/:token" element={<PaymentCheckoutPage />} />
               <Route path="/pay/:token" element={<PaymentCheckoutPage />} />
+
+              {/* Payment Link Route (query params) */}
+              <Route path="/pay" element={<PayPage />} />
 
               {/* Regular User Protected Routes */}
               <Route
@@ -224,6 +229,14 @@ function App() {
                 element={
                   <RoleBasedRoute allowedRoles={['admin']}>
                     <FeesPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/admin/fee-settings"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin']}>
+                    <FeeSettingsPage />
                   </RoleBasedRoute>
                 }
               />

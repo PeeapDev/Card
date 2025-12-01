@@ -21,6 +21,7 @@ import {
   Layers,
   ShieldCheck,
   UserCog,
+  DollarSign,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -76,6 +77,7 @@ const navSections: NavSection[] = [
     title: 'Configuration',
     items: [
       { path: '/admin/fees', label: 'Fees & Pricing', icon: CreditCard },
+      { path: '/admin/fee-settings', label: 'Fee Settings', icon: DollarSign },
       { path: '/admin/subscriptions', label: 'Subscriptions', icon: Wallet },
     ],
   },

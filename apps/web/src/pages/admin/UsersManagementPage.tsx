@@ -141,28 +141,58 @@ export function UsersManagementPage() {
         return;
       }
 
-      // Create wallet for the user
-      const walletExternalId = `wal_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-
-      const { error: walletError } = await supabase
+      // Check if wallet was auto-created by a database trigger
+      const { data: existingWallet } = await supabase
         .from('wallets')
-        .insert({
-          external_id: walletExternalId,
-          user_id: newUser.id,
-          wallet_type: 'primary',
-          currency: 'USD',
-          balance: formData.initialBalance,
-          status: 'ACTIVE',
-          daily_limit: 5000,
-          monthly_limit: 50000,
-        });
+        .select('id, external_id')
+        .eq('user_id', newUser.id)
+        .eq('wallet_type', 'primary')
+        .single();
 
-      if (walletError) {
-        console.error('Wallet creation error:', walletError);
-        // User was created but wallet failed - still show partial success
-        setCreateSuccess(`User created but wallet failed: ${walletError.message}`);
+      if (existingWallet) {
+        // Wallet exists (created by trigger) - update it with external_id and balance
+        const walletExternalId = existingWallet.external_id || `wal_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+
+        const { error: updateError } = await supabase
+          .from('wallets')
+          .update({
+            external_id: walletExternalId,
+            balance: formData.initialBalance,
+            status: 'ACTIVE',
+            daily_limit: 5000,
+            monthly_limit: 50000,
+          })
+          .eq('id', existingWallet.id);
+
+        if (updateError) {
+          console.error('Wallet update error:', updateError);
+          setCreateSuccess(`User created but wallet update failed: ${updateError.message}`);
+        } else {
+          setCreateSuccess(`User ${formData.email} created successfully with $${formData.initialBalance} balance!`);
+        }
       } else {
-        setCreateSuccess(`User ${formData.email} created successfully with $${formData.initialBalance} balance!`);
+        // No wallet exists - create one
+        const walletExternalId = `wal_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+
+        const { error: walletError } = await supabase
+          .from('wallets')
+          .insert({
+            external_id: walletExternalId,
+            user_id: newUser.id,
+            wallet_type: 'primary',
+            currency: 'USD',
+            balance: formData.initialBalance,
+            status: 'ACTIVE',
+            daily_limit: 5000,
+            monthly_limit: 50000,
+          });
+
+        if (walletError) {
+          console.error('Wallet creation error:', walletError);
+          setCreateSuccess(`User created but wallet failed: ${walletError.message}`);
+        } else {
+          setCreateSuccess(`User ${formData.email} created successfully with $${formData.initialBalance} balance!`);
+        }
       }
 
       // Reset form
