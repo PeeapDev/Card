@@ -40,11 +40,21 @@ export function PaymentQRCode({
 }: PaymentQRCodeProps) {
   const [qrData, setQrData] = useState<GeneratedQR | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
   const generateQR = async () => {
     setLoading(true);
+    setError(null);
+
+    // Validate inputs
+    if (!userId || !walletId) {
+      setError('Missing user or wallet information');
+      setLoading(false);
+      return;
+    }
+
     try {
       let generated: GeneratedQR;
 
@@ -64,8 +74,9 @@ export function PaymentQRCode({
         const expiresAt = new Date(generated.expiresAt).getTime();
         setTimeLeft(Math.max(0, Math.floor((expiresAt - Date.now()) / 1000)));
       }
-    } catch (error) {
-      console.error('Failed to generate QR:', error);
+    } catch (err: any) {
+      console.error('Failed to generate QR:', err);
+      setError(err.message || 'Failed to generate QR code');
     } finally {
       setLoading(false);
     }
@@ -129,11 +140,12 @@ export function PaymentQRCode({
     );
   }
 
-  if (!qrData) {
+  if (!qrData || error) {
     return (
       <div className="flex flex-col items-center justify-center p-8 text-center">
         <QrCode className="w-12 h-12 text-gray-300 mb-4" />
-        <p className="text-gray-500">Failed to generate QR code</p>
+        <p className="text-gray-500 font-medium">Failed to generate QR code</p>
+        {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
         <button
           onClick={generateQR}
           className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"

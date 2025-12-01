@@ -37,6 +37,8 @@ export function ReceiveMoneyPage() {
   const [paymentLink, setPaymentLink] = useState('');
   const [copied, setCopied] = useState(false);
   const [showAmountInput, setShowAmountInput] = useState(false);
+  const [walletLoading, setWalletLoading] = useState(true);
+  const [walletError, setWalletError] = useState<string | null>(null);
 
   useEffect(() => {
     if (user?.id) {
@@ -45,16 +47,34 @@ export function ReceiveMoneyPage() {
   }, [user?.id]);
 
   const fetchWallet = async () => {
-    const { data: wallet } = await supabase
-      .from('wallets')
-      .select('id, balance')
-      .eq('user_id', user?.id)
-      .eq('wallet_type', 'primary')
-      .single();
+    setWalletLoading(true);
+    setWalletError(null);
 
-    if (wallet) {
-      setWalletId(wallet.id);
-      setWalletBalance(wallet.balance);
+    try {
+      const { data: wallet, error } = await supabase
+        .from('wallets')
+        .select('id, balance')
+        .eq('user_id', user?.id)
+        .eq('wallet_type', 'primary')
+        .single();
+
+      if (error) {
+        console.error('Wallet fetch error:', error);
+        setWalletError('Failed to load wallet');
+        return;
+      }
+
+      if (wallet) {
+        setWalletId(wallet.id);
+        setWalletBalance(wallet.balance);
+      } else {
+        setWalletError('No wallet found');
+      }
+    } catch (err) {
+      console.error('Wallet fetch exception:', err);
+      setWalletError('Failed to load wallet');
+    } finally {
+      setWalletLoading(false);
     }
   };
 
@@ -192,7 +212,30 @@ export function ReceiveMoneyPage() {
 
         {/* Content based on method */}
         <Card className="p-6">
-          {method === 'qr' && user?.id && walletId && (
+          {/* Loading state */}
+          {walletLoading && (
+            <div className="flex flex-col items-center justify-center p-8">
+              <div className="w-12 h-12 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mb-4" />
+              <p className="text-gray-500">Loading wallet...</p>
+            </div>
+          )}
+
+          {/* Error state */}
+          {!walletLoading && walletError && (
+            <div className="flex flex-col items-center justify-center p-8 text-center">
+              <QrCode className="w-12 h-12 text-gray-300 mb-4" />
+              <p className="text-gray-500 font-medium">Unable to load QR code</p>
+              <p className="text-red-500 text-sm mt-2">{walletError}</p>
+              <button
+                onClick={fetchWallet}
+                className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+              >
+                Try Again
+              </button>
+            </div>
+          )}
+
+          {method === 'qr' && !walletLoading && !walletError && user?.id && walletId && (
             <PaymentQRCode
               userId={user.id}
               walletId={walletId}
@@ -203,7 +246,7 @@ export function ReceiveMoneyPage() {
             />
           )}
 
-          {method === 'nfc' && user?.id && walletId && (
+          {method === 'nfc' && !walletLoading && !walletError && user?.id && walletId && (
             <NFCPayment
               userId={user.id}
               walletId={walletId}

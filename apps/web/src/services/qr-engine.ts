@@ -120,6 +120,10 @@ class QREngineService {
    * Generate a static QR code for receiving payments (no amount)
    */
   async generateStaticQR(userId: string, walletId: string): Promise<GeneratedQR> {
+    if (!userId || !walletId) {
+      throw new Error('userId and walletId are required');
+    }
+
     const reference = this.generateReference();
 
     const data: QRPaymentData = {
@@ -134,17 +138,20 @@ class QREngineService {
     const qrData = this.encodeQRData(data);
     const deepLink = `${window.location.origin}/pay?qr=${reference}`;
 
-    // Store QR in database for tracking
-    await supabase.from('qr_codes').insert({
-      reference,
-      user_id: userId,
-      wallet_id: walletId,
-      type: 'static',
-      qr_data: qrData,
-      status: 'active',
-    }).catch(() => {
+    // Store QR in database for tracking (optional - table may not exist)
+    try {
+      await supabase.from('qr_codes').insert({
+        reference,
+        user_id: userId,
+        wallet_id: walletId,
+        type: 'static',
+        qr_data: qrData,
+        status: 'active',
+      });
+    } catch {
       // Table might not exist yet, continue anyway
-    });
+      console.log('QR codes table not available, skipping database storage');
+    }
 
     return {
       qrData,
@@ -164,6 +171,10 @@ class QREngineService {
     description?: string,
     expirationMinutes: number = 15
   ): Promise<GeneratedQR> {
+    if (!userId || !walletId) {
+      throw new Error('userId and walletId are required');
+    }
+
     const reference = this.generateReference();
     const expiresAt = this.getExpiration(expirationMinutes);
 
@@ -182,18 +193,22 @@ class QREngineService {
     const qrData = this.encodeQRData(data);
     const deepLink = `${window.location.origin}/pay?qr=${reference}&amount=${amount}`;
 
-    // Store QR in database
-    await supabase.from('qr_codes').insert({
-      reference,
-      user_id: userId,
-      wallet_id: walletId,
-      type: 'dynamic',
-      amount,
-      description,
-      qr_data: qrData,
-      expires_at: expiresAt,
-      status: 'active',
-    }).catch(() => {});
+    // Store QR in database (optional - table may not exist)
+    try {
+      await supabase.from('qr_codes').insert({
+        reference,
+        user_id: userId,
+        wallet_id: walletId,
+        type: 'dynamic',
+        amount,
+        description,
+        qr_data: qrData,
+        expires_at: expiresAt,
+        status: 'active',
+      });
+    } catch {
+      console.log('QR codes table not available, skipping database storage');
+    }
 
     return {
       qrData,
