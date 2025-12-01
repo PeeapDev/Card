@@ -3,18 +3,47 @@ import type { User, AuthTokens, LoginRequest, RegisterRequest } from '@/types';
 
 export const authService = {
   async login(data: LoginRequest): Promise<{ user: User; tokens: AuthTokens }> {
-    // Fetch user from Supabase
-    const { data: users, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', data.email)
-      .limit(1);
+    // Determine if login is via phone or email
+    const loginIdentifier = data.email; // Can be email or phone
+    const isPhoneLogin = loginIdentifier.startsWith('+') || /^\d{10,}$/.test(loginIdentifier);
 
-    if (error || !users || users.length === 0) {
-      throw new Error('Invalid email or password');
+    // Fetch user from Supabase - try phone first, then email
+    let dbUser = null;
+    let error = null;
+
+    if (isPhoneLogin) {
+      // Phone-based login
+      const { data: users, error: phoneError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('phone', loginIdentifier)
+        .limit(1);
+
+      if (!phoneError && users && users.length > 0) {
+        dbUser = users[0];
+      } else {
+        error = phoneError;
+      }
     }
 
-    const dbUser = users[0];
+    // If not found by phone, try email
+    if (!dbUser) {
+      const { data: users, error: emailError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', loginIdentifier)
+        .limit(1);
+
+      if (!emailError && users && users.length > 0) {
+        dbUser = users[0];
+      } else {
+        error = emailError;
+      }
+    }
+
+    if (error || !dbUser) {
+      throw new Error('Invalid credentials');
+    }
 
     // For demo purposes - validate against known passwords
     // In production, you would verify the password hash on the backend
@@ -25,19 +54,22 @@ export const authService = {
       'merchant@example.com': 'Merchant123!@#',
       'developer@example.com': 'Developer123!@#',
       'agent@example.com': 'Agent123!@#',
+      // Also add by phone for seeded users
+      '+1234567890': 'Admin123!@#',
+      '+1234567891': 'User123!@#',
     };
 
     // Check if it's a seeded user or validate against stored password
-    const expectedPassword = validPasswords[data.email];
+    const expectedPassword = validPasswords[dbUser.email] || validPasswords[dbUser.phone];
     if (expectedPassword) {
       // Known user - validate against known password
       if (expectedPassword !== data.password) {
-        throw new Error('Invalid email or password');
+        throw new Error('Invalid credentials');
       }
     } else {
       // New user - validate against stored password_hash (plain text for demo)
       if (dbUser.password_hash !== data.password) {
-        throw new Error('Invalid email or password');
+        throw new Error('Invalid credentials');
       }
     }
 

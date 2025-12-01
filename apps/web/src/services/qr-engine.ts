@@ -245,17 +245,21 @@ class QREngineService {
     const qrData = this.encodeQRData(data);
     const deepLink = `${window.location.origin}/pay?merchant=${reference}`;
 
-    await supabase.from('qr_codes').insert({
-      reference,
-      user_id: userId,
-      wallet_id: walletId,
-      type: 'merchant',
-      amount,
-      merchant_name: merchantName,
-      qr_data: qrData,
-      expires_at: expiresAt || null,
-      status: 'active',
-    }).catch(() => {});
+    try {
+      await supabase.from('qr_codes').insert({
+        reference,
+        user_id: userId,
+        wallet_id: walletId,
+        type: 'merchant',
+        amount,
+        merchant_name: merchantName,
+        qr_data: qrData,
+        expires_at: expiresAt || null,
+        status: 'active',
+      });
+    } catch {
+      // Ignore errors
+    }
 
     return {
       qrData,

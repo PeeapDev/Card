@@ -25,11 +25,13 @@ import {
   Wifi,
   Search,
   ArrowLeft,
+  AtSign,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { QRScanner } from '@/components/payment/QRScanner';
 import { NFCPayment } from '@/components/payment/NFCPayment';
+import { UserSearch, SearchResult } from '@/components/ui/UserSearch';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { qrEngine, QRValidationResult } from '@/services/qr-engine';
@@ -37,6 +39,7 @@ import { qrEngine, QRValidationResult } from '@/services/qr-engine';
 interface Recipient {
   id: string;
   name: string;
+  username?: string;
   email?: string;
   phone?: string;
   walletId: string;
@@ -486,83 +489,58 @@ export function SendMoneyPage() {
           <Card className="p-6 space-y-4">
             <h2 className="font-semibold text-gray-900">Find Recipient</h2>
 
-            {/* Search Type Toggle */}
-            <div className="flex gap-2">
-              <button
-                onClick={() => setSearchType('email')}
-                className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
-                  searchType === 'email'
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                <Mail className="w-4 h-4 inline mr-2" />
-                Email
-              </button>
-              <button
-                onClick={() => setSearchType('phone')}
-                className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
-                  searchType === 'phone'
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                <Phone className="w-4 h-4 inline mr-2" />
-                Phone
-              </button>
+            {/* Global User Search */}
+            <UserSearch
+              placeholder="Search by @username, phone, or name..."
+              excludeUserId={user?.id}
+              autoFocus
+              onSelect={async (searchResult: SearchResult) => {
+                // Get wallet for selected user
+                const { data: wallet } = await supabase
+                  .from('wallets')
+                  .select('id')
+                  .eq('user_id', searchResult.id)
+                  .eq('wallet_type', 'primary')
+                  .single();
+
+                if (wallet) {
+                  setRecipient({
+                    id: searchResult.id,
+                    name: `${searchResult.first_name} ${searchResult.last_name}`,
+                    username: searchResult.username || undefined,
+                    email: searchResult.email || undefined,
+                    phone: searchResult.phone || undefined,
+                    walletId: wallet.id,
+                  });
+                  setStep('amount');
+                } else {
+                  setResult({
+                    success: false,
+                    error: 'This user does not have a wallet. They cannot receive payments.',
+                  });
+                  setStep('result');
+                }
+              }}
+            />
+
+            {/* Search Help */}
+            <div className="p-4 bg-blue-50 rounded-xl">
+              <p className="text-sm text-blue-700 font-medium mb-2">Search tips:</p>
+              <ul className="text-sm text-blue-600 space-y-1">
+                <li className="flex items-center gap-2">
+                  <AtSign className="w-4 h-4" />
+                  <span>Search by username: @johndoe</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Phone className="w-4 h-4" />
+                  <span>Search by phone: +1234567890</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <User className="w-4 h-4" />
+                  <span>Search by name: John Doe</span>
+                </li>
+              </ul>
             </div>
-
-            {/* Search Input */}
-            <div className="relative">
-              <input
-                type={searchType === 'email' ? 'email' : 'tel'}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && searchRecipient()}
-                placeholder={searchType === 'email' ? 'Enter email address' : 'Enter phone number'}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              />
-              <button
-                onClick={searchRecipient}
-                disabled={isSearching || !searchQuery.trim()}
-                className="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
-              >
-                {isSearching ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Search className="w-4 h-4" />
-                )}
-              </button>
-            </div>
-
-            {/* Search Results */}
-            {searchResults.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-sm text-gray-500">Select recipient:</p>
-                {searchResults.map((r) => (
-                  <button
-                    key={r.id}
-                    onClick={() => selectRecipient(r)}
-                    className="w-full flex items-center gap-3 p-3 bg-gray-50 hover:bg-gray-100 rounded-lg text-left transition-colors"
-                  >
-                    <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
-                      <User className="w-5 h-5 text-primary-600" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-gray-900">{r.name}</p>
-                      <p className="text-sm text-gray-500">{r.email || r.phone}</p>
-                    </div>
-                    <ArrowRight className="w-5 h-5 text-gray-400" />
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {searchResults.length === 0 && searchQuery && !isSearching && (
-              <p className="text-center text-gray-500 py-4">
-                No users found. Try a different search.
-              </p>
-            )}
           </Card>
         )}
 
@@ -577,6 +555,12 @@ export function SendMoneyPage() {
               <div>
                 <p className="font-medium text-green-900">Sending to</p>
                 <p className="text-sm text-green-600">{recipient.name}</p>
+                {recipient.username && (
+                  <p className="text-xs text-green-500 flex items-center gap-1">
+                    <AtSign className="w-3 h-3" />
+                    {recipient.username}
+                  </p>
+                )}
               </div>
               <CheckCircle className="w-5 h-5 text-green-600 ml-auto" />
             </div>

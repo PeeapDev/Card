@@ -238,7 +238,7 @@ export function PaymentQRCode({
           )}
         </button>
 
-        {navigator.share && (
+        {typeof navigator !== 'undefined' && 'share' in navigator && (
           <button
             onClick={handleShare}
             className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"

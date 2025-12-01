@@ -7,10 +7,10 @@ import { AuthLayout } from '@/components/layout/AuthLayout';
 import { Button, Input } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
 import { getUserDashboard } from '@/components/RoleBasedRoute';
-import { AlertCircle, Shield, User, Store, Code, Headphones } from 'lucide-react';
+import { AlertCircle, Shield, User, Store, Code, Headphones, Phone, Mail } from 'lucide-react';
 
 const loginSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  email: z.string().min(1, 'Phone number or email is required'),
   password: z.string().min(1, 'Password is required'),
 });
 
@@ -81,13 +81,26 @@ export function LoginPage() {
           </div>
         )}
 
-        <Input
-          label="Email"
-          type="email"
-          placeholder="Enter your email"
-          error={errors.email?.message}
-          {...register('email')}
-        />
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Phone Number or Email
+          </label>
+          <div className="relative">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+              <Phone className="w-4 h-4" />
+            </div>
+            <input
+              type="text"
+              placeholder="+1234567890 or email@example.com"
+              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              {...register('email')}
+            />
+          </div>
+          {errors.email?.message && (
+            <p className="mt-1 text-sm text-red-500">{errors.email.message}</p>
+          )}
+          <p className="mt-1 text-xs text-gray-500">Primary: Phone number | Alternative: Email</p>
+        </div>
 
         <Input
           label="Password"

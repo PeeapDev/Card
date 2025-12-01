@@ -81,9 +81,10 @@ export function QRScanner({ onScan, onClose, autoValidate = true }: QRScannerPro
     }
   };
 
-  const handleError = (err: Error) => {
+  const handleError = (err: unknown) => {
     console.error('QR Scanner error:', err);
-    setError(err.message || 'Scanner error occurred');
+    const errorMessage = err instanceof Error ? err.message : 'Scanner error occurred';
+    setError(errorMessage);
   };
 
   const toggleCamera = () => {

@@ -143,8 +143,6 @@ class NFCEngineService {
       signature,
       expires_at: expiresAt,
       status: 'active',
-    }).catch(() => {
-      // Table might not exist, continue anyway
     });
 
     return tokenData;
@@ -177,18 +175,22 @@ class NFCEngineService {
       signature,
     };
 
-    await supabase.from('nfc_tokens').insert({
-      token,
-      user_id: userId,
-      wallet_id: walletId,
-      amount: maxAmount,
-      currency: 'USD',
-      nonce,
-      signature,
-      expires_at: expiresAt,
-      status: 'active',
-      type: 'send',
-    }).catch(() => {});
+    try {
+      await supabase.from('nfc_tokens').insert({
+        token,
+        user_id: userId,
+        wallet_id: walletId,
+        amount: maxAmount,
+        currency: 'USD',
+        nonce,
+        signature,
+        expires_at: expiresAt,
+        status: 'active',
+        type: 'send',
+      });
+    } catch {
+      // Ignore errors
+    }
 
     return tokenData;
   }
@@ -330,20 +332,24 @@ class NFCEngineService {
         .eq('token', request.token);
 
       // Create transaction record
-      await supabase.from('transactions').insert({
-        external_id: transactionId,
-        wallet_id: request.senderWalletId,
-        type: 'TRANSFER',
-        amount: -request.amount,
-        currency: 'USD',
-        status: 'COMPLETED',
-        description: 'NFC Payment',
-        metadata: {
-          nfc_token: request.token,
-          recipient_wallet: tokenData.walletId,
-          method: 'nfc',
-        },
-      }).catch(() => {});
+      try {
+        await supabase.from('transactions').insert({
+          external_id: transactionId,
+          wallet_id: request.senderWalletId,
+          type: 'TRANSFER',
+          amount: -request.amount,
+          currency: 'USD',
+          status: 'COMPLETED',
+          description: 'NFC Payment',
+          metadata: {
+            nfc_token: request.token,
+            recipient_wallet: tokenData.walletId,
+            method: 'nfc',
+          },
+        });
+      } catch {
+        // Ignore errors
+      }
 
       return {
         success: true,

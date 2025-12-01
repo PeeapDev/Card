@@ -183,7 +183,13 @@ export function FeeSettingsPage() {
           // Table might not exist, add to local state
           const newConfig: FeeConfig = {
             id: `local_${Date.now()}`,
-            ...feeForm as FeeConfig,
+            transactionType: feeForm.transactionType || 'TRANSFER',
+            percentage: feeForm.percentage || 0,
+            minimumFee: feeForm.minimumFee || 0,
+            maximumFee: feeForm.maximumFee ?? null,
+            flatFee: feeForm.flatFee || 0,
+            currency: feeForm.currency || 'USD',
+            isActive: feeForm.isActive ?? true,
           };
           setFeeConfigs(prev => [...prev, newConfig]);
         } else if (newFee) {
@@ -233,11 +239,14 @@ export function FeeSettingsPage() {
     ));
 
     // Try to update in database
-    await supabase
-      .from('currencies')
-      .update({ is_active: !currencies.find(c => c.code === code)?.isActive })
-      .eq('code', code)
-      .catch(() => {});
+    try {
+      await supabase
+        .from('currencies')
+        .update({ is_active: !currencies.find(c => c.code === code)?.isActive })
+        .eq('code', code);
+    } catch {
+      // Ignore errors
+    }
   };
 
   const setDefaultCurrency = async (code: string) => {
@@ -247,8 +256,12 @@ export function FeeSettingsPage() {
     })));
 
     // Try to update in database
-    await supabase.from('currencies').update({ is_default: false }).neq('code', code).catch(() => {});
-    await supabase.from('currencies').update({ is_default: true }).eq('code', code).catch(() => {});
+    try {
+      await supabase.from('currencies').update({ is_default: false }).neq('code', code);
+      await supabase.from('currencies').update({ is_default: true }).eq('code', code);
+    } catch {
+      // Ignore errors
+    }
 
     setSuccess(`${code} set as default currency`);
     setTimeout(() => setSuccess(null), 3000);

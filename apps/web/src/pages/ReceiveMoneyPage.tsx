@@ -311,7 +311,7 @@ export function ReceiveMoneyPage() {
                   )}
                 </button>
 
-                {navigator.share && (
+                {typeof navigator !== 'undefined' && 'share' in navigator && (
                   <button
                     onClick={handleShare}
                     className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700"

@@ -39,6 +39,7 @@ interface CreateUserForm {
   firstName: string;
   lastName: string;
   phone: string;
+  username: string;
   role: string;
   initialBalance: number;
 }
@@ -58,6 +59,7 @@ export function UsersManagementPage() {
     firstName: '',
     lastName: '',
     phone: '',
+    username: '',
     role: 'user',
     initialBalance: 100,
   });
@@ -95,103 +97,156 @@ export function UsersManagementPage() {
 
     try {
       // Validate form
-      if (!formData.email || !formData.firstName || !formData.lastName) {
-        setCreateError('Please fill in all required fields');
+      if (!formData.phone || !formData.firstName || !formData.lastName) {
+        setCreateError('Please fill in all required fields (Phone, First Name, Last Name)');
         setCreating(false);
         return;
       }
 
-      // Check if email already exists
-      const { data: existing } = await supabase
+      // Generate username if not provided
+      const username = formData.username || `user${Date.now().toString(36)}`;
+
+      // Check if phone already exists
+      const { data: existingPhone } = await supabase
         .from('users')
         .select('id')
-        .eq('email', formData.email)
+        .eq('phone', formData.phone)
         .single();
 
-      if (existing) {
-        setCreateError('A user with this email already exists');
+      if (existingPhone) {
+        setCreateError('A user with this phone number already exists');
         setCreating(false);
         return;
+      }
+
+      // Check if username already exists
+      const { data: existingUsername } = await supabase
+        .from('users')
+        .select('id')
+        .eq('username', username)
+        .single();
+
+      if (existingUsername) {
+        setCreateError('This username is already taken');
+        setCreating(false);
+        return;
+      }
+
+      // Check if email already exists (if provided)
+      if (formData.email) {
+        const { data: existingEmail } = await supabase
+          .from('users')
+          .select('id')
+          .eq('email', formData.email)
+          .single();
+
+        if (existingEmail) {
+          setCreateError('A user with this email already exists');
+          setCreating(false);
+          return;
+        }
       }
 
       const externalId = `usr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+      const walletExternalId = `wal_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
 
-      // Create user
-      const { data: newUser, error: userError } = await supabase
-        .from('users')
-        .insert({
-          external_id: externalId,
-          email: formData.email,
-          password_hash: formData.password,
-          first_name: formData.firstName,
-          last_name: formData.lastName,
-          phone: formData.phone || null,
-          roles: formData.role,
-          kyc_tier: 1,
-          kyc_status: 'APPROVED',
-          status: 'ACTIVE',
-          email_verified: true,
-        })
-        .select()
-        .single();
+      // Try using RPC function if available, otherwise use direct insert
+      // First, try to call the create_user_with_wallet function
+      const { data: rpcResult, error: rpcError } = await supabase.rpc('create_user_with_wallet', {
+        p_external_id: externalId,
+        p_email: formData.email || null,
+        p_password_hash: formData.password,
+        p_first_name: formData.firstName,
+        p_last_name: formData.lastName,
+        p_phone: formData.phone,
+        p_username: username,
+        p_roles: formData.role,
+        p_wallet_external_id: walletExternalId,
+        p_initial_balance: formData.initialBalance,
+      });
 
-      if (userError) {
-        setCreateError(`Failed to create user: ${userError.message}`);
-        setCreating(false);
-        return;
-      }
-
-      // Check if wallet was auto-created by a database trigger
-      const { data: existingWallet } = await supabase
-        .from('wallets')
-        .select('id, external_id')
-        .eq('user_id', newUser.id)
-        .eq('wallet_type', 'primary')
-        .single();
-
-      if (existingWallet) {
-        // Wallet exists (created by trigger) - update it with external_id and balance
-        const walletExternalId = existingWallet.external_id || `wal_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-
-        const { error: updateError } = await supabase
-          .from('wallets')
-          .update({
-            external_id: walletExternalId,
-            balance: formData.initialBalance,
-            status: 'ACTIVE',
-            daily_limit: 5000,
-            monthly_limit: 50000,
-          })
-          .eq('id', existingWallet.id);
-
-        if (updateError) {
-          console.error('Wallet update error:', updateError);
-          setCreateSuccess(`User created but wallet update failed: ${updateError.message}`);
-        } else {
-          setCreateSuccess(`User ${formData.email} created successfully with $${formData.initialBalance} balance!`);
-        }
+      if (!rpcError && rpcResult) {
+        setCreateSuccess(`User @${username} created successfully with $${formData.initialBalance} balance!`);
       } else {
-        // No wallet exists - create one
-        const walletExternalId = `wal_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+        // RPC not available, try direct insert (may fail if trigger exists)
+        console.log('RPC not available, trying direct insert:', rpcError?.message);
 
-        const { error: walletError } = await supabase
-          .from('wallets')
+        // Create user directly
+        const { data: newUser, error: userError } = await supabase
+          .from('users')
           .insert({
-            external_id: walletExternalId,
-            user_id: newUser.id,
-            wallet_type: 'primary',
-            currency: 'USD',
-            balance: formData.initialBalance,
+            external_id: externalId,
+            email: formData.email || null,
+            password_hash: formData.password,
+            first_name: formData.firstName,
+            last_name: formData.lastName,
+            phone: formData.phone,
+            username: username,
+            roles: formData.role,
+            kyc_tier: 1,
+            kyc_status: 'APPROVED',
             status: 'ACTIVE',
-            daily_limit: 5000,
-            monthly_limit: 50000,
-          });
+            email_verified: formData.email ? true : false,
+            phone_verified: true,
+          })
+          .select()
+          .single();
 
-        if (walletError) {
-          console.error('Wallet creation error:', walletError);
-          setCreateSuccess(`User created but wallet failed: ${walletError.message}`);
+        if (userError) {
+          // Check if it's the wallet trigger error
+          if (userError.message.includes('external_id') && userError.message.includes('wallets')) {
+            setCreateError('Database trigger error: Please contact admin to fix the wallet creation trigger, or disable it temporarily.');
+          } else {
+            setCreateError(`Failed to create user: ${userError.message}`);
+          }
+          setCreating(false);
+          return;
+        }
+
+        // Check if wallet was auto-created by a database trigger
+        const { data: existingWallet } = await supabase
+          .from('wallets')
+          .select('id, external_id')
+          .eq('user_id', newUser.id)
+          .eq('wallet_type', 'primary')
+          .single();
+
+        if (existingWallet) {
+          // Wallet exists (created by trigger) - update it with external_id and balance
+          const walletExtId = existingWallet.external_id || walletExternalId;
+
+          await supabase
+            .from('wallets')
+            .update({
+              external_id: walletExtId,
+              balance: formData.initialBalance,
+              status: 'ACTIVE',
+              daily_limit: 5000,
+              monthly_limit: 50000,
+            })
+            .eq('id', existingWallet.id);
+
+          setCreateSuccess(`User @${username} created successfully with $${formData.initialBalance} balance!`);
         } else {
-          setCreateSuccess(`User ${formData.email} created successfully with $${formData.initialBalance} balance!`);
+          // No wallet exists - create one
+          const { error: walletError } = await supabase
+            .from('wallets')
+            .insert({
+              external_id: walletExternalId,
+              user_id: newUser.id,
+              wallet_type: 'primary',
+              currency: 'USD',
+              balance: formData.initialBalance,
+              status: 'ACTIVE',
+              daily_limit: 5000,
+              monthly_limit: 50000,
+            });
+
+          if (walletError) {
+            setCreateSuccess(`User @${username} created but wallet failed: ${walletError.message}`);
+          } else {
+            setCreateSuccess(`User @${username} created successfully with $${formData.initialBalance} balance!`);
+          }
         }
       }
 
@@ -202,6 +257,7 @@ export function UsersManagementPage() {
         firstName: '',
         lastName: '',
         phone: '',
+        username: '',
         role: 'user',
         initialBalance: 100,
       });
@@ -517,7 +573,34 @@ export function UsersManagementPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
+                  <input
+                    type="tel"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="+1234567890"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Primary login method</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">@</span>
+                    <input
+                      type="text"
+                      value={formData.username}
+                      onChange={(e) => setFormData({ ...formData, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
+                      className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      placeholder="johndoe"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Unique username for transfers. Auto-generated if empty.</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email (Optional)</label>
                   <input
                     type="email"
                     value={formData.email}
@@ -525,6 +608,7 @@ export function UsersManagementPage() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     placeholder="john@example.com"
                   />
+                  <p className="text-xs text-gray-500 mt-1">Alternative login method</p>
                 </div>
 
                 <div>
@@ -537,17 +621,6 @@ export function UsersManagementPage() {
                     placeholder="User123!@#"
                   />
                   <p className="text-xs text-gray-500 mt-1">Default: User123!@#</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                  <input
-                    type="tel"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="+1234567890"
-                  />
                 </div>
 
                 <div>
