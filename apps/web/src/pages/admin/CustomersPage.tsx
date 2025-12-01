@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Users,
   Plus,
@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { supabase } from '@/lib/supabase';
 
 interface Customer {
   id: string;
@@ -46,106 +47,91 @@ export function CustomersPage() {
   const [filter, setFilter] = useState<'all' | 'individual' | 'business'>('all');
   const [kycFilter, setKycFilter] = useState<'all' | 'pending' | 'verified' | 'rejected'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  const [stats] = useState({
-    totalCustomers: 1247,
-    verified: 1089,
-    pending: 103,
-    individuals: 1045,
-    businesses: 202,
-    newThisMonth: 156,
+  const [stats, setStats] = useState({
+    totalCustomers: 0,
+    verified: 0,
+    pending: 0,
+    individuals: 0,
+    businesses: 0,
+    newThisMonth: 0,
   });
 
-  const [customers] = useState<Customer[]>([
-    {
-      id: 'cust_001',
-      type: 'individual',
-      firstName: 'John',
-      lastName: 'Doe',
-      email: 'john.doe@example.com',
-      phone: '+1 234 567 8900',
-      country: 'United States',
-      kycStatus: 'verified',
-      status: 'active',
-      totalCards: 2,
-      totalAccounts: 1,
-      createdAt: '2024-01-10T10:00:00Z',
-      lastActive: '2024-01-15T10:30:00Z',
-    },
-    {
-      id: 'cust_002',
-      type: 'business',
-      businessName: 'Acme Corporation',
-      email: 'finance@acme.com',
-      phone: '+1 234 567 8901',
-      country: 'United States',
-      kycStatus: 'verified',
-      status: 'active',
-      totalCards: 15,
-      totalAccounts: 3,
-      createdAt: '2024-01-08T09:00:00Z',
-      lastActive: '2024-01-15T11:00:00Z',
-    },
-    {
-      id: 'cust_003',
-      type: 'individual',
-      firstName: 'Jane',
-      lastName: 'Smith',
-      email: 'jane.smith@example.com',
-      phone: '+44 20 1234 5678',
-      country: 'United Kingdom',
-      kycStatus: 'pending',
-      status: 'active',
-      totalCards: 0,
-      totalAccounts: 1,
-      createdAt: '2024-01-14T14:00:00Z',
-      lastActive: '2024-01-15T08:00:00Z',
-    },
-    {
-      id: 'cust_004',
-      type: 'business',
-      businessName: 'Tech Innovations Ltd',
-      email: 'hello@techinnovations.com',
-      phone: '+49 30 1234567',
-      country: 'Germany',
-      kycStatus: 'rejected',
-      status: 'suspended',
-      totalCards: 0,
-      totalAccounts: 0,
-      createdAt: '2024-01-05T11:00:00Z',
-      lastActive: '2024-01-10T15:00:00Z',
-    },
-    {
-      id: 'cust_005',
-      type: 'individual',
-      firstName: 'Bob',
-      lastName: 'Wilson',
-      email: 'bob.wilson@example.com',
-      phone: '+234 801 234 5678',
-      country: 'Nigeria',
-      kycStatus: 'not_submitted',
-      status: 'active',
-      totalCards: 0,
-      totalAccounts: 0,
-      createdAt: '2024-01-15T09:00:00Z',
-      lastActive: '2024-01-15T09:00:00Z',
-    },
-    {
-      id: 'cust_006',
-      type: 'individual',
-      firstName: 'Alice',
-      lastName: 'Brown',
-      email: 'alice.brown@example.com',
-      phone: '+1 555 123 4567',
-      country: 'Canada',
-      kycStatus: 'verified',
-      status: 'active',
-      totalCards: 3,
-      totalAccounts: 2,
-      createdAt: '2023-12-20T10:00:00Z',
-      lastActive: '2024-01-15T12:00:00Z',
-    },
-  ]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+
+  useEffect(() => {
+    fetchCustomers();
+  }, []);
+
+  const fetchCustomers = async () => {
+    setLoading(true);
+    try {
+      // Fetch all users (customers)
+      const { data: users, error } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching customers:', error);
+        setCustomers([]);
+        setLoading(false);
+        return;
+      }
+
+      // Get card counts per user
+      const { data: cards } = await supabase.from('cards').select('user_id');
+      const cardCounts = new Map<string, number>();
+      cards?.forEach(card => {
+        cardCounts.set(card.user_id, (cardCounts.get(card.user_id) || 0) + 1);
+      });
+
+      // Get wallet counts per user
+      const { data: wallets } = await supabase.from('wallets').select('user_id');
+      const walletCounts = new Map<string, number>();
+      wallets?.forEach(wallet => {
+        walletCounts.set(wallet.user_id, (walletCounts.get(wallet.user_id) || 0) + 1);
+      });
+
+      // Transform users to customer format
+      const formattedCustomers: Customer[] = (users || []).map(user => ({
+        id: user.id,
+        type: user.role === 'merchant' ? 'business' : 'individual',
+        firstName: user.first_name,
+        lastName: user.last_name,
+        businessName: user.business_name,
+        email: user.email,
+        phone: user.phone || '',
+        country: user.country || 'Unknown',
+        kycStatus: (user.kyc_status?.toLowerCase() || 'not_submitted') as Customer['kycStatus'],
+        status: user.is_active ? 'active' : 'suspended',
+        totalCards: cardCounts.get(user.id) || 0,
+        totalAccounts: walletCounts.get(user.id) || 0,
+        createdAt: user.created_at,
+        lastActive: user.updated_at || user.created_at,
+      }));
+
+      setCustomers(formattedCustomers);
+
+      // Calculate stats
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      setStats({
+        totalCustomers: formattedCustomers.length,
+        verified: formattedCustomers.filter(c => c.kycStatus === 'verified').length,
+        pending: formattedCustomers.filter(c => c.kycStatus === 'pending').length,
+        individuals: formattedCustomers.filter(c => c.type === 'individual').length,
+        businesses: formattedCustomers.filter(c => c.type === 'business').length,
+        newThisMonth: formattedCustomers.filter(c => new Date(c.createdAt) >= startOfMonth).length,
+      });
+    } catch (error) {
+      console.error('Error fetching customers:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getKYCStatusBadge = (status: string) => {
     switch (status) {

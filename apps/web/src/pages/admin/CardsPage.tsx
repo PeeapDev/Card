@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   CreditCard,
   Plus,
@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { supabase } from '@/lib/supabase';
 
 interface CardData {
   id: string;
@@ -43,120 +44,90 @@ export function CardsPage() {
   const [filter, setFilter] = useState<'all' | 'virtual' | 'physical'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'frozen' | 'cancelled' | 'pending'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  const [stats] = useState({
-    totalCards: 2341,
-    activeCards: 2156,
-    virtualCards: 1890,
-    physicalCards: 451,
-    frozenCards: 85,
-    issuedThisMonth: 234,
+  const [stats, setStats] = useState({
+    totalCards: 0,
+    activeCards: 0,
+    virtualCards: 0,
+    physicalCards: 0,
+    frozenCards: 0,
+    issuedThisMonth: 0,
   });
 
-  const [cards] = useState<CardData[]>([
-    {
-      id: 'card_001',
-      cardProgramId: 'prog_001',
-      cardProgramName: 'Premium Virtual',
-      customerId: 'cust_001',
-      customerName: 'John Doe',
-      last4: '4242',
-      brand: 'visa',
-      type: 'virtual',
-      status: 'active',
-      balance: 5250.00,
-      currency: 'USD',
-      expiryMonth: 12,
-      expiryYear: 2027,
-      createdAt: '2024-01-10T10:00:00Z',
-      lastUsed: '2024-01-15T10:30:00Z',
-    },
-    {
-      id: 'card_002',
-      cardProgramId: 'prog_002',
-      cardProgramName: 'Business Physical',
-      customerId: 'cust_002',
-      customerName: 'Acme Corporation',
-      last4: '1234',
-      brand: 'mastercard',
-      type: 'physical',
-      status: 'active',
-      balance: 50000.00,
-      currency: 'USD',
-      expiryMonth: 6,
-      expiryYear: 2026,
-      createdAt: '2024-01-08T09:00:00Z',
-      lastUsed: '2024-01-15T11:00:00Z',
-    },
-    {
-      id: 'card_003',
-      cardProgramId: 'prog_001',
-      cardProgramName: 'Premium Virtual',
-      customerId: 'cust_003',
-      customerName: 'Jane Smith',
-      last4: '5678',
-      brand: 'visa',
-      type: 'virtual',
-      status: 'pending',
-      balance: 0.00,
-      currency: 'USD',
-      expiryMonth: 3,
-      expiryYear: 2028,
-      createdAt: '2024-01-15T14:00:00Z',
-      lastUsed: null,
-    },
-    {
-      id: 'card_004',
-      cardProgramId: 'prog_003',
-      cardProgramName: 'Standard Virtual',
-      customerId: 'cust_004',
-      customerName: 'Bob Wilson',
-      last4: '9012',
-      brand: 'visa',
-      type: 'virtual',
-      status: 'frozen',
-      balance: 1500.00,
-      currency: 'USD',
-      expiryMonth: 9,
-      expiryYear: 2025,
-      createdAt: '2024-01-05T11:00:00Z',
-      lastUsed: '2024-01-10T15:00:00Z',
-    },
-    {
-      id: 'card_005',
-      cardProgramId: 'prog_002',
-      cardProgramName: 'Business Physical',
-      customerId: 'cust_005',
-      customerName: 'Alice Brown',
-      last4: '3456',
-      brand: 'mastercard',
-      type: 'physical',
-      status: 'cancelled',
-      balance: 0.00,
-      currency: 'EUR',
-      expiryMonth: 1,
-      expiryYear: 2024,
-      createdAt: '2023-01-01T10:00:00Z',
-      lastUsed: '2023-12-15T10:00:00Z',
-    },
-    {
-      id: 'card_006',
-      cardProgramId: 'prog_004',
-      cardProgramName: 'NGN Virtual',
-      customerId: 'cust_006',
-      customerName: 'Tech Innovations',
-      last4: '7890',
-      brand: 'visa',
-      type: 'virtual',
-      status: 'active',
-      balance: 250000.00,
-      currency: 'NGN',
-      expiryMonth: 8,
-      expiryYear: 2027,
-      createdAt: '2024-01-02T10:00:00Z',
-      lastUsed: '2024-01-15T08:00:00Z',
-    },
-  ]);
+  const [cards, setCards] = useState<CardData[]>([]);
+
+  useEffect(() => {
+    fetchCards();
+  }, []);
+
+  const fetchCards = async () => {
+    setLoading(true);
+    try {
+      // Fetch cards from database
+      const { data: cardData, error } = await supabase
+        .from('cards')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching cards:', error);
+        setCards([]);
+        setLoading(false);
+        return;
+      }
+
+      // Get user info for cards
+      const userIds = [...new Set(cardData?.map(c => c.user_id) || [])];
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, first_name, last_name')
+        .in('id', userIds);
+
+      const userMap = new Map(users?.map(u => [u.id, u]) || []);
+
+      // Transform cards to display format
+      const formattedCards: CardData[] = (cardData || []).map(card => {
+        const user = userMap.get(card.user_id);
+        return {
+          id: card.id,
+          cardProgramId: card.card_program_id || '',
+          cardProgramName: card.card_type || 'Standard',
+          customerId: card.user_id,
+          customerName: user ? `${user.first_name} ${user.last_name}` : 'Unknown',
+          last4: card.last_four || '****',
+          brand: card.brand || 'visa',
+          type: card.card_type || 'virtual',
+          status: card.status || 'active',
+          balance: card.balance || 0,
+          currency: card.currency || 'USD',
+          expiryMonth: card.expiry_month || 12,
+          expiryYear: card.expiry_year || 2027,
+          createdAt: card.created_at,
+          lastUsed: card.last_used_at || null,
+        };
+      });
+
+      setCards(formattedCards);
+
+      // Calculate stats
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      setStats({
+        totalCards: formattedCards.length,
+        activeCards: formattedCards.filter(c => c.status === 'active').length,
+        virtualCards: formattedCards.filter(c => c.type === 'virtual').length,
+        physicalCards: formattedCards.filter(c => c.type === 'physical').length,
+        frozenCards: formattedCards.filter(c => c.status === 'frozen').length,
+        issuedThisMonth: formattedCards.filter(c => new Date(c.createdAt) >= startOfMonth).length,
+      });
+    } catch (error) {
+      console.error('Error fetching cards:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {

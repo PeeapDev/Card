@@ -55,10 +55,15 @@ export function UsersManagementPage() {
         .eq('role', 'user')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching users:', error);
+        setUsers([]);
+        return;
+      }
       setUsers(data || []);
     } catch (error) {
       console.error('Error fetching users:', error);
+      setUsers([]);
     } finally {
       setLoading(false);
     }
@@ -98,7 +103,10 @@ export function UsersManagementPage() {
         .update({ is_active: !currentStatus })
         .eq('id', userId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error updating user status:', error);
+        return;
+      }
       fetchUsers();
     } catch (error) {
       console.error('Error updating user status:', error);

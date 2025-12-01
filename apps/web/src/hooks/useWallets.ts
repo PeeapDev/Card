@@ -1,10 +1,51 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { walletService, CreateWalletRequest, DepositRequest, TransferRequest } from '@/services/wallet.service';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
+import type { Wallet } from '@/types';
+
+// Check if we're in demo mode
+const isDemoMode = () => {
+  return localStorage.getItem('demoUser') !== null;
+};
 
 export function useWallets() {
+  const { user } = useAuth();
+
   return useQuery({
-    queryKey: ['wallets'],
-    queryFn: walletService.getWallets,
+    queryKey: ['wallets', user?.id],
+    queryFn: async (): Promise<Wallet[]> => {
+      // If demo mode, fetch from Supabase or return empty array
+      if (isDemoMode()) {
+        if (!user?.id) return [];
+
+        const { data, error } = await supabase
+          .from('wallets')
+          .select('*')
+          .eq('user_id', user.id);
+
+        if (error) {
+          console.error('Error fetching wallets:', error);
+          return [];
+        }
+
+        return (data || []).map(w => ({
+          id: w.id,
+          userId: w.user_id,
+          balance: w.balance || 0,
+          currency: w.currency || 'USD',
+          status: w.status || 'ACTIVE',
+          dailyLimit: w.daily_limit || 5000,
+          monthlyLimit: w.monthly_limit || 50000,
+          createdAt: w.created_at,
+          updatedAt: w.updated_at,
+        }));
+      }
+
+      // Normal API mode
+      return walletService.getWallets();
+    },
+    enabled: !!user?.id,
   });
 }
 

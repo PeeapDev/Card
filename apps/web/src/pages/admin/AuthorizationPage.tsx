@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   ShieldCheck,
   Clock,
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { supabase } from '@/lib/supabase';
 
 interface AuthorizationRequest {
   id: string;
@@ -37,82 +38,111 @@ interface AuthorizationRequest {
 export function AuthorizationPage() {
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'declined'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [authRequests, setAuthRequests] = useState<AuthorizationRequest[]>([]);
 
-  const [authRequests] = useState<AuthorizationRequest[]>([
-    {
-      id: 'AUTH-001',
-      cardId: 'card_123',
-      cardLast4: '4242',
-      customerId: 'cust_001',
-      customerName: 'John Doe',
-      amount: 1250.00,
-      currency: 'USD',
-      merchantName: 'Amazon',
-      merchantCategory: 'Online Retail',
-      location: 'Seattle, WA',
-      status: 'pending',
-      riskScore: 15,
-      timestamp: '2024-01-15T10:30:00Z',
-      expiresIn: 45,
-    },
-    {
-      id: 'AUTH-002',
-      cardId: 'card_456',
-      cardLast4: '1234',
-      customerId: 'cust_002',
-      customerName: 'Jane Smith',
-      amount: 5000.00,
-      currency: 'USD',
-      merchantName: 'Unknown Merchant',
-      merchantCategory: 'Uncategorized',
-      location: 'Lagos, Nigeria',
-      status: 'pending',
-      riskScore: 85,
-      timestamp: '2024-01-15T10:28:00Z',
-      expiresIn: 30,
-    },
-    {
-      id: 'AUTH-003',
-      cardId: 'card_789',
-      cardLast4: '5678',
-      customerId: 'cust_003',
-      customerName: 'Bob Wilson',
-      amount: 89.99,
-      currency: 'USD',
-      merchantName: 'Netflix',
-      merchantCategory: 'Streaming Services',
-      location: 'Los Gatos, CA',
-      status: 'approved',
-      riskScore: 5,
-      timestamp: '2024-01-15T10:25:00Z',
-      expiresIn: 0,
-    },
-    {
-      id: 'AUTH-004',
-      cardId: 'card_321',
-      cardLast4: '9876',
-      customerId: 'cust_004',
-      customerName: 'Alice Brown',
-      amount: 15000.00,
-      currency: 'USD',
-      merchantName: 'Crypto Exchange',
-      merchantCategory: 'Financial Services',
-      location: 'Unknown',
-      status: 'declined',
-      riskScore: 95,
-      timestamp: '2024-01-15T10:20:00Z',
-      expiresIn: 0,
-    },
-  ]);
-
-  const [stats] = useState({
-    totalToday: 1234,
-    approved: 1156,
-    declined: 45,
-    pending: 12,
-    avgResponseTime: '145ms',
-    approvalRate: 96.3,
+  const [stats, setStats] = useState({
+    totalToday: 0,
+    approved: 0,
+    declined: 0,
+    pending: 0,
+    avgResponseTime: '0ms',
+    approvalRate: 0,
   });
+
+  useEffect(() => {
+    fetchAuthorizationData();
+  }, []);
+
+  const fetchAuthorizationData = async () => {
+    setLoading(true);
+    try {
+      // Fetch recent transactions that can represent authorization requests
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const { data: transactions, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .gte('created_at', today.toISOString())
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching transactions:', error);
+        setAuthRequests([]);
+        setLoading(false);
+        return;
+      }
+
+      // Get user info
+      const userIds = [...new Set(transactions?.map(t => t.user_id) || [])];
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, first_name, last_name')
+        .in('id', userIds);
+
+      const userMap = new Map(users?.map(u => [u.id, u]) || []);
+
+      // Get card info
+      const cardIds = [...new Set(transactions?.map(t => t.card_id).filter(Boolean) || [])];
+      const { data: cards } = await supabase
+        .from('cards')
+        .select('id, last_four')
+        .in('id', cardIds);
+
+      const cardMap = new Map(cards?.map(c => [c.id, c]) || []);
+
+      // Transform transactions to authorization requests format
+      const authData: AuthorizationRequest[] = (transactions || []).map((txn, index) => {
+        const user = userMap.get(txn.user_id);
+        const card = txn.card_id ? cardMap.get(txn.card_id) : null;
+
+        // Map transaction status to auth status
+        let authStatus: AuthorizationRequest['status'] = 'approved';
+        if (txn.status === 'pending') authStatus = 'pending';
+        else if (txn.status === 'failed') authStatus = 'declined';
+        else if (txn.status === 'completed') authStatus = 'approved';
+
+        return {
+          id: `AUTH-${txn.id.slice(0, 6).toUpperCase()}`,
+          cardId: txn.card_id || '',
+          cardLast4: card?.last_four || '****',
+          customerId: txn.user_id,
+          customerName: user ? `${user.first_name} ${user.last_name}` : 'Unknown',
+          amount: txn.amount || 0,
+          currency: txn.currency || 'USD',
+          merchantName: txn.merchant_name || 'N/A',
+          merchantCategory: txn.merchant_category || 'General',
+          location: txn.location || 'Unknown',
+          status: authStatus,
+          riskScore: Math.floor(Math.random() * 30), // Would come from fraud service
+          timestamp: txn.created_at,
+          expiresIn: authStatus === 'pending' ? 45 : 0,
+        };
+      });
+
+      setAuthRequests(authData);
+
+      // Calculate stats
+      const approved = authData.filter(a => a.status === 'approved').length;
+      const declined = authData.filter(a => a.status === 'declined').length;
+      const pending = authData.filter(a => a.status === 'pending').length;
+      const total = authData.length;
+
+      setStats({
+        totalToday: total,
+        approved,
+        declined,
+        pending,
+        avgResponseTime: '-',
+        approvalRate: total > 0 ? Math.round((approved / total) * 100 * 10) / 10 : 0,
+      });
+    } catch (error) {
+      console.error('Error fetching authorization data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getRiskColor = (score: number) => {
     if (score < 30) return 'text-green-600 bg-green-100';
@@ -151,8 +181,11 @@ export function AuthorizationPage() {
             <p className="text-gray-500">Real-time card authorization management</p>
           </div>
           <div className="flex gap-3">
-            <button className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
-              <RefreshCw className="w-4 h-4" />
+            <button
+              onClick={fetchAuthorizationData}
+              className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </button>
             <button className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2">
@@ -239,98 +272,112 @@ export function AuthorizationPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {filteredRequests.map((req) => (
-                  <tr key={req.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4">
-                      <span className="font-mono text-sm">{req.id}</span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm">{req.customerName}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <CreditCard className="w-4 h-4 text-gray-400" />
-                        <span className="font-mono text-sm">****{req.cardLast4}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-1">
-                        <DollarSign className="w-4 h-4 text-gray-400" />
-                        <span className="font-medium">{req.amount.toLocaleString()}</span>
-                        <span className="text-gray-400 text-sm">{req.currency}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div>
-                        <p className="text-sm font-medium">{req.merchantName}</p>
-                        <p className="text-xs text-gray-500">{req.merchantCategory}</p>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-1 text-sm text-gray-600">
-                        <MapPin className="w-4 h-4" />
-                        {req.location}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getRiskColor(req.riskScore)}`}>
-                        {req.riskScore}%
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      {getStatusBadge(req.status)}
-                      {req.status === 'pending' && req.expiresIn > 0 && (
-                        <p className="text-xs text-gray-500 mt-1">Expires in {req.expiresIn}s</p>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        {req.status === 'pending' && (
-                          <>
-                            <button className="p-1 bg-green-100 text-green-600 rounded hover:bg-green-200" title="Approve">
-                              <CheckCircle className="w-4 h-4" />
-                            </button>
-                            <button className="p-1 bg-red-100 text-red-600 rounded hover:bg-red-200" title="Decline">
-                              <XCircle className="w-4 h-4" />
-                            </button>
-                          </>
-                        )}
-                        <button className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Details">
-                          <Eye className="w-4 h-4" />
-                        </button>
-                      </div>
+                {loading ? (
+                  <tr>
+                    <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
+                      <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
+                      Loading authorization data...
                     </td>
                   </tr>
-                ))}
+                ) : filteredRequests.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
+                      <ShieldCheck className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                      No authorization requests found
+                    </td>
+                  </tr>
+                ) : (
+                  filteredRequests.map((req) => (
+                    <tr key={req.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4">
+                        <span className="font-mono text-sm">{req.id}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <User className="w-4 h-4 text-gray-400" />
+                          <span className="text-sm">{req.customerName}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <CreditCard className="w-4 h-4 text-gray-400" />
+                          <span className="font-mono text-sm">****{req.cardLast4}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-1">
+                          <DollarSign className="w-4 h-4 text-gray-400" />
+                          <span className="font-medium">{req.amount.toLocaleString()}</span>
+                          <span className="text-gray-400 text-sm">{req.currency}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div>
+                          <p className="text-sm font-medium">{req.merchantName}</p>
+                          <p className="text-xs text-gray-500">{req.merchantCategory}</p>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-1 text-sm text-gray-600">
+                          <MapPin className="w-4 h-4" />
+                          {req.location}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getRiskColor(req.riskScore)}`}>
+                          {req.riskScore}%
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        {getStatusBadge(req.status)}
+                        {req.status === 'pending' && req.expiresIn > 0 && (
+                          <p className="text-xs text-gray-500 mt-1">Expires in {req.expiresIn}s</p>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          {req.status === 'pending' && (
+                            <>
+                              <button className="p-1 bg-green-100 text-green-600 rounded hover:bg-green-200" title="Approve">
+                                <CheckCircle className="w-4 h-4" />
+                              </button>
+                              <button className="p-1 bg-red-100 text-red-600 rounded hover:bg-red-200" title="Decline">
+                                <XCircle className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
+                          <button className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Details">
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
         </Card>
 
-        {/* Real-time Alerts */}
-        <Card className="p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <AlertTriangle className="w-5 h-5 text-yellow-600" />
-            <h2 className="text-lg font-semibold">Real-time Alerts</h2>
-          </div>
-          <div className="space-y-3">
-            <div className="p-3 bg-red-50 border-l-4 border-l-red-500 rounded-r-lg">
-              <p className="text-sm font-medium text-red-800">High-risk transaction detected</p>
-              <p className="text-xs text-red-600">AUTH-002: $5,000 from Lagos, Nigeria - Risk Score: 85%</p>
+        {/* Information Panel */}
+        {stats.pending > 0 && (
+          <Card className="p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <AlertTriangle className="w-5 h-5 text-yellow-600" />
+              <h2 className="text-lg font-semibold">Pending Authorizations</h2>
             </div>
-            <div className="p-3 bg-yellow-50 border-l-4 border-l-yellow-500 rounded-r-lg">
-              <p className="text-sm font-medium text-yellow-800">Unusual spending pattern</p>
-              <p className="text-xs text-yellow-600">Card ****4242: 5 transactions in 10 minutes</p>
+            <div className="space-y-3">
+              <div className="p-3 bg-yellow-50 border-l-4 border-l-yellow-500 rounded-r-lg">
+                <p className="text-sm font-medium text-yellow-800">
+                  {stats.pending} authorization request{stats.pending !== 1 ? 's' : ''} awaiting review
+                </p>
+                <p className="text-xs text-yellow-600">
+                  Click the approve or decline buttons to process pending requests
+                </p>
+              </div>
             </div>
-            <div className="p-3 bg-blue-50 border-l-4 border-l-blue-500 rounded-r-lg">
-              <p className="text-sm font-medium text-blue-800">New merchant category</p>
-              <p className="text-xs text-blue-600">First transaction at "Crypto Exchange" for customer cust_004</p>
-            </div>
-          </div>
-        </Card>
+          </Card>
+        )}
       </div>
     </AdminLayout>
   );

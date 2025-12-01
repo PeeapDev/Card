@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Wallet,
   Plus,
@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { supabase } from '@/lib/supabase';
 
 interface Account {
   id: string;
@@ -39,90 +40,90 @@ export function AccountsPage() {
   const [filter, setFilter] = useState<'all' | 'wallet' | 'card_funding' | 'merchant' | 'agent'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'frozen' | 'closed'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  const [stats] = useState({
-    totalAccounts: 1456,
-    activeAccounts: 1389,
-    totalBalance: 2456780.50,
-    frozenAccounts: 45,
-    closedAccounts: 22,
-    newThisMonth: 89,
+  const [stats, setStats] = useState({
+    totalAccounts: 0,
+    activeAccounts: 0,
+    totalBalance: 0,
+    frozenAccounts: 0,
+    closedAccounts: 0,
+    newThisMonth: 0,
   });
 
-  const [accounts] = useState<Account[]>([
-    {
-      id: 'acc_001',
-      customerId: 'cust_001',
-      customerName: 'John Doe',
-      type: 'wallet',
-      currency: 'USD',
-      balance: 5250.00,
-      availableBalance: 5250.00,
-      status: 'active',
-      createdAt: '2024-01-10T10:00:00Z',
-      lastTransaction: '2024-01-15T10:30:00Z',
-    },
-    {
-      id: 'acc_002',
-      customerId: 'cust_002',
-      customerName: 'Acme Corporation',
-      type: 'card_funding',
-      currency: 'USD',
-      balance: 125000.00,
-      availableBalance: 118500.00,
-      status: 'active',
-      createdAt: '2024-01-08T09:00:00Z',
-      lastTransaction: '2024-01-15T11:00:00Z',
-    },
-    {
-      id: 'acc_003',
-      customerId: 'cust_003',
-      customerName: 'Quick Mart Store',
-      type: 'merchant',
-      currency: 'USD',
-      balance: 45780.50,
-      availableBalance: 45780.50,
-      status: 'active',
-      createdAt: '2024-01-05T14:00:00Z',
-      lastTransaction: '2024-01-15T12:00:00Z',
-    },
-    {
-      id: 'acc_004',
-      customerId: 'cust_004',
-      customerName: 'Mobile Money Agent',
-      type: 'agent',
-      currency: 'NGN',
-      balance: 2500000.00,
-      availableBalance: 2350000.00,
-      status: 'active',
-      createdAt: '2024-01-02T11:00:00Z',
-      lastTransaction: '2024-01-15T09:00:00Z',
-    },
-    {
-      id: 'acc_005',
-      customerId: 'cust_005',
-      customerName: 'Jane Smith',
-      type: 'wallet',
-      currency: 'EUR',
-      balance: 3200.00,
-      availableBalance: 0.00,
-      status: 'frozen',
-      createdAt: '2024-01-01T10:00:00Z',
-      lastTransaction: '2024-01-10T15:00:00Z',
-    },
-    {
-      id: 'acc_006',
-      customerId: 'cust_006',
-      customerName: 'Old User Account',
-      type: 'wallet',
-      currency: 'USD',
-      balance: 0.00,
-      availableBalance: 0.00,
-      status: 'closed',
-      createdAt: '2023-06-15T10:00:00Z',
-      lastTransaction: '2023-12-01T10:00:00Z',
-    },
-  ]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+
+  useEffect(() => {
+    fetchAccounts();
+  }, []);
+
+  const fetchAccounts = async () => {
+    setLoading(true);
+    try {
+      // Fetch wallets from database
+      const { data: wallets, error } = await supabase
+        .from('wallets')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching wallets:', error);
+        setAccounts([]);
+        setLoading(false);
+        return;
+      }
+
+      // Get user info
+      const userIds = [...new Set(wallets?.map(w => w.user_id) || [])];
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, role')
+        .in('id', userIds);
+
+      const userMap = new Map(users?.map(u => [u.id, u]) || []);
+
+      // Transform wallets to account format
+      const formattedAccounts: Account[] = (wallets || []).map(wallet => {
+        const user = userMap.get(wallet.user_id);
+        let accountType: Account['type'] = 'wallet';
+        if (user?.role === 'merchant') accountType = 'merchant';
+        else if (user?.role === 'agent') accountType = 'agent';
+
+        return {
+          id: wallet.id,
+          customerId: wallet.user_id,
+          customerName: user ? `${user.first_name} ${user.last_name}` : 'Unknown',
+          type: accountType,
+          currency: wallet.currency || 'USD',
+          balance: wallet.balance || 0,
+          availableBalance: wallet.balance || 0,
+          status: wallet.status || 'active',
+          createdAt: wallet.created_at,
+          lastTransaction: wallet.updated_at || null,
+        };
+      });
+
+      setAccounts(formattedAccounts);
+
+      // Calculate stats
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const totalBalance = formattedAccounts.reduce((sum, a) => sum + a.balance, 0);
+
+      setStats({
+        totalAccounts: formattedAccounts.length,
+        activeAccounts: formattedAccounts.filter(a => a.status === 'active').length,
+        totalBalance,
+        frozenAccounts: formattedAccounts.filter(a => a.status === 'frozen').length,
+        closedAccounts: formattedAccounts.filter(a => a.status === 'closed').length,
+        newThisMonth: formattedAccounts.filter(a => new Date(a.createdAt) >= startOfMonth).length,
+      });
+    } catch (error) {
+      console.error('Error fetching accounts:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getTypeBadge = (type: string) => {
     switch (type) {

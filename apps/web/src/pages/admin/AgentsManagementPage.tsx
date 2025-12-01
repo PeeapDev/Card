@@ -51,10 +51,15 @@ export function AgentsManagementPage() {
         .eq('role', 'agent')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching agents:', error);
+        setAgents([]);
+        return;
+      }
       setAgents(data || []);
     } catch (error) {
       console.error('Error fetching agents:', error);
+      setAgents([]);
     } finally {
       setLoading(false);
     }
@@ -94,7 +99,10 @@ export function AgentsManagementPage() {
         .update({ is_active: !currentStatus })
         .eq('id', agentId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error updating agent status:', error);
+        return;
+      }
       fetchAgents();
     } catch (error) {
       console.error('Error updating agent status:', error);

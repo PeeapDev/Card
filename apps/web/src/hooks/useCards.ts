@@ -1,10 +1,55 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { cardService, CreateCardRequest, UpdateCardLimitsRequest } from '@/services/card.service';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
+import type { Card } from '@/types';
+
+// Check if we're in demo mode
+const isDemoMode = () => {
+  return localStorage.getItem('demoUser') !== null;
+};
 
 export function useCards() {
+  const { user } = useAuth();
+
   return useQuery({
-    queryKey: ['cards'],
-    queryFn: cardService.getCards,
+    queryKey: ['cards', user?.id],
+    queryFn: async (): Promise<Card[]> => {
+      // If demo mode, fetch from Supabase or return empty array
+      if (isDemoMode()) {
+        if (!user?.id) return [];
+
+        const { data, error } = await supabase
+          .from('cards')
+          .select('*')
+          .eq('user_id', user.id);
+
+        if (error) {
+          console.error('Error fetching cards:', error);
+          return [];
+        }
+
+        return (data || []).map(c => ({
+          id: c.id,
+          walletId: c.wallet_id,
+          cardNumber: c.card_number || '',
+          maskedNumber: c.masked_number || '****',
+          expiryMonth: c.expiry_month || 12,
+          expiryYear: c.expiry_year || 2025,
+          cardholderName: c.cardholder_name || '',
+          status: c.status || 'ACTIVE',
+          type: c.type || 'VIRTUAL',
+          dailyLimit: c.daily_limit || 1000,
+          monthlyLimit: c.monthly_limit || 10000,
+          createdAt: c.created_at,
+          updatedAt: c.updated_at,
+        }));
+      }
+
+      // Normal API mode
+      return cardService.getCards();
+    },
+    enabled: !!user?.id,
   });
 }
 

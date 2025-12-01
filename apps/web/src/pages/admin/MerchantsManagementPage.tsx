@@ -57,10 +57,15 @@ export function MerchantsManagementPage() {
         .eq('role', 'merchant')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching merchants:', error);
+        setMerchants([]);
+        return;
+      }
       setMerchants(data || []);
     } catch (error) {
       console.error('Error fetching merchants:', error);
+      setMerchants([]);
     } finally {
       setLoading(false);
     }
@@ -103,7 +108,10 @@ export function MerchantsManagementPage() {
         .update({ is_active: !currentStatus })
         .eq('id', merchantId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error updating merchant status:', error);
+        return;
+      }
       fetchMerchants();
     } catch (error) {
       console.error('Error updating merchant status:', error);

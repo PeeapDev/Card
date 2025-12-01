@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   ArrowLeftRight,
   Search,
@@ -18,10 +18,11 @@ import {
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { supabase } from '@/lib/supabase';
 
 interface Transaction {
   id: string;
-  type: 'authorization' | 'clearing' | 'refund' | 'reversal' | 'transfer';
+  type: 'authorization' | 'clearing' | 'refund' | 'reversal' | 'transfer' | 'deposit' | 'withdrawal';
   cardId: string;
   cardLast4: string;
   customerId: string;
@@ -40,114 +41,92 @@ export function TransactionsPage() {
   const [filter, setFilter] = useState<'all' | 'authorization' | 'clearing' | 'refund' | 'transfer'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'pending' | 'failed'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  const [stats] = useState({
-    totalTransactions: 45672,
-    volume: 2456780.50,
-    pending: 156,
-    failed: 89,
-    avgValue: 125.50,
-    successRate: 98.5,
+  const [stats, setStats] = useState({
+    totalTransactions: 0,
+    volume: 0,
+    pending: 0,
+    failed: 0,
+    avgValue: 0,
+    successRate: 0,
   });
 
-  const [transactions] = useState<Transaction[]>([
-    {
-      id: 'txn_001',
-      type: 'authorization',
-      cardId: 'card_001',
-      cardLast4: '4242',
-      customerId: 'cust_001',
-      customerName: 'John Doe',
-      amount: 125.00,
-      currency: 'USD',
-      merchantName: 'Amazon',
-      merchantCategory: 'Online Retail',
-      status: 'completed',
-      direction: 'debit',
-      createdAt: '2024-01-15T10:30:00Z',
-      settledAt: '2024-01-15T10:30:05Z',
-    },
-    {
-      id: 'txn_002',
-      type: 'clearing',
-      cardId: 'card_002',
-      cardLast4: '1234',
-      customerId: 'cust_002',
-      customerName: 'Acme Corp',
-      amount: 5000.00,
-      currency: 'USD',
-      merchantName: 'Office Depot',
-      merchantCategory: 'Office Supplies',
-      status: 'pending',
-      direction: 'debit',
-      createdAt: '2024-01-15T10:28:00Z',
-      settledAt: null,
-    },
-    {
-      id: 'txn_003',
-      type: 'refund',
-      cardId: 'card_003',
-      cardLast4: '5678',
-      customerId: 'cust_003',
-      customerName: 'Jane Smith',
-      amount: 89.99,
-      currency: 'USD',
-      merchantName: 'Netflix',
-      merchantCategory: 'Streaming',
-      status: 'completed',
-      direction: 'credit',
-      createdAt: '2024-01-15T10:25:00Z',
-      settledAt: '2024-01-15T10:25:30Z',
-    },
-    {
-      id: 'txn_004',
-      type: 'authorization',
-      cardId: 'card_004',
-      cardLast4: '9012',
-      customerId: 'cust_004',
-      customerName: 'Bob Wilson',
-      amount: 15000.00,
-      currency: 'USD',
-      merchantName: 'Crypto Exchange',
-      merchantCategory: 'Financial Services',
-      status: 'failed',
-      direction: 'debit',
-      createdAt: '2024-01-15T10:20:00Z',
-      settledAt: null,
-    },
-    {
-      id: 'txn_005',
-      type: 'transfer',
-      cardId: 'card_001',
-      cardLast4: '4242',
-      customerId: 'cust_001',
-      customerName: 'John Doe',
-      amount: 500.00,
-      currency: 'USD',
-      merchantName: 'P2P Transfer',
-      merchantCategory: 'Transfer',
-      status: 'completed',
-      direction: 'debit',
-      createdAt: '2024-01-15T10:15:00Z',
-      settledAt: '2024-01-15T10:15:02Z',
-    },
-    {
-      id: 'txn_006',
-      type: 'reversal',
-      cardId: 'card_005',
-      cardLast4: '3456',
-      customerId: 'cust_005',
-      customerName: 'Alice Brown',
-      amount: 250.00,
-      currency: 'EUR',
-      merchantName: 'Travel Agency',
-      merchantCategory: 'Travel',
-      status: 'completed',
-      direction: 'credit',
-      createdAt: '2024-01-15T10:10:00Z',
-      settledAt: '2024-01-15T10:10:15Z',
-    },
-  ]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+
+  useEffect(() => {
+    fetchTransactions();
+  }, []);
+
+  const fetchTransactions = async () => {
+    setLoading(true);
+    try {
+      // Fetch transactions from database
+      const { data: txnData, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (error) {
+        console.error('Error fetching transactions:', error);
+        setTransactions([]);
+        setLoading(false);
+        return;
+      }
+
+      // Get user info for transactions
+      const userIds = [...new Set(txnData?.map(t => t.user_id) || [])];
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, first_name, last_name')
+        .in('id', userIds);
+
+      const userMap = new Map(users?.map(u => [u.id, u]) || []);
+
+      // Transform transactions to display format
+      const formattedTxns: Transaction[] = (txnData || []).map(txn => {
+        const user = userMap.get(txn.user_id);
+        return {
+          id: txn.id,
+          type: txn.type || 'transfer',
+          cardId: txn.card_id || '',
+          cardLast4: '****',
+          customerId: txn.user_id,
+          customerName: user ? `${user.first_name} ${user.last_name}` : 'Unknown',
+          amount: txn.amount,
+          currency: txn.currency || 'USD',
+          merchantName: txn.description || txn.type,
+          merchantCategory: txn.type,
+          status: txn.status || 'completed',
+          direction: ['deposit', 'refund', 'receive'].includes(txn.type) ? 'credit' : 'debit',
+          createdAt: txn.created_at,
+          settledAt: txn.status === 'completed' ? txn.created_at : null,
+        };
+      });
+
+      setTransactions(formattedTxns);
+
+      // Calculate stats
+      const completed = formattedTxns.filter(t => t.status === 'completed').length;
+      const pending = formattedTxns.filter(t => t.status === 'pending').length;
+      const failed = formattedTxns.filter(t => t.status === 'failed').length;
+      const totalVolume = formattedTxns.reduce((sum, t) => sum + t.amount, 0);
+
+      setStats({
+        totalTransactions: formattedTxns.length,
+        volume: totalVolume,
+        pending,
+        failed,
+        avgValue: formattedTxns.length > 0 ? totalVolume / formattedTxns.length : 0,
+        successRate: formattedTxns.length > 0 ? (completed / formattedTxns.length) * 100 : 0,
+      });
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getTypeBadge = (type: string) => {
     switch (type) {

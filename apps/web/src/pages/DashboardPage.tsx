@@ -5,14 +5,16 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { useAuth } from '@/context/AuthContext';
 import { useWallets } from '@/hooks/useWallets';
 import { useCards } from '@/hooks/useCards';
+import { useTransactions } from '@/hooks/useTransactions';
 import { clsx } from 'clsx';
 
 export function DashboardPage() {
   const { user } = useAuth();
-  const { data: wallets, isLoading: walletsLoading } = useWallets();
-  const { data: cards, isLoading: cardsLoading } = useCards();
+  const { data: wallets, isLoading: walletsLoading, error: walletsError } = useWallets();
+  const { data: cards, isLoading: cardsLoading, error: cardsError } = useCards();
+  const { data: transactions, isLoading: transactionsLoading, error: transactionsError } = useTransactions();
 
-  const totalBalance = wallets?.reduce((sum, w) => sum + w.balance, 0) || 0;
+  const totalBalance = wallets?.reduce((sum, w) => sum + (w.balance || 0), 0) || 0;
   const activeCards = cards?.filter((c) => c.status === 'ACTIVE').length || 0;
 
   return (
@@ -133,43 +135,51 @@ export function DashboardPage() {
               <CardDescription>Your latest financial activity</CardDescription>
             </CardHeader>
             <div className="space-y-4">
-              {/* Placeholder transactions */}
-              <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                <div className="flex items-center">
-                  <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                    <ArrowDownRight className="w-5 h-5 text-green-600" />
-                  </div>
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-gray-900">Deposit</p>
-                    <p className="text-xs text-gray-500">Nov 28, 2024</p>
-                  </div>
-                </div>
-                <p className="text-sm font-medium text-green-600">+$500.00</p>
-              </div>
-              <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                <div className="flex items-center">
-                  <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                    <ArrowUpRight className="w-5 h-5 text-red-600" />
-                  </div>
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-gray-900">Payment - Amazon</p>
-                    <p className="text-xs text-gray-500">Nov 27, 2024</p>
-                  </div>
-                </div>
-                <p className="text-sm font-medium text-red-600">-$89.99</p>
-              </div>
-              <div className="flex items-center justify-between py-3">
-                <div className="flex items-center">
-                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                    <ArrowUpRight className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-gray-900">Transfer</p>
-                    <p className="text-xs text-gray-500">Nov 26, 2024</p>
-                  </div>
-                </div>
-                <p className="text-sm font-medium text-blue-600">-$200.00</p>
-              </div>
+              {transactionsLoading ? (
+                <div className="py-8 text-center text-gray-500">Loading transactions...</div>
+              ) : transactions && transactions.length > 0 ? (
+                transactions.slice(0, 3).map((txn, index) => {
+                  const isCredit = ['deposit', 'receive', 'refund'].includes(txn.type);
+                  return (
+                    <div
+                      key={txn.id}
+                      className={clsx(
+                        "flex items-center justify-between py-3",
+                        index < 2 && "border-b border-gray-100"
+                      )}
+                    >
+                      <div className="flex items-center">
+                        <div className={clsx(
+                          "w-10 h-10 rounded-full flex items-center justify-center",
+                          isCredit ? "bg-green-100" : "bg-red-100"
+                        )}>
+                          {isCredit ? (
+                            <ArrowDownRight className="w-5 h-5 text-green-600" />
+                          ) : (
+                            <ArrowUpRight className="w-5 h-5 text-red-600" />
+                          )}
+                        </div>
+                        <div className="ml-3">
+                          <p className="text-sm font-medium text-gray-900 capitalize">
+                            {txn.description || txn.type}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {new Date(txn.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      <p className={clsx(
+                        "text-sm font-medium",
+                        isCredit ? "text-green-600" : "text-red-600"
+                      )}>
+                        {isCredit ? '+' : '-'}${Math.abs(txn.amount).toFixed(2)}
+                      </p>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="py-8 text-center text-gray-500">No transactions yet</div>
+              )}
             </div>
             <Link
               to="/transactions"
