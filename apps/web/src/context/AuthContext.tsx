@@ -28,6 +28,18 @@ const DEMO_USERS: Record<string, User> = {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
+  user2: {
+    id: 'demo-user-002',
+    email: 'user2@demo.com',
+    firstName: 'Jane',
+    lastName: 'Smith',
+    phone: '+1234567895',
+    roles: ['user'],
+    isActive: true,
+    kycStatus: 'VERIFIED',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
   merchant: {
     id: 'demo-merchant-001',
     email: 'merchant@demo.com',

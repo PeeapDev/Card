@@ -7,7 +7,7 @@ import { AuthLayout } from '@/components/layout/AuthLayout';
 import { Button, Input } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
 import { getUserDashboard } from '@/components/RoleBasedRoute';
-import { AlertCircle, Shield, User, Store, Code, Headphones } from 'lucide-react';
+import { AlertCircle, Shield, User, UserPlus, Store, Code, Headphones } from 'lucide-react';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -18,7 +18,8 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 const DEMO_ROLES = [
   { key: 'admin', label: 'Admin', icon: Shield, color: 'bg-red-500 hover:bg-red-600' },
-  { key: 'user', label: 'User', icon: User, color: 'bg-blue-500 hover:bg-blue-600' },
+  { key: 'user', label: 'User 1', icon: User, color: 'bg-blue-500 hover:bg-blue-600' },
+  { key: 'user2', label: 'User 2', icon: UserPlus, color: 'bg-cyan-500 hover:bg-cyan-600' },
   { key: 'merchant', label: 'Merchant', icon: Store, color: 'bg-green-500 hover:bg-green-600' },
   { key: 'developer', label: 'Developer', icon: Code, color: 'bg-purple-500 hover:bg-purple-600' },
   { key: 'agent', label: 'Agent', icon: Headphones, color: 'bg-orange-500 hover:bg-orange-600' },
@@ -54,7 +55,7 @@ export function LoginPage() {
     }
   };
 
-  const handleDemoLogin = async (role: 'admin' | 'user' | 'merchant' | 'developer' | 'agent') => {
+  const handleDemoLogin = async (role: 'admin' | 'user' | 'user2' | 'merchant' | 'developer' | 'agent') => {
     try {
       setError(null);
       setDemoLoading(role);
