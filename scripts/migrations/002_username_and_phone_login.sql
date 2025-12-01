@@ -12,9 +12,10 @@ CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
 
 -- 4. Drop the problematic wallet trigger if it exists
 DROP TRIGGER IF EXISTS create_wallet_on_user_insert ON users;
+DROP TRIGGER IF EXISTS trigger_create_wallet_for_user ON users;
 
--- 5. Drop the old function if it exists
-DROP FUNCTION IF EXISTS create_wallet_for_user();
+-- 5. Drop the old function if it exists (CASCADE to drop dependent triggers)
+DROP FUNCTION IF EXISTS create_wallet_for_user() CASCADE;
 
 -- 6. Create a proper RPC function for user creation with wallet
 CREATE OR REPLACE FUNCTION create_user_with_wallet(

@@ -1,8 +1,8 @@
 {
   "run": {
-    "command": "nx build --filter=web",
-    "startTime": "2025-12-01T16:46:07.471Z",
-    "endTime": "2025-12-01T16:46:10.329Z",
+    "command": "nx build",
+    "startTime": "2025-12-01T19:46:18.761Z",
+    "endTime": "2025-12-01T19:46:18.780Z",
     "inner": false
   },
   "tasks": [
@@ -11,8 +11,8 @@
       "target": "build",
       "projectName": "common",
       "hash": "5047249017832070023",
-      "startTime": "2025-12-01T16:46:07.475Z",
-      "endTime": "2025-12-01T16:46:07.503Z",
+      "startTime": "2025-12-01T19:46:18.764Z",
+      "endTime": "2025-12-01T19:46:18.777Z",
       "params": "",
       "cacheStatus": "local-cache-hit",
       "status": 0
@@ -21,12 +21,12 @@
       "taskId": "api-gateway:build:production",
       "target": "build",
       "projectName": "api-gateway",
-      "hash": "3214825814865703946",
-      "startTime": "2025-12-01T16:46:07.506Z",
-      "endTime": "2025-12-01T16:46:10.329Z",
+      "hash": "3357027396267541040",
+      "startTime": "2025-12-01T19:46:18.778Z",
+      "endTime": "2025-12-01T19:46:18.779Z",
       "params": "",
-      "cacheStatus": "cache-miss",
-      "status": 1
+      "cacheStatus": "local-cache-hit",
+      "status": 0
     }
   ]
 }

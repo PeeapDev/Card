@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react';
 import {
   Users,
   Search,
-  Eye,
-  Edit,
   Ban,
   CheckCircle,
   XCircle,
@@ -15,6 +13,12 @@ import {
   X,
   Loader2,
   Wallet,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Calendar,
+  DollarSign,
+  Shield,
+  AlertTriangle,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
@@ -30,7 +34,26 @@ interface User {
   kyc_status: string;
   status: string;
   created_at: string;
-  last_login?: string;
+  last_login_at?: string;
+  external_id?: string;
+}
+
+interface UserWallet {
+  id: string;
+  balance: number;
+  currency: string;
+  status: string;
+}
+
+interface Transaction {
+  id: string;
+  external_id: string;
+  type: string;
+  amount: number;
+  currency: string;
+  status: string;
+  description: string;
+  created_at: string;
 }
 
 interface CreateUserForm {
@@ -49,6 +72,8 @@ export function UsersManagementPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+
+  // Create modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -63,6 +88,12 @@ export function UsersManagementPage() {
     role: 'user',
     initialBalance: 100,
   });
+
+  // User detail modal state
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [userWallet, setUserWallet] = useState<UserWallet | null>(null);
+  const [userTransactions, setUserTransactions] = useState<Transaction[]>([]);
+  const [loadingDetails, setLoadingDetails] = useState(false);
 
   useEffect(() => {
     fetchUsers();
@@ -90,23 +121,56 @@ export function UsersManagementPage() {
     }
   };
 
+  const fetchUserDetails = async (user: User) => {
+    setSelectedUser(user);
+    setLoadingDetails(true);
+    setUserWallet(null);
+    setUserTransactions([]);
+
+    try {
+      // Fetch user's wallet
+      const { data: walletData } = await supabase
+        .from('wallets')
+        .select('id, balance, currency, status')
+        .eq('user_id', user.id)
+        .eq('wallet_type', 'primary')
+        .single();
+
+      if (walletData) {
+        setUserWallet(walletData);
+
+        // Fetch transactions for this wallet
+        const { data: txData } = await supabase
+          .from('transactions')
+          .select('*')
+          .eq('wallet_id', walletData.id)
+          .order('created_at', { ascending: false })
+          .limit(20);
+
+        setUserTransactions(txData || []);
+      }
+    } catch (error) {
+      console.error('Error fetching user details:', error);
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
+
   const createUser = async () => {
     setCreating(true);
     setCreateError(null);
     setCreateSuccess(null);
 
     try {
-      // Validate form
       if (!formData.phone || !formData.firstName || !formData.lastName) {
         setCreateError('Please fill in all required fields (Phone, First Name, Last Name)');
         setCreating(false);
         return;
       }
 
-      // Generate username if not provided
       const username = formData.username || `user${Date.now().toString(36)}`;
 
-      // Check if phone already exists (phone column should always exist)
+      // Check if phone already exists
       const { data: existingPhone, error: phoneCheckError } = await supabase
         .from('users')
         .select('id')
@@ -137,7 +201,7 @@ export function UsersManagementPage() {
       const externalId = `usr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
       const walletExternalId = `wal_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
 
-      // Try using RPC function if available
+      // Try RPC function first
       const { data: rpcResult, error: rpcError } = await supabase.rpc('create_user_with_wallet', {
         p_external_id: externalId,
         p_email: formData.email || null,
@@ -154,10 +218,9 @@ export function UsersManagementPage() {
       if (!rpcError && rpcResult) {
         setCreateSuccess(`User ${formData.firstName} created successfully with $${formData.initialBalance} balance!`);
       } else {
-        // RPC not available, try direct insert WITHOUT username (column might not exist)
         console.log('RPC not available, trying direct insert:', rpcError?.message);
 
-        // Build insert object without username if column doesn't exist
+        // Direct insert without username column
         const insertData: Record<string, unknown> = {
           external_id: externalId,
           email: formData.email || null,
@@ -173,7 +236,6 @@ export function UsersManagementPage() {
           phone_verified: true,
         };
 
-        // Create user directly
         const { data: newUser, error: userError } = await supabase
           .from('users')
           .insert(insertData)
@@ -181,11 +243,8 @@ export function UsersManagementPage() {
           .single();
 
         if (userError) {
-          // Check if it's the wallet trigger error
           if (userError.message.includes('external_id') && userError.message.includes('wallets')) {
-            setCreateError('Database trigger error: The wallet trigger is missing external_id. Please run the SQL migration in Supabase.');
-          } else if (userError.message.includes('username')) {
-            setCreateError('Username column not found. Please run the SQL migration in Supabase to add the username column.');
+            setCreateError('Database trigger error. Please run the SQL migration in Supabase.');
           } else {
             setCreateError(`Failed to create user: ${userError.message}`);
           }
@@ -193,33 +252,27 @@ export function UsersManagementPage() {
           return;
         }
 
-        // Check if wallet was auto-created by a database trigger
+        // Check if wallet was auto-created
         const { data: existingWallet } = await supabase
           .from('wallets')
           .select('id, external_id')
           .eq('user_id', newUser.id)
           .eq('wallet_type', 'primary')
-          .single();
+          .maybeSingle();
 
         if (existingWallet) {
-          // Wallet exists (created by trigger) - update it with external_id and balance
-          const walletExtId = existingWallet.external_id || walletExternalId;
-
           await supabase
             .from('wallets')
             .update({
-              external_id: walletExtId,
+              external_id: existingWallet.external_id || walletExternalId,
               balance: formData.initialBalance,
               status: 'ACTIVE',
               daily_limit: 5000,
               monthly_limit: 50000,
             })
             .eq('id', existingWallet.id);
-
-          setCreateSuccess(`User @${username} created successfully with $${formData.initialBalance} balance!`);
         } else {
-          // No wallet exists - create one
-          const { error: walletError } = await supabase
+          await supabase
             .from('wallets')
             .insert({
               external_id: walletExternalId,
@@ -231,16 +284,11 @@ export function UsersManagementPage() {
               daily_limit: 5000,
               monthly_limit: 50000,
             });
-
-          if (walletError) {
-            setCreateSuccess(`User @${username} created but wallet failed: ${walletError.message}`);
-          } else {
-            setCreateSuccess(`User @${username} created successfully with $${formData.initialBalance} balance!`);
-          }
         }
+
+        setCreateSuccess(`User ${formData.firstName} created successfully with $${formData.initialBalance} balance!`);
       }
 
-      // Reset form
       setFormData({
         email: '',
         password: 'User123!@#',
@@ -252,10 +300,8 @@ export function UsersManagementPage() {
         initialBalance: 100,
       });
 
-      // Refresh user list
       fetchUsers();
 
-      // Close modal after 2 seconds on success
       setTimeout(() => {
         setShowCreateModal(false);
         setCreateSuccess(null);
@@ -268,9 +314,37 @@ export function UsersManagementPage() {
     }
   };
 
+  const toggleUserStatus = async (userId: string, currentStatus: string) => {
+    try {
+      const newStatus = currentStatus === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
+      const { error } = await supabase
+        .from('users')
+        .update({ status: newStatus })
+        .eq('id', userId);
+
+      if (error) {
+        console.error('Error updating user status:', error);
+        return;
+      }
+
+      // Update local state
+      setUsers(prev => prev.map(u =>
+        u.id === userId ? { ...u, status: newStatus } : u
+      ));
+
+      // Update selected user if viewing
+      if (selectedUser?.id === userId) {
+        setSelectedUser(prev => prev ? { ...prev, status: newStatus } : null);
+      }
+    } catch (error) {
+      console.error('Error updating user status:', error);
+    }
+  };
+
   const filteredUsers = users.filter(user => {
     const matchesSearch =
       user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.phone?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       `${user.first_name} ${user.last_name}`.toLowerCase().includes(searchTerm.toLowerCase());
 
     const isActive = user.status === 'ACTIVE';
@@ -294,24 +368,6 @@ export function UsersManagementPage() {
         return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700"><XCircle className="w-3 h-3" /> Rejected</span>;
       default:
         return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">Not Started</span>;
-    }
-  };
-
-  const toggleUserStatus = async (userId: string, currentStatus: string) => {
-    try {
-      const newStatus = currentStatus === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
-      const { error } = await supabase
-        .from('users')
-        .update({ status: newStatus })
-        .eq('id', userId);
-
-      if (error) {
-        console.error('Error updating user status:', error);
-        return;
-      }
-      fetchUsers();
-    } catch (error) {
-      console.error('Error updating user status:', error);
     }
   };
 
@@ -374,8 +430,8 @@ export function UsersManagementPage() {
                 <Ban className="w-5 h-5 text-red-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Inactive</p>
-                <p className="text-xl font-semibold">{users.filter(u => u.status !== 'ACTIVE').length}</p>
+                <p className="text-sm text-gray-500">Suspended</p>
+                <p className="text-xl font-semibold">{users.filter(u => u.status === 'SUSPENDED').length}</p>
               </div>
             </div>
           </Card>
@@ -388,7 +444,7 @@ export function UsersManagementPage() {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search users by name or email..."
+                placeholder="Search users by name, email, or phone..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
@@ -401,7 +457,7 @@ export function UsersManagementPage() {
             >
               <option value="all">All Status</option>
               <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
+              <option value="inactive">Suspended</option>
               <option value="verified">KYC Verified</option>
               <option value="pending">KYC Pending</option>
             </select>
@@ -428,12 +484,15 @@ export function UsersManagementPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">KYC Status</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Joined</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {filteredUsers.map((user) => (
-                  <tr key={user.id} className="hover:bg-gray-50">
+                  <tr
+                    key={user.id}
+                    onClick={() => fetchUserDetails(user)}
+                    className="hover:bg-blue-50 cursor-pointer transition-colors"
+                  >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
@@ -449,10 +508,12 @@ export function UsersManagementPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="space-y-1">
-                        <p className="text-sm flex items-center gap-1">
-                          <Mail className="w-3 h-3 text-gray-400" />
-                          {user.email}
-                        </p>
+                        {user.email && (
+                          <p className="text-sm flex items-center gap-1">
+                            <Mail className="w-3 h-3 text-gray-400" />
+                            {user.email}
+                          </p>
+                        )}
                         {user.phone && (
                           <p className="text-sm flex items-center gap-1">
                             <Phone className="w-3 h-3 text-gray-400" />
@@ -476,23 +537,6 @@ export function UsersManagementPage() {
                         {new Date(user.created_at).toLocaleDateString()}
                       </p>
                     </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button className="p-2 hover:bg-gray-100 rounded-lg" title="View">
-                          <Eye className="w-4 h-4 text-gray-500" />
-                        </button>
-                        <button className="p-2 hover:bg-gray-100 rounded-lg" title="Edit">
-                          <Edit className="w-4 h-4 text-gray-500" />
-                        </button>
-                        <button
-                          onClick={() => toggleUserStatus(user.id, user.status)}
-                          className={`p-2 hover:bg-gray-100 rounded-lg ${user.status === 'ACTIVE' ? 'text-red-500' : 'text-green-500'}`}
-                          title={user.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
-                        >
-                          {user.status === 'ACTIVE' ? <Ban className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -505,6 +549,178 @@ export function UsersManagementPage() {
             </div>
           )}
         </Card>
+
+        {/* User Detail Modal */}
+        {selectedUser && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+              {/* Header */}
+              <div className="p-6 border-b border-gray-200 flex items-center justify-between bg-gray-50">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 bg-primary-100 rounded-full flex items-center justify-center">
+                    <span className="text-primary-700 font-bold text-xl">
+                      {selectedUser.first_name?.charAt(0)}{selectedUser.last_name?.charAt(0)}
+                    </span>
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">
+                      {selectedUser.first_name} {selectedUser.last_name}
+                    </h2>
+                    <p className="text-sm text-gray-500">{selectedUser.email || selectedUser.phone}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedUser(null)}
+                  className="p-2 hover:bg-gray-200 rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {loadingDetails ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+                  </div>
+                ) : (
+                  <>
+                    {/* User Info */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <p className="text-sm text-gray-500 mb-1">Phone</p>
+                        <p className="font-medium">{selectedUser.phone || 'N/A'}</p>
+                      </div>
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <p className="text-sm text-gray-500 mb-1">Email</p>
+                        <p className="font-medium">{selectedUser.email || 'N/A'}</p>
+                      </div>
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <p className="text-sm text-gray-500 mb-1">Role</p>
+                        <p className="font-medium capitalize">{selectedUser.roles || 'user'}</p>
+                      </div>
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <p className="text-sm text-gray-500 mb-1">Joined</p>
+                        <p className="font-medium">{new Date(selectedUser.created_at).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+
+                    {/* Status & KYC */}
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <Shield className="w-4 h-4 text-gray-500" />
+                        <span className="text-sm text-gray-500">Status:</span>
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                          selectedUser.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        }`}>
+                          {selectedUser.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-gray-500" />
+                        <span className="text-sm text-gray-500">KYC:</span>
+                        {getKycBadge(selectedUser.kyc_status)}
+                      </div>
+                    </div>
+
+                    {/* Wallet Info */}
+                    {userWallet && (
+                      <div className="p-4 bg-gradient-to-r from-primary-600 to-primary-500 rounded-xl text-white">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-primary-100">Wallet Balance</p>
+                            <p className="text-3xl font-bold">
+                              ${userWallet.balance?.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}
+                            </p>
+                          </div>
+                          <div className="p-3 bg-white/20 rounded-xl">
+                            <Wallet className="w-8 h-8" />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Transactions */}
+                    <div>
+                      <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                        <DollarSign className="w-5 h-5" />
+                        Recent Transactions
+                      </h3>
+                      {userTransactions.length === 0 ? (
+                        <div className="text-center py-8 bg-gray-50 rounded-lg">
+                          <Calendar className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                          <p className="text-gray-500">No transactions yet</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2 max-h-64 overflow-y-auto">
+                          {userTransactions.map((tx) => (
+                            <div
+                              key={tx.id}
+                              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className={`p-2 rounded-full ${
+                                  tx.amount >= 0 ? 'bg-green-100' : 'bg-red-100'
+                                }`}>
+                                  {tx.amount >= 0 ? (
+                                    <ArrowDownLeft className="w-4 h-4 text-green-600" />
+                                  ) : (
+                                    <ArrowUpRight className="w-4 h-4 text-red-600" />
+                                  )}
+                                </div>
+                                <div>
+                                  <p className="font-medium text-sm">{tx.description || tx.type}</p>
+                                  <p className="text-xs text-gray-500">
+                                    {new Date(tx.created_at).toLocaleString()}
+                                  </p>
+                                </div>
+                              </div>
+                              <p className={`font-semibold ${
+                                tx.amount >= 0 ? 'text-green-600' : 'text-red-600'
+                              }`}>
+                                {tx.amount >= 0 ? '+' : ''}{tx.amount?.toFixed(2)} {tx.currency}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Footer Actions */}
+              <div className="p-4 border-t border-gray-200 bg-gray-50 flex gap-3">
+                <button
+                  onClick={() => toggleUserStatus(selectedUser.id, selectedUser.status)}
+                  className={`flex-1 py-3 rounded-lg font-medium flex items-center justify-center gap-2 ${
+                    selectedUser.status === 'ACTIVE'
+                      ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                      : 'bg-green-100 text-green-700 hover:bg-green-200'
+                  }`}
+                >
+                  {selectedUser.status === 'ACTIVE' ? (
+                    <>
+                      <Ban className="w-4 h-4" />
+                      Suspend User
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      Activate User
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => setSelectedUser(null)}
+                  className="flex-1 py-3 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Create User Modal */}
         {showCreateModal && (
@@ -527,7 +743,7 @@ export function UsersManagementPage() {
               <div className="p-6 space-y-4">
                 {createError && (
                   <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-center gap-2">
-                    <XCircle className="w-4 h-4" />
+                    <AlertTriangle className="w-4 h-4" />
                     {createError}
                   </div>
                 )}
@@ -571,22 +787,6 @@ export function UsersManagementPage() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     placeholder="+1234567890"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Primary login method</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">@</span>
-                    <input
-                      type="text"
-                      value={formData.username}
-                      onChange={(e) => setFormData({ ...formData, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
-                      className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      placeholder="johndoe"
-                    />
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">Unique username for transfers. Auto-generated if empty.</p>
                 </div>
 
                 <div>
@@ -598,7 +798,6 @@ export function UsersManagementPage() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     placeholder="john@example.com"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Alternative login method</p>
                 </div>
 
                 <div>
@@ -608,9 +807,7 @@ export function UsersManagementPage() {
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="User123!@#"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Default: User123!@#</p>
                 </div>
 
                 <div>
@@ -630,7 +827,7 @@ export function UsersManagementPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     <Wallet className="w-4 h-4 inline mr-1" />
-                    Initial Wallet Balance ($)
+                    Initial Balance ($)
                   </label>
                   <input
                     type="number"
