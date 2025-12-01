@@ -27,10 +27,18 @@ export const authService = {
       'agent@example.com': 'Agent123!@#',
     };
 
-    // Check if it's a seeded user or validate against stored hash
-    const isSeededUser = validPasswords[data.email];
-    if (isSeededUser && validPasswords[data.email] !== data.password) {
-      throw new Error('Invalid email or password');
+    // Check if it's a seeded user or validate against stored password
+    const expectedPassword = validPasswords[data.email];
+    if (expectedPassword) {
+      // Known user - validate against known password
+      if (expectedPassword !== data.password) {
+        throw new Error('Invalid email or password');
+      }
+    } else {
+      // New user - validate against stored password_hash (plain text for demo)
+      if (dbUser.password_hash !== data.password) {
+        throw new Error('Invalid email or password');
+      }
     }
 
     // Create user object

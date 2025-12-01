@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react';
 import {
   Users,
   Search,
-  Filter,
-  MoreVertical,
   Eye,
   Edit,
   Ban,
@@ -14,8 +12,9 @@ import {
   Download,
   Mail,
   Phone,
-  Calendar,
-  Shield,
+  X,
+  Loader2,
+  Wallet,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
@@ -27,11 +26,21 @@ interface User {
   first_name: string;
   last_name: string;
   phone: string;
-  role: string;
+  roles: string;
   kyc_status: string;
-  is_active: boolean;
+  status: string;
   created_at: string;
   last_login?: string;
+}
+
+interface CreateUserForm {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  role: string;
+  initialBalance: number;
 }
 
 export function UsersManagementPage() {
@@ -39,8 +48,19 @@ export function UsersManagementPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [showUserModal, setShowUserModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [createSuccess, setCreateSuccess] = useState<string | null>(null);
+  const [formData, setFormData] = useState<CreateUserForm>({
+    email: '',
+    password: 'User123!@#',
+    firstName: '',
+    lastName: '',
+    phone: '',
+    role: 'user',
+    initialBalance: 100,
+  });
 
   useEffect(() => {
     fetchUsers();
@@ -52,7 +72,6 @@ export function UsersManagementPage() {
       const { data, error } = await supabase
         .from('users')
         .select('*')
-        .eq('role', 'user')
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -69,15 +88,120 @@ export function UsersManagementPage() {
     }
   };
 
+  const createUser = async () => {
+    setCreating(true);
+    setCreateError(null);
+    setCreateSuccess(null);
+
+    try {
+      // Validate form
+      if (!formData.email || !formData.firstName || !formData.lastName) {
+        setCreateError('Please fill in all required fields');
+        setCreating(false);
+        return;
+      }
+
+      // Check if email already exists
+      const { data: existing } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', formData.email)
+        .single();
+
+      if (existing) {
+        setCreateError('A user with this email already exists');
+        setCreating(false);
+        return;
+      }
+
+      const externalId = `usr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+
+      // Create user
+      const { data: newUser, error: userError } = await supabase
+        .from('users')
+        .insert({
+          external_id: externalId,
+          email: formData.email,
+          password_hash: formData.password,
+          first_name: formData.firstName,
+          last_name: formData.lastName,
+          phone: formData.phone || null,
+          roles: formData.role,
+          kyc_tier: 1,
+          kyc_status: 'APPROVED',
+          status: 'ACTIVE',
+          email_verified: true,
+        })
+        .select()
+        .single();
+
+      if (userError) {
+        setCreateError(`Failed to create user: ${userError.message}`);
+        setCreating(false);
+        return;
+      }
+
+      // Create wallet for the user
+      const walletExternalId = `wal_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+
+      const { error: walletError } = await supabase
+        .from('wallets')
+        .insert({
+          external_id: walletExternalId,
+          user_id: newUser.id,
+          wallet_type: 'primary',
+          currency: 'USD',
+          balance: formData.initialBalance,
+          status: 'ACTIVE',
+          daily_limit: 5000,
+          monthly_limit: 50000,
+        });
+
+      if (walletError) {
+        console.error('Wallet creation error:', walletError);
+        // User was created but wallet failed - still show partial success
+        setCreateSuccess(`User created but wallet failed: ${walletError.message}`);
+      } else {
+        setCreateSuccess(`User ${formData.email} created successfully with $${formData.initialBalance} balance!`);
+      }
+
+      // Reset form
+      setFormData({
+        email: '',
+        password: 'User123!@#',
+        firstName: '',
+        lastName: '',
+        phone: '',
+        role: 'user',
+        initialBalance: 100,
+      });
+
+      // Refresh user list
+      fetchUsers();
+
+      // Close modal after 2 seconds on success
+      setTimeout(() => {
+        setShowCreateModal(false);
+        setCreateSuccess(null);
+      }, 2000);
+
+    } catch (error: any) {
+      setCreateError(error.message || 'An unexpected error occurred');
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const filteredUsers = users.filter(user => {
     const matchesSearch =
-      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       `${user.first_name} ${user.last_name}`.toLowerCase().includes(searchTerm.toLowerCase());
 
+    const isActive = user.status === 'ACTIVE';
     const matchesStatus = statusFilter === 'all' ||
-      (statusFilter === 'active' && user.is_active) ||
-      (statusFilter === 'inactive' && !user.is_active) ||
-      (statusFilter === 'verified' && user.kyc_status === 'VERIFIED') ||
+      (statusFilter === 'active' && isActive) ||
+      (statusFilter === 'inactive' && !isActive) ||
+      (statusFilter === 'verified' && user.kyc_status === 'APPROVED') ||
       (statusFilter === 'pending' && user.kyc_status === 'PENDING');
 
     return matchesSearch && matchesStatus;
@@ -85,6 +209,7 @@ export function UsersManagementPage() {
 
   const getKycBadge = (status: string) => {
     switch (status) {
+      case 'APPROVED':
       case 'VERIFIED':
         return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700"><CheckCircle className="w-3 h-3" /> Verified</span>;
       case 'PENDING':
@@ -96,11 +221,12 @@ export function UsersManagementPage() {
     }
   };
 
-  const toggleUserStatus = async (userId: string, currentStatus: boolean) => {
+  const toggleUserStatus = async (userId: string, currentStatus: string) => {
     try {
+      const newStatus = currentStatus === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
       const { error } = await supabase
         .from('users')
-        .update({ is_active: !currentStatus })
+        .update({ status: newStatus })
         .eq('id', userId);
 
       if (error) {
@@ -122,7 +248,10 @@ export function UsersManagementPage() {
             <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
             <p className="text-gray-500">Manage regular user accounts and settings</p>
           </div>
-          <button className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2">
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2"
+          >
             <Plus className="w-4 h-4" />
             Add User
           </button>
@@ -148,7 +277,7 @@ export function UsersManagementPage() {
               </div>
               <div>
                 <p className="text-sm text-gray-500">Verified</p>
-                <p className="text-xl font-semibold">{users.filter(u => u.kyc_status === 'VERIFIED').length}</p>
+                <p className="text-xl font-semibold">{users.filter(u => u.kyc_status === 'APPROVED' || u.kyc_status === 'VERIFIED').length}</p>
               </div>
             </div>
           </Card>
@@ -170,7 +299,7 @@ export function UsersManagementPage() {
               </div>
               <div>
                 <p className="text-sm text-gray-500">Inactive</p>
-                <p className="text-xl font-semibold">{users.filter(u => !u.is_active).length}</p>
+                <p className="text-xl font-semibold">{users.filter(u => u.status !== 'ACTIVE').length}</p>
               </div>
             </div>
           </Card>
@@ -261,9 +390,9 @@ export function UsersManagementPage() {
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                        user.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        user.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                       }`}>
-                        {user.is_active ? 'Active' : 'Inactive'}
+                        {user.status === 'ACTIVE' ? 'Active' : user.status || 'Inactive'}
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -280,11 +409,11 @@ export function UsersManagementPage() {
                           <Edit className="w-4 h-4 text-gray-500" />
                         </button>
                         <button
-                          onClick={() => toggleUserStatus(user.id, user.is_active)}
-                          className={`p-2 hover:bg-gray-100 rounded-lg ${user.is_active ? 'text-red-500' : 'text-green-500'}`}
-                          title={user.is_active ? 'Deactivate' : 'Activate'}
+                          onClick={() => toggleUserStatus(user.id, user.status)}
+                          className={`p-2 hover:bg-gray-100 rounded-lg ${user.status === 'ACTIVE' ? 'text-red-500' : 'text-green-500'}`}
+                          title={user.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
                         >
-                          {user.is_active ? <Ban className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                          {user.status === 'ACTIVE' ? <Ban className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
                         </button>
                       </div>
                     </td>
@@ -300,6 +429,159 @@ export function UsersManagementPage() {
             </div>
           )}
         </Card>
+
+        {/* Create User Modal */}
+        {showCreateModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-gray-900">Create New User</h2>
+                <button
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setCreateError(null);
+                    setCreateSuccess(null);
+                  }}
+                  className="p-2 hover:bg-gray-100 rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                {createError && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-center gap-2">
+                    <XCircle className="w-4 h-4" />
+                    {createError}
+                  </div>
+                )}
+
+                {createSuccess && (
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4" />
+                    {createSuccess}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
+                    <input
+                      type="text"
+                      value={formData.firstName}
+                      onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      placeholder="John"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
+                    <input
+                      type="text"
+                      value={formData.lastName}
+                      onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      placeholder="Doe"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="john@example.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                  <input
+                    type="text"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="User123!@#"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Default: User123!@#</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                  <input
+                    type="tel"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="+1234567890"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                  <select
+                    value={formData.role}
+                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  >
+                    <option value="user">User</option>
+                    <option value="merchant">Merchant</option>
+                    <option value="agent">Agent</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <Wallet className="w-4 h-4 inline mr-1" />
+                    Initial Wallet Balance ($)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.initialBalance}
+                    onChange={(e) => setFormData({ ...formData, initialBalance: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                </div>
+              </div>
+
+              <div className="p-6 border-t border-gray-200 flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setCreateError(null);
+                    setCreateSuccess(null);
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={createUser}
+                  disabled={creating}
+                  className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {creating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4" />
+                      Create User
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </AdminLayout>
   );
