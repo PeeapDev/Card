@@ -1,28 +1,43 @@
 import { supabase } from '@/lib/supabase';
 import type { User, AuthTokens, LoginRequest, RegisterRequest } from '@/types';
+import { normalizePhoneNumber } from '@/utils/phone';
 
 export const authService = {
   async login(data: LoginRequest): Promise<{ user: User; tokens: AuthTokens }> {
     // Determine if login is via phone or email
     const loginIdentifier = data.email; // Can be email or phone
-    const isPhoneLogin = loginIdentifier.startsWith('+') || /^\d{10,}$/.test(loginIdentifier);
+    const isEmail = loginIdentifier.includes('@');
 
-    // Fetch user from Supabase - try phone first, then email
+    // Fetch user from Supabase - try phone first (normalized), then email
     let dbUser = null;
     let error = null;
 
-    if (isPhoneLogin) {
-      // Phone-based login
+    if (!isEmail) {
+      // Phone-based login - normalize the phone number first
+      const normalizedPhone = normalizePhoneNumber(loginIdentifier);
+
+      // Try with normalized phone
       const { data: users, error: phoneError } = await supabase
         .from('users')
         .select('*')
-        .eq('phone', loginIdentifier)
+        .eq('phone', normalizedPhone)
         .limit(1);
 
       if (!phoneError && users && users.length > 0) {
         dbUser = users[0];
       } else {
-        error = phoneError;
+        // Also try with original input in case it's stored differently
+        const { data: users2 } = await supabase
+          .from('users')
+          .select('*')
+          .eq('phone', loginIdentifier)
+          .limit(1);
+
+        if (users2 && users2.length > 0) {
+          dbUser = users2[0];
+        } else {
+          error = phoneError;
+        }
       }
     }
 

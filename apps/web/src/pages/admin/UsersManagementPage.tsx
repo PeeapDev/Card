@@ -23,6 +23,7 @@ import {
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
+import { normalizePhoneNumber, isValidPhoneNumber, getPhoneValidationError } from '@/utils/phone';
 
 interface User {
   id: string;
@@ -168,13 +169,23 @@ export function UsersManagementPage() {
         return;
       }
 
+      // Normalize and validate phone number
+      const normalizedPhone = normalizePhoneNumber(formData.phone);
+      const phoneError = getPhoneValidationError(formData.phone);
+
+      if (phoneError) {
+        setCreateError(phoneError);
+        setCreating(false);
+        return;
+      }
+
       const username = formData.username || `user${Date.now().toString(36)}`;
 
-      // Check if phone already exists
+      // Check if phone already exists (using normalized phone)
       const { data: existingPhone, error: phoneCheckError } = await supabase
         .from('users')
         .select('id')
-        .eq('phone', formData.phone)
+        .eq('phone', normalizedPhone)
         .maybeSingle();
 
       if (!phoneCheckError && existingPhone) {
@@ -208,7 +219,7 @@ export function UsersManagementPage() {
         p_password_hash: formData.password,
         p_first_name: formData.firstName,
         p_last_name: formData.lastName,
-        p_phone: formData.phone,
+        p_phone: normalizedPhone,
         p_username: username,
         p_roles: formData.role,
         p_wallet_external_id: walletExternalId,
@@ -227,7 +238,7 @@ export function UsersManagementPage() {
           password_hash: formData.password,
           first_name: formData.firstName,
           last_name: formData.lastName,
-          phone: formData.phone,
+          phone: normalizedPhone,
           roles: formData.role,
           kyc_tier: 1,
           kyc_status: 'APPROVED',
@@ -785,8 +796,16 @@ export function UsersManagementPage() {
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="+1234567890"
+                    placeholder="077123456 or +232771234567"
                   />
+                  <p className="text-xs text-gray-500 mt-1">
+                    9 digits starting with 0. Country code (+232) will be auto-removed.
+                  </p>
+                  {formData.phone && (
+                    <p className="text-xs text-primary-600 mt-1">
+                      Will be saved as: {normalizePhoneNumber(formData.phone) || formData.phone}
+                    </p>
+                  )}
                 </div>
 
                 <div>
