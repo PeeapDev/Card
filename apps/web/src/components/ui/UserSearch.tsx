@@ -61,7 +61,7 @@ export function UserSearch({
         ? searchQuery.substring(1)
         : searchQuery;
 
-      // Try RPC function first
+      // Try RPC function first (requires migration to be run)
       const { data: rpcData, error: rpcError } = await supabase.rpc('search_users', {
         p_query: cleanQuery,
         p_limit: 10,
@@ -77,21 +77,31 @@ export function UserSearch({
         return;
       }
 
-      // Fallback to direct query if RPC not available
+      // Fallback to direct query - works without username column
+      // Search by phone, first_name, last_name only (username might not exist)
       const { data, error } = await supabase
         .from('users')
-        .select('id, first_name, last_name, username, phone, email')
+        .select('id, first_name, last_name, phone, email')
         .eq('status', 'ACTIVE')
-        .or(`username.ilike.%${cleanQuery}%,phone.ilike.%${cleanQuery}%,first_name.ilike.%${cleanQuery}%,last_name.ilike.%${cleanQuery}%`)
+        .or(`phone.ilike.%${cleanQuery}%,first_name.ilike.%${cleanQuery}%,last_name.ilike.%${cleanQuery}%,email.ilike.%${cleanQuery}%`)
         .limit(10);
 
       if (error) {
         console.error('Search error:', error);
         setResults([]);
       } else {
+        // Map to SearchResult format (username will be null if column doesn't exist)
+        const mappedResults: SearchResult[] = (data || []).map(u => ({
+          id: u.id,
+          first_name: u.first_name,
+          last_name: u.last_name,
+          username: null, // Username column might not exist yet
+          phone: u.phone,
+          email: u.email,
+        }));
         const filteredResults = excludeUserId
-          ? (data || []).filter(u => u.id !== excludeUserId)
-          : data || [];
+          ? mappedResults.filter(u => u.id !== excludeUserId)
+          : mappedResults;
         setResults(filteredResults);
         setIsOpen(filteredResults.length > 0);
       }

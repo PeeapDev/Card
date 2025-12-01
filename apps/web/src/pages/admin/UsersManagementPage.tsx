@@ -106,41 +106,28 @@ export function UsersManagementPage() {
       // Generate username if not provided
       const username = formData.username || `user${Date.now().toString(36)}`;
 
-      // Check if phone already exists
-      const { data: existingPhone } = await supabase
+      // Check if phone already exists (phone column should always exist)
+      const { data: existingPhone, error: phoneCheckError } = await supabase
         .from('users')
         .select('id')
         .eq('phone', formData.phone)
-        .single();
+        .maybeSingle();
 
-      if (existingPhone) {
+      if (!phoneCheckError && existingPhone) {
         setCreateError('A user with this phone number already exists');
-        setCreating(false);
-        return;
-      }
-
-      // Check if username already exists
-      const { data: existingUsername } = await supabase
-        .from('users')
-        .select('id')
-        .eq('username', username)
-        .single();
-
-      if (existingUsername) {
-        setCreateError('This username is already taken');
         setCreating(false);
         return;
       }
 
       // Check if email already exists (if provided)
       if (formData.email) {
-        const { data: existingEmail } = await supabase
+        const { data: existingEmail, error: emailCheckError } = await supabase
           .from('users')
           .select('id')
           .eq('email', formData.email)
-          .single();
+          .maybeSingle();
 
-        if (existingEmail) {
+        if (!emailCheckError && existingEmail) {
           setCreateError('A user with this email already exists');
           setCreating(false);
           return;
@@ -150,8 +137,7 @@ export function UsersManagementPage() {
       const externalId = `usr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
       const walletExternalId = `wal_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
 
-      // Try using RPC function if available, otherwise use direct insert
-      // First, try to call the create_user_with_wallet function
+      // Try using RPC function if available
       const { data: rpcResult, error: rpcError } = await supabase.rpc('create_user_with_wallet', {
         p_external_id: externalId,
         p_email: formData.email || null,
@@ -166,36 +152,40 @@ export function UsersManagementPage() {
       });
 
       if (!rpcError && rpcResult) {
-        setCreateSuccess(`User @${username} created successfully with $${formData.initialBalance} balance!`);
+        setCreateSuccess(`User ${formData.firstName} created successfully with $${formData.initialBalance} balance!`);
       } else {
-        // RPC not available, try direct insert (may fail if trigger exists)
+        // RPC not available, try direct insert WITHOUT username (column might not exist)
         console.log('RPC not available, trying direct insert:', rpcError?.message);
+
+        // Build insert object without username if column doesn't exist
+        const insertData: Record<string, unknown> = {
+          external_id: externalId,
+          email: formData.email || null,
+          password_hash: formData.password,
+          first_name: formData.firstName,
+          last_name: formData.lastName,
+          phone: formData.phone,
+          roles: formData.role,
+          kyc_tier: 1,
+          kyc_status: 'APPROVED',
+          status: 'ACTIVE',
+          email_verified: formData.email ? true : false,
+          phone_verified: true,
+        };
 
         // Create user directly
         const { data: newUser, error: userError } = await supabase
           .from('users')
-          .insert({
-            external_id: externalId,
-            email: formData.email || null,
-            password_hash: formData.password,
-            first_name: formData.firstName,
-            last_name: formData.lastName,
-            phone: formData.phone,
-            username: username,
-            roles: formData.role,
-            kyc_tier: 1,
-            kyc_status: 'APPROVED',
-            status: 'ACTIVE',
-            email_verified: formData.email ? true : false,
-            phone_verified: true,
-          })
+          .insert(insertData)
           .select()
           .single();
 
         if (userError) {
           // Check if it's the wallet trigger error
           if (userError.message.includes('external_id') && userError.message.includes('wallets')) {
-            setCreateError('Database trigger error: Please contact admin to fix the wallet creation trigger, or disable it temporarily.');
+            setCreateError('Database trigger error: The wallet trigger is missing external_id. Please run the SQL migration in Supabase.');
+          } else if (userError.message.includes('username')) {
+            setCreateError('Username column not found. Please run the SQL migration in Supabase to add the username column.');
           } else {
             setCreateError(`Failed to create user: ${userError.message}`);
           }

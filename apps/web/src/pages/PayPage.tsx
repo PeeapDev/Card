@@ -145,13 +145,17 @@ export function PayPage() {
   };
 
   const fetchRecipient = async (userId: string): Promise<Recipient | null> => {
-    const { data: userData } = await supabase
+    // Select without username column (might not exist)
+    const { data: userData, error } = await supabase
       .from('users')
-      .select('id, first_name, last_name, email, phone, username')
+      .select('id, first_name, last_name, email, phone')
       .eq('id', userId)
       .single();
 
-    if (!userData) return null;
+    if (error || !userData) {
+      console.error('Error fetching recipient:', error);
+      return null;
+    }
 
     const { data: wallet } = await supabase
       .from('wallets')
@@ -163,7 +167,7 @@ export function PayPage() {
     return {
       id: userData.id,
       name: `${userData.first_name} ${userData.last_name}`,
-      username: userData.username,
+      username: undefined, // Username column might not exist
       email: userData.email,
       phone: userData.phone,
       walletId: wallet?.id || '',
@@ -171,29 +175,40 @@ export function PayPage() {
   };
 
   const fetchRecipientByUsername = async (username: string): Promise<Recipient | null> => {
-    const { data: userData } = await supabase
-      .from('users')
-      .select('id, first_name, last_name, email, phone, username')
-      .eq('username', username)
-      .single();
+    // Try to search by username - this will fail if column doesn't exist
+    // In that case, try searching by phone or name
+    try {
+      const { data: userData, error } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, email, phone')
+        .or(`phone.eq.${username},first_name.ilike.%${username}%,last_name.ilike.%${username}%`)
+        .limit(1)
+        .single();
 
-    if (!userData) return null;
+      if (error || !userData) {
+        console.error('Error fetching recipient by username:', error);
+        return null;
+      }
 
-    const { data: wallet } = await supabase
-      .from('wallets')
-      .select('id')
-      .eq('user_id', userData.id)
-      .eq('wallet_type', 'primary')
-      .single();
+      const { data: wallet } = await supabase
+        .from('wallets')
+        .select('id')
+        .eq('user_id', userData.id)
+        .eq('wallet_type', 'primary')
+        .single();
 
-    return {
-      id: userData.id,
-      name: `${userData.first_name} ${userData.last_name}`,
-      username: userData.username,
-      email: userData.email,
-      phone: userData.phone,
-      walletId: wallet?.id || '',
-    };
+      return {
+        id: userData.id,
+        name: `${userData.first_name} ${userData.last_name}`,
+        username: undefined,
+        email: userData.email,
+        phone: userData.phone,
+        walletId: wallet?.id || '',
+      };
+    } catch (err) {
+      console.error('Error in fetchRecipientByUsername:', err);
+      return null;
+    }
   };
 
   const fetchWallet = async () => {
