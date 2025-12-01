@@ -1,6 +1,6 @@
-# @softtouch/sdk
+# @peeap/peeapcard
 
-Official JavaScript/TypeScript SDK for the SoftTouch Payment Platform - a modern closed-loop payment system.
+Official JavaScript/TypeScript SDK for the PeeapCard Payment Platform - a modern closed-loop payment system.
 
 ## Features
 
@@ -16,20 +16,20 @@ Official JavaScript/TypeScript SDK for the SoftTouch Payment Platform - a modern
 ## Installation
 
 ```bash
-npm install @softtouch/sdk
+npm install @peeap/peeapcard
 # or
-yarn add @softtouch/sdk
+yarn add @peeap/peeapcard
 # or
-pnpm add @softtouch/sdk
+pnpm add @peeap/peeapcard
 ```
 
 ## Quick Start
 
 ```typescript
-import { SoftTouchSDK } from '@softtouch/sdk';
+import { PeeapCardSDK } from '@peeap/peeapcard';
 
-const sdk = new SoftTouchSDK({
-  apiKey: process.env.SOFTTOUCH_API_KEY!,
+const sdk = new PeeapCardSDK({
+  apiKey: process.env.PEEAPCARD_API_KEY!,
   environment: 'sandbox' // or 'production'
 });
 ```
@@ -52,7 +52,7 @@ const topUp = await sdk.wallet.topUp({
 // Withdraw to bank
 const withdrawal = await sdk.wallet.withdraw({
   amount: 25000,
-  bankCode: 'SLB001',
+  bankCode: 'BANK001',
   accountNumber: '1234567890'
 });
 
@@ -69,7 +69,7 @@ const transactions = await sdk.wallet.getTransactions({
 // Create virtual card
 const card = await sdk.cards.createVirtual({
   spendingLimit: 500000,
-  currency: 'SLE'
+  currency: 'USD'
 });
 
 // Get card details (sensitive)
@@ -92,7 +92,7 @@ const cardTxns = await sdk.cards.getTransactions(card.id);
 // Create a charge
 const payment = await sdk.payments.charge({
   amount: 25000,
-  currency: 'SLE',
+  currency: 'USD',
   customerEmail: 'customer@example.com',
   description: 'Order #12345'
 });
@@ -181,7 +181,7 @@ const nfcPayment = await sdk.nfc.processPayment({
 // Verify webhook signature
 const isValid = sdk.webhooks.verifySignature({
   payload: req.body,
-  signature: req.headers['x-softtouch-signature'],
+  signature: req.headers['x-cardpay-signature'],
   secret: process.env.WEBHOOK_SECRET!
 });
 
@@ -241,12 +241,12 @@ const settlements = await sdk.settlements.list({
 ## Error Handling
 
 ```typescript
-import { SoftTouchSDK, SDKError } from '@softtouch/sdk';
+import { PeeapCardSDK, SDKError } from '@peeap/peeapcard';
 
 try {
   const payment = await sdk.payments.charge({
     amount: 1000000,
-    currency: 'SLE'
+    currency: 'USD'
   });
 } catch (error) {
   const sdkError = error as SDKError;
@@ -260,7 +260,7 @@ try {
 ## Configuration Options
 
 ```typescript
-const sdk = new SoftTouchSDK({
+const sdk = new CardPaySDK({
   apiKey: 'sk_live_...',           // Required
   environment: 'production',        // 'sandbox' | 'production'
   baseUrl: 'https://custom.api.com', // Optional custom base URL
@@ -276,7 +276,7 @@ This SDK is written in TypeScript and includes full type definitions.
 
 ```typescript
 import {
-  SoftTouchSDK,
+  PeeapCardSDK,
   SDKConfig,
   WalletBalance,
   Card,
@@ -285,7 +285,7 @@ import {
   QRCode,
   NFCTag,
   SDKError
-} from '@softtouch/sdk';
+} from '@peeap/peeapcard';
 ```
 
 ## Browser Support

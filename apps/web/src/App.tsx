@@ -13,6 +13,8 @@ import { CardsPage } from '@/pages/CardsPage';
 import { TransactionsPage } from '@/pages/TransactionsPage';
 import { ProfilePage } from '@/pages/ProfilePage';
 import { ApiDocsPage } from '@/pages/ApiDocsPage';
+import { SendMoneyPage } from '@/pages/SendMoneyPage';
+import { ReceiveMoneyPage } from '@/pages/ReceiveMoneyPage';
 
 // Admin Pages
 import { AdminDashboard } from '@/pages/admin/AdminDashboard';
@@ -31,6 +33,8 @@ import { MerchantsManagementPage } from '@/pages/admin/MerchantsManagementPage';
 import { AgentsManagementPage } from '@/pages/admin/AgentsManagementPage';
 import { FeesPage } from '@/pages/admin/FeesPage';
 import { SubscriptionsPage } from '@/pages/admin/SubscriptionsPage';
+import { RolesManagementPage } from '@/pages/admin/RolesManagementPage';
+import { PaymentCheckoutPage } from '@/pages/PaymentCheckoutPage';
 
 // Merchant Pages
 import { MerchantDashboard } from '@/pages/merchant/MerchantDashboard';
@@ -63,6 +67,10 @@ function App() {
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/docs" element={<ApiDocsPage />} />
+
+              {/* Payment Checkout Routes (NFC/QR) */}
+              <Route path="/t/:token" element={<PaymentCheckoutPage />} />
+              <Route path="/pay/:token" element={<PaymentCheckoutPage />} />
 
               {/* Regular User Protected Routes */}
               <Route
@@ -102,6 +110,22 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <ProfilePage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/send"
+                element={
+                  <ProtectedRoute>
+                    <SendMoneyPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/receive"
+                element={
+                  <ProtectedRoute>
+                    <ReceiveMoneyPage />
                   </ProtectedRoute>
                 }
               />
@@ -208,6 +232,14 @@ function App() {
                 element={
                   <RoleBasedRoute allowedRoles={['admin']}>
                     <SubscriptionsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/admin/roles"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <RolesManagementPage />
                   </RoleBasedRoute>
                 }
               />

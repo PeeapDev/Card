@@ -3510,6 +3510,60 @@
         "hash": "sha512-Uy0+khmZqUrUGm5dmMqVlnvufZRSK0FbYzVgp0UMstm+F5+W2/jnEEQyc9vo1ZR/E5ZI/B1WjjoTqBqwJL6Krw=="
       }
     },
+    "npm:@supabase/auth-js": {
+      "type": "npm",
+      "name": "npm:@supabase/auth-js",
+      "data": {
+        "version": "2.86.0",
+        "packageName": "@supabase/auth-js",
+        "hash": "sha512-3xPqMvBWC6Haqpr6hEWmSUqDq+6SA1BAEdbiaHdAZM9QjZ5uiQJ+6iD9pZOzOa6MVXZh4GmwjhC9ObIG0K1NcA=="
+      }
+    },
+    "npm:@supabase/functions-js": {
+      "type": "npm",
+      "name": "npm:@supabase/functions-js",
+      "data": {
+        "version": "2.86.0",
+        "packageName": "@supabase/functions-js",
+        "hash": "sha512-AlOoVfeaq9XGlBFIyXTmb+y+CZzxNO4wWbfgRM6iPpNU5WCXKawtQYSnhivi3UVxS7GA0rWovY4d6cIAxZAojA=="
+      }
+    },
+    "npm:@supabase/postgrest-js": {
+      "type": "npm",
+      "name": "npm:@supabase/postgrest-js",
+      "data": {
+        "version": "2.86.0",
+        "packageName": "@supabase/postgrest-js",
+        "hash": "sha512-QVf+wIXILcZJ7IhWhWn+ozdf8B+oO0Ulizh2AAPxD/6nQL+x3r9lJ47a+fpc/jvAOGXMbkeW534Kw6jz7e8iIA=="
+      }
+    },
+    "npm:@supabase/realtime-js": {
+      "type": "npm",
+      "name": "npm:@supabase/realtime-js",
+      "data": {
+        "version": "2.86.0",
+        "packageName": "@supabase/realtime-js",
+        "hash": "sha512-dyS8bFoP29R/sj5zLi0AP3JfgG8ar1nuImcz5jxSx7UIW7fbFsXhUCVrSY2Ofo0+Ev6wiATiSdBOzBfWaiFyPA=="
+      }
+    },
+    "npm:@supabase/storage-js": {
+      "type": "npm",
+      "name": "npm:@supabase/storage-js",
+      "data": {
+        "version": "2.86.0",
+        "packageName": "@supabase/storage-js",
+        "hash": "sha512-PM47jX/Mfobdtx7NNpoj9EvlrkapAVTQBZgGGslEXD6NS70EcGjhgRPBItwHdxZPM5GwqQ0cGMN06uhjeY2mHQ=="
+      }
+    },
+    "npm:@supabase/supabase-js": {
+      "type": "npm",
+      "name": "npm:@supabase/supabase-js",
+      "data": {
+        "version": "2.86.0",
+        "packageName": "@supabase/supabase-js",
+        "hash": "sha512-BaC9sv5+HGNy1ulZwY8/Ev7EjfYYmWD4fOMw9bDBqTawEj6JHAiOHeTwXLRzVaeSay4p17xYLN2NSCoGgXMQnw=="
+      }
+    },
     "npm:@tokenizer/inflate": {
       "type": "npm",
       "name": "npm:@tokenizer/inflate",
@@ -3877,6 +3931,15 @@
         "version": "0.2.38",
         "packageName": "@types/passport-strategy",
         "hash": "sha512-GC6eMqqojOooq993Tmnmp7AUTbbQSgilyvpCYQjT+H6JfG/g6RGc7nXEniZlp0zyKJ0WUdOiZWLBZft9Yug1uA=="
+      }
+    },
+    "npm:@types/phoenix": {
+      "type": "npm",
+      "name": "npm:@types/phoenix",
+      "data": {
+        "version": "1.6.6",
+        "packageName": "@types/phoenix",
+        "hash": "sha512-PIzZZlEppgrpoT2QgbnDU+MMzuR6BbCjllj0bM70lWoejMeNJAxCchxnv7J3XFkI8MpygtRpzXrIlmWUBclP5A=="
       }
     },
     "npm:@types/qs": {
@@ -7459,6 +7522,15 @@
         "version": "1.2.0",
         "packageName": "hyperdyperid",
         "hash": "sha512-Y93lCzHYgGWdrJ66yIktxiaGULYc6oGiABxhcO5AufBeOyoIdZF7bIfLaOrbM0iGIOXQQgxxRrFEnb+Y6w1n4A=="
+      }
+    },
+    "npm:iceberg-js": {
+      "type": "npm",
+      "name": "npm:iceberg-js",
+      "data": {
+        "version": "0.8.0",
+        "packageName": "iceberg-js",
+        "hash": "sha512-kmgmea2nguZEvRqW79gDqNXyxA3OS5WIgMVffrHpqXV4F/J4UmNIw2vstixioLTNSkd5rFB8G0s3Lwzogm6OFw=="
       }
     },
     "npm:iconv-lite": {
@@ -17347,6 +17419,76 @@
     {
       "source": "npm:@sinonjs/fake-timers",
       "target": "npm:@sinonjs/commons",
+      "type": "static"
+    },
+    {
+      "source": "npm:@supabase/auth-js",
+      "target": "npm:tslib",
+      "type": "static"
+    },
+    {
+      "source": "npm:@supabase/functions-js",
+      "target": "npm:tslib",
+      "type": "static"
+    },
+    {
+      "source": "npm:@supabase/postgrest-js",
+      "target": "npm:tslib",
+      "type": "static"
+    },
+    {
+      "source": "npm:@supabase/realtime-js",
+      "target": "npm:@types/phoenix",
+      "type": "static"
+    },
+    {
+      "source": "npm:@supabase/realtime-js",
+      "target": "npm:@types/ws",
+      "type": "static"
+    },
+    {
+      "source": "npm:@supabase/realtime-js",
+      "target": "npm:tslib",
+      "type": "static"
+    },
+    {
+      "source": "npm:@supabase/realtime-js",
+      "target": "npm:ws",
+      "type": "static"
+    },
+    {
+      "source": "npm:@supabase/storage-js",
+      "target": "npm:iceberg-js",
+      "type": "static"
+    },
+    {
+      "source": "npm:@supabase/storage-js",
+      "target": "npm:tslib",
+      "type": "static"
+    },
+    {
+      "source": "npm:@supabase/supabase-js",
+      "target": "npm:@supabase/auth-js",
+      "type": "static"
+    },
+    {
+      "source": "npm:@supabase/supabase-js",
+      "target": "npm:@supabase/functions-js",
+      "type": "static"
+    },
+    {
+      "source": "npm:@supabase/supabase-js",
+      "target": "npm:@supabase/postgrest-js",
+      "type": "static"
+    },
+    {
+      "source": "npm:@supabase/supabase-js",
+      "target": "npm:@supabase/realtime-js",
+      "type": "static"
+    },
+    {
+      "source": "npm:@supabase/supabase-js",
+      "target": "npm:@supabase/storage-js",
       "type": "static"
     },
     {

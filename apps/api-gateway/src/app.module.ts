@@ -7,6 +7,12 @@ import { ProxyModule } from './modules/proxy/proxy.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { RateLimitModule } from './modules/rate-limit/rate-limit.module';
 import { HealthModule } from './modules/health/health.module';
+import { CryptoModule } from './modules/crypto/crypto.module';
+import { CardEngineModule } from './modules/card-engine/card-engine.module';
+import { NFCEngineModule } from './modules/nfc-engine/nfc-engine.module';
+import { QREngineModule } from './modules/qr-engine/qr-engine.module';
+import { PaymentSessionModule } from './modules/payment-session/payment-session.module';
+import { P2PTransferModule } from './modules/p2p-transfer/p2p-transfer.module';
 import { LoggingInterceptor } from './interceptors/logging.interceptor';
 import { HttpExceptionFilter } from './filters/http-exception.filter';
 import { RequestIdMiddleware } from './middleware/request-id.middleware';
@@ -49,6 +55,14 @@ import { CorrelationIdMiddleware } from './middleware/correlation-id.middleware'
     AuthModule,
     RateLimitModule,
     HealthModule,
+
+    // Peeap Pay Engine modules
+    CryptoModule,
+    CardEngineModule,
+    NFCEngineModule,
+    QREngineModule,
+    PaymentSessionModule,
+    P2PTransferModule,
   ],
   providers: [
     {

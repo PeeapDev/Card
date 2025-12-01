@@ -15,13 +15,12 @@ import {
   Bell,
   Search,
   Code2,
-  TestTube,
   Webhook,
   AlertTriangle,
   FileCheck,
   Layers,
   ShieldCheck,
-  ChevronDown,
+  UserCog,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -90,6 +89,7 @@ const navSections: NavSection[] = [
   {
     title: 'Settings',
     items: [
+      { path: '/admin/roles', label: 'Role Management', icon: UserCog },
       { path: '/admin/settings', label: 'Settings', icon: Settings },
       { path: '/admin/compliance', label: 'Compliance', icon: FileCheck, badge: 'Pending', badgeColor: 'yellow' },
     ],
@@ -98,7 +98,6 @@ const navSections: NavSection[] = [
 
 export function AdminLayout({ children }: AdminLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [environment, setEnvironment] = useState<'sandbox' | 'live'>('sandbox');
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -138,30 +137,6 @@ export function AdminLayout({ children }: AdminLayoutProps) {
             >
               <X className="w-5 h-5" />
             </button>
-          </div>
-
-          {/* Environment Switcher */}
-          <div className="px-4 py-3 border-b border-gray-700">
-            <div className="relative">
-              <select
-                value={environment}
-                onChange={(e) => setEnvironment(e.target.value as 'sandbox' | 'live')}
-                className="w-full appearance-none bg-gray-800 text-white text-sm rounded-lg px-3 py-2 pr-8 border border-gray-700 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              >
-                <option value="sandbox">Sandbox</option>
-                <option value="live">Live</option>
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-            </div>
-            <div className="mt-2 flex items-center gap-2">
-              <div className={clsx(
-                'w-2 h-2 rounded-full',
-                environment === 'sandbox' ? 'bg-yellow-500' : 'bg-green-500'
-              )} />
-              <span className="text-xs text-gray-400">
-                {environment === 'sandbox' ? 'Test Environment' : 'Production Environment'}
-              </span>
-            </div>
           </div>
 
           {/* Navigation */}
@@ -258,13 +233,8 @@ export function AdminLayout({ children }: AdminLayoutProps) {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <span className={clsx(
-                'px-3 py-1 rounded-full text-xs font-medium',
-                environment === 'sandbox'
-                  ? 'bg-yellow-100 text-yellow-700'
-                  : 'bg-green-100 text-green-700'
-              )}>
-                {environment === 'sandbox' ? 'Sandbox Mode' : 'Live Mode'}
+              <span className="px-3 py-1 rounded-full text-xs font-medium bg-primary-100 text-primary-700">
+                Admin Portal
               </span>
               <button className="relative p-2 hover:bg-gray-100 rounded-lg">
                 <Bell className="w-5 h-5 text-gray-600" />

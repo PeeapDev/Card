@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Users,
@@ -7,8 +7,6 @@ import {
   AlertTriangle,
   CheckCircle,
   Clock,
-  TrendingUp,
-  TrendingDown,
   Activity,
   DollarSign,
   Layers,
@@ -18,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { supabase } from '@/lib/supabase';
 
 interface DashboardStats {
   totalAccounts: number;
@@ -26,40 +25,171 @@ interface DashboardStats {
   verifiedCustomers: number;
   totalCards: number;
   activeCards: number;
+  virtualCards: number;
+  physicalCards: number;
   cardPrograms: number;
   totalVolume: number;
   pendingAuthorizations: number;
   disputesOpen: number;
+  apiRequests: number;
+  webhookDeliveries: number;
+  avgResponseTime: number;
+  activeDevelopers: number;
+}
+
+interface Transaction {
+  id: string;
+  user_id: string;
+  amount: number;
+  type: string;
+  status: string;
+  created_at: string;
+  user?: { first_name: string; last_name: string };
+}
+
+interface PendingItem {
+  type: string;
+  description: string;
+  priority: 'high' | 'medium' | 'low';
 }
 
 export function AdminDashboard() {
-  const [stats] = useState<DashboardStats>({
-    totalAccounts: 1456,
-    activeAccounts: 1289,
-    totalCustomers: 1247,
-    verifiedCustomers: 1089,
-    totalCards: 2341,
-    activeCards: 2156,
-    cardPrograms: 5,
-    totalVolume: 2456780.50,
-    pendingAuthorizations: 12,
-    disputesOpen: 3,
+  const [stats, setStats] = useState<DashboardStats>({
+    totalAccounts: 0,
+    activeAccounts: 0,
+    totalCustomers: 0,
+    verifiedCustomers: 0,
+    totalCards: 0,
+    activeCards: 0,
+    virtualCards: 0,
+    physicalCards: 0,
+    cardPrograms: 0,
+    totalVolume: 0,
+    pendingAuthorizations: 0,
+    disputesOpen: 0,
+    apiRequests: 0,
+    webhookDeliveries: 0,
+    avgResponseTime: 0,
+    activeDevelopers: 0,
   });
 
-  const [recentTransactions] = useState([
-    { id: 'TXN-001', customer: 'John Doe', amount: 1250.00, type: 'purchase', status: 'completed', time: '2 min ago' },
-    { id: 'TXN-002', customer: 'Jane Smith', amount: 89.99, type: 'purchase', status: 'completed', time: '5 min ago' },
-    { id: 'TXN-003', customer: 'Acme Corp', amount: 5000.00, type: 'transfer', status: 'pending', time: '8 min ago' },
-    { id: 'TXN-004', customer: 'Bob Wilson', amount: 320.50, type: 'purchase', status: 'completed', time: '12 min ago' },
-    { id: 'TXN-005', customer: 'Tech Inc', amount: 15000.00, type: 'transfer', status: 'flagged', time: '15 min ago' },
-  ]);
+  const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
+  const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [pendingItems] = useState([
-    { type: 'authorization', description: '12 pending authorization requests', priority: 'high' },
-    { type: 'kyc', description: '23 KYC verifications awaiting review', priority: 'medium' },
-    { type: 'dispute', description: '3 open disputes need attention', priority: 'high' },
-    { type: 'compliance', description: 'Monthly compliance report due', priority: 'low' },
-  ]);
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    setLoading(true);
+    try {
+      // Fetch user counts
+      const { data: allUsers } = await supabase.from('users').select('id, is_active, kyc_status, role');
+      const users = allUsers?.filter(u => u.role === 'user') || [];
+      const merchants = allUsers?.filter(u => u.role === 'merchant') || [];
+      const agents = allUsers?.filter(u => u.role === 'agent') || [];
+
+      // Fetch card counts
+      const { data: cards } = await supabase.from('cards').select('id, status, type');
+
+      // Fetch API keys count (developers)
+      const { data: apiKeys } = await supabase.from('api_keys').select('id, user_id');
+      const developerIds = new Set(apiKeys?.map(k => k.user_id) || []);
+
+      // Fetch recent transactions
+      const { data: transactions } = await supabase
+        .from('transactions')
+        .select('id, amount, type, status, created_at, user_id')
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      // Fetch wallets for volume calculation
+      const { data: wallets } = await supabase.from('wallets').select('balance');
+      const totalVolume = wallets?.reduce((sum, w) => sum + (w.balance || 0), 0) || 0;
+
+      // Calculate stats
+      setStats({
+        totalAccounts: allUsers?.length || 0,
+        activeAccounts: allUsers?.filter(u => u.is_active).length || 0,
+        totalCustomers: users.length,
+        verifiedCustomers: users.filter(u => u.kyc_status === 'VERIFIED').length,
+        totalCards: cards?.length || 0,
+        activeCards: cards?.filter(c => c.status === 'active').length || 0,
+        virtualCards: cards?.filter(c => c.type === 'virtual').length || 0,
+        physicalCards: cards?.filter(c => c.type === 'physical').length || 0,
+        cardPrograms: 0, // Will be fetched when card_programs table exists
+        totalVolume,
+        pendingAuthorizations: 0,
+        disputesOpen: 0,
+        apiRequests: 0, // Would come from analytics service
+        webhookDeliveries: 0,
+        avgResponseTime: 0,
+        activeDevelopers: developerIds.size,
+      });
+
+      // Format recent transactions
+      if (transactions && transactions.length > 0) {
+        const userIds = [...new Set(transactions.map(t => t.user_id))];
+        const { data: txnUsers } = await supabase
+          .from('users')
+          .select('id, first_name, last_name')
+          .in('id', userIds);
+
+        const userMap = new Map(txnUsers?.map(u => [u.id, u]) || []);
+
+        setRecentTransactions(transactions.map(txn => {
+          const user = userMap.get(txn.user_id);
+          const timeAgo = getTimeAgo(new Date(txn.created_at));
+          return {
+            id: txn.id.slice(0, 8).toUpperCase(),
+            customer: user ? `${user.first_name} ${user.last_name}` : 'Unknown',
+            amount: txn.amount,
+            type: txn.type,
+            status: txn.status,
+            time: timeAgo,
+          };
+        }));
+      }
+
+      // Calculate pending items
+      const pendingKyc = users.filter(u => u.kyc_status === 'PENDING').length;
+      const newPendingItems: PendingItem[] = [];
+
+      if (pendingKyc > 0) {
+        newPendingItems.push({
+          type: 'kyc',
+          description: `${pendingKyc} KYC verification${pendingKyc > 1 ? 's' : ''} awaiting review`,
+          priority: pendingKyc > 10 ? 'high' : 'medium',
+        });
+      }
+
+      const inactiveUsers = users.filter(u => !u.is_active).length;
+      if (inactiveUsers > 0) {
+        newPendingItems.push({
+          type: 'users',
+          description: `${inactiveUsers} inactive user account${inactiveUsers > 1 ? 's' : ''}`,
+          priority: 'low',
+        });
+      }
+
+      setPendingItems(newPendingItems);
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getTimeAgo = (date: Date) => {
+    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+    if (seconds < 60) return `${seconds} sec ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} min ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} hr ago`;
+    return `${Math.floor(hours / 24)} days ago`;
+  };
 
   return (
     <AdminLayout>
@@ -86,10 +216,6 @@ export function AdminDashboard() {
               <div className="p-2 bg-blue-100 rounded-lg">
                 <Wallet className="w-5 h-5 text-blue-600" />
               </div>
-              <span className="text-xs text-green-600 flex items-center gap-1">
-                <TrendingUp className="w-3 h-3" />
-                +5.2%
-              </span>
             </div>
             <p className="text-sm font-medium text-gray-500">Total Accounts</p>
             <p className="text-2xl font-bold text-gray-900">{stats.totalAccounts.toLocaleString()}</p>
@@ -101,10 +227,6 @@ export function AdminDashboard() {
               <div className="p-2 bg-green-100 rounded-lg">
                 <Users className="w-5 h-5 text-green-600" />
               </div>
-              <span className="text-xs text-green-600 flex items-center gap-1">
-                <TrendingUp className="w-3 h-3" />
-                +12.3%
-              </span>
             </div>
             <p className="text-sm font-medium text-gray-500">Customers</p>
             <p className="text-2xl font-bold text-gray-900">{stats.totalCustomers.toLocaleString()}</p>
@@ -116,10 +238,6 @@ export function AdminDashboard() {
               <div className="p-2 bg-purple-100 rounded-lg">
                 <CreditCard className="w-5 h-5 text-purple-600" />
               </div>
-              <span className="text-xs text-green-600 flex items-center gap-1">
-                <TrendingUp className="w-3 h-3" />
-                +8.7%
-              </span>
             </div>
             <p className="text-sm font-medium text-gray-500">Cards Issued</p>
             <p className="text-2xl font-bold text-gray-900">{stats.totalCards.toLocaleString()}</p>
@@ -131,10 +249,6 @@ export function AdminDashboard() {
               <div className="p-2 bg-emerald-100 rounded-lg">
                 <DollarSign className="w-5 h-5 text-emerald-600" />
               </div>
-              <span className="text-xs text-green-600 flex items-center gap-1">
-                <TrendingUp className="w-3 h-3" />
-                +15.4%
-              </span>
             </div>
             <p className="text-sm font-medium text-gray-500">Total Volume</p>
             <p className="text-2xl font-bold text-gray-900">${(stats.totalVolume / 1000000).toFixed(2)}M</p>
@@ -274,35 +388,31 @@ export function AdminDashboard() {
         {/* Quick Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Card className="p-4 text-center">
-            <p className="text-sm text-gray-500">API Requests (24h)</p>
-            <p className="text-xl font-bold text-gray-900">45,672</p>
-            <p className="text-xs text-green-600 flex items-center justify-center gap-1 mt-1">
-              <TrendingUp className="w-3 h-3" />
-              99.9% success rate
+            <p className="text-sm text-gray-500">Virtual Cards</p>
+            <p className="text-xl font-bold text-gray-900">{stats.virtualCards.toLocaleString()}</p>
+            <p className="text-xs text-gray-500 mt-1">
+              {stats.totalCards > 0 ? Math.round((stats.virtualCards / stats.totalCards) * 100) : 0}% of total
             </p>
           </Card>
           <Card className="p-4 text-center">
-            <p className="text-sm text-gray-500">Webhook Deliveries</p>
-            <p className="text-xl font-bold text-gray-900">12,456</p>
-            <p className="text-xs text-green-600 flex items-center justify-center gap-1 mt-1">
-              <TrendingUp className="w-3 h-3" />
-              98.7% delivered
+            <p className="text-sm text-gray-500">Physical Cards</p>
+            <p className="text-xl font-bold text-gray-900">{stats.physicalCards.toLocaleString()}</p>
+            <p className="text-xs text-gray-500 mt-1">
+              {stats.totalCards > 0 ? Math.round((stats.physicalCards / stats.totalCards) * 100) : 0}% of total
             </p>
           </Card>
           <Card className="p-4 text-center">
-            <p className="text-sm text-gray-500">Avg Response Time</p>
-            <p className="text-xl font-bold text-gray-900">145ms</p>
-            <p className="text-xs text-green-600 flex items-center justify-center gap-1 mt-1">
-              <TrendingDown className="w-3 h-3" />
-              -12ms from yesterday
+            <p className="text-sm text-gray-500">Merchants</p>
+            <p className="text-xl font-bold text-gray-900">{stats.totalAccounts - stats.totalCustomers}</p>
+            <p className="text-xs text-gray-500 mt-1">
+              Business accounts
             </p>
           </Card>
           <Card className="p-4 text-center">
             <p className="text-sm text-gray-500">Active Developers</p>
-            <p className="text-xl font-bold text-gray-900">89</p>
-            <p className="text-xs text-green-600 flex items-center justify-center gap-1 mt-1">
-              <TrendingUp className="w-3 h-3" />
-              +5 this week
+            <p className="text-xl font-bold text-gray-900">{stats.activeDevelopers}</p>
+            <p className="text-xs text-gray-500 mt-1">
+              With API keys
             </p>
           </Card>
         </div>

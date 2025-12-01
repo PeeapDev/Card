@@ -1,4 +1,21 @@
-export type UserRole = 'admin' | 'user' | 'merchant' | 'developer' | 'agent';
+export type UserRole = 'superadmin' | 'admin' | 'user' | 'merchant' | 'developer' | 'agent';
+
+export interface RolePermission {
+  id: string;
+  role: UserRole;
+  resource: string;
+  actions: ('create' | 'read' | 'update' | 'delete')[];
+}
+
+export interface SystemRole {
+  id: string;
+  name: UserRole;
+  displayName: string;
+  description: string;
+  permissions: string[];
+  isSystem: boolean;
+  createdAt: string;
+}
 
 export interface User {
   id: string;

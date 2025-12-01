@@ -1,0 +1,60 @@
+{
+  "name": "@peeap/pay-sdk",
+  "version": "1.0.0",
+  "description": "Peeap Pay SDK - NFC, QR, and Payment Integration for Web and Mobile",
+  "main": "./dist/peeap-pay.js",
+  "module": "./dist/peeap-pay.esm.js",
+  "types": "./dist/index.d.ts",
+  "unpkg": "./dist/peeap-pay.umd.js",
+  "jsdelivr": "./dist/peeap-pay.umd.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/peeap-pay.esm.js",
+      "require": "./dist/peeap-pay.js",
+      "browser": "./dist/peeap-pay.umd.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm,iife --global-name PeeapPay --dts --clean --minify",
+    "build:cdn": "tsup src/index.ts --format iife --global-name PeeapPay --minify --outDir dist/cdn",
+    "dev": "tsup src/index.ts --format cjs,esm,iife --global-name PeeapPay --dts --watch",
+    "lint": "eslint src --ext .ts",
+    "test": "jest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "peeap",
+    "payment",
+    "nfc",
+    "qr",
+    "tap-to-pay",
+    "sdk",
+    "payment-gateway",
+    "mobile-payments",
+    "africa",
+    "fintech"
+  ],
+  "author": "Peeap <developers@peeap.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/peeap/pay-sdk.git"
+  },
+  "homepage": "https://docs.peeap.com/pay-sdk",
+  "bugs": {
+    "url": "https://github.com/peeap/pay-sdk/issues"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "tsup": "^8.0.1",
+    "typescript": "^5.3.2"
+  }
+}

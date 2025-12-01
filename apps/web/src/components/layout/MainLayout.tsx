@@ -10,6 +10,8 @@ import {
   LogOut,
   Menu,
   X,
+  Send,
+  QrCode,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -19,6 +21,8 @@ interface MainLayoutProps {
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { path: '/send', label: 'Send Money', icon: Send },
+  { path: '/receive', label: 'Receive Money', icon: QrCode },
   { path: '/wallets', label: 'Wallets', icon: Wallet },
   { path: '/cards', label: 'Cards', icon: CreditCard },
   { path: '/transactions', label: 'Transactions', icon: ArrowLeftRight },

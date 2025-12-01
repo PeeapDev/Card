@@ -1,7 +1,7 @@
 {
-  "name": "@softtouch/sdk",
+  "name": "@peeap/peeapcard",
   "version": "1.0.0",
-  "description": "Official SDK for SoftTouch Payment Platform - A modern closed-loop payment system",
+  "description": "Official SDK for PeeapCard Payment Platform - A modern closed-loop payment system",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -13,7 +13,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts --clean",
@@ -29,21 +30,23 @@
     "wallet",
     "cards",
     "fintech",
-    "softtouch",
+    "peeap",
+    "peeapcard",
     "payment-gateway",
     "virtual-cards",
     "qr-payments",
-    "nfc"
+    "nfc",
+    "closed-loop"
   ],
-  "author": "SoftTouch <developers@softtouch.io>",
+  "author": "Peeap <developers@peeap.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/softtouch/sdk-js.git"
+    "url": "https://github.com/peeap/peeapcard-sdk.git"
   },
-  "homepage": "https://docs.softtouch.io/sdk",
+  "homepage": "https://docs.peeap.com/sdk",
   "bugs": {
-    "url": "https://github.com/softtouch/sdk-js/issues"
+    "url": "https://github.com/peeap/peeapcard-sdk/issues"
   },
   "engines": {
     "node": ">=16.0.0"

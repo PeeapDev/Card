@@ -1,13 +1,13 @@
 /**
- * SoftTouch Payment SDK
- * Official JavaScript/TypeScript SDK for the SoftTouch Payment Platform
+ * PeeapCard Payment SDK
+ * Official JavaScript/TypeScript SDK for the PeeapCard Payment Platform
  *
  * @example
  * ```typescript
- * import { SoftTouchSDK } from '@softtouch/sdk';
+ * import { PeeapCardSDK } from '@peeap/peeapcard';
  *
- * const sdk = new SoftTouchSDK({
- *   apiKey: process.env.SOFTTOUCH_API_KEY!,
+ * const sdk = new PeeapCardSDK({
+ *   apiKey: process.env.PEEAPCARD_API_KEY!,
  *   environment: 'sandbox'
  * });
  *
@@ -17,13 +17,13 @@
  * // Create a virtual card
  * const card = await sdk.cards.createVirtual({
  *   spendingLimit: 500000,
- *   currency: 'SLE'
+ *   currency: 'USD'
  * });
  *
  * // Process a payment
  * const payment = await sdk.payments.charge({
  *   amount: 25000,
- *   currency: 'SLE',
+ *   currency: 'USD',
  *   customerId: 'cust_123'
  * });
  * ```
@@ -48,9 +48,9 @@ import { verifyWebhookSignature, parseWebhookEvent, constructWebhookEvent, compu
 
 /**
  * Main SDK class
- * @class SoftTouchSDK
+ * @class PeeapCardSDK
  */
-export class SoftTouchSDK {
+export class PeeapCardSDK {
   private client: HttpClient;
 
   /** Wallet operations - balance, top-ups, withdrawals */
@@ -114,7 +114,7 @@ export class SoftTouchSDK {
   };
 
   /**
-   * Create a new SoftTouch SDK instance
+   * Create a new PeeapCard SDK instance
    * @param config - SDK configuration
    */
   constructor(config: SDKConfig) {
@@ -162,5 +162,8 @@ export { WEBHOOK_EVENTS, ERROR_CODES, ENVIRONMENTS } from './config';
 // Export webhook utilities directly
 export { verifyWebhookSignature, parseWebhookEvent, constructWebhookEvent, computeWebhookSignature };
 
+// Also export as CardPaySDK for backwards compatibility
+export { PeeapCardSDK as CardPaySDK };
+
 // Default export
-export default SoftTouchSDK;
+export default PeeapCardSDK;
