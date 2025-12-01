@@ -7,7 +7,7 @@ import { AuthLayout } from '@/components/layout/AuthLayout';
 import { Button, Input } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
 import { getUserDashboard } from '@/components/RoleBasedRoute';
-import { AlertCircle, Shield, User, UserPlus, Store, Code, Headphones } from 'lucide-react';
+import { AlertCircle, Shield, User, Store, Code, Headphones } from 'lucide-react';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -16,19 +16,19 @@ const loginSchema = z.object({
 
 type LoginFormData = z.infer<typeof loginSchema>;
 
-const DEMO_ROLES = [
-  { key: 'admin', label: 'Admin', icon: Shield, color: 'bg-red-500 hover:bg-red-600' },
-  { key: 'user', label: 'User 1', icon: User, color: 'bg-blue-500 hover:bg-blue-600' },
-  { key: 'user2', label: 'User 2', icon: UserPlus, color: 'bg-cyan-500 hover:bg-cyan-600' },
-  { key: 'merchant', label: 'Merchant', icon: Store, color: 'bg-green-500 hover:bg-green-600' },
-  { key: 'developer', label: 'Developer', icon: Code, color: 'bg-purple-500 hover:bg-purple-600' },
-  { key: 'agent', label: 'Agent', icon: Headphones, color: 'bg-orange-500 hover:bg-orange-600' },
-] as const;
+// Real database users with their credentials
+const QUICK_LOGIN_USERS = [
+  { email: 'admin@example.com', password: 'Admin123!@#', label: 'Admin', icon: Shield, color: 'bg-red-500 hover:bg-red-600' },
+  { email: 'user@example.com', password: 'User123!@#', label: 'User 1', icon: User, color: 'bg-blue-500 hover:bg-blue-600' },
+  { email: 'merchant@example.com', password: 'Merchant123!@#', label: 'Merchant', icon: Store, color: 'bg-green-500 hover:bg-green-600' },
+  { email: 'developer@example.com', password: 'Developer123!@#', label: 'Developer', icon: Code, color: 'bg-purple-500 hover:bg-purple-600' },
+  { email: 'agent@example.com', password: 'Agent123!@#', label: 'Agent', icon: Headphones, color: 'bg-orange-500 hover:bg-orange-600' },
+];
 
 export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
-  const [demoLoading, setDemoLoading] = useState<string | null>(null);
-  const { login, demoLogin } = useAuth();
+  const [quickLoginLoading, setQuickLoginLoading] = useState<string | null>(null);
+  const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -55,18 +55,19 @@ export function LoginPage() {
     }
   };
 
-  const handleDemoLogin = async (role: 'admin' | 'user' | 'user2' | 'merchant' | 'developer' | 'agent') => {
+  // Quick login with real database credentials
+  const handleQuickLogin = async (email: string, password: string) => {
     try {
       setError(null);
-      setDemoLoading(role);
-      const user = await demoLogin(role);
-      const redirectPath = getUserDashboard(user.roles);
+      setQuickLoginLoading(email);
+      const user = await login({ email, password });
+      const redirectPath = fromState || getUserDashboard(user.roles);
       navigate(redirectPath, { replace: true });
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Demo login failed';
+      const errorMessage = err instanceof Error ? err.message : 'Login failed';
       setError(errorMessage);
     } finally {
-      setDemoLoading(null);
+      setQuickLoginLoading(null);
     }
   };
 
@@ -117,21 +118,21 @@ export function LoginPage() {
           </Link>
         </p>
 
-        {/* Demo Login Section */}
+        {/* Quick Login Section - Real database users */}
         <div className="pt-6 border-t border-gray-200">
           <p className="text-center text-sm text-gray-500 mb-4">
-            Or try a demo account
+            Quick login with test accounts
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {DEMO_ROLES.map(({ key, label, icon: Icon, color }) => (
+            {QUICK_LOGIN_USERS.map(({ email, password, label, icon: Icon, color }) => (
               <button
-                key={key}
+                key={email}
                 type="button"
-                onClick={() => handleDemoLogin(key)}
-                disabled={demoLoading !== null}
+                onClick={() => handleQuickLogin(email, password)}
+                disabled={quickLoginLoading !== null}
                 className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${color}`}
               >
-                {demoLoading === key ? (
+                {quickLoginLoading === email ? (
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <Icon className="w-4 h-4" />

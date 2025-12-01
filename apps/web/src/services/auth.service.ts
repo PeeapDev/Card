@@ -21,6 +21,7 @@ export const authService = {
     const validPasswords: Record<string, string> = {
       'admin@example.com': 'Admin123!@#',
       'user@example.com': 'User123!@#',
+      'user2@example.com': 'User123!@#',
       'merchant@example.com': 'Merchant123!@#',
       'developer@example.com': 'Developer123!@#',
       'agent@example.com': 'Agent123!@#',
