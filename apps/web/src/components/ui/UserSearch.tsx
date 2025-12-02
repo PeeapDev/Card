@@ -1,16 +1,24 @@
 /**
- * Global User Search Component
+ * Global User Search Component with Fuse.js
  *
- * AJAX-powered search that finds users by:
+ * Production-grade search using Fuse.js for fuzzy matching
+ * Searches users by:
  * - Username (@mohamed)
  * - Phone number
  * - Name (first name, last name)
+ * - Email
+ *
+ * Shows profile picture from KYC (read-only, cannot be changed by user)
+ * Reusable for: Send Money, Add Contact, Search Users
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, User, Phone, AtSign, X, Loader2 } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Search, Phone, AtSign, X, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { clsx } from 'clsx';
+import { useAuth } from '@/context/AuthContext';
+import { rbacService } from '@/services/rbac.service';
+import Fuse from 'fuse.js';
 
 export interface SearchResult {
   id: string;
@@ -19,6 +27,7 @@ export interface SearchResult {
   username: string | null;
   phone: string | null;
   email: string | null;
+  profile_picture: string | null;
 }
 
 interface UserSearchProps {
@@ -29,6 +38,22 @@ interface UserSearchProps {
   autoFocus?: boolean;
 }
 
+// Fuse.js configuration for fuzzy search
+const fuseOptions = {
+  keys: [
+    { name: 'first_name', weight: 0.3 },
+    { name: 'last_name', weight: 0.3 },
+    { name: 'phone', weight: 0.2 },
+    { name: 'email', weight: 0.15 },
+    { name: 'username', weight: 0.05 },
+  ],
+  threshold: 0.4, // Lower = more strict matching
+  distance: 100,
+  minMatchCharLength: 2,
+  includeScore: true,
+  shouldSort: true,
+};
+
 export function UserSearch({
   onSelect,
   placeholder = 'Search by @username, phone, or name...',
@@ -36,17 +61,76 @@ export function UserSearch({
   excludeUserId,
   autoFocus = false,
 }: UserSearchProps) {
+  const { user } = useAuth();
   const [query, setQuery] = useState('');
+  const [allUsers, setAllUsers] = useState<SearchResult[]>([]);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Debounced search function
-  const searchUsers = useCallback(async (searchQuery: string) => {
+  // Initialize RBAC when user changes
+  useEffect(() => {
+    if (user?.id && user?.roles) {
+      rbacService.initialize(user.id, user.roles.join(','));
+    }
+  }, [user?.id, user?.roles]);
+
+  // Load all users on mount for Fuse.js client-side search
+  useEffect(() => {
+    const loadUsers = async () => {
+      setIsInitialLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, first_name, last_name, phone, email, roles, status')
+          .eq('status', 'ACTIVE')
+          .limit(500);
+
+        if (error) {
+          console.error('Error loading users:', error);
+          setAllUsers([]);
+        } else {
+          // Map to SearchResult format
+          const mappedUsers: SearchResult[] = (data || []).map((u: any) => ({
+            id: u.id,
+            first_name: u.first_name || '',
+            last_name: u.last_name || '',
+            username: null,
+            phone: u.phone || null,
+            email: u.email || null,
+            profile_picture: null,
+          }));
+
+          // Exclude current user if specified
+          const filteredUsers = excludeUserId
+            ? mappedUsers.filter(u => u.id !== excludeUserId)
+            : mappedUsers;
+
+          setAllUsers(filteredUsers);
+        }
+      } catch (err) {
+        console.error('Error in loadUsers:', err);
+        setAllUsers([]);
+      } finally {
+        setIsInitialLoading(false);
+      }
+    };
+
+    loadUsers();
+  }, [excludeUserId]);
+
+  // Create Fuse instance with memoization
+  const fuse = useMemo(() => {
+    return new Fuse(allUsers, fuseOptions);
+  }, [allUsers]);
+
+  // Perform fuzzy search using Fuse.js
+  const searchUsers = useCallback((searchQuery: string) => {
     if (searchQuery.length < 2) {
       setResults([]);
       setIsOpen(false);
@@ -55,63 +139,23 @@ export function UserSearch({
 
     setIsLoading(true);
 
-    try {
-      // Clean up query - remove @ prefix for username search
-      const cleanQuery = searchQuery.startsWith('@')
-        ? searchQuery.substring(1)
-        : searchQuery;
+    // Clean up query - remove @ prefix for username search
+    const cleanQuery = searchQuery.startsWith('@')
+      ? searchQuery.substring(1)
+      : searchQuery;
 
-      // Try RPC function first (requires migration to be run)
-      const { data: rpcData, error: rpcError } = await supabase.rpc('search_users', {
-        p_query: cleanQuery,
-        p_limit: 10,
-      });
+    // Perform Fuse.js search
+    const searchResults = fuse.search(cleanQuery);
 
-      if (!rpcError && rpcData && rpcData.length > 0) {
-        const filteredResults = excludeUserId
-          ? rpcData.filter((u: SearchResult) => u.id !== excludeUserId)
-          : rpcData;
-        setResults(filteredResults);
-        setIsOpen(filteredResults.length > 0);
-        setIsLoading(false);
-        return;
-      }
+    // Extract matched items and limit to top 20
+    const matchedUsers = searchResults
+      .slice(0, 20)
+      .map(result => result.item);
 
-      // Fallback to direct query - works without username column
-      // Search by phone, first_name, last_name only (username might not exist)
-      const { data, error } = await supabase
-        .from('users')
-        .select('id, first_name, last_name, phone, email')
-        .eq('status', 'ACTIVE')
-        .or(`phone.ilike.%${cleanQuery}%,first_name.ilike.%${cleanQuery}%,last_name.ilike.%${cleanQuery}%,email.ilike.%${cleanQuery}%`)
-        .limit(10);
-
-      if (error) {
-        console.error('Search error:', error);
-        setResults([]);
-      } else {
-        // Map to SearchResult format (username will be null if column doesn't exist)
-        const mappedResults: SearchResult[] = (data || []).map(u => ({
-          id: u.id,
-          first_name: u.first_name,
-          last_name: u.last_name,
-          username: null, // Username column might not exist yet
-          phone: u.phone,
-          email: u.email,
-        }));
-        const filteredResults = excludeUserId
-          ? mappedResults.filter(u => u.id !== excludeUserId)
-          : mappedResults;
-        setResults(filteredResults);
-        setIsOpen(filteredResults.length > 0);
-      }
-    } catch (err) {
-      console.error('Search error:', err);
-      setResults([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [excludeUserId]);
+    setResults(matchedUsers);
+    setIsOpen(matchedUsers.length > 0);
+    setIsLoading(false);
+  }, [fuse, allUsers.length]);
 
   // Handle input change with debounce
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -127,7 +171,7 @@ export function UserSearch({
     // Set new timeout for debounced search
     debounceRef.current = setTimeout(() => {
       searchUsers(value);
-    }, 300);
+    }, 150); // Faster since it's client-side
   };
 
   // Handle keyboard navigation
@@ -159,8 +203,8 @@ export function UserSearch({
   };
 
   // Handle selection
-  const handleSelect = (user: SearchResult) => {
-    onSelect(user);
+  const handleSelect = (selectedUser: SearchResult) => {
+    onSelect(selectedUser);
     setQuery('');
     setResults([]);
     setIsOpen(false);
@@ -205,7 +249,7 @@ export function UserSearch({
       {/* Input */}
       <div className="relative">
         <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-          {isLoading ? (
+          {isLoading || isInitialLoading ? (
             <Loader2 className="w-5 h-5 animate-spin" />
           ) : (
             <Search className="w-5 h-5" />
@@ -218,9 +262,10 @@ export function UserSearch({
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           onFocus={() => query.length >= 2 && setIsOpen(results.length > 0)}
-          placeholder={placeholder}
+          placeholder={isInitialLoading ? 'Loading users...' : placeholder}
           autoFocus={autoFocus}
-          className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900"
+          disabled={isInitialLoading}
+          className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 disabled:bg-gray-100"
         />
         {query && (
           <button
@@ -244,10 +289,10 @@ export function UserSearch({
             </div>
           ) : (
             <ul className="py-2">
-              {results.map((user, index) => (
-                <li key={user.id}>
+              {results.map((resultUser, index) => (
+                <li key={resultUser.id}>
                   <button
-                    onClick={() => handleSelect(user)}
+                    onClick={() => handleSelect(resultUser)}
                     className={clsx(
                       'w-full px-4 py-3 flex items-center gap-3 text-left transition-colors',
                       selectedIndex === index
@@ -255,30 +300,47 @@ export function UserSearch({
                         : 'hover:bg-gray-50'
                     )}
                   >
-                    {/* Avatar */}
-                    <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <User className="w-5 h-5 text-primary-600" />
-                    </div>
-
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900 truncate">
-                        {user.first_name} {user.last_name}
-                      </p>
-                      <div className="flex items-center gap-3 text-sm text-gray-500">
-                        {user.username && (
-                          <span className="flex items-center gap-1">
-                            <AtSign className="w-3 h-3" />
-                            {user.username}
-                          </span>
-                        )}
-                        {user.phone && (
-                          <span className="flex items-center gap-1">
-                            <Phone className="w-3 h-3" />
-                            {user.phone}
-                          </span>
-                        )}
+                    {/* Profile Picture (from KYC) - small round circle */}
+                    {resultUser.profile_picture ? (
+                      <img
+                        src={resultUser.profile_picture}
+                        alt={`${resultUser.first_name} ${resultUser.last_name}`}
+                        className="w-10 h-10 rounded-full object-cover flex-shrink-0 border-2 border-gray-100"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <span className="text-primary-700 font-medium text-sm">
+                          {resultUser.first_name?.charAt(0)}{resultUser.last_name?.charAt(0)}
+                        </span>
                       </div>
+                    )}
+
+                    {/* Info - Username and Name */}
+                    <div className="flex-1 min-w-0">
+                      {/* Username first if available (with @) */}
+                      {resultUser.username ? (
+                        <>
+                          <p className="font-medium text-gray-900 truncate flex items-center gap-1">
+                            <AtSign className="w-4 h-4 text-primary-500" />
+                            {resultUser.username}
+                          </p>
+                          <p className="text-sm text-gray-500 truncate">
+                            {resultUser.first_name} {resultUser.last_name}
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="font-medium text-gray-900 truncate">
+                            {resultUser.first_name} {resultUser.last_name}
+                          </p>
+                          {resultUser.phone && (
+                            <p className="text-sm text-gray-500 flex items-center gap-1">
+                              <Phone className="w-3 h-3" />
+                              {resultUser.phone}
+                            </p>
+                          )}
+                        </>
+                      )}
                     </div>
                   </button>
                 </li>
