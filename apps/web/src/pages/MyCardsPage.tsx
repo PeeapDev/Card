@@ -1,0 +1,585 @@
+import { useState } from 'react';
+import {
+  CreditCard,
+  Plus,
+  Eye,
+  EyeOff,
+  Lock,
+  Unlock,
+  MoreVertical,
+  QrCode,
+  Scan,
+  RefreshCw,
+  ChevronRight,
+  CheckCircle,
+  Clock,
+  X,
+  AlertCircle,
+  Smartphone,
+} from 'lucide-react';
+import QRCode from 'react-qr-code';
+import { Card, CardHeader, CardTitle, Button, Input } from '@/components/ui';
+import { MainLayout } from '@/components/layout/MainLayout';
+import {
+  useCards,
+  useBlockCard,
+  useUnblockCard,
+  useActivateCard,
+  useActivateCardByQR,
+  useCardOrders,
+  useCardWithType,
+} from '@/hooks/useCards';
+import { useWallets } from '@/hooks/useWallets';
+import { clsx } from 'clsx';
+import type { Card as CardType } from '@/types';
+import { useNavigate } from 'react-router-dom';
+
+export function MyCardsPage() {
+  const navigate = useNavigate();
+  const { data: cards, isLoading } = useCards();
+  const { data: orders } = useCardOrders();
+  const { data: wallets } = useWallets();
+  const blockCard = useBlockCard();
+  const unblockCard = useUnblockCard();
+  const activateCard = useActivateCard();
+  const activateByQR = useActivateCardByQR();
+
+  const [selectedCard, setSelectedCard] = useState<CardType | null>(null);
+  const [showCardDetails, setShowCardDetails] = useState<string | null>(null);
+  const [showQRScanner, setShowQRScanner] = useState(false);
+  const [qrInput, setQrInput] = useState('');
+  const [showFlipCard, setShowFlipCard] = useState<string | null>(null);
+  const [showCardModal, setShowCardModal] = useState(false);
+
+  const handleToggleBlock = async (card: CardType) => {
+    try {
+      if (card.status === 'BLOCKED') {
+        await unblockCard.mutateAsync(card.id);
+      } else {
+        await blockCard.mutateAsync(card.id);
+      }
+    } catch (error) {
+      console.error('Failed to update card status:', error);
+    }
+  };
+
+  const handleActivate = async (cardId: string) => {
+    try {
+      await activateCard.mutateAsync(cardId);
+    } catch (error) {
+      console.error('Failed to activate card:', error);
+    }
+  };
+
+  const handleQRActivation = async () => {
+    if (!qrInput.trim()) return;
+    try {
+      await activateByQR.mutateAsync(qrInput.trim());
+      setShowQRScanner(false);
+      setQrInput('');
+      alert('Card activated successfully!');
+    } catch (error: any) {
+      alert(error.message || 'Failed to activate card');
+    }
+  };
+
+  const getCardGradient = (type: string, index: number) => {
+    const gradients = [
+      'from-blue-600 to-blue-800',
+      'from-purple-600 to-purple-800',
+      'from-indigo-600 to-indigo-800',
+      'from-teal-600 to-teal-800',
+    ];
+    return type === 'PHYSICAL' ? 'from-gray-700 to-gray-900' : gradients[index % gradients.length];
+  };
+
+  const pendingOrders = orders?.filter((o) => ['PENDING', 'GENERATED'].includes(o.status)) || [];
+  const activeCards = cards?.filter((c) => c.status === 'ACTIVE') || [];
+  const inactiveCards = cards?.filter((c) => c.status !== 'ACTIVE') || [];
+
+  return (
+    <MainLayout>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">My Cards</h1>
+            <p className="text-gray-500 mt-1">Manage your virtual and physical cards</p>
+          </div>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => setShowQRScanner(true)}>
+              <Scan className="w-4 h-4 mr-2" />
+              Scan QR
+            </Button>
+            <Button onClick={() => navigate('/cards/marketplace')}>
+              <Plus className="w-4 h-4 mr-2" />
+              Get New Card
+            </Button>
+          </div>
+        </div>
+
+        {/* Pending Orders */}
+        {pendingOrders.length > 0 && (
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Pending Orders</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {pendingOrders.map((order) => (
+                <Card key={order.id} className="p-4">
+                  <div className="flex items-center gap-4">
+                    <div
+                      className={clsx(
+                        'w-16 h-10 rounded bg-gradient-to-br flex items-center justify-center',
+                        order.cardType?.colorGradient || 'from-gray-400 to-gray-600'
+                      )}
+                    >
+                      <CreditCard className="w-6 h-6 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium">{order.cardType?.name}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        {order.status === 'PENDING' ? (
+                          <span className="flex items-center gap-1 text-xs text-yellow-600">
+                            <Clock className="w-3 h-3" />
+                            Under Review
+                          </span>
+                        ) : order.status === 'GENERATED' ? (
+                          <span className="flex items-center gap-1 text-xs text-purple-600">
+                            <CheckCircle className="w-3 h-3" />
+                            Ready for Activation
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                    {order.status === 'GENERATED' && order.cardType?.cardType === 'PHYSICAL' && (
+                      <Button size="sm" variant="outline" onClick={() => setShowQRScanner(true)}>
+                        Activate
+                      </Button>
+                    )}
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Active Cards */}
+        {isLoading ? (
+          <div className="text-center py-12">Loading cards...</div>
+        ) : cards && cards.length > 0 ? (
+          <div className="space-y-6">
+            {/* Active Cards Section */}
+            {activeCards.length > 0 && (
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">Active Cards</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {activeCards.map((card, index) => (
+                    <CardItem
+                      key={card.id}
+                      card={card}
+                      index={index}
+                      showDetails={showCardDetails === card.id}
+                      showFlip={showFlipCard === card.id}
+                      onToggleDetails={() =>
+                        setShowCardDetails(showCardDetails === card.id ? null : card.id)
+                      }
+                      onToggleFlip={() =>
+                        setShowFlipCard(showFlipCard === card.id ? null : card.id)
+                      }
+                      onBlock={() => handleToggleBlock(card)}
+                      onViewDetails={() => {
+                        setSelectedCard(card);
+                        setShowCardModal(true);
+                      }}
+                      isBlocking={blockCard.isPending || unblockCard.isPending}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Inactive/Blocked Cards */}
+            {inactiveCards.length > 0 && (
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">Inactive Cards</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {inactiveCards.map((card, index) => (
+                    <CardItem
+                      key={card.id}
+                      card={card}
+                      index={index}
+                      showDetails={showCardDetails === card.id}
+                      showFlip={showFlipCard === card.id}
+                      onToggleDetails={() =>
+                        setShowCardDetails(showCardDetails === card.id ? null : card.id)
+                      }
+                      onToggleFlip={() =>
+                        setShowFlipCard(showFlipCard === card.id ? null : card.id)
+                      }
+                      onBlock={() => handleToggleBlock(card)}
+                      onActivate={() => handleActivate(card.id)}
+                      onViewDetails={() => {
+                        setSelectedCard(card);
+                        setShowCardModal(true);
+                      }}
+                      isBlocking={blockCard.isPending || unblockCard.isPending}
+                      isActivating={activateCard.isPending}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <Card className="text-center py-12">
+            <CreditCard className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No cards yet</h3>
+            <p className="text-gray-500 mb-4">Get your first card from the marketplace</p>
+            <Button onClick={() => navigate('/cards/marketplace')}>
+              <Plus className="w-4 h-4 mr-2" />
+              Browse Cards
+            </Button>
+          </Card>
+        )}
+      </div>
+
+      {/* QR Scanner Modal */}
+      {showQRScanner && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Activate Physical Card</CardTitle>
+                <button onClick={() => setShowQRScanner(false)}>
+                  <X className="w-5 h-5 text-gray-400 hover:text-gray-600" />
+                </button>
+              </div>
+            </CardHeader>
+            <div className="p-6 space-y-6">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Smartphone className="w-8 h-8 text-primary-600" />
+                </div>
+                <p className="text-gray-600">
+                  Scan the QR code on the back of your physical card or enter it manually below.
+                </p>
+              </div>
+
+              {/* Manual QR Input */}
+              <div>
+                <Input
+                  label="QR Code"
+                  value={qrInput}
+                  onChange={(e) => setQrInput(e.target.value)}
+                  placeholder="Enter QR code from your card"
+                />
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-gray-600">
+                    The QR code is printed on the back of your physical card. Make sure you have received your card before activating.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setShowQRScanner(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={handleQRActivation}
+                  isLoading={activateByQR.isPending}
+                  disabled={!qrInput.trim()}
+                >
+                  Activate Card
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Card Details Modal */}
+      {showCardModal && selectedCard && (
+        <CardDetailsModal
+          card={selectedCard}
+          onClose={() => {
+            setShowCardModal(false);
+            setSelectedCard(null);
+          }}
+        />
+      )}
+    </MainLayout>
+  );
+}
+
+// Card Item Component
+interface CardItemProps {
+  card: CardType;
+  index: number;
+  showDetails: boolean;
+  showFlip: boolean;
+  onToggleDetails: () => void;
+  onToggleFlip: () => void;
+  onBlock: () => void;
+  onActivate?: () => void;
+  onViewDetails: () => void;
+  isBlocking: boolean;
+  isActivating?: boolean;
+}
+
+function CardItem({
+  card,
+  index,
+  showDetails,
+  showFlip,
+  onToggleDetails,
+  onToggleFlip,
+  onBlock,
+  onActivate,
+  onViewDetails,
+  isBlocking,
+  isActivating,
+}: CardItemProps) {
+  const getCardGradient = (type: string, idx: number) => {
+    const gradients = [
+      'from-blue-600 to-blue-800',
+      'from-purple-600 to-purple-800',
+      'from-indigo-600 to-indigo-800',
+      'from-teal-600 to-teal-800',
+    ];
+    return type === 'PHYSICAL' ? 'from-gray-700 to-gray-900' : gradients[idx % gradients.length];
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Card Visual with Flip */}
+      <div className="relative perspective-1000">
+        <div
+          className={clsx(
+            'transform-style-preserve-3d transition-transform duration-500',
+            showFlip && 'rotate-y-180'
+          )}
+          style={{
+            transformStyle: 'preserve-3d',
+            transform: showFlip ? 'rotateY(180deg)' : 'rotateY(0deg)',
+          }}
+        >
+          {/* Front */}
+          <div
+            className={clsx(
+              'relative aspect-[1.586/1] rounded-xl p-6 text-white bg-gradient-to-br shadow-lg cursor-pointer backface-hidden',
+              getCardGradient(card.type, index),
+              card.status !== 'ACTIVE' && 'opacity-60'
+            )}
+            onClick={onViewDetails}
+            style={{ backfaceVisibility: 'hidden' }}
+          >
+            {card.status === 'BLOCKED' && (
+              <div className="absolute inset-0 bg-black bg-opacity-50 rounded-xl flex items-center justify-center">
+                <Lock className="w-12 h-12" />
+              </div>
+            )}
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs uppercase tracking-wider opacity-80">{card.type} Card</p>
+                <p className="text-sm mt-1 opacity-90">{card.cardholderName}</p>
+              </div>
+              <CreditCard className="w-8 h-8" />
+            </div>
+            <div className="absolute bottom-6 left-6 right-6">
+              <p className="text-lg tracking-widest font-mono">
+                {showDetails ? card.cardNumber : card.maskedNumber || '•••• •••• •••• ••••'}
+              </p>
+              <div className="flex justify-between mt-2">
+                <div>
+                  <p className="text-xs opacity-70">Expires</p>
+                  <p className="text-sm">
+                    {String(card.expiryMonth).padStart(2, '0')}/{String(card.expiryYear).slice(-2)}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs opacity-70">Status</p>
+                  <p className="text-sm">{card.status}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Back */}
+          <div
+            className="absolute inset-0 aspect-[1.586/1] rounded-xl bg-gradient-to-br from-gray-700 to-gray-900 shadow-lg overflow-hidden rotate-y-180"
+            style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+          >
+            {/* Magnetic Strip */}
+            <div className="absolute top-8 left-0 right-0 h-10 bg-gray-800" />
+
+            {/* QR Code placeholder */}
+            <div className="absolute bottom-6 right-6 bg-white p-2 rounded-lg">
+              <QrCode className="w-20 h-20 text-gray-800" />
+            </div>
+
+            <div className="absolute bottom-6 left-6 max-w-[140px] text-white">
+              <p className="text-xs opacity-70">Scan to pay or activate</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Card Actions */}
+      <Card padding="sm">
+        <div className="flex items-center justify-between">
+          <div className="text-sm">
+            <p className="text-gray-500">Daily Limit</p>
+            <p className="font-medium">${card.dailyLimit.toLocaleString()}</p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={onToggleDetails} title="Toggle card number">
+              {showDetails ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onToggleFlip} title="Flip card">
+              <RefreshCw className="w-4 h-4" />
+            </Button>
+            {card.status === 'INACTIVE' && onActivate ? (
+              <Button variant="outline" size="sm" onClick={onActivate} isLoading={isActivating}>
+                Activate
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onBlock}
+                title={card.status === 'BLOCKED' ? 'Unblock' : 'Block'}
+                isLoading={isBlocking}
+              >
+                {card.status === 'BLOCKED' ? (
+                  <Unlock className="w-4 h-4 text-green-500" />
+                ) : (
+                  <Lock className="w-4 h-4 text-red-500" />
+                )}
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={onViewDetails}>
+              <MoreVertical className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// Card Details Modal
+interface CardDetailsModalProps {
+  card: CardType;
+  onClose: () => void;
+}
+
+function CardDetailsModal({ card, onClose }: CardDetailsModalProps) {
+  const { data: cardWithType } = useCardWithType(card.id);
+  const [showSensitive, setShowSensitive] = useState(false);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+      <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Card Details</CardTitle>
+            <button onClick={onClose}>
+              <X className="w-5 h-5 text-gray-400 hover:text-gray-600" />
+            </button>
+          </div>
+        </CardHeader>
+        <div className="p-6 space-y-6">
+          {/* Card Preview */}
+          <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl p-6 text-white">
+            <div className="flex justify-between items-start mb-8">
+              <div>
+                <p className="text-xs uppercase tracking-wider opacity-80">{card.type} Card</p>
+                <p className="font-bold mt-1">{cardWithType?.cardType?.name || 'Card'}</p>
+              </div>
+              <CreditCard className="w-8 h-8 opacity-80" />
+            </div>
+            <p className="text-xl tracking-widest font-mono mb-4">
+              {showSensitive
+                ? card.cardNumber.replace(/(.{4})/g, '$1 ').trim()
+                : '•••• •••• •••• ' + card.cardNumber.slice(-4)}
+            </p>
+            <div className="flex justify-between">
+              <div>
+                <p className="text-xs opacity-70">EXPIRES</p>
+                <p>
+                  {String(card.expiryMonth).padStart(2, '0')}/{String(card.expiryYear).slice(-2)}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs opacity-70">CARDHOLDER</p>
+                <p>{card.cardholderName.toUpperCase()}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Details */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between py-2 border-b">
+              <span className="text-gray-500">Status</span>
+              <span
+                className={clsx(
+                  'font-medium',
+                  card.status === 'ACTIVE' && 'text-green-600',
+                  card.status === 'BLOCKED' && 'text-red-600',
+                  card.status === 'INACTIVE' && 'text-yellow-600'
+                )}
+              >
+                {card.status}
+              </span>
+            </div>
+            <div className="flex items-center justify-between py-2 border-b">
+              <span className="text-gray-500">Card Type</span>
+              <span className="font-medium">{card.type}</span>
+            </div>
+            <div className="flex items-center justify-between py-2 border-b">
+              <span className="text-gray-500">Daily Limit</span>
+              <span className="font-medium">${card.dailyLimit.toLocaleString()}</span>
+            </div>
+            <div className="flex items-center justify-between py-2 border-b">
+              <span className="text-gray-500">Monthly Limit</span>
+              <span className="font-medium">${card.monthlyLimit.toLocaleString()}</span>
+            </div>
+            <div className="flex items-center justify-between py-2">
+              <span className="text-gray-500">Created</span>
+              <span className="font-medium">{new Date(card.createdAt).toLocaleDateString()}</span>
+            </div>
+          </div>
+
+          {/* Toggle Sensitive Data */}
+          <Button variant="outline" className="w-full" onClick={() => setShowSensitive(!showSensitive)}>
+            {showSensitive ? (
+              <>
+                <EyeOff className="w-4 h-4 mr-2" />
+                Hide Card Details
+              </>
+            ) : (
+              <>
+                <Eye className="w-4 h-4 mr-2" />
+                Show Full Card Number
+              </>
+            )}
+          </Button>
+
+          <Button variant="outline" className="w-full" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+export default MyCardsPage;

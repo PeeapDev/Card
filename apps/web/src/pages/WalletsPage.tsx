@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { Wallet, Plus, ArrowDownRight, ArrowUpRight, MoreVertical, Snowflake, Send, QrCode, Copy, CheckCircle, Search, User, X, AlertCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Wallet, Plus, ArrowDownRight, ArrowUpRight, MoreVertical, Snowflake, Send, QrCode, Copy, CheckCircle, Search, User, X, AlertCircle, PiggyBank, ChevronDown } from 'lucide-react';
 import { Card, CardHeader, CardTitle, Button } from '@/components/ui';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { CreatePotModal } from '@/components/pots';
 import { useWallets, useCreateWallet, useDeposit, useTransfer, useFreezeWallet, useUnfreezeWallet } from '@/hooks/useWallets';
 import { clsx } from 'clsx';
 import type { Wallet as WalletType } from '@/types';
@@ -16,6 +18,7 @@ interface Recipient {
 }
 
 export function WalletsPage() {
+  const navigate = useNavigate();
   const { data: wallets, isLoading } = useWallets();
   const createWallet = useCreateWallet();
   const deposit = useDeposit();
@@ -23,7 +26,9 @@ export function WalletsPage() {
   const freezeWallet = useFreezeWallet();
   const unfreezeWallet = useUnfreezeWallet();
 
+  const [showCreateDropdown, setShowCreateDropdown] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showCreatePotModal, setShowCreatePotModal] = useState(false);
   const [showDepositModal, setShowDepositModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showReceiveModal, setShowReceiveModal] = useState(false);
@@ -173,10 +178,59 @@ export function WalletsPage() {
             <h1 className="text-2xl font-bold text-gray-900">Wallets</h1>
             <p className="text-gray-500 mt-1">Manage your digital wallets</p>
           </div>
-          <Button onClick={() => setShowCreateModal(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Create Wallet
-          </Button>
+
+          {/* Create Dropdown */}
+          <div className="relative">
+            <Button onClick={() => setShowCreateDropdown(!showCreateDropdown)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Create
+              <ChevronDown className={clsx(
+                'w-4 h-4 ml-2 transition-transform',
+                showCreateDropdown && 'rotate-180'
+              )} />
+            </Button>
+
+            {showCreateDropdown && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setShowCreateDropdown(false)}
+                />
+                <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-20">
+                  <button
+                    onClick={() => {
+                      setShowCreateDropdown(false);
+                      setShowCreateModal(true);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
+                      <Wallet className="w-5 h-5 text-primary-600" />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-medium text-gray-900">Wallet</p>
+                      <p className="text-xs text-gray-500">Regular spending wallet</p>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowCreateDropdown(false);
+                      setShowCreatePotModal(true);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                      <PiggyBank className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-medium text-gray-900">Savings Pot</p>
+                      <p className="text-xs text-gray-500">Locked savings goal</p>
+                    </div>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Wallets grid */}
@@ -288,11 +342,17 @@ export function WalletsPage() {
           <Card className="text-center py-12">
             <Wallet className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No wallets yet</h3>
-            <p className="text-gray-500 mb-4">Create your first wallet to get started</p>
-            <Button onClick={() => setShowCreateModal(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Create Wallet
-            </Button>
+            <p className="text-gray-500 mb-6">Create your first wallet or savings pot to get started</p>
+            <div className="flex justify-center gap-4">
+              <Button onClick={() => setShowCreateModal(true)}>
+                <Wallet className="w-4 h-4 mr-2" />
+                Create Wallet
+              </Button>
+              <Button variant="outline" onClick={() => setShowCreatePotModal(true)}>
+                <PiggyBank className="w-4 h-4 mr-2" />
+                Create Pot
+              </Button>
+            </div>
           </Card>
         )}
       </div>
@@ -628,6 +688,16 @@ export function WalletsPage() {
           </Card>
         </div>
       )}
+
+      {/* Create Pot Modal */}
+      <CreatePotModal
+        isOpen={showCreatePotModal}
+        onClose={() => setShowCreatePotModal(false)}
+        onSuccess={() => {
+          setShowCreatePotModal(false);
+          navigate('/pots');
+        }}
+      />
     </MainLayout>
   );
 }

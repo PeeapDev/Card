@@ -1,13 +1,21 @@
+/**
+ * Card Hooks - Production Grade
+ *
+ * React Query hooks for card operations with Supabase
+ */
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { cardService, CreateCardRequest, UpdateCardLimitsRequest } from '@/services/card.service';
-import { supabase } from '@/lib/supabase';
+import {
+  cardService,
+  CreateCardRequest,
+  UpdateCardLimitsRequest,
+  CreateCardTypeRequest,
+  CreateCardOrderRequest,
+  CardType,
+  CardOrder,
+} from '@/services/card.service';
 import { useAuth } from '@/context/AuthContext';
 import type { Card } from '@/types';
-
-// Check if we're in demo mode
-const isDemoMode = () => {
-  return localStorage.getItem('demoUser') !== null;
-};
 
 export function useCards() {
   const { user } = useAuth();
@@ -15,41 +23,12 @@ export function useCards() {
   return useQuery({
     queryKey: ['cards', user?.id],
     queryFn: async (): Promise<Card[]> => {
-      // If demo mode, fetch from Supabase or return empty array
-      if (isDemoMode()) {
-        if (!user?.id) return [];
-
-        const { data, error } = await supabase
-          .from('cards')
-          .select('*')
-          .eq('user_id', user.id);
-
-        if (error) {
-          console.error('Error fetching cards:', error);
-          return [];
-        }
-
-        return (data || []).map(c => ({
-          id: c.id,
-          walletId: c.wallet_id,
-          cardNumber: c.card_number || '',
-          maskedNumber: c.masked_number || '****',
-          expiryMonth: c.expiry_month || 12,
-          expiryYear: c.expiry_year || 2025,
-          cardholderName: c.cardholder_name || '',
-          status: c.status || 'ACTIVE',
-          type: c.type || 'VIRTUAL',
-          dailyLimit: c.daily_limit || 1000,
-          monthlyLimit: c.monthly_limit || 10000,
-          createdAt: c.created_at,
-          updatedAt: c.updated_at,
-        }));
-      }
-
-      // Normal API mode
-      return cardService.getCards();
+      if (!user?.id) return [];
+      return cardService.getCards(user.id);
     },
     enabled: !!user?.id,
+    staleTime: 30000,
+    retry: 2,
   });
 }
 
@@ -58,14 +37,19 @@ export function useCard(id: string) {
     queryKey: ['cards', id],
     queryFn: () => cardService.getCard(id),
     enabled: !!id,
+    staleTime: 30000,
   });
 }
 
 export function useCreateCard() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   return useMutation({
-    mutationFn: (data: CreateCardRequest) => cardService.createCard(data),
+    mutationFn: (data: CreateCardRequest) => {
+      if (!user?.id) throw new Error('User not authenticated');
+      return cardService.createCard(user.id, data);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cards'] });
     },
@@ -126,5 +110,191 @@ export function useCardDetails(id: string) {
     queryKey: ['cards', id, 'details'],
     queryFn: () => cardService.getCardDetails(id),
     enabled: false, // Only fetch on demand
+  });
+}
+
+// ==========================================
+// Card Types Hooks
+// ==========================================
+
+export function useCardTypes(includeInactive = false) {
+  return useQuery({
+    queryKey: ['cardTypes', { includeInactive }],
+    queryFn: () => cardService.getCardTypes(includeInactive),
+    staleTime: 60000, // 1 minute
+  });
+}
+
+export function useCardType(id: string) {
+  return useQuery({
+    queryKey: ['cardTypes', id],
+    queryFn: () => cardService.getCardType(id),
+    enabled: !!id,
+    staleTime: 60000,
+  });
+}
+
+export function useCreateCardType() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: CreateCardTypeRequest) => cardService.createCardType(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cardTypes'] });
+    },
+  });
+}
+
+export function useUpdateCardType() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<CreateCardTypeRequest> }) =>
+      cardService.updateCardType(id, data),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['cardTypes'] });
+      queryClient.invalidateQueries({ queryKey: ['cardTypes', id] });
+    },
+  });
+}
+
+export function useDeleteCardType() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => cardService.deleteCardType(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cardTypes'] });
+    },
+  });
+}
+
+// ==========================================
+// Card Orders Hooks
+// ==========================================
+
+export function useCardOrders() {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ['cardOrders', user?.id],
+    queryFn: async (): Promise<CardOrder[]> => {
+      if (!user?.id) return [];
+      return cardService.getCardOrders(user.id);
+    },
+    enabled: !!user?.id,
+    staleTime: 30000,
+  });
+}
+
+export function useAllCardOrders(status?: string) {
+  return useQuery({
+    queryKey: ['cardOrders', 'all', status],
+    queryFn: () => cardService.getAllCardOrders(status),
+    staleTime: 30000,
+  });
+}
+
+export function useCardOrder(id: string) {
+  return useQuery({
+    queryKey: ['cardOrders', id],
+    queryFn: () => cardService.getCardOrder(id),
+    enabled: !!id,
+    staleTime: 30000,
+  });
+}
+
+export function useCreateCardOrder() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: (data: CreateCardOrderRequest) => {
+      if (!user?.id) throw new Error('User not authenticated');
+      return cardService.createCardOrder(user.id, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cardOrders'] });
+      queryClient.invalidateQueries({ queryKey: ['wallets'] });
+    },
+  });
+}
+
+export function useGenerateCard() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: ({ orderId, notes }: { orderId: string; notes?: string }) => {
+      if (!user?.id) throw new Error('User not authenticated');
+      return cardService.generateCard(orderId, user.id, notes);
+    },
+    onSuccess: (_, { orderId }) => {
+      queryClient.invalidateQueries({ queryKey: ['cardOrders'] });
+      queryClient.invalidateQueries({ queryKey: ['cardOrders', orderId] });
+      queryClient.invalidateQueries({ queryKey: ['cards'] });
+    },
+  });
+}
+
+export function useRejectCardOrder() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: ({ orderId, notes }: { orderId: string; notes: string }) => {
+      if (!user?.id) throw new Error('User not authenticated');
+      return cardService.rejectCardOrder(orderId, user.id, notes);
+    },
+    onSuccess: (_, { orderId }) => {
+      queryClient.invalidateQueries({ queryKey: ['cardOrders'] });
+      queryClient.invalidateQueries({ queryKey: ['cardOrders', orderId] });
+    },
+  });
+}
+
+export function useUpdateShipping() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ orderId, trackingNumber }: { orderId: string; trackingNumber: string }) =>
+      cardService.updateShipping(orderId, trackingNumber),
+    onSuccess: (_, { orderId }) => {
+      queryClient.invalidateQueries({ queryKey: ['cardOrders'] });
+      queryClient.invalidateQueries({ queryKey: ['cardOrders', orderId] });
+    },
+  });
+}
+
+export function useActivateCardByQR() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: (qrCode: string) => {
+      if (!user?.id) throw new Error('User not authenticated');
+      return cardService.activateCardByQR(qrCode, user.id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cards'] });
+      queryClient.invalidateQueries({ queryKey: ['cardOrders'] });
+    },
+  });
+}
+
+export function useCardByQR(qrCode: string) {
+  return useQuery({
+    queryKey: ['cards', 'qr', qrCode],
+    queryFn: () => cardService.getCardByQR(qrCode),
+    enabled: !!qrCode,
+  });
+}
+
+export function useCardWithType(id: string) {
+  return useQuery({
+    queryKey: ['cards', id, 'withType'],
+    queryFn: () => cardService.getCardWithType(id),
+    enabled: !!id,
+    staleTime: 30000,
   });
 }

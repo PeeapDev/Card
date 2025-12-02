@@ -1,4 +1,11 @@
-import { api } from './api';
+/**
+ * Card Service - Production Grade
+ *
+ * Direct Supabase integration for card operations
+ * Includes proper error handling and type safety
+ */
+
+import { supabase } from '@/lib/supabase';
 import type { Card } from '@/types';
 
 export interface CreateCardRequest {
@@ -14,49 +21,798 @@ export interface UpdateCardLimitsRequest {
   monthlyLimit?: number;
 }
 
+// Card Types (Admin-configured card products)
+export interface CardType {
+  id: string;
+  name: string;
+  description: string;
+  cardImageUrl?: string;
+  price: number;
+  transactionFeePercentage: number;
+  transactionFeeFixed: number;
+  requiredKycLevel: number;
+  cardType: 'VIRTUAL' | 'PHYSICAL';
+  isActive: boolean;
+  dailyLimit: number;
+  monthlyLimit: number;
+  colorGradient: string;
+  features: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateCardTypeRequest {
+  name: string;
+  description: string;
+  cardImageUrl?: string;
+  price: number;
+  transactionFeePercentage?: number;
+  transactionFeeFixed?: number;
+  requiredKycLevel?: number;
+  cardType: 'VIRTUAL' | 'PHYSICAL';
+  isActive?: boolean;
+  dailyLimit?: number;
+  monthlyLimit?: number;
+  colorGradient?: string;
+  features?: string[];
+}
+
+// Card Orders (User purchase requests)
+export interface CardOrder {
+  id: string;
+  userId: string;
+  cardTypeId: string;
+  walletId: string;
+  amountPaid: number;
+  currency: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'GENERATED' | 'ACTIVATED' | 'CANCELLED';
+  transactionId?: string;
+  generatedCardId?: string;
+  cardNumber?: string;
+  qrCodeData?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  reviewNotes?: string;
+  shippingAddress?: {
+    street: string;
+    city: string;
+    state: string;
+    postalCode: string;
+    country: string;
+  };
+  trackingNumber?: string;
+  shippedAt?: string;
+  deliveredAt?: string;
+  activatedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  // Joined data
+  cardType?: CardType;
+  user?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string;
+    kycStatus: string;
+    kycTier?: number;
+  };
+  wallet?: {
+    id: string;
+    currency: string;
+    balance: number;
+  };
+}
+
+export interface CreateCardOrderRequest {
+  cardTypeId: string;
+  walletId: string;
+  shippingAddress?: {
+    street: string;
+    city: string;
+    state: string;
+    postalCode: string;
+    country: string;
+  };
+}
+
+// Generate a random card number (for virtual cards)
+const generateCardNumber = (): string => {
+  // Visa-like card number starting with 4
+  const prefix = '4';
+  let cardNumber = prefix;
+  for (let i = 0; i < 15; i++) {
+    cardNumber += Math.floor(Math.random() * 10).toString();
+  }
+  return cardNumber;
+};
+
+// Generate masked card number
+const maskCardNumber = (cardNumber: string): string => {
+  return `****${cardNumber.slice(-4)}`;
+};
+
+// Generate CVV
+const generateCVV = (): string => {
+  return Math.floor(100 + Math.random() * 900).toString();
+};
+
+// Map database row to CardType
+const mapCardType = (row: any): CardType => ({
+  id: row.id,
+  name: row.name,
+  description: row.description || '',
+  cardImageUrl: row.card_image_url,
+  price: parseFloat(row.price) || 0,
+  transactionFeePercentage: parseFloat(row.transaction_fee_percentage) || 0,
+  transactionFeeFixed: parseFloat(row.transaction_fee_fixed) || 0,
+  requiredKycLevel: row.required_kyc_level || 1,
+  cardType: row.card_type || 'VIRTUAL',
+  isActive: row.is_active ?? true,
+  dailyLimit: parseFloat(row.daily_limit) || 1000,
+  monthlyLimit: parseFloat(row.monthly_limit) || 10000,
+  colorGradient: row.color_gradient || 'from-blue-600 to-blue-800',
+  features: row.features || [],
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+// Map database row to CardOrder
+const mapCardOrder = (row: any): CardOrder => ({
+  id: row.id,
+  userId: row.user_id,
+  cardTypeId: row.card_type_id,
+  walletId: row.wallet_id,
+  amountPaid: parseFloat(row.amount_paid) || 0,
+  currency: row.currency || 'SLE',
+  status: row.status || 'PENDING',
+  transactionId: row.transaction_id,
+  generatedCardId: row.generated_card_id,
+  cardNumber: row.card_number,
+  qrCodeData: row.qr_code_data,
+  reviewedBy: row.reviewed_by,
+  reviewedAt: row.reviewed_at,
+  reviewNotes: row.review_notes,
+  shippingAddress: row.shipping_address,
+  trackingNumber: row.tracking_number,
+  shippedAt: row.shipped_at,
+  deliveredAt: row.delivered_at,
+  activatedAt: row.activated_at,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+  cardType: row.card_types ? mapCardType(row.card_types) : undefined,
+  user: row.users ? {
+    id: row.users.id,
+    firstName: row.users.first_name,
+    lastName: row.users.last_name,
+    email: row.users.email,
+    phone: row.users.phone,
+    kycStatus: row.users.kyc_status,
+    kycTier: row.users.kyc_tier,
+  } : undefined,
+  wallet: row.wallets ? {
+    id: row.wallets.id,
+    currency: row.wallets.currency,
+    balance: parseFloat(row.wallets.balance) || 0,
+  } : undefined,
+});
+
+// Map database row to Card type
+const mapCard = (row: any): Card => ({
+  id: row.id,
+  walletId: row.wallet_id,
+  cardNumber: row.card_number || '',
+  maskedNumber: row.masked_number || maskCardNumber(row.card_number || '0000'),
+  expiryMonth: row.expiry_month || 12,
+  expiryYear: row.expiry_year || new Date().getFullYear() + 3,
+  cardholderName: row.cardholder_name || '',
+  status: row.status || 'ACTIVE',
+  type: row.type || 'VIRTUAL',
+  dailyLimit: parseFloat(row.daily_limit) || 1000,
+  monthlyLimit: parseFloat(row.monthly_limit) || 10000,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
 export const cardService = {
-  async getCards(): Promise<Card[]> {
-    const response = await api.get<Card[]>('/cards');
-    return response.data;
+  /**
+   * Get all cards for the current user
+   */
+  async getCards(userId: string): Promise<Card[]> {
+    // First get user's wallets
+    const { data: wallets, error: walletsError } = await supabase
+      .from('wallets')
+      .select('id')
+      .eq('user_id', userId);
+
+    if (walletsError || !wallets?.length) {
+      return [];
+    }
+
+    const walletIds = wallets.map(w => w.id);
+
+    // Get cards for those wallets
+    const { data, error } = await supabase
+      .from('cards')
+      .select('*')
+      .in('wallet_id', walletIds)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching cards:', error);
+      throw new Error(error.message);
+    }
+
+    return (data || []).map(mapCard);
   },
 
+  /**
+   * Get cards by user ID directly (if user_id column exists)
+   */
+  async getCardsByUserId(userId: string): Promise<Card[]> {
+    const { data, error } = await supabase
+      .from('cards')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      // Fallback to wallet-based lookup
+      return this.getCards(userId);
+    }
+
+    return (data || []).map(mapCard);
+  },
+
+  /**
+   * Get a single card by ID
+   */
   async getCard(id: string): Promise<Card> {
-    const response = await api.get<Card>(`/cards/${id}`);
-    return response.data;
+    const { data, error } = await supabase
+      .from('cards')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      console.error('Error fetching card:', error);
+      throw new Error(error.message);
+    }
+
+    return mapCard(data);
   },
 
-  async createCard(data: CreateCardRequest): Promise<Card> {
-    const response = await api.post<Card>('/cards', data);
-    return response.data;
+  /**
+   * Create a new card
+   */
+  async createCard(userId: string, data: CreateCardRequest): Promise<Card> {
+    const cardNumber = generateCardNumber();
+    const expiryDate = new Date();
+    expiryDate.setFullYear(expiryDate.getFullYear() + 3);
+
+    const { data: card, error } = await supabase
+      .from('cards')
+      .insert({
+        user_id: userId,
+        wallet_id: data.walletId,
+        card_number: cardNumber,
+        masked_number: maskCardNumber(cardNumber),
+        cvv: generateCVV(),
+        expiry_month: expiryDate.getMonth() + 1,
+        expiry_year: expiryDate.getFullYear(),
+        cardholder_name: data.cardholderName,
+        type: data.type,
+        status: data.type === 'VIRTUAL' ? 'ACTIVE' : 'INACTIVE',
+        daily_limit: data.dailyLimit || 1000,
+        monthly_limit: data.monthlyLimit || 10000,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating card:', error);
+      throw new Error(error.message);
+    }
+
+    return mapCard(card);
   },
 
+  /**
+   * Activate a card
+   */
   async activateCard(id: string): Promise<Card> {
-    const response = await api.post<Card>(`/cards/${id}/activate`);
-    return response.data;
+    const { data, error } = await supabase
+      .from('cards')
+      .update({
+        status: 'ACTIVE',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error activating card:', error);
+      throw new Error(error.message);
+    }
+
+    return mapCard(data);
   },
 
+  /**
+   * Block a card
+   */
   async blockCard(id: string): Promise<Card> {
-    const response = await api.post<Card>(`/cards/${id}/block`);
-    return response.data;
+    const { data, error } = await supabase
+      .from('cards')
+      .update({
+        status: 'BLOCKED',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error blocking card:', error);
+      throw new Error(error.message);
+    }
+
+    return mapCard(data);
   },
 
+  /**
+   * Unblock a card
+   */
   async unblockCard(id: string): Promise<Card> {
-    const response = await api.post<Card>(`/cards/${id}/unblock`);
-    return response.data;
+    const { data, error } = await supabase
+      .from('cards')
+      .update({
+        status: 'ACTIVE',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error unblocking card:', error);
+      throw new Error(error.message);
+    }
+
+    return mapCard(data);
   },
 
+  /**
+   * Update card limits
+   */
   async updateLimits(id: string, data: UpdateCardLimitsRequest): Promise<Card> {
-    const response = await api.patch<Card>(`/cards/${id}/limits`, data);
-    return response.data;
+    const updates: any = { updated_at: new Date().toISOString() };
+    if (data.dailyLimit !== undefined) updates.daily_limit = data.dailyLimit;
+    if (data.monthlyLimit !== undefined) updates.monthly_limit = data.monthlyLimit;
+
+    const { data: card, error } = await supabase
+      .from('cards')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating card limits:', error);
+      throw new Error(error.message);
+    }
+
+    return mapCard(card);
   },
 
+  /**
+   * Get full card details (sensitive data)
+   * Note: In production, this should require additional authentication
+   */
   async getCardDetails(id: string): Promise<{
     cardNumber: string;
     cvv: string;
     expiryMonth: number;
     expiryYear: number;
   }> {
-    const response = await api.get(`/cards/${id}/details`);
-    return response.data;
+    const { data, error } = await supabase
+      .from('cards')
+      .select('card_number, cvv, expiry_month, expiry_year')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      console.error('Error fetching card details:', error);
+      throw new Error(error.message);
+    }
+
+    return {
+      cardNumber: data.card_number,
+      cvv: data.cvv,
+      expiryMonth: data.expiry_month,
+      expiryYear: data.expiry_year,
+    };
+  },
+
+  // ==========================================
+  // Card Types Management (Admin)
+  // ==========================================
+
+  /**
+   * Get all card types (active ones for users, all for admins)
+   */
+  async getCardTypes(includeInactive = false): Promise<CardType[]> {
+    let query = supabase
+      .from('card_types')
+      .select('*')
+      .order('price', { ascending: true });
+
+    if (!includeInactive) {
+      query = query.eq('is_active', true);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error fetching card types:', error);
+      throw new Error(error.message);
+    }
+
+    return (data || []).map(mapCardType);
+  },
+
+  /**
+   * Get a single card type
+   */
+  async getCardType(id: string): Promise<CardType> {
+    const { data, error } = await supabase
+      .from('card_types')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      console.error('Error fetching card type:', error);
+      throw new Error(error.message);
+    }
+
+    return mapCardType(data);
+  },
+
+  /**
+   * Create a new card type (Admin only)
+   */
+  async createCardType(data: CreateCardTypeRequest): Promise<CardType> {
+    const { data: cardType, error } = await supabase
+      .from('card_types')
+      .insert({
+        name: data.name,
+        description: data.description,
+        card_image_url: data.cardImageUrl,
+        price: data.price,
+        transaction_fee_percentage: data.transactionFeePercentage || 0,
+        transaction_fee_fixed: data.transactionFeeFixed || 0,
+        required_kyc_level: data.requiredKycLevel || 1,
+        card_type: data.cardType,
+        is_active: data.isActive ?? true,
+        daily_limit: data.dailyLimit || 1000,
+        monthly_limit: data.monthlyLimit || 10000,
+        color_gradient: data.colorGradient || 'from-blue-600 to-blue-800',
+        features: data.features || [],
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating card type:', error);
+      throw new Error(error.message);
+    }
+
+    return mapCardType(cardType);
+  },
+
+  /**
+   * Update a card type (Admin only)
+   */
+  async updateCardType(id: string, data: Partial<CreateCardTypeRequest>): Promise<CardType> {
+    const updates: any = { updated_at: new Date().toISOString() };
+
+    if (data.name !== undefined) updates.name = data.name;
+    if (data.description !== undefined) updates.description = data.description;
+    if (data.cardImageUrl !== undefined) updates.card_image_url = data.cardImageUrl;
+    if (data.price !== undefined) updates.price = data.price;
+    if (data.transactionFeePercentage !== undefined) updates.transaction_fee_percentage = data.transactionFeePercentage;
+    if (data.transactionFeeFixed !== undefined) updates.transaction_fee_fixed = data.transactionFeeFixed;
+    if (data.requiredKycLevel !== undefined) updates.required_kyc_level = data.requiredKycLevel;
+    if (data.cardType !== undefined) updates.card_type = data.cardType;
+    if (data.isActive !== undefined) updates.is_active = data.isActive;
+    if (data.dailyLimit !== undefined) updates.daily_limit = data.dailyLimit;
+    if (data.monthlyLimit !== undefined) updates.monthly_limit = data.monthlyLimit;
+    if (data.colorGradient !== undefined) updates.color_gradient = data.colorGradient;
+    if (data.features !== undefined) updates.features = data.features;
+
+    const { data: cardType, error } = await supabase
+      .from('card_types')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating card type:', error);
+      throw new Error(error.message);
+    }
+
+    return mapCardType(cardType);
+  },
+
+  /**
+   * Delete a card type (Admin only)
+   */
+  async deleteCardType(id: string): Promise<void> {
+    const { error } = await supabase
+      .from('card_types')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting card type:', error);
+      throw new Error(error.message);
+    }
+  },
+
+  // ==========================================
+  // Card Orders Management
+  // ==========================================
+
+  /**
+   * Get all card orders for a user
+   */
+  async getCardOrders(userId: string): Promise<CardOrder[]> {
+    const { data, error } = await supabase
+      .from('card_orders')
+      .select(`
+        *,
+        card_types (*),
+        wallets (id, currency, balance)
+      `)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching card orders:', error);
+      throw new Error(error.message);
+    }
+
+    return (data || []).map(mapCardOrder);
+  },
+
+  /**
+   * Get all card orders (Admin)
+   */
+  async getAllCardOrders(status?: string): Promise<CardOrder[]> {
+    let query = supabase
+      .from('card_orders')
+      .select(`
+        *,
+        card_types (*),
+        users (id, first_name, last_name, email, phone, kyc_status, kyc_tier),
+        wallets (id, currency, balance)
+      `)
+      .order('created_at', { ascending: false });
+
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error fetching all card orders:', error);
+      throw new Error(error.message);
+    }
+
+    return (data || []).map(mapCardOrder);
+  },
+
+  /**
+   * Get a single card order
+   */
+  async getCardOrder(id: string): Promise<CardOrder> {
+    const { data, error } = await supabase
+      .from('card_orders')
+      .select(`
+        *,
+        card_types (*),
+        users (id, first_name, last_name, email, phone, kyc_status, kyc_tier),
+        wallets (id, currency, balance)
+      `)
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      console.error('Error fetching card order:', error);
+      throw new Error(error.message);
+    }
+
+    return mapCardOrder(data);
+  },
+
+  /**
+   * Create a card order (purchase a card)
+   */
+  async createCardOrder(userId: string, data: CreateCardOrderRequest): Promise<CardOrder> {
+    // Use the RPC function for atomic operation
+    const { data: orderId, error } = await supabase.rpc('create_card_order', {
+      p_user_id: userId,
+      p_card_type_id: data.cardTypeId,
+      p_wallet_id: data.walletId,
+    });
+
+    if (error) {
+      console.error('Error creating card order:', error);
+      throw new Error(error.message);
+    }
+
+    // Update shipping address if provided
+    if (data.shippingAddress) {
+      await supabase
+        .from('card_orders')
+        .update({ shipping_address: data.shippingAddress })
+        .eq('id', orderId);
+    }
+
+    return this.getCardOrder(orderId);
+  },
+
+  /**
+   * Admin: Generate a card for an order
+   */
+  async generateCard(orderId: string, adminId: string, notes?: string): Promise<string> {
+    const { data: cardId, error } = await supabase.rpc('admin_generate_card', {
+      p_order_id: orderId,
+      p_admin_id: adminId,
+      p_notes: notes || null,
+    });
+
+    if (error) {
+      console.error('Error generating card:', error);
+      throw new Error(error.message);
+    }
+
+    return cardId;
+  },
+
+  /**
+   * Admin: Reject a card order
+   */
+  async rejectCardOrder(orderId: string, adminId: string, notes: string): Promise<CardOrder> {
+    // Get the order to refund
+    const order = await this.getCardOrder(orderId);
+
+    // Refund the wallet
+    await supabase.rpc('wallet_deposit', {
+      p_wallet_id: order.walletId,
+      p_amount: order.amountPaid,
+      p_description: `Refund for rejected card order: ${order.cardType?.name || 'Card'}`,
+    });
+
+    // Update order status
+    const { data, error } = await supabase
+      .from('card_orders')
+      .update({
+        status: 'REJECTED',
+        reviewed_by: adminId,
+        reviewed_at: new Date().toISOString(),
+        review_notes: notes,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', orderId)
+      .select(`
+        *,
+        card_types (*),
+        users (id, first_name, last_name, email, phone, kyc_status, kyc_tier),
+        wallets (id, currency, balance)
+      `)
+      .single();
+
+    if (error) {
+      console.error('Error rejecting card order:', error);
+      throw new Error(error.message);
+    }
+
+    return mapCardOrder(data);
+  },
+
+  /**
+   * Admin: Update shipping info
+   */
+  async updateShipping(orderId: string, trackingNumber: string): Promise<CardOrder> {
+    const { data, error } = await supabase
+      .from('card_orders')
+      .update({
+        tracking_number: trackingNumber,
+        shipped_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', orderId)
+      .select(`
+        *,
+        card_types (*),
+        users (id, first_name, last_name, email, phone, kyc_status, kyc_tier),
+        wallets (id, currency, balance)
+      `)
+      .single();
+
+    if (error) {
+      console.error('Error updating shipping:', error);
+      throw new Error(error.message);
+    }
+
+    return mapCardOrder(data);
+  },
+
+  /**
+   * Activate card by QR code
+   */
+  async activateCardByQR(qrCode: string, userId: string): Promise<string> {
+    const { data: cardId, error } = await supabase.rpc('activate_card_by_qr', {
+      p_qr_code: qrCode,
+      p_user_id: userId,
+    });
+
+    if (error) {
+      console.error('Error activating card by QR:', error);
+      throw new Error(error.message);
+    }
+
+    return cardId;
+  },
+
+  /**
+   * Get card by QR code
+   */
+  async getCardByQR(qrCode: string): Promise<Card | null> {
+    const { data, error } = await supabase
+      .from('cards')
+      .select('*')
+      .eq('qr_code', qrCode)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return null; // Not found
+      }
+      console.error('Error fetching card by QR:', error);
+      throw new Error(error.message);
+    }
+
+    return mapCard(data);
+  },
+
+  /**
+   * Get card with extended info (including card type)
+   */
+  async getCardWithType(id: string): Promise<Card & { cardType?: CardType }> {
+    const { data, error } = await supabase
+      .from('cards')
+      .select(`
+        *,
+        card_types (*)
+      `)
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      console.error('Error fetching card with type:', error);
+      throw new Error(error.message);
+    }
+
+    const card = mapCard(data);
+    return {
+      ...card,
+      cardType: data.card_types ? mapCardType(data.card_types) : undefined,
+    };
   },
 };

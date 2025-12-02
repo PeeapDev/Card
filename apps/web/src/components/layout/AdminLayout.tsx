@@ -22,6 +22,9 @@ import {
   ShieldCheck,
   UserCog,
   DollarSign,
+  ShoppingBag,
+  ClipboardList,
+  PiggyBank,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -61,8 +64,11 @@ const navSections: NavSection[] = [
     items: [
       { path: '/admin/accounts', label: 'Accounts', icon: Wallet },
       { path: '/admin/customers', label: 'Customers', icon: Users },
+      { path: '/admin/pots', label: 'Savings Pots', icon: PiggyBank },
       { path: '/admin/cards', label: 'Cards', icon: CreditCard },
       { path: '/admin/card-programs', label: 'Card Programs', icon: Layers },
+      { path: '/admin/card-types', label: 'Card Types', icon: ShoppingBag },
+      { path: '/admin/card-orders', label: 'Card Orders', icon: ClipboardList, badge: 'New', badgeColor: 'primary' },
     ],
   },
   {
@@ -172,9 +178,9 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                         {item.badge && (
                           <span className={clsx(
                             'px-2 py-0.5 text-xs rounded-full',
-                            item.badgeColor === 'yellow'
-                              ? 'bg-yellow-100 text-yellow-700'
-                              : 'bg-gray-100 text-gray-700'
+                            item.badgeColor === 'yellow' && 'bg-yellow-100 text-yellow-700',
+                            item.badgeColor === 'primary' && 'bg-primary-100 text-primary-700',
+                            !item.badgeColor && 'bg-gray-100 text-gray-700'
                           )}>
                             {item.badge}
                           </span>

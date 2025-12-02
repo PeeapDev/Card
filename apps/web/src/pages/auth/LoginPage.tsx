@@ -18,7 +18,8 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 // Real database users with their credentials
 const QUICK_LOGIN_USERS = [
-  { email: 'admin@example.com', password: 'Admin123!@#', label: 'Admin', icon: Shield, color: 'bg-red-500 hover:bg-red-600' },
+  { email: 'superadmin@cardpay.com', password: 'admin123', label: 'Super Admin', icon: Shield, color: 'bg-black hover:bg-gray-800' },
+  { email: 'admin@cardpay.com', password: 'admin123', label: 'Admin', icon: Shield, color: 'bg-red-500 hover:bg-red-600' },
   { email: 'user@example.com', password: 'User123!@#', label: 'User 1', icon: User, color: 'bg-blue-500 hover:bg-blue-600' },
   { email: 'merchant@example.com', password: 'Merchant123!@#', label: 'Merchant', icon: Store, color: 'bg-green-500 hover:bg-green-600' },
   { email: 'developer@example.com', password: 'Developer123!@#', label: 'Developer', icon: Code, color: 'bg-purple-500 hover:bg-purple-600' },

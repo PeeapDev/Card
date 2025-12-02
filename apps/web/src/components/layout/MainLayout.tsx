@@ -12,6 +12,7 @@ import {
   X,
   Send,
   QrCode,
+  PiggyBank,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -24,6 +25,7 @@ const navItems = [
   { path: '/send', label: 'Send Money', icon: Send },
   { path: '/receive', label: 'Receive Money', icon: QrCode },
   { path: '/wallets', label: 'Wallets', icon: Wallet },
+  { path: '/pots', label: 'Savings Pots', icon: PiggyBank },
   { path: '/cards', label: 'Cards', icon: CreditCard },
   { path: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
   { path: '/profile', label: 'Profile', icon: User },

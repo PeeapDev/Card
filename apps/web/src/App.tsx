@@ -15,6 +15,12 @@ import { ProfilePage } from '@/pages/ProfilePage';
 import { ApiDocsPage } from '@/pages/ApiDocsPage';
 import { SendMoneyPage } from '@/pages/SendMoneyPage';
 import { ReceiveMoneyPage } from '@/pages/ReceiveMoneyPage';
+import { PotsPage } from '@/pages/PotsPage';
+import { PotDetailPage } from '@/pages/PotDetailPage';
+
+// New Card Management Pages
+import { CardMarketplacePage } from '@/pages/CardMarketplacePage';
+import { MyCardsPage } from '@/pages/MyCardsPage';
 
 // Admin Pages
 import { AdminDashboard } from '@/pages/admin/AdminDashboard';
@@ -25,16 +31,20 @@ import { CustomersPage } from '@/pages/admin/CustomersPage';
 import { AccountsPage } from '@/pages/admin/AccountsPage';
 import { CardsPage as AdminCardsPage } from '@/pages/admin/CardsPage';
 import { CardProgramsPage } from '@/pages/admin/CardProgramsPage';
+import { CardTypesPage } from '@/pages/admin/CardTypesPage';
+import { CardOrdersPage } from '@/pages/admin/CardOrdersPage';
 import { TransactionsPage as AdminTransactionsPage } from '@/pages/admin/TransactionsPage';
 import { DisputesPage } from '@/pages/admin/DisputesPage';
 import { DevelopersPage } from '@/pages/admin/DevelopersPage';
 import { UsersManagementPage } from '@/pages/admin/UsersManagementPage';
+import { UserDetailPage } from '@/pages/admin/UserDetailPage';
 import { MerchantsManagementPage } from '@/pages/admin/MerchantsManagementPage';
 import { AgentsManagementPage } from '@/pages/admin/AgentsManagementPage';
 import { FeesPage } from '@/pages/admin/FeesPage';
 import { FeeSettingsPage } from '@/pages/admin/FeeSettingsPage';
 import { SubscriptionsPage } from '@/pages/admin/SubscriptionsPage';
 import { RolesManagementPage } from '@/pages/admin/RolesManagementPage';
+import { PotsManagementPage } from '@/pages/admin/PotsManagementPage';
 import { PaymentCheckoutPage } from '@/pages/PaymentCheckoutPage';
 import { PayPage } from '@/pages/PayPage';
 
@@ -98,6 +108,22 @@ function App() {
                 path="/cards"
                 element={
                   <ProtectedRoute>
+                    <MyCardsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/cards/marketplace"
+                element={
+                  <ProtectedRoute>
+                    <CardMarketplacePage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/cards/legacy"
+                element={
+                  <ProtectedRoute>
                     <CardsPage />
                   </ProtectedRoute>
                 }
@@ -134,12 +160,28 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+              <Route
+                path="/pots"
+                element={
+                  <ProtectedRoute>
+                    <PotsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/pots/:potId"
+                element={
+                  <ProtectedRoute>
+                    <PotDetailPage />
+                  </ProtectedRoute>
+                }
+              />
 
               {/* Admin Routes */}
               <Route
                 path="/admin"
                 element={
-                  <RoleBasedRoute allowedRoles={['admin']}>
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
                     <AdminDashboard />
                   </RoleBasedRoute>
                 }
@@ -147,7 +189,7 @@ function App() {
               <Route
                 path="/admin/accounts"
                 element={
-                  <RoleBasedRoute allowedRoles={['admin']}>
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
                     <AccountsPage />
                   </RoleBasedRoute>
                 }
@@ -155,7 +197,7 @@ function App() {
               <Route
                 path="/admin/customers"
                 element={
-                  <RoleBasedRoute allowedRoles={['admin']}>
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
                     <CustomersPage />
                   </RoleBasedRoute>
                 }
@@ -163,7 +205,7 @@ function App() {
               <Route
                 path="/admin/cards"
                 element={
-                  <RoleBasedRoute allowedRoles={['admin']}>
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
                     <AdminCardsPage />
                   </RoleBasedRoute>
                 }
@@ -171,15 +213,31 @@ function App() {
               <Route
                 path="/admin/card-programs"
                 element={
-                  <RoleBasedRoute allowedRoles={['admin']}>
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
                     <CardProgramsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/admin/card-types"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <CardTypesPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/admin/card-orders"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <CardOrdersPage />
                   </RoleBasedRoute>
                 }
               />
               <Route
                 path="/admin/authorization"
                 element={
-                  <RoleBasedRoute allowedRoles={['admin']}>
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
                     <AuthorizationPage />
                   </RoleBasedRoute>
                 }
@@ -187,7 +245,7 @@ function App() {
               <Route
                 path="/admin/transactions"
                 element={
-                  <RoleBasedRoute allowedRoles={['admin']}>
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
                     <AdminTransactionsPage />
                   </RoleBasedRoute>
                 }
@@ -195,7 +253,7 @@ function App() {
               <Route
                 path="/admin/disputes"
                 element={
-                  <RoleBasedRoute allowedRoles={['admin']}>
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
                     <DisputesPage />
                   </RoleBasedRoute>
                 }
@@ -203,15 +261,23 @@ function App() {
               <Route
                 path="/admin/users"
                 element={
-                  <RoleBasedRoute allowedRoles={['admin']}>
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
                     <UsersManagementPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/admin/users/:userId"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <UserDetailPage />
                   </RoleBasedRoute>
                 }
               />
               <Route
                 path="/admin/merchants"
                 element={
-                  <RoleBasedRoute allowedRoles={['admin']}>
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
                     <MerchantsManagementPage />
                   </RoleBasedRoute>
                 }
@@ -219,7 +285,7 @@ function App() {
               <Route
                 path="/admin/agents"
                 element={
-                  <RoleBasedRoute allowedRoles={['admin']}>
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
                     <AgentsManagementPage />
                   </RoleBasedRoute>
                 }
@@ -227,7 +293,7 @@ function App() {
               <Route
                 path="/admin/fees"
                 element={
-                  <RoleBasedRoute allowedRoles={['admin']}>
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
                     <FeesPage />
                   </RoleBasedRoute>
                 }
@@ -235,7 +301,7 @@ function App() {
               <Route
                 path="/admin/fee-settings"
                 element={
-                  <RoleBasedRoute allowedRoles={['admin']}>
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
                     <FeeSettingsPage />
                   </RoleBasedRoute>
                 }
@@ -243,7 +309,7 @@ function App() {
               <Route
                 path="/admin/subscriptions"
                 element={
-                  <RoleBasedRoute allowedRoles={['admin']}>
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
                     <SubscriptionsPage />
                   </RoleBasedRoute>
                 }
@@ -257,9 +323,17 @@ function App() {
                 }
               />
               <Route
+                path="/admin/pots"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <PotsManagementPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
                 path="/admin/webhooks"
                 element={
-                  <RoleBasedRoute allowedRoles={['admin']}>
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
                     <WebhooksPage />
                   </RoleBasedRoute>
                 }
@@ -267,7 +341,7 @@ function App() {
               <Route
                 path="/admin/compliance"
                 element={
-                  <RoleBasedRoute allowedRoles={['admin']}>
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
                     <CompliancePage />
                   </RoleBasedRoute>
                 }
@@ -275,7 +349,7 @@ function App() {
               <Route
                 path="/admin/developers"
                 element={
-                  <RoleBasedRoute allowedRoles={['admin']}>
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
                     <DevelopersPage />
                   </RoleBasedRoute>
                 }

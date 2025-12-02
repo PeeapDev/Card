@@ -1,13 +1,13 @@
+/**
+ * Wallet Hooks - Production Grade
+ *
+ * React Query hooks for wallet operations with Supabase
+ */
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { walletService, CreateWalletRequest, DepositRequest, TransferRequest } from '@/services/wallet.service';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import type { Wallet } from '@/types';
-
-// Check if we're in demo mode
-const isDemoMode = () => {
-  return localStorage.getItem('demoUser') !== null;
-};
 
 export function useWallets() {
   const { user } = useAuth();
@@ -15,37 +15,12 @@ export function useWallets() {
   return useQuery({
     queryKey: ['wallets', user?.id],
     queryFn: async (): Promise<Wallet[]> => {
-      // If demo mode, fetch from Supabase or return empty array
-      if (isDemoMode()) {
-        if (!user?.id) return [];
-
-        const { data, error } = await supabase
-          .from('wallets')
-          .select('*')
-          .eq('user_id', user.id);
-
-        if (error) {
-          console.error('Error fetching wallets:', error);
-          return [];
-        }
-
-        return (data || []).map(w => ({
-          id: w.id,
-          userId: w.user_id,
-          balance: w.balance || 0,
-          currency: w.currency || 'USD',
-          status: w.status || 'ACTIVE',
-          dailyLimit: w.daily_limit || 5000,
-          monthlyLimit: w.monthly_limit || 50000,
-          createdAt: w.created_at,
-          updatedAt: w.updated_at,
-        }));
-      }
-
-      // Normal API mode
-      return walletService.getWallets();
+      if (!user?.id) return [];
+      return walletService.getWallets(user.id);
     },
     enabled: !!user?.id,
+    staleTime: 30000, // 30 seconds
+    retry: 2,
   });
 }
 
@@ -54,14 +29,33 @@ export function useWallet(id: string) {
     queryKey: ['wallets', id],
     queryFn: () => walletService.getWallet(id),
     enabled: !!id,
+    staleTime: 30000,
+  });
+}
+
+export function usePrimaryWallet() {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ['wallets', 'primary', user?.id],
+    queryFn: async (): Promise<Wallet | null> => {
+      if (!user?.id) return null;
+      return walletService.getWalletByUserId(user.id);
+    },
+    enabled: !!user?.id,
+    staleTime: 30000,
   });
 }
 
 export function useCreateWallet() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   return useMutation({
-    mutationFn: (data: CreateWalletRequest) => walletService.createWallet(data),
+    mutationFn: (data: CreateWalletRequest) => {
+      if (!user?.id) throw new Error('User not authenticated');
+      return walletService.createWallet(user.id, data);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['wallets'] });
     },
@@ -86,9 +80,10 @@ export function useTransfer() {
 
   return useMutation({
     mutationFn: (data: TransferRequest) => walletService.transfer(data),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['wallets'] });
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['wallets', variables.fromWalletId] });
     },
   });
 }
@@ -98,6 +93,7 @@ export function useWalletTransactions(walletId: string, page = 1, limit = 10) {
     queryKey: ['transactions', walletId, page, limit],
     queryFn: () => walletService.getTransactions(walletId, { page, limit }),
     enabled: !!walletId,
+    staleTime: 10000,
   });
 }
 

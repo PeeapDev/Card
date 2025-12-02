@@ -60,32 +60,10 @@ export const authService = {
       throw new Error('Invalid credentials');
     }
 
-    // For demo purposes - validate against known passwords
-    // In production, you would verify the password hash on the backend
-    const validPasswords: Record<string, string> = {
-      'admin@example.com': 'Admin123!@#',
-      'user@example.com': 'User123!@#',
-      'user2@example.com': 'User123!@#',
-      'merchant@example.com': 'Merchant123!@#',
-      'developer@example.com': 'Developer123!@#',
-      'agent@example.com': 'Agent123!@#',
-      // Also add by phone for seeded users
-      '+1234567890': 'Admin123!@#',
-      '+1234567891': 'User123!@#',
-    };
-
-    // Check if it's a seeded user or validate against stored password
-    const expectedPassword = validPasswords[dbUser.email] || validPasswords[dbUser.phone];
-    if (expectedPassword) {
-      // Known user - validate against known password
-      if (expectedPassword !== data.password) {
-        throw new Error('Invalid credentials');
-      }
-    } else {
-      // New user - validate against stored password_hash (plain text for demo)
-      if (dbUser.password_hash !== data.password) {
-        throw new Error('Invalid credentials');
-      }
+    // Validate password against stored password_hash
+    // Note: In production, use proper password hashing (bcrypt, argon2)
+    if (dbUser.password_hash !== data.password) {
+      throw new Error('Invalid credentials');
     }
 
     // Create user object
@@ -94,6 +72,7 @@ export const authService = {
       email: dbUser.email,
       firstName: dbUser.first_name,
       lastName: dbUser.last_name,
+      phone: dbUser.phone,
       roles: dbUser.roles?.split(',') || ['user'],
       kycStatus: dbUser.kyc_status,
       kycTier: dbUser.kyc_tier,
@@ -126,25 +105,41 @@ export const authService = {
   },
 
   async register(data: RegisterRequest): Promise<{ user: User; tokens: AuthTokens }> {
-    // Check if user exists
-    const { data: existing } = await supabase
+    // Check if user exists by email
+    const { data: existingByEmail } = await supabase
       .from('users')
       .select('id')
       .eq('email', data.email)
       .limit(1);
 
-    if (existing && existing.length > 0) {
-      throw new Error('User already exists');
+    if (existingByEmail && existingByEmail.length > 0) {
+      throw new Error('Email already registered');
     }
 
-    const externalId = `usr_${Date.now()}_user`;
+    // Check if user exists by phone (if provided)
+    if (data.phone) {
+      const normalizedPhone = normalizePhoneNumber(data.phone);
+      const { data: existingByPhone } = await supabase
+        .from('users')
+        .select('id')
+        .eq('phone', normalizedPhone)
+        .limit(1);
 
-    // Create user (password stored as plain text for demo - use proper hashing in production!)
+      if (existingByPhone && existingByPhone.length > 0) {
+        throw new Error('Phone number already registered');
+      }
+    }
+
+    const externalId = `usr_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Create user
+    // Note: In production, hash the password before storing!
     const { data: newUser, error } = await supabase
       .from('users')
       .insert({
         external_id: externalId,
         email: data.email,
+        phone: data.phone ? normalizePhoneNumber(data.phone) : null,
         password_hash: data.password, // In production, hash this!
         first_name: data.firstName,
         last_name: data.lastName,
@@ -158,7 +153,8 @@ export const authService = {
       .single();
 
     if (error || !newUser) {
-      throw new Error('Failed to create user');
+      console.error('Registration error:', error);
+      throw new Error(error?.message || 'Failed to create user');
     }
 
     const user: User = {
@@ -166,6 +162,7 @@ export const authService = {
       email: newUser.email,
       firstName: newUser.first_name,
       lastName: newUser.last_name,
+      phone: newUser.phone,
       roles: ['user'],
       kycStatus: newUser.kyc_status,
       kycTier: newUser.kyc_tier,
@@ -220,6 +217,7 @@ export const authService = {
         email: dbUser.email,
         firstName: dbUser.first_name,
         lastName: dbUser.last_name,
+        phone: dbUser.phone,
         roles: dbUser.roles?.split(',') || ['user'],
         kycStatus: dbUser.kyc_status,
         kycTier: dbUser.kyc_tier,

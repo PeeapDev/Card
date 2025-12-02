@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Users,
   Search,
@@ -13,17 +14,13 @@ import {
   X,
   Loader2,
   Wallet,
-  ArrowUpRight,
-  ArrowDownLeft,
-  Calendar,
-  DollarSign,
-  Shield,
   AlertTriangle,
+  AtSign,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
-import { normalizePhoneNumber, isValidPhoneNumber, getPhoneValidationError } from '@/utils/phone';
+import { normalizePhoneNumber, getPhoneValidationError } from '@/utils/phone';
 
 interface User {
   id: string;
@@ -39,24 +36,6 @@ interface User {
   external_id?: string;
 }
 
-interface UserWallet {
-  id: string;
-  balance: number;
-  currency: string;
-  status: string;
-}
-
-interface Transaction {
-  id: string;
-  external_id: string;
-  type: string;
-  amount: number;
-  currency: string;
-  status: string;
-  description: string;
-  created_at: string;
-}
-
 interface CreateUserForm {
   email: string;
   password: string;
@@ -69,6 +48,7 @@ interface CreateUserForm {
 }
 
 export function UsersManagementPage() {
+  const navigate = useNavigate();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -90,11 +70,10 @@ export function UsersManagementPage() {
     initialBalance: 100,
   });
 
-  // User detail modal state
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [userWallet, setUserWallet] = useState<UserWallet | null>(null);
-  const [userTransactions, setUserTransactions] = useState<Transaction[]>([]);
-  const [loadingDetails, setLoadingDetails] = useState(false);
+  // Username availability check state
+  const [checkingUsername, setCheckingUsername] = useState(false);
+  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchUsers();
@@ -122,39 +101,87 @@ export function UsersManagementPage() {
     }
   };
 
-  const fetchUserDetails = async (user: User) => {
-    setSelectedUser(user);
-    setLoadingDetails(true);
-    setUserWallet(null);
-    setUserTransactions([]);
+  // Check username availability with debounce
+  const checkUsernameAvailability = useCallback(async (username: string) => {
+    // Remove @ if user accidentally typed it
+    const cleanUsername = username.replace(/^@/, '').toLowerCase().trim();
+
+    if (!cleanUsername) {
+      setUsernameAvailable(null);
+      setUsernameError(null);
+      return;
+    }
+
+    // Validate username format (alphanumeric and underscores only)
+    if (!/^[a-zA-Z0-9_]+$/.test(cleanUsername)) {
+      setUsernameAvailable(false);
+      setUsernameError('Username can only contain letters, numbers, and underscores');
+      return;
+    }
+
+    if (cleanUsername.length < 3) {
+      setUsernameAvailable(false);
+      setUsernameError('Username must be at least 3 characters');
+      return;
+    }
+
+    if (cleanUsername.length > 20) {
+      setUsernameAvailable(false);
+      setUsernameError('Username must be 20 characters or less');
+      return;
+    }
+
+    setCheckingUsername(true);
+    setUsernameError(null);
 
     try {
-      // Fetch user's wallet
-      const { data: walletData } = await supabase
-        .from('wallets')
-        .select('id, balance, currency, status')
-        .eq('user_id', user.id)
-        .eq('wallet_type', 'primary')
-        .single();
+      // Check if username exists in users table
+      const { data: existingUser, error } = await supabase
+        .from('users')
+        .select('id')
+        .ilike('external_id', `%${cleanUsername}%`)
+        .limit(1);
 
-      if (walletData) {
-        setUserWallet(walletData);
+      // Also check in a potential usernames table if it exists
+      // For now, we'll use external_id or a pattern match
 
-        // Fetch transactions for this wallet
-        const { data: txData } = await supabase
-          .from('transactions')
-          .select('*')
-          .eq('wallet_id', walletData.id)
-          .order('created_at', { ascending: false })
-          .limit(20);
+      if (error) {
+        console.error('Error checking username:', error);
+        setUsernameAvailable(null);
+        return;
+      }
 
-        setUserTransactions(txData || []);
+      // If no user found with that pattern, username is available
+      setUsernameAvailable(!existingUser || existingUser.length === 0);
+      if (existingUser && existingUser.length > 0) {
+        setUsernameError('This username is already taken');
       }
     } catch (error) {
-      console.error('Error fetching user details:', error);
+      console.error('Error checking username:', error);
+      setUsernameAvailable(null);
     } finally {
-      setLoadingDetails(false);
+      setCheckingUsername(false);
     }
+  }, []);
+
+  // Debounced username check
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (formData.username) {
+        checkUsernameAvailability(formData.username);
+      } else {
+        setUsernameAvailable(null);
+        setUsernameError(null);
+      }
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [formData.username, checkUsernameAvailability]);
+
+  const handleUsernameChange = (value: string) => {
+    // Remove @ if user types it, we'll add it in display
+    const cleanValue = value.replace(/^@/, '');
+    setFormData({ ...formData, username: cleanValue });
   };
 
   const createUser = async () => {
@@ -325,33 +352,6 @@ export function UsersManagementPage() {
     }
   };
 
-  const toggleUserStatus = async (userId: string, currentStatus: string) => {
-    try {
-      const newStatus = currentStatus === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
-      const { error } = await supabase
-        .from('users')
-        .update({ status: newStatus })
-        .eq('id', userId);
-
-      if (error) {
-        console.error('Error updating user status:', error);
-        return;
-      }
-
-      // Update local state
-      setUsers(prev => prev.map(u =>
-        u.id === userId ? { ...u, status: newStatus } : u
-      ));
-
-      // Update selected user if viewing
-      if (selectedUser?.id === userId) {
-        setSelectedUser(prev => prev ? { ...prev, status: newStatus } : null);
-      }
-    } catch (error) {
-      console.error('Error updating user status:', error);
-    }
-  };
-
   const filteredUsers = users.filter(user => {
     const matchesSearch =
       user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -501,7 +501,7 @@ export function UsersManagementPage() {
                 {filteredUsers.map((user) => (
                   <tr
                     key={user.id}
-                    onClick={() => fetchUserDetails(user)}
+                    onClick={() => navigate(`/admin/users/${user.id}`)}
                     className="hover:bg-blue-50 cursor-pointer transition-colors"
                   >
                     <td className="px-6 py-4">
@@ -561,178 +561,6 @@ export function UsersManagementPage() {
           )}
         </Card>
 
-        {/* User Detail Modal */}
-        {selectedUser && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-              {/* Header */}
-              <div className="p-6 border-b border-gray-200 flex items-center justify-between bg-gray-50">
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 bg-primary-100 rounded-full flex items-center justify-center">
-                    <span className="text-primary-700 font-bold text-xl">
-                      {selectedUser.first_name?.charAt(0)}{selectedUser.last_name?.charAt(0)}
-                    </span>
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold text-gray-900">
-                      {selectedUser.first_name} {selectedUser.last_name}
-                    </h2>
-                    <p className="text-sm text-gray-500">{selectedUser.email || selectedUser.phone}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setSelectedUser(null)}
-                  className="p-2 hover:bg-gray-200 rounded-lg"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Content */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                {loadingDetails ? (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
-                  </div>
-                ) : (
-                  <>
-                    {/* User Info */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="p-4 bg-gray-50 rounded-lg">
-                        <p className="text-sm text-gray-500 mb-1">Phone</p>
-                        <p className="font-medium">{selectedUser.phone || 'N/A'}</p>
-                      </div>
-                      <div className="p-4 bg-gray-50 rounded-lg">
-                        <p className="text-sm text-gray-500 mb-1">Email</p>
-                        <p className="font-medium">{selectedUser.email || 'N/A'}</p>
-                      </div>
-                      <div className="p-4 bg-gray-50 rounded-lg">
-                        <p className="text-sm text-gray-500 mb-1">Role</p>
-                        <p className="font-medium capitalize">{selectedUser.roles || 'user'}</p>
-                      </div>
-                      <div className="p-4 bg-gray-50 rounded-lg">
-                        <p className="text-sm text-gray-500 mb-1">Joined</p>
-                        <p className="font-medium">{new Date(selectedUser.created_at).toLocaleDateString()}</p>
-                      </div>
-                    </div>
-
-                    {/* Status & KYC */}
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-2">
-                        <Shield className="w-4 h-4 text-gray-500" />
-                        <span className="text-sm text-gray-500">Status:</span>
-                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                          selectedUser.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                        }`}>
-                          {selectedUser.status}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-gray-500" />
-                        <span className="text-sm text-gray-500">KYC:</span>
-                        {getKycBadge(selectedUser.kyc_status)}
-                      </div>
-                    </div>
-
-                    {/* Wallet Info */}
-                    {userWallet && (
-                      <div className="p-4 bg-gradient-to-r from-primary-600 to-primary-500 rounded-xl text-white">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm text-primary-100">Wallet Balance</p>
-                            <p className="text-3xl font-bold">
-                              ${userWallet.balance?.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}
-                            </p>
-                          </div>
-                          <div className="p-3 bg-white/20 rounded-xl">
-                            <Wallet className="w-8 h-8" />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Transactions */}
-                    <div>
-                      <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                        <DollarSign className="w-5 h-5" />
-                        Recent Transactions
-                      </h3>
-                      {userTransactions.length === 0 ? (
-                        <div className="text-center py-8 bg-gray-50 rounded-lg">
-                          <Calendar className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                          <p className="text-gray-500">No transactions yet</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-2 max-h-64 overflow-y-auto">
-                          {userTransactions.map((tx) => (
-                            <div
-                              key={tx.id}
-                              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className={`p-2 rounded-full ${
-                                  tx.amount >= 0 ? 'bg-green-100' : 'bg-red-100'
-                                }`}>
-                                  {tx.amount >= 0 ? (
-                                    <ArrowDownLeft className="w-4 h-4 text-green-600" />
-                                  ) : (
-                                    <ArrowUpRight className="w-4 h-4 text-red-600" />
-                                  )}
-                                </div>
-                                <div>
-                                  <p className="font-medium text-sm">{tx.description || tx.type}</p>
-                                  <p className="text-xs text-gray-500">
-                                    {new Date(tx.created_at).toLocaleString()}
-                                  </p>
-                                </div>
-                              </div>
-                              <p className={`font-semibold ${
-                                tx.amount >= 0 ? 'text-green-600' : 'text-red-600'
-                              }`}>
-                                {tx.amount >= 0 ? '+' : ''}{tx.amount?.toFixed(2)} {tx.currency}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Footer Actions */}
-              <div className="p-4 border-t border-gray-200 bg-gray-50 flex gap-3">
-                <button
-                  onClick={() => toggleUserStatus(selectedUser.id, selectedUser.status)}
-                  className={`flex-1 py-3 rounded-lg font-medium flex items-center justify-center gap-2 ${
-                    selectedUser.status === 'ACTIVE'
-                      ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                      : 'bg-green-100 text-green-700 hover:bg-green-200'
-                  }`}
-                >
-                  {selectedUser.status === 'ACTIVE' ? (
-                    <>
-                      <Ban className="w-4 h-4" />
-                      Suspend User
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="w-4 h-4" />
-                      Activate User
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={() => setSelectedUser(null)}
-                  className="flex-1 py-3 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Create User Modal */}
         {showCreateModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -787,6 +615,44 @@ export function UsersManagementPage() {
                       placeholder="Doe"
                     />
                   </div>
+                </div>
+
+                {/* Username Field with @ prefix and availability check */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <AtSign className="w-4 h-4 inline mr-1" />
+                    Username
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">@</span>
+                    <input
+                      type="text"
+                      value={formData.username}
+                      onChange={(e) => handleUsernameChange(e.target.value)}
+                      className={`w-full pl-8 pr-10 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
+                        usernameError ? 'border-red-300' : usernameAvailable === true ? 'border-green-300' : 'border-gray-300'
+                      }`}
+                      placeholder="johndoe"
+                    />
+                    {checkingUsername && (
+                      <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 animate-spin text-gray-400" />
+                    )}
+                    {!checkingUsername && usernameAvailable === true && formData.username && (
+                      <CheckCircle className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-green-500" />
+                    )}
+                    {!checkingUsername && usernameAvailable === false && formData.username && (
+                      <XCircle className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-red-500" />
+                    )}
+                  </div>
+                  {usernameError && (
+                    <p className="text-xs text-red-600 mt-1">{usernameError}</p>
+                  )}
+                  {usernameAvailable === true && formData.username && (
+                    <p className="text-xs text-green-600 mt-1">Username @{formData.username} is available!</p>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    Letters, numbers, and underscores only. The @ will be added automatically.
+                  </p>
                 </div>
 
                 <div>

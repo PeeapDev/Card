@@ -42,6 +42,7 @@ export function RoleBasedRoute({
 // Helper function to get dashboard path based on role
 export function getRoleDashboard(role: UserRole): string {
   switch (role) {
+    case 'superadmin':
     case 'admin':
       return '/admin';
     case 'merchant':
@@ -63,7 +64,7 @@ export function getUserDashboard(roles: UserRole[] | undefined): string {
   }
 
   // Priority order for dashboard redirect
-  const priorityOrder: UserRole[] = ['admin', 'merchant', 'developer', 'agent', 'user'];
+  const priorityOrder: UserRole[] = ['superadmin', 'admin', 'merchant', 'developer', 'agent', 'user'];
 
   for (const role of priorityOrder) {
     if (roles.includes(role)) {

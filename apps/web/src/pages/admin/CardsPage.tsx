@@ -21,6 +21,7 @@ import {
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
+import { useNavigate } from 'react-router-dom';
 
 interface CardData {
   id: string;
@@ -41,6 +42,7 @@ interface CardData {
 }
 
 export function CardsPage() {
+  const navigate = useNavigate();
   const [filter, setFilter] = useState<'all' | 'virtual' | 'physical'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'frozen' | 'cancelled' | 'pending'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -178,9 +180,12 @@ export function CardsPage() {
               <Download className="w-4 h-4" />
               Export
             </button>
-            <button className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2">
+            <button
+              onClick={() => navigate('/admin/card-programs')}
+              className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2"
+            >
               <Plus className="w-4 h-4" />
-              Issue Card
+              Card Programs
             </button>
           </div>
         </div>
