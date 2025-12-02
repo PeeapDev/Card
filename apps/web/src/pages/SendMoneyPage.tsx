@@ -33,7 +33,7 @@ import { Card } from '@/components/ui/Card';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { QRScanner } from '@/components/payment/QRScanner';
 import { NFCPayment } from '@/components/payment/NFCPayment';
-import { UserSearch, SearchResult } from '@/components/ui/UserSearch';
+import { UserSearch } from '@/components/ui/UserSearch';
 import { SlideToSend } from '@/components/ui/SlideToSend';
 import { TransactionPinModal } from '@/components/ui/TransactionPinModal';
 import { SetupPinModal } from '@/components/ui/SetupPinModal';
@@ -556,7 +556,7 @@ export function SendMoneyPage() {
               placeholder="Search by @username, phone, or name..."
               excludeUserId={user?.id}
               autoFocus
-              onSelect={async (searchResult: SearchResult) => {
+              onSelect={async (searchResult) => {
                 const { data: wallet } = await supabase
                   .from('wallets')
                   .select('id')
@@ -574,7 +574,7 @@ export function SendMoneyPage() {
                     email: searchResult.email || undefined,
                     phone: searchResult.phone || undefined,
                     walletId: wallet.id,
-                    profilePicture: searchResult.profile_picture || undefined,
+                    profilePicture: (searchResult as any).profile_picture || undefined,
                   });
                   setStep('amount');
                 } else {
