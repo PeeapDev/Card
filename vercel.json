@@ -1,5 +1,5 @@
 {
-  "installCommand": "cd apps/web && npm install",
+  "installCommand": "cd apps/web && rm -rf node_modules/.cache && npm install",
   "buildCommand": "cd apps/web && npm run build",
   "outputDirectory": "apps/web/dist",
   "framework": "vite",
