@@ -25,6 +25,7 @@ import {
   ShoppingBag,
   ClipboardList,
   PiggyBank,
+  Banknote,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -82,6 +83,7 @@ const navSections: NavSection[] = [
   {
     title: 'Configuration',
     items: [
+      { path: '/admin/payment-settings', label: 'Payment Gateway', icon: Banknote, badge: 'New', badgeColor: 'primary' },
       { path: '/admin/fees', label: 'Fees & Pricing', icon: CreditCard },
       { path: '/admin/fee-settings', label: 'Fee Settings', icon: DollarSign },
       { path: '/admin/subscriptions', label: 'Subscriptions', icon: Wallet },

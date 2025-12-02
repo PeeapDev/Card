@@ -42,6 +42,7 @@ import { MerchantsManagementPage } from '@/pages/admin/MerchantsManagementPage';
 import { AgentsManagementPage } from '@/pages/admin/AgentsManagementPage';
 import { FeesPage } from '@/pages/admin/FeesPage';
 import { FeeSettingsPage } from '@/pages/admin/FeeSettingsPage';
+import { PaymentSettingsPage } from '@/pages/admin/PaymentSettingsPage';
 import { SubscriptionsPage } from '@/pages/admin/SubscriptionsPage';
 import { RolesManagementPage } from '@/pages/admin/RolesManagementPage';
 import { PotsManagementPage } from '@/pages/admin/PotsManagementPage';
@@ -303,6 +304,14 @@ function App() {
                 element={
                   <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
                     <FeeSettingsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/admin/payment-settings"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <PaymentSettingsPage />
                   </RoleBasedRoute>
                 }
               />

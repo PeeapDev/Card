@@ -6,7 +6,9 @@ import { RedisModule } from '@nestjs-modules/ioredis';
 import { WalletsModule } from './modules/wallets/wallets.module';
 import { LedgerModule } from './modules/ledger/ledger.module';
 import { HealthModule } from './modules/health/health.module';
+import { MonimeModule } from './modules/monime/monime.module';
 import { Wallet, Account, LedgerEntry, JournalEntry } from '@payment-system/database';
+import { MonimeTransaction } from './modules/monime/entities/monime-transaction.entity';
 import { EXCHANGES } from '@payment-system/events';
 
 @Module({
@@ -26,7 +28,7 @@ import { EXCHANGES } from '@payment-system/events';
         username: configService.get('DB_USER', 'account_user'),
         password: configService.get('DB_PASSWORD', 'account_pass'),
         database: configService.get('DB_NAME', 'account_db'),
-        entities: [Wallet, Account, LedgerEntry, JournalEntry],
+        entities: [Wallet, Account, LedgerEntry, JournalEntry, MonimeTransaction],
         synchronize: configService.get('NODE_ENV') === 'development',
         logging: configService.get('NODE_ENV') === 'development',
       }),
@@ -41,7 +43,7 @@ import { EXCHANGES } from '@payment-system/events';
       }),
     }),
 
-    RabbitMQModule.forRootAsync(RabbitMQModule, {
+    RabbitMQModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
@@ -59,6 +61,7 @@ import { EXCHANGES } from '@payment-system/events';
     WalletsModule,
     LedgerModule,
     HealthModule,
+    MonimeModule,
   ],
 })
 export class AppModule {}

@@ -24,7 +24,7 @@ import { EXCHANGES } from '@payment-system/events';
         synchronize: config.get('NODE_ENV') === 'development',
       }),
     }),
-    RabbitMQModule.forRootAsync(RabbitMQModule, {
+    RabbitMQModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({

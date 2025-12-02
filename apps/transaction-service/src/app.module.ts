@@ -42,7 +42,7 @@ import { EXCHANGES } from '@payment-system/events';
       }),
     }),
 
-    RabbitMQModule.forRootAsync(RabbitMQModule, {
+    RabbitMQModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
