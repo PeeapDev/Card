@@ -1,14 +1,16 @@
-import { Link } from 'react-router-dom';
-import { Wallet, CreditCard, ArrowUpRight, ArrowDownRight, TrendingUp } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Wallet, CreditCard, ArrowUpRight, ArrowDownRight, TrendingUp, Send, Users } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useAuth } from '@/context/AuthContext';
 import { useWallets } from '@/hooks/useWallets';
 import { useCards } from '@/hooks/useCards';
 import { useTransactions } from '@/hooks/useTransactions';
+import { UserSearch, SearchResult } from '@/components/ui/UserSearch';
 import { clsx } from 'clsx';
 
 export function DashboardPage() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { data: wallets, isLoading: walletsLoading, error: walletsError } = useWallets();
   const { data: cards, isLoading: cardsLoading, error: cardsError } = useCards();
@@ -16,6 +18,13 @@ export function DashboardPage() {
 
   const totalBalance = wallets?.reduce((sum, w) => sum + (w.balance || 0), 0) || 0;
   const activeCards = cards?.filter((c) => c.status === 'ACTIVE').length || 0;
+
+  // Handle user selection from search - navigate to send money page with pre-selected recipient
+  const handleUserSelect = (selectedUser: SearchResult) => {
+    // Store selected user in sessionStorage for SendMoneyPage to pick up
+    sessionStorage.setItem('sendMoneyRecipient', JSON.stringify(selectedUser));
+    navigate('/send');
+  };
 
   return (
     <MainLayout>
@@ -126,6 +135,34 @@ export function DashboardPage() {
           </Card>
         </div>
 
+        {/* Quick Send Money - Global User Search */}
+        <Card className="p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
+              <Send className="w-5 h-5 text-primary-600" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-gray-900">Send Money</h2>
+              <p className="text-sm text-gray-500">Search for a user to send money instantly</p>
+            </div>
+          </div>
+          <UserSearch
+            placeholder="Search by @username, phone, or name..."
+            excludeUserId={user?.id}
+            onSelect={handleUserSelect}
+          />
+          <div className="mt-3 flex items-center gap-4 text-xs text-gray-500">
+            <span className="flex items-center gap-1">
+              <Users className="w-3 h-3" />
+              Search by name
+            </span>
+            <span>•</span>
+            <span>@username</span>
+            <span>•</span>
+            <span>Phone number</span>
+          </div>
+        </Card>
+
         {/* Recent activity */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Recent transactions */}
@@ -138,14 +175,15 @@ export function DashboardPage() {
               {transactionsLoading ? (
                 <div className="py-8 text-center text-gray-500">Loading transactions...</div>
               ) : transactions && transactions.length > 0 ? (
-                transactions.slice(0, 3).map((txn, index) => {
-                  const isCredit = ['deposit', 'receive', 'refund'].includes(txn.type);
+                transactions.slice(0, 5).map((txn, index) => {
+                  // Determine if credit or debit based on amount sign or type
+                  const isCredit = txn.amount > 0 || ['deposit', 'receive', 'refund'].includes(txn.type.toLowerCase());
                   return (
                     <div
                       key={txn.id}
                       className={clsx(
                         "flex items-center justify-between py-3",
-                        index < 2 && "border-b border-gray-100"
+                        index < transactions.slice(0, 5).length - 1 && "border-b border-gray-100"
                       )}
                     >
                       <div className="flex items-center">
@@ -160,25 +198,33 @@ export function DashboardPage() {
                           )}
                         </div>
                         <div className="ml-3">
-                          <p className="text-sm font-medium text-gray-900 capitalize">
+                          <p className="text-sm font-medium text-gray-900">
                             {txn.description || txn.type}
                           </p>
                           <p className="text-xs text-gray-500">
-                            {new Date(txn.createdAt).toLocaleDateString()}
+                            {new Date(txn.createdAt).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
                           </p>
                         </div>
                       </div>
                       <p className={clsx(
-                        "text-sm font-medium",
+                        "text-sm font-semibold",
                         isCredit ? "text-green-600" : "text-red-600"
                       )}>
-                        {isCredit ? '+' : '-'}${Math.abs(txn.amount).toFixed(2)}
+                        {isCredit ? '+' : ''}${txn.amount.toFixed(2)}
                       </p>
                     </div>
                   );
                 })
               ) : (
-                <div className="py-8 text-center text-gray-500">No transactions yet</div>
+                <div className="py-8 text-center text-gray-500">
+                  <p>No transactions yet</p>
+                  <p className="text-xs mt-1">Send money to see your activity here</p>
+                </div>
               )}
             </div>
             <Link

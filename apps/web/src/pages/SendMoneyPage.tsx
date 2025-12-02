@@ -5,13 +5,15 @@
  * - QR Code scanning (camera)
  * - NFC tap-to-pay
  * - Manual recipient search (phone/email/wallet)
+ * - Transaction PIN verification
+ * - Slide to send confirmation
+ * - Profile avatars with initials
  */
 
 import { useState, useEffect } from 'react';
 import {
   Send,
   Phone,
-  Mail,
   QrCode,
   Wallet,
   ArrowRight,
@@ -21,17 +23,21 @@ import {
   User,
   DollarSign,
   AlertCircle,
-  History,
   Wifi,
   Search,
   ArrowLeft,
   AtSign,
+  Lock,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { QRScanner } from '@/components/payment/QRScanner';
 import { NFCPayment } from '@/components/payment/NFCPayment';
 import { UserSearch, SearchResult } from '@/components/ui/UserSearch';
+import { SlideToSend } from '@/components/ui/SlideToSend';
+import { TransactionPinModal } from '@/components/ui/TransactionPinModal';
+import { SetupPinModal } from '@/components/ui/SetupPinModal';
+import { ProfileAvatar } from '@/components/ui/ProfileAvatar';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { qrEngine, QRValidationResult } from '@/services/qr-engine';
@@ -39,10 +45,13 @@ import { qrEngine, QRValidationResult } from '@/services/qr-engine';
 interface Recipient {
   id: string;
   name: string;
+  firstName?: string;
+  lastName?: string;
   username?: string;
   email?: string;
   phone?: string;
   walletId: string;
+  profilePicture?: string;
 }
 
 interface TransferResult {
@@ -70,11 +79,7 @@ export function SendMoneyPage() {
   const [sendMethod, setSendMethod] = useState<SendMethod>('search');
 
   // Recipient state
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchType, setSearchType] = useState<'email' | 'phone' | 'wallet'>('email');
-  const [isSearching, setIsSearching] = useState(false);
   const [recipient, setRecipient] = useState<Recipient | null>(null);
-  const [searchResults, setSearchResults] = useState<Recipient[]>([]);
 
   // Transfer state
   const [amount, setAmount] = useState('');
@@ -87,6 +92,11 @@ export function SendMoneyPage() {
   const [walletBalance, setWalletBalance] = useState(0);
   const [fee, setFee] = useState(0);
 
+  // PIN Modal state
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [showSetupPinModal, setShowSetupPinModal] = useState(false);
+  const [hasTransactionPin, setHasTransactionPin] = useState(false);
+
   // Recent transfers
   const [recentTransfers, setRecentTransfers] = useState<RecentTransfer[]>([]);
 
@@ -94,8 +104,48 @@ export function SendMoneyPage() {
     if (user?.id) {
       fetchWallet();
       fetchRecentTransfers();
+      checkTransactionPin();
     }
   }, [user?.id]);
+
+  // Check for pre-selected recipient from dashboard
+  useEffect(() => {
+    const storedRecipient = sessionStorage.getItem('sendMoneyRecipient');
+    if (storedRecipient) {
+      try {
+        const parsedRecipient = JSON.parse(storedRecipient);
+        sessionStorage.removeItem('sendMoneyRecipient');
+
+        const fetchRecipientWallet = async () => {
+          const { data: wallet } = await supabase
+            .from('wallets')
+            .select('id')
+            .eq('user_id', parsedRecipient.id)
+            .eq('wallet_type', 'primary')
+            .single();
+
+          if (wallet) {
+            setRecipient({
+              id: parsedRecipient.id,
+              name: `${parsedRecipient.first_name} ${parsedRecipient.last_name}`,
+              firstName: parsedRecipient.first_name,
+              lastName: parsedRecipient.last_name,
+              username: parsedRecipient.username || undefined,
+              email: parsedRecipient.email || undefined,
+              phone: parsedRecipient.phone || undefined,
+              walletId: wallet.id,
+            });
+            setStep('amount');
+          }
+        };
+
+        fetchRecipientWallet();
+      } catch (e) {
+        console.error('Error parsing stored recipient:', e);
+        sessionStorage.removeItem('sendMoneyRecipient');
+      }
+    }
+  }, []);
 
   useEffect(() => {
     // Calculate fee (1% with $0.10 minimum)
@@ -104,83 +154,66 @@ export function SendMoneyPage() {
     setFee(amountNum > 0 ? calculatedFee : 0);
   }, [amount]);
 
+  const checkTransactionPin = async () => {
+    if (!user?.id) return;
+
+    const { data, error } = await supabase
+      .from('users')
+      .select('transaction_pin')
+      .eq('id', user.id)
+      .single();
+
+    if (error) {
+      console.error('Error checking transaction PIN:', error);
+      setHasTransactionPin(false);
+      return;
+    }
+
+    const hasPin = !!data?.transaction_pin;
+    console.log('Transaction PIN check:', { hasPin, userId: user.id });
+    setHasTransactionPin(hasPin);
+  };
+
   const fetchWallet = async () => {
+    if (!user?.id) return;
+
     const { data: wallet } = await supabase
       .from('wallets')
       .select('id, balance')
-      .eq('user_id', user?.id)
+      .eq('user_id', user.id)
       .eq('wallet_type', 'primary')
       .single();
 
     if (wallet) {
       setWalletId(wallet.id);
       setWalletBalance(wallet.balance);
+      fetchRecentTransfers(wallet.id);
     }
   };
 
-  const fetchRecentTransfers = async () => {
-    // Get recent outgoing transfers
+  const fetchRecentTransfers = async (wId?: string) => {
+    const walletIdToUse = wId || walletId;
+    if (!walletIdToUse) return;
+
     const { data: transactions } = await supabase
       .from('transactions')
       .select('*')
-      .eq('wallet_id', walletId)
+      .eq('wallet_id', walletIdToUse)
       .eq('type', 'TRANSFER')
       .lt('amount', 0)
       .order('created_at', { ascending: false })
       .limit(5);
 
-    if (transactions) {
-      // For now, use mock data until we have proper transfer records
-      setRecentTransfers([]);
-    }
-  };
-
-  const searchRecipient = async () => {
-    if (!searchQuery.trim()) return;
-
-    setIsSearching(true);
-    setSearchResults([]);
-
-    try {
-      let query = supabase.from('users').select('id, first_name, last_name, email, phone');
-
-      if (searchType === 'email') {
-        query = query.ilike('email', `%${searchQuery}%`);
-      } else if (searchType === 'phone') {
-        query = query.ilike('phone', `%${searchQuery}%`);
-      }
-
-      const { data: users } = await query.limit(5);
-
-      if (users && users.length > 0) {
-        // Get wallets for these users
-        const userIds = users.map(u => u.id);
-        const { data: wallets } = await supabase
-          .from('wallets')
-          .select('id, user_id')
-          .in('user_id', userIds)
-          .eq('wallet_type', 'primary');
-
-        const results: Recipient[] = users
-          .filter(u => u.id !== user?.id) // Exclude self
-          .map(u => {
-            const wallet = wallets?.find(w => w.user_id === u.id);
-            return {
-              id: u.id,
-              name: `${u.first_name} ${u.last_name}`,
-              email: u.email,
-              phone: u.phone,
-              walletId: wallet?.id || '',
-            };
-          })
-          .filter(r => r.walletId); // Only include users with wallets
-
-        setSearchResults(results);
-      }
-    } catch (error) {
-      console.error('Search error:', error);
-    } finally {
-      setIsSearching(false);
+    if (transactions && transactions.length > 0) {
+      const transfers: RecentTransfer[] = transactions.map(tx => ({
+        id: tx.id,
+        recipientName: tx.metadata?.recipient_name || 'Unknown',
+        recipientId: tx.metadata?.recipient_id || '',
+        amount: Math.abs(tx.amount),
+        date: tx.created_at,
+        status: tx.status === 'COMPLETED' ? 'completed' : tx.status === 'PENDING' ? 'pending' : 'failed',
+      }));
+      setRecentTransfers(transfers);
     }
   };
 
@@ -192,25 +225,18 @@ export function SendMoneyPage() {
         walletId: result.recipient.walletId,
       });
 
-      // If QR has amount, pre-fill it
       if (result.data?.amount) {
         setAmount(result.data.amount.toString());
       }
 
       setStep('amount');
     } else {
-      // Show error
       setResult({
         success: false,
         error: result.error || 'Invalid QR code',
       });
       setStep('result');
     }
-  };
-
-  const selectRecipient = (r: Recipient) => {
-    setRecipient(r);
-    setStep('amount');
   };
 
   const handleContinue = () => {
@@ -223,12 +249,50 @@ export function SendMoneyPage() {
     setStep('confirm');
   };
 
+  const handleSlideConfirm = () => {
+    console.log('handleSlideConfirm called, hasTransactionPin:', hasTransactionPin);
+    // If user doesn't have a PIN set, prompt them to set one
+    if (!hasTransactionPin) {
+      console.log('Opening SetupPinModal');
+      setShowSetupPinModal(true);
+      return;
+    }
+    // If user has a PIN set, require verification
+    console.log('Opening TransactionPinModal');
+    setShowPinModal(true);
+  };
+
+  const handlePinSetupSuccess = () => {
+    setShowSetupPinModal(false);
+    setHasTransactionPin(true);
+    // After PIN is set, show the verification modal
+    setShowPinModal(true);
+  };
+
+  const verifyTransactionPin = async (enteredPin: string): Promise<boolean> => {
+    if (!user?.id) return false;
+
+    const { data } = await supabase
+      .from('users')
+      .select('transaction_pin')
+      .eq('id', user.id)
+      .single();
+
+    if (data?.transaction_pin === enteredPin) {
+      setShowPinModal(false);
+      await processTransfer();
+      return true;
+    }
+
+    return false;
+  };
+
   const processTransfer = async () => {
     if (!recipient || !amount || !user?.id || !walletId) return;
 
     setIsProcessing(true);
     const amountNum = parseFloat(amount);
-    const totalAmount = amountNum; // Fee is separate
+    const totalAmount = amountNum;
 
     try {
       // Check balance again
@@ -317,7 +381,7 @@ export function SendMoneyPage() {
         fee,
       });
       setStep('result');
-      fetchWallet(); // Refresh balance
+      fetchWallet();
 
     } catch (error: any) {
       console.error('Transfer error:', error);
@@ -334,9 +398,7 @@ export function SendMoneyPage() {
   const resetForm = () => {
     setStep('method');
     setSendMethod('search');
-    setSearchQuery('');
     setRecipient(null);
-    setSearchResults([]);
     setAmount('');
     setNote('');
     setResult(null);
@@ -415,7 +477,7 @@ export function SendMoneyPage() {
                 </div>
                 <div>
                   <p className="font-medium text-gray-900">Search Recipient</p>
-                  <p className="text-sm text-gray-500">Find by email or phone</p>
+                  <p className="text-sm text-gray-500">Find by name, email or phone</p>
                 </div>
               </button>
 
@@ -495,7 +557,6 @@ export function SendMoneyPage() {
               excludeUserId={user?.id}
               autoFocus
               onSelect={async (searchResult: SearchResult) => {
-                // Get wallet for selected user
                 const { data: wallet } = await supabase
                   .from('wallets')
                   .select('id')
@@ -507,10 +568,13 @@ export function SendMoneyPage() {
                   setRecipient({
                     id: searchResult.id,
                     name: `${searchResult.first_name} ${searchResult.last_name}`,
+                    firstName: searchResult.first_name,
+                    lastName: searchResult.last_name,
                     username: searchResult.username || undefined,
                     email: searchResult.email || undefined,
                     phone: searchResult.phone || undefined,
                     walletId: wallet.id,
+                    profilePicture: searchResult.profile_picture || undefined,
                   });
                   setStep('amount');
                 } else {
@@ -547,22 +611,31 @@ export function SendMoneyPage() {
         {/* Step: Enter Amount */}
         {step === 'amount' && recipient && (
           <Card className="p-6 space-y-6">
-            {/* Recipient Info */}
-            <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                <User className="w-5 h-5 text-green-600" />
-              </div>
-              <div>
+            {/* Recipient Info with Avatar */}
+            <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
+              <ProfileAvatar
+                firstName={recipient.firstName}
+                lastName={recipient.lastName}
+                profilePicture={recipient.profilePicture}
+                size="lg"
+              />
+              <div className="flex-1">
                 <p className="font-medium text-green-900">Sending to</p>
-                <p className="text-sm text-green-600">{recipient.name}</p>
+                <p className="text-green-700">{recipient.name}</p>
                 {recipient.username && (
                   <p className="text-xs text-green-500 flex items-center gap-1">
                     <AtSign className="w-3 h-3" />
                     {recipient.username}
                   </p>
                 )}
+                {recipient.phone && (
+                  <p className="text-xs text-green-500 flex items-center gap-1">
+                    <Phone className="w-3 h-3" />
+                    {recipient.phone}
+                  </p>
+                )}
               </div>
-              <CheckCircle className="w-5 h-5 text-green-600 ml-auto" />
+              <CheckCircle className="w-6 h-6 text-green-600" />
             </div>
 
             {/* Amount Input */}
@@ -640,42 +713,61 @@ export function SendMoneyPage() {
           </Card>
         )}
 
-        {/* Step: Confirm */}
+        {/* Step: Confirm with Slide to Send */}
         {step === 'confirm' && recipient && (
           <Card className="p-6 space-y-6">
+            {/* Header */}
             <div className="text-center">
-              <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Send className="w-8 h-8 text-primary-600" />
+              <div className="w-20 h-20 mx-auto mb-4">
+                <ProfileAvatar
+                  firstName={recipient.firstName}
+                  lastName={recipient.lastName}
+                  profilePicture={recipient.profilePicture}
+                  size="xl"
+                />
               </div>
               <h2 className="text-xl font-bold text-gray-900">Confirm Transfer</h2>
+              <p className="text-gray-500">to {recipient.name}</p>
             </div>
 
-            <div className="bg-gray-50 rounded-xl p-4 space-y-4">
-              <div className="flex justify-between">
+            {/* Amount Display */}
+            <div className="text-center py-4">
+              <p className="text-4xl font-bold text-primary-600">
+                ${parseFloat(amount).toFixed(2)}
+              </p>
+              <p className="text-sm text-gray-500 mt-1">
+                Recipient receives ${(parseFloat(amount) - fee).toFixed(2)}
+              </p>
+            </div>
+
+            {/* Transaction Details */}
+            <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+              <div className="flex justify-between text-sm">
                 <span className="text-gray-500">To</span>
                 <span className="font-medium">{recipient.name}</span>
               </div>
-              <div className="flex justify-between">
+              {recipient.phone && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Phone</span>
+                  <span className="text-gray-700">{recipient.phone}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-sm">
                 <span className="text-gray-500">Amount</span>
                 <span className="font-medium">${parseFloat(amount).toFixed(2)}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between text-sm">
                 <span className="text-gray-500">Fee</span>
-                <span className="font-medium">${fee.toFixed(2)}</span>
-              </div>
-              <div className="border-t border-gray-200 pt-4 flex justify-between">
-                <span className="text-gray-900 font-semibold">Total</span>
-                <span className="text-xl font-bold text-primary-600">
-                  ${parseFloat(amount).toFixed(2)}
-                </span>
+                <span className="text-gray-700">${fee.toFixed(2)}</span>
               </div>
               {note && (
-                <div className="border-t border-gray-200 pt-4">
+                <div className="border-t border-gray-200 pt-3">
                   <span className="text-gray-500 text-sm">Note: {note}</span>
                 </div>
               )}
             </div>
 
+            {/* Security Notice */}
             <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
               <p className="text-sm text-yellow-800">
@@ -683,31 +775,31 @@ export function SendMoneyPage() {
               </p>
             </div>
 
-            <div className="flex gap-3">
-              <button
-                onClick={goBack}
-                className="flex-1 py-4 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-colors"
-              >
-                Back
-              </button>
-              <button
-                onClick={processTransfer}
-                disabled={isProcessing}
-                className="flex-1 py-4 bg-primary-600 text-white rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-primary-700 transition-colors disabled:opacity-50"
-              >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-5 h-5" />
-                    Send ${parseFloat(amount).toFixed(2)}
-                  </>
-                )}
-              </button>
-            </div>
+            {/* PIN Required Notice */}
+            {hasTransactionPin && (
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <Lock className="w-4 h-4" />
+                <span>Transaction PIN required to complete</span>
+              </div>
+            )}
+
+            {/* Slide to Send */}
+            <SlideToSend
+              amount={amount}
+              recipientName={recipient.name}
+              onConfirm={handleSlideConfirm}
+              disabled={isProcessing}
+              isProcessing={isProcessing}
+            />
+
+            {/* Back Button */}
+            <button
+              onClick={goBack}
+              disabled={isProcessing}
+              className="w-full py-3 text-gray-600 font-medium hover:text-gray-800 disabled:opacity-50"
+            >
+              Go Back
+            </button>
           </Card>
         )}
 
@@ -760,6 +852,23 @@ export function SendMoneyPage() {
           </Card>
         )}
       </div>
+
+      {/* Transaction PIN Modal */}
+      <TransactionPinModal
+        isOpen={showPinModal}
+        onClose={() => setShowPinModal(false)}
+        onVerify={verifyTransactionPin}
+        amount={amount}
+        recipientName={recipient?.name || ''}
+      />
+
+      {/* Setup PIN Modal - for first-time users */}
+      <SetupPinModal
+        isOpen={showSetupPinModal}
+        onClose={() => setShowSetupPinModal(false)}
+        onSuccess={handlePinSetupSuccess}
+        userId={user?.id || ''}
+      />
     </MainLayout>
   );
 }
