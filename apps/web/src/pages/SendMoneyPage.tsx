@@ -574,7 +574,6 @@ export function SendMoneyPage() {
                     email: searchResult.email || undefined,
                     phone: searchResult.phone || undefined,
                     walletId: wallet.id,
-                    profilePicture: (searchResult as any).profile_picture || undefined,
                   });
                   setStep('amount');
                 } else {

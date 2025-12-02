@@ -83,6 +83,72 @@ export function CreatePotModal({ isOpen, onClose, onSuccess }: CreatePotModalPro
   const [showAutoDeposit, setShowAutoDeposit] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Calculate recommended deposit amount based on goal and lock period
+  const calculateRecommendedDeposit = (frequency: AutoDepositFrequency | undefined): number | null => {
+    if (!formData.goalAmount || !formData.lockPeriodDays || !frequency) {
+      return null;
+    }
+
+    const days = formData.lockPeriodDays;
+    let numberOfDeposits: number;
+
+    switch (frequency) {
+      case 'daily':
+        numberOfDeposits = days;
+        break;
+      case 'weekly':
+        numberOfDeposits = Math.floor(days / 7);
+        break;
+      case 'bi_weekly':
+        numberOfDeposits = Math.floor(days / 14);
+        break;
+      case 'monthly':
+        numberOfDeposits = Math.floor(days / 30);
+        break;
+      default:
+        return null;
+    }
+
+    if (numberOfDeposits <= 0) return null;
+
+    return Math.ceil((formData.goalAmount / numberOfDeposits) * 100) / 100;
+  };
+
+  // Calculate total that will be saved with current settings
+  const calculateProjectedTotal = (): { total: number; deposits: number } | null => {
+    if (!formData.autoDepositAmount || !formData.autoDepositFrequency || !formData.lockPeriodDays) {
+      return null;
+    }
+
+    const days = formData.lockPeriodDays;
+    let numberOfDeposits: number;
+
+    switch (formData.autoDepositFrequency) {
+      case 'daily':
+        numberOfDeposits = days;
+        break;
+      case 'weekly':
+        numberOfDeposits = Math.floor(days / 7);
+        break;
+      case 'bi_weekly':
+        numberOfDeposits = Math.floor(days / 14);
+        break;
+      case 'monthly':
+        numberOfDeposits = Math.floor(days / 30);
+        break;
+      default:
+        return null;
+    }
+
+    return {
+      total: formData.autoDepositAmount * numberOfDeposits,
+      deposits: numberOfDeposits,
+    };
+  };
+
+  const recommendedDeposit = calculateRecommendedDeposit(formData.autoDepositFrequency);
+  const projectedSavings = calculateProjectedTotal();
+
   // Filter only primary wallets (not pot wallets)
   const primaryWallets = wallets.filter((w: WalletType) => w.status === 'ACTIVE');
 
@@ -372,6 +438,71 @@ export function CreatePotModal({ isOpen, onClose, onSuccess }: CreatePotModalPro
 
               {showAutoDeposit && (
                 <div className="mt-4 space-y-4 p-4 bg-gray-50 rounded-xl">
+                  {/* Frequency - Now first for better UX */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Frequency *
+                    </label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {FREQUENCY_OPTIONS.map((option) => {
+                        const recommended = calculateRecommendedDeposit(option.value);
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() =>
+                              setFormData({ ...formData, autoDepositFrequency: option.value })
+                            }
+                            className={clsx(
+                              'py-2 px-3 rounded-lg text-sm font-medium transition-colors flex flex-col items-center',
+                              formData.autoDepositFrequency === option.value
+                                ? 'bg-primary-600 text-white'
+                                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+                            )}
+                          >
+                            <span>{option.label}</span>
+                            {recommended && (
+                              <span className={clsx(
+                                'text-xs mt-0.5',
+                                formData.autoDepositFrequency === option.value
+                                  ? 'text-primary-100'
+                                  : 'text-gray-400'
+                              )}>
+                                ~{recommended.toFixed(2)}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {errors.autoDepositFrequency && (
+                      <p className="mt-1 text-sm text-red-600">{errors.autoDepositFrequency}</p>
+                    )}
+                  </div>
+
+                  {/* Recommended deposit hint */}
+                  {formData.goalAmount && formData.lockPeriodDays && formData.autoDepositFrequency && recommendedDeposit && (
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <p className="text-sm text-blue-800">
+                        <strong>Recommended:</strong> To reach your goal of{' '}
+                        <span className="font-semibold">SLE {formData.goalAmount.toLocaleString()}</span> in{' '}
+                        <span className="font-semibold">{formData.lockPeriodDays} days</span>, deposit{' '}
+                        <span className="font-semibold">SLE {recommendedDeposit.toFixed(2)}</span>{' '}
+                        {formData.autoDepositFrequency === 'daily' && 'per day'}
+                        {formData.autoDepositFrequency === 'weekly' && 'per week'}
+                        {formData.autoDepositFrequency === 'bi_weekly' && 'every 2 weeks'}
+                        {formData.autoDepositFrequency === 'monthly' && 'per month'}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, autoDepositAmount: recommendedDeposit })}
+                        className="mt-2 text-sm font-medium text-blue-600 hover:text-blue-800"
+                      >
+                        Use recommended amount
+                      </button>
+                    </div>
+                  )}
+
                   {/* Amount */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -401,34 +532,44 @@ export function CreatePotModal({ isOpen, onClose, onSuccess }: CreatePotModalPro
                     )}
                   </div>
 
-                  {/* Frequency */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Frequency *
-                    </label>
-                    <div className="grid grid-cols-4 gap-2">
-                      {FREQUENCY_OPTIONS.map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() =>
-                            setFormData({ ...formData, autoDepositFrequency: option.value })
-                          }
-                          className={clsx(
-                            'py-2 px-3 rounded-lg text-sm font-medium transition-colors',
-                            formData.autoDepositFrequency === option.value
-                              ? 'bg-primary-600 text-white'
-                              : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+                  {/* Projected savings summary */}
+                  {projectedSavings && (
+                    <div className={clsx(
+                      'p-3 rounded-lg border',
+                      formData.goalAmount && projectedSavings.total >= formData.goalAmount
+                        ? 'bg-green-50 border-green-200'
+                        : formData.goalAmount && projectedSavings.total < formData.goalAmount
+                        ? 'bg-yellow-50 border-yellow-200'
+                        : 'bg-gray-100 border-gray-200'
+                    )}>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">Projected total:</span>
+                        <span className="font-semibold text-gray-900">
+                          SLE {projectedSavings.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center mt-1">
+                        <span className="text-sm text-gray-600">Number of deposits:</span>
+                        <span className="font-medium text-gray-700">{projectedSavings.deposits}</span>
+                      </div>
+                      {formData.goalAmount && (
+                        <div className="mt-2 pt-2 border-t border-gray-200">
+                          {projectedSavings.total >= formData.goalAmount ? (
+                            <p className="text-sm text-green-700">
+                              You'll reach your goal of SLE {formData.goalAmount.toLocaleString()}
+                              {projectedSavings.total > formData.goalAmount && (
+                                <span> (+SLE {(projectedSavings.total - formData.goalAmount).toFixed(2)} extra)</span>
+                              )}
+                            </p>
+                          ) : (
+                            <p className="text-sm text-yellow-700">
+                              You'll be SLE {(formData.goalAmount - projectedSavings.total).toFixed(2)} short of your goal
+                            </p>
                           )}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
+                        </div>
+                      )}
                     </div>
-                    {errors.autoDepositFrequency && (
-                      <p className="mt-1 text-sm text-red-600">{errors.autoDepositFrequency}</p>
-                    )}
-                  </div>
+                  )}
 
                   {/* Source Wallet */}
                   <div>

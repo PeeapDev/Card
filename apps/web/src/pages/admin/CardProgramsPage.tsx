@@ -3,18 +3,19 @@ import {
   Layers,
   Plus,
   Search,
-  Eye,
   Edit2,
   Trash2,
   CheckCircle,
-  XCircle,
   Pause,
   CreditCard,
-  DollarSign,
   X,
   Loader2,
-  Upload,
-  Image,
+  Zap,
+  Clock,
+  TrendingUp,
+  Percent,
+  Banknote,
+  ShieldCheck,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
@@ -35,6 +36,52 @@ const GRADIENT_OPTIONS = [
   { name: 'Gold', value: 'from-yellow-500 to-yellow-700' },
 ];
 
+// Feature definitions with descriptions
+const FEATURE_DEFINITIONS = [
+  {
+    key: 'noTransactionFees',
+    label: 'No Transaction Fees',
+    description: 'Zero fees on all card transactions',
+    icon: Percent,
+  },
+  {
+    key: 'allowNegativeBalance',
+    label: 'Negative Balance / Overdraft',
+    description: 'Allow spending beyond available balance up to overdraft limit',
+    icon: Banknote,
+    hasAmount: true,
+    amountKey: 'overdraftLimit',
+    amountLabel: 'Overdraft Limit (SLE)',
+  },
+  {
+    key: 'allowBuyNowPayLater',
+    label: 'Buy Now Pay Later (BNPL)',
+    description: 'Allow purchases to be paid in installments',
+    icon: Clock,
+    hasAmount: true,
+    amountKey: 'bnplMaxAmount',
+    amountLabel: 'Max BNPL Amount (SLE)',
+    hasRate: true,
+    rateKey: 'bnplInterestRate',
+    rateLabel: 'Interest Rate (%)',
+  },
+  {
+    key: 'highTransactionLimit',
+    label: 'High Transaction Limits',
+    description: 'Higher daily and monthly limits for large transactions',
+    icon: TrendingUp,
+  },
+  {
+    key: 'cashbackEnabled',
+    label: 'Cashback Rewards',
+    description: 'Earn cashback on purchases',
+    icon: Zap,
+    hasRate: true,
+    rateKey: 'cashbackPercentage',
+    rateLabel: 'Cashback Rate (%)',
+  },
+];
+
 // Default form state
 const DEFAULT_FORM: CreateCardTypeRequest = {
   name: '',
@@ -50,6 +97,16 @@ const DEFAULT_FORM: CreateCardTypeRequest = {
   monthlyLimit: 50000,
   colorGradient: 'from-blue-600 to-blue-800',
   features: [],
+  // Feature flags
+  allowNegativeBalance: false,
+  allowBuyNowPayLater: false,
+  highTransactionLimit: false,
+  noTransactionFees: false,
+  cashbackEnabled: false,
+  cashbackPercentage: 0,
+  overdraftLimit: 0,
+  bnplMaxAmount: 0,
+  bnplInterestRate: 0,
 };
 
 export function CardProgramsPage() {
@@ -57,11 +114,11 @@ export function CardProgramsPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingCard, setEditingCard] = useState<CardType | null>(null);
   const [formData, setFormData] = useState<CreateCardTypeRequest>(DEFAULT_FORM);
-  const [newFeature, setNewFeature] = useState('');
+  const [newFeatureText, setNewFeatureText] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   // Hooks
-  const { data: cardTypes, isLoading } = useCardTypes(true); // Include inactive
+  const { data: cardTypes, isLoading } = useCardTypes(true);
   const createCardType = useCreateCardType();
   const updateCardType = useUpdateCardType();
   const deleteCardType = useDeleteCardType();
@@ -78,7 +135,7 @@ export function CardProgramsPage() {
   const openCreateModal = () => {
     setEditingCard(null);
     setFormData(DEFAULT_FORM);
-    setNewFeature('');
+    setNewFeatureText('');
     setShowModal(true);
   };
 
@@ -99,8 +156,18 @@ export function CardProgramsPage() {
       monthlyLimit: cardType.monthlyLimit,
       colorGradient: cardType.colorGradient,
       features: cardType.features || [],
+      // Feature flags
+      allowNegativeBalance: cardType.allowNegativeBalance || false,
+      allowBuyNowPayLater: cardType.allowBuyNowPayLater || false,
+      highTransactionLimit: cardType.highTransactionLimit || false,
+      noTransactionFees: cardType.noTransactionFees || false,
+      cashbackEnabled: cardType.cashbackEnabled || false,
+      cashbackPercentage: cardType.cashbackPercentage || 0,
+      overdraftLimit: cardType.overdraftLimit || 0,
+      bnplMaxAmount: cardType.bnplMaxAmount || 0,
+      bnplInterestRate: cardType.bnplInterestRate || 0,
     });
-    setNewFeature('');
+    setNewFeatureText('');
     setShowModal(true);
   };
 
@@ -123,19 +190,19 @@ export function CardProgramsPage() {
     }
   };
 
-  // Add feature
-  const addFeature = () => {
-    if (newFeature.trim() && !formData.features?.includes(newFeature.trim())) {
+  // Add display feature text
+  const addFeatureText = () => {
+    if (newFeatureText.trim() && !formData.features?.includes(newFeatureText.trim())) {
       setFormData({
         ...formData,
-        features: [...(formData.features || []), newFeature.trim()],
+        features: [...(formData.features || []), newFeatureText.trim()],
       });
-      setNewFeature('');
+      setNewFeatureText('');
     }
   };
 
-  // Remove feature
-  const removeFeature = (index: number) => {
+  // Remove display feature text
+  const removeFeatureText = (index: number) => {
     setFormData({
       ...formData,
       features: formData.features?.filter((_, i) => i !== index),
@@ -179,6 +246,17 @@ export function CardProgramsPage() {
       currency: 'SLE',
       minimumFractionDigits: 0,
     }).format(amount);
+  };
+
+  // Get active features for display
+  const getActiveFeatures = (cardType: CardType) => {
+    const features: string[] = [];
+    if (cardType.noTransactionFees) features.push('No Fees');
+    if (cardType.allowNegativeBalance) features.push(`Overdraft: ${formatCurrency(cardType.overdraftLimit || 0)}`);
+    if (cardType.allowBuyNowPayLater) features.push('BNPL');
+    if (cardType.highTransactionLimit) features.push('High Limits');
+    if (cardType.cashbackEnabled) features.push(`${cardType.cashbackPercentage}% Cashback`);
+    return features;
   };
 
   return (
@@ -284,7 +362,7 @@ export function CardProgramsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {filteredCardTypes.map((cardType) => (
               <Card key={cardType.id} className="overflow-hidden">
-                {/* Card Preview */}
+                {/* Card Preview - No name on card */}
                 <div
                   className={`relative p-6 text-white bg-gradient-to-br ${cardType.colorGradient}`}
                 >
@@ -304,8 +382,7 @@ export function CardProgramsPage() {
                   <div className="flex flex-col h-40 justify-between">
                     <div>
                       <CreditCard className="w-10 h-10 opacity-80" />
-                      <p className="font-bold text-xl mt-2">{cardType.name}</p>
-                      <p className="text-white/70 text-sm">{cardType.cardType} Card</p>
+                      <p className="text-white/70 text-sm mt-2">{cardType.cardType} Card</p>
                     </div>
                     <div className="flex justify-between items-end">
                       <div>
@@ -324,12 +401,32 @@ export function CardProgramsPage() {
 
                 {/* Card Details */}
                 <div className="p-4 space-y-4">
-                  <p className="text-sm text-gray-600">{cardType.description}</p>
+                  <div>
+                    <h3 className="font-semibold text-lg">{cardType.name}</h3>
+                    <p className="text-sm text-gray-600">{cardType.description}</p>
+                  </div>
 
-                  {/* Features */}
+                  {/* Active Features */}
+                  {getActiveFeatures(cardType).length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-gray-500 uppercase">Active Features</p>
+                      <div className="flex flex-wrap gap-1">
+                        {getActiveFeatures(cardType).map((feature, i) => (
+                          <span
+                            key={i}
+                            className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium"
+                          >
+                            {feature}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Display Features */}
                   {cardType.features && cardType.features.length > 0 && (
                     <div className="space-y-1">
-                      <p className="text-xs font-medium text-gray-500 uppercase">Features</p>
+                      <p className="text-xs font-medium text-gray-500 uppercase">Description Features</p>
                       <div className="flex flex-wrap gap-1">
                         {cardType.features.map((feature, i) => (
                           <span
@@ -348,7 +445,11 @@ export function CardProgramsPage() {
                     <div>
                       <p className="text-gray-500">Transaction Fee</p>
                       <p className="font-medium">
-                        {cardType.transactionFeePercentage}% + {formatCurrency(cardType.transactionFeeFixed)}
+                        {cardType.noTransactionFees ? (
+                          <span className="text-green-600">No Fees</span>
+                        ) : (
+                          `${cardType.transactionFeePercentage}% + ${formatCurrency(cardType.transactionFeeFixed)}`
+                        )}
                       </p>
                     </div>
                     <div>
@@ -407,10 +508,10 @@ export function CardProgramsPage() {
         {/* Create/Edit Modal */}
         {showModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
               <form onSubmit={handleSubmit}>
                 {/* Modal Header */}
-                <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white">
+                <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white z-10">
                   <h2 className="text-lg font-semibold">
                     {editingCard ? 'Edit Card Program' : 'Create Card Program'}
                   </h2>
@@ -425,22 +526,20 @@ export function CardProgramsPage() {
 
                 {/* Modal Body */}
                 <div className="p-4 space-y-6">
-                  {/* Card Preview */}
+                  {/* Card Preview - No name */}
                   <div
                     className={`relative p-6 text-white bg-gradient-to-br ${formData.colorGradient} rounded-xl`}
                   >
                     <div className="flex flex-col h-32 justify-between">
                       <div>
                         <CreditCard className="w-8 h-8 opacity-80" />
-                        <p className="font-bold text-lg mt-2">
-                          {formData.name || 'Card Name'}
-                        </p>
-                        <p className="text-white/70 text-sm">{formData.cardType} Card</p>
+                        <p className="text-white/70 text-sm mt-2">{formData.cardType} Card</p>
                       </div>
                       <div className="flex justify-between items-end">
                         <p className="text-xl font-bold">
                           {formData.price === 0 ? 'FREE' : `SLE ${formData.price}`}
                         </p>
+                        <p className="text-sm opacity-70">KYC {formData.requiredKycLevel}</p>
                       </div>
                     </div>
                   </div>
@@ -449,7 +548,7 @@ export function CardProgramsPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Card Name *
+                        Program Name * <span className="text-gray-400 font-normal">(for admin reference)</span>
                       </label>
                       <input
                         type="text"
@@ -463,22 +562,20 @@ export function CardProgramsPage() {
 
                     <div className="col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Description *
+                        Description * <span className="text-gray-400 font-normal">(shown to users)</span>
                       </label>
                       <textarea
                         required
                         value={formData.description}
                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                         placeholder="Describe what this card offers..."
-                        rows={3}
+                        rows={2}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Card Type *
-                      </label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Card Type *</label>
                       <select
                         value={formData.cardType}
                         onChange={(e) =>
@@ -492,9 +589,7 @@ export function CardProgramsPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Card Color
-                      </label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Card Color</label>
                       <select
                         value={formData.colorGradient}
                         onChange={(e) => setFormData({ ...formData, colorGradient: e.target.value })}
@@ -534,7 +629,8 @@ export function CardProgramsPage() {
                           onChange={(e) =>
                             setFormData({ ...formData, transactionFeePercentage: parseFloat(e.target.value) || 0 })
                           }
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                          disabled={formData.noTransactionFees}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100"
                         />
                       </div>
                       <div>
@@ -547,7 +643,8 @@ export function CardProgramsPage() {
                           onChange={(e) =>
                             setFormData({ ...formData, transactionFeeFixed: parseFloat(e.target.value) || 0 })
                           }
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                          disabled={formData.noTransactionFees}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100"
                         />
                       </div>
                     </div>
@@ -581,109 +678,172 @@ export function CardProgramsPage() {
                   </div>
 
                   {/* Requirements */}
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-700 mb-3">Requirements</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Required KYC Level</label>
-                        <select
-                          value={formData.requiredKycLevel}
-                          onChange={(e) =>
-                            setFormData({ ...formData, requiredKycLevel: parseInt(e.target.value) })
-                          }
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                        >
-                          <option value={1}>Level 1 - Basic (Email verified)</option>
-                          <option value={2}>Level 2 - Advanced (ID verified)</option>
-                          <option value={3}>Level 3 - Enhanced (Full KYC)</option>
-                        </select>
-                      </div>
-                      <div className="flex items-center">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={formData.isActive}
-                            onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                            className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                          />
-                          <span className="text-sm text-gray-700">Active (visible in marketplace)</span>
-                        </label>
-                      </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Required KYC Level</label>
+                      <select
+                        value={formData.requiredKycLevel}
+                        onChange={(e) =>
+                          setFormData({ ...formData, requiredKycLevel: parseInt(e.target.value) })
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      >
+                        <option value={1}>Level 1 - Basic</option>
+                        <option value={2}>Level 2 - Advanced</option>
+                        <option value={3}>Level 3 - Enhanced</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.isActive}
+                          onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                          className="w-4 h-4 text-primary-600 border-gray-300 rounded"
+                        />
+                        <span className="text-sm text-gray-700">Active in marketplace</span>
+                      </label>
                     </div>
                   </div>
 
-                  {/* Features */}
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-700 mb-3">Card Features</h3>
+                  {/* FUNCTIONAL FEATURES - These actually affect card behavior */}
+                  <div className="border-t pt-6">
+                    <h3 className="text-sm font-medium text-gray-900 mb-1 flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-primary-600" />
+                      Functional Features
+                    </h3>
+                    <p className="text-xs text-gray-500 mb-4">
+                      These features will be applied to all cards issued under this program
+                    </p>
+
+                    <div className="space-y-4">
+                      {FEATURE_DEFINITIONS.map((feature) => {
+                        const isEnabled = formData[feature.key as keyof CreateCardTypeRequest] as boolean;
+                        const Icon = feature.icon;
+
+                        return (
+                          <div key={feature.key} className="border rounded-lg p-4">
+                            <div className="flex items-start gap-3">
+                              <div className={`p-2 rounded-lg ${isEnabled ? 'bg-primary-100' : 'bg-gray-100'}`}>
+                                <Icon className={`w-5 h-5 ${isEnabled ? 'text-primary-600' : 'text-gray-400'}`} />
+                              </div>
+                              <div className="flex-1">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={isEnabled}
+                                    onChange={(e) =>
+                                      setFormData({ ...formData, [feature.key]: e.target.checked })
+                                    }
+                                    className="w-4 h-4 text-primary-600 border-gray-300 rounded"
+                                  />
+                                  <span className="font-medium text-gray-900">{feature.label}</span>
+                                </label>
+                                <p className="text-xs text-gray-500 mt-1">{feature.description}</p>
+
+                                {/* Additional inputs when enabled */}
+                                {isEnabled && (feature.hasAmount || feature.hasRate) && (
+                                  <div className="mt-3 flex gap-4">
+                                    {feature.hasAmount && feature.amountKey && (
+                                      <div>
+                                        <label className="block text-xs text-gray-500 mb-1">
+                                          {feature.amountLabel}
+                                        </label>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          value={formData[feature.amountKey as keyof CreateCardTypeRequest] as number || 0}
+                                          onChange={(e) =>
+                                            setFormData({
+                                              ...formData,
+                                              [feature.amountKey!]: parseFloat(e.target.value) || 0,
+                                            })
+                                          }
+                                          className="w-32 px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                        />
+                                      </div>
+                                    )}
+                                    {feature.hasRate && feature.rateKey && (
+                                      <div>
+                                        <label className="block text-xs text-gray-500 mb-1">
+                                          {feature.rateLabel}
+                                        </label>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          step="0.1"
+                                          max="100"
+                                          value={formData[feature.rateKey as keyof CreateCardTypeRequest] as number || 0}
+                                          onChange={(e) =>
+                                            setFormData({
+                                              ...formData,
+                                              [feature.rateKey!]: parseFloat(e.target.value) || 0,
+                                            })
+                                          }
+                                          className="w-24 px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Display Features - Text descriptions for marketing */}
+                  <div className="border-t pt-6">
+                    <h3 className="text-sm font-medium text-gray-700 mb-1">Display Features</h3>
+                    <p className="text-xs text-gray-500 mb-3">
+                      Marketing text shown to users (does not affect card behavior)
+                    </p>
                     <div className="space-y-3">
-                      {/* Add Feature Input */}
                       <div className="flex gap-2">
                         <input
                           type="text"
-                          value={newFeature}
-                          onChange={(e) => setNewFeature(e.target.value)}
+                          value={newFeatureText}
+                          onChange={(e) => setNewFeatureText(e.target.value)}
                           onKeyPress={(e) => {
                             if (e.key === 'Enter') {
                               e.preventDefault();
-                              addFeature();
+                              addFeatureText();
                             }
                           }}
-                          placeholder="Add a feature (e.g., No monthly fees)"
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                          placeholder="Add a display feature..."
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg"
                         />
                         <button
                           type="button"
-                          onClick={addFeature}
+                          onClick={addFeatureText}
                           className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
                         >
                           <Plus className="w-4 h-4" />
                         </button>
                       </div>
 
-                      {/* Feature List */}
-                      {formData.features && formData.features.length > 0 ? (
+                      {formData.features && formData.features.length > 0 && (
                         <div className="flex flex-wrap gap-2">
                           {formData.features.map((feature, index) => (
                             <span
                               key={index}
-                              className="inline-flex items-center gap-1 px-3 py-1 bg-primary-50 text-primary-700 rounded-full text-sm"
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm"
                             >
                               {feature}
                               <button
                                 type="button"
-                                onClick={() => removeFeature(index)}
-                                className="p-0.5 hover:bg-primary-100 rounded-full"
+                                onClick={() => removeFeatureText(index)}
+                                className="p-0.5 hover:bg-gray-200 rounded-full"
                               >
                                 <X className="w-3 h-3" />
                               </button>
                             </span>
                           ))}
                         </div>
-                      ) : (
-                        <p className="text-sm text-gray-500 italic">
-                          No features added. Add features to describe card benefits.
-                        </p>
                       )}
                     </div>
-                  </div>
-
-                  {/* Card Image URL (Optional) */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Card Image URL (Optional)
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="url"
-                        value={formData.cardImageUrl || ''}
-                        onChange={(e) => setFormData({ ...formData, cardImageUrl: e.target.value })}
-                        placeholder="https://example.com/card-image.png"
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                      />
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Optional custom card image. If not provided, gradient color will be used.
-                    </p>
                   </div>
                 </div>
 

@@ -211,13 +211,9 @@ export const potService = {
    * Get pot summary with stats
    */
   async getPotSummary(potId: string): Promise<PotSummary> {
-    const { data, error } = await supabase.rpc('get_pot_summary', {
-      p_pot_id: potId,
-    });
-
-    if (error) {
-      console.error('Error fetching pot summary:', error);
-      // Fallback to manual fetch
+    // Skip RPC and use manual fetch directly since RPC may not exist
+    {
+      // Manual fetch
       const pot = await this.getPot(potId);
       const transactions = await this.getPotTransactions(potId, { limit: 1000 });
 
@@ -265,41 +261,14 @@ export const potService = {
         updatedAt: pot.updatedAt,
       };
     }
-
-    if (data?.error) {
-      throw new Error(data.error);
-    }
-
-    return mapPotSummary(data);
   },
 
   /**
    * Create a new pot
    */
   async createPot(userId: string, request: CreatePotRequest): Promise<Pot> {
-    // Try RPC function first
-    const { data: potId, error: rpcError } = await supabase.rpc('create_pot', {
-      p_user_id: userId,
-      p_name: request.name,
-      p_description: request.description || null,
-      p_goal_amount: request.goalAmount || null,
-      p_lock_type: request.lockType || 'time_based',
-      p_lock_period_days: request.lockPeriodDays || 30,
-      p_maturity_date: request.maturityDate || null,
-      p_auto_deposit_enabled: request.autoDepositEnabled || false,
-      p_auto_deposit_amount: request.autoDepositAmount || null,
-      p_auto_deposit_frequency: request.autoDepositFrequency || null,
-      p_source_wallet_id: request.sourceWalletId || null,
-      p_icon: request.icon || 'piggy-bank',
-      p_color: request.color || '#4F46E5',
-    });
-
-    if (!rpcError && potId) {
-      return this.getPot(potId);
-    }
-
-    // Fallback: Manual creation
-    console.warn('RPC create_pot failed, using fallback:', rpcError);
+    // Skip RPC and use direct table insertion since RPC may not exist
+    console.log('Creating pot directly via table insertion');
 
     // Generate unique external_id for pot wallet
     const externalId = `pot_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
@@ -450,25 +419,7 @@ export const potService = {
    * Contribute to a pot
    */
   async contributeToPot(request: ContributePotRequest): Promise<PotTransaction> {
-    // Try RPC function first
-    const { data: txId, error: rpcError } = await supabase.rpc('contribute_to_pot', {
-      p_pot_id: request.potId,
-      p_source_wallet_id: request.sourceWalletId,
-      p_amount: request.amount,
-      p_description: request.description || 'Contribution',
-    });
-
-    if (!rpcError && txId) {
-      const { data: tx } = await supabase
-        .from('pot_transactions')
-        .select('*')
-        .eq('id', txId)
-        .single();
-      return mapPotTransaction(tx);
-    }
-
-    // Fallback: Manual contribution
-    console.warn('RPC contribute_to_pot failed, using fallback:', rpcError);
+    // Use direct table operations
 
     // Get pot
     const pot = await this.getPot(request.potId);
@@ -590,101 +541,72 @@ export const potService = {
    * Check withdrawal eligibility
    */
   async checkWithdrawalEligibility(potId: string): Promise<WithdrawalEligibility> {
-    const { data, error } = await supabase.rpc('check_pot_withdrawal_eligibility', {
-      p_pot_id: potId,
-    });
+    // Use direct check instead of RPC
+    const pot = await this.getPot(potId);
 
-    if (error) {
-      console.error('Error checking withdrawal eligibility:', error);
-      // Fallback: Manual check
-      const pot = await this.getPot(potId);
-
-      if (pot.adminLocked) {
-        return {
-          canWithdraw: false,
-          lockStatus: 'admin_locked',
-          reason: 'Pot is locked by administrator',
-          currentBalance: pot.currentBalance,
-          maxWithdrawalAmount: pot.currentBalance,
-        };
-      }
-
-      if (pot.status === 'CLOSED') {
-        return {
-          canWithdraw: false,
-          lockStatus: 'closed',
-          reason: 'Pot has been closed',
-          currentBalance: pot.currentBalance,
-          maxWithdrawalAmount: 0,
-        };
-      }
-
-      // Check time-based lock
-      if (pot.lockType === 'time_based' || pot.lockType === 'hybrid') {
-        if (pot.lockEndDate && new Date(pot.lockEndDate) > new Date()) {
-          const daysUntilUnlock = Math.ceil(
-            (new Date(pot.lockEndDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-          );
-          return {
-            canWithdraw: false,
-            canWithdrawWithPenalty: true,
-            lockStatus: 'locked',
-            lockEndDate: pot.lockEndDate,
-            daysUntilUnlock,
-            penaltyPercent: 5.0,
-            currentBalance: pot.currentBalance,
-            maxWithdrawalAmount: pot.currentBalance,
-            withdrawalAfterPenalty: pot.currentBalance * 0.95,
-            reason: `Pot is locked until ${new Date(pot.lockEndDate).toLocaleDateString()}`,
-          };
-        }
-      }
-
-      // Check goal-based lock
-      if (pot.lockType === 'goal_based' || pot.lockType === 'hybrid') {
-        if (pot.goalAmount && pot.currentBalance < pot.goalAmount) {
-          return {
-            canWithdraw: false,
-            lockStatus: 'goal_not_reached',
-            goalAmount: pot.goalAmount,
-            currentBalance: pot.currentBalance,
-            maxWithdrawalAmount: pot.currentBalance,
-            remainingToGoal: pot.goalAmount - pot.currentBalance,
-            progressPercent: (pot.currentBalance / pot.goalAmount) * 100,
-            reason: 'Goal not yet reached',
-          };
-        }
-      }
-
+    if (pot.adminLocked) {
       return {
-        canWithdraw: true,
-        lockStatus: 'unlocked',
+        canWithdraw: false,
+        lockStatus: 'admin_locked',
+        reason: 'Pot is locked by administrator',
         currentBalance: pot.currentBalance,
         maxWithdrawalAmount: pot.currentBalance,
-        reason: 'Withdrawal available',
       };
     }
 
-    if (data?.error) {
-      throw new Error(data.error);
+    if (pot.status === 'CLOSED') {
+      return {
+        canWithdraw: false,
+        lockStatus: 'closed',
+        reason: 'Pot has been closed',
+        currentBalance: pot.currentBalance,
+        maxWithdrawalAmount: 0,
+      };
+    }
+
+    // Check time-based lock
+    if (pot.lockType === 'time_based' || pot.lockType === 'hybrid') {
+      if (pot.lockEndDate && new Date(pot.lockEndDate) > new Date()) {
+        const daysUntilUnlock = Math.ceil(
+          (new Date(pot.lockEndDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+        );
+        return {
+          canWithdraw: false,
+          canWithdrawWithPenalty: true,
+          lockStatus: 'locked',
+          lockEndDate: pot.lockEndDate,
+          daysUntilUnlock,
+          penaltyPercent: 5.0,
+          currentBalance: pot.currentBalance,
+          maxWithdrawalAmount: pot.currentBalance,
+          withdrawalAfterPenalty: pot.currentBalance * 0.95,
+          reason: `Pot is locked until ${new Date(pot.lockEndDate).toLocaleDateString()}`,
+        };
+      }
+    }
+
+    // Check goal-based lock
+    if (pot.lockType === 'goal_based' || pot.lockType === 'hybrid') {
+      if (pot.goalAmount && pot.currentBalance < pot.goalAmount) {
+        return {
+          canWithdraw: false,
+          lockStatus: 'goal_not_reached',
+          goalAmount: pot.goalAmount,
+          currentBalance: pot.currentBalance,
+          maxWithdrawalAmount: pot.currentBalance,
+          remainingToGoal: pot.goalAmount - pot.currentBalance,
+          progressPercent: (pot.currentBalance / pot.goalAmount) * 100,
+          reason: 'Goal not yet reached',
+        };
+      }
     }
 
     return {
-      canWithdraw: data.can_withdraw,
-      canWithdrawWithPenalty: data.can_withdraw_with_penalty,
-      lockStatus: data.lock_status,
-      lockEndDate: data.lock_end_date,
-      daysUntilUnlock: data.days_until_unlock,
-      penaltyPercent: data.penalty_percent ? parseFloat(data.penalty_percent) : undefined,
-      currentBalance: parseFloat(data.current_balance) || 0,
-      maxWithdrawalAmount: parseFloat(data.max_withdrawal_amount) || 0,
-      withdrawalAfterPenalty: data.withdrawal_after_penalty
-        ? parseFloat(data.withdrawal_after_penalty)
-        : undefined,
-      goalAmount: data.goal_amount ? parseFloat(data.goal_amount) : undefined,
-      remainingToGoal: data.remaining_to_goal ? parseFloat(data.remaining_to_goal) : undefined,
-      progressPercent: data.progress_percent ? parseFloat(data.progress_percent) : undefined,
-      reason: data.reason,
+      canWithdraw: true,
+      lockStatus: 'unlocked',
+      currentBalance: pot.currentBalance,
+      maxWithdrawalAmount: pot.currentBalance,
+      reason: 'Withdrawal available',
     };
   },
 
@@ -692,26 +614,7 @@ export const potService = {
    * Withdraw from a pot
    */
   async withdrawFromPot(request: WithdrawPotRequest): Promise<PotTransaction> {
-    // Try RPC function first
-    const { data: txId, error: rpcError } = await supabase.rpc('withdraw_from_pot', {
-      p_pot_id: request.potId,
-      p_destination_wallet_id: request.destinationWalletId,
-      p_amount: request.amount,
-      p_force_with_penalty: request.forceWithPenalty || false,
-      p_description: request.description || 'Withdrawal',
-    });
-
-    if (!rpcError && txId) {
-      const { data: tx } = await supabase
-        .from('pot_transactions')
-        .select('*')
-        .eq('id', txId)
-        .single();
-      return mapPotTransaction(tx);
-    }
-
-    // Fallback: Manual withdrawal
-    console.warn('RPC withdraw_from_pot failed, using fallback:', rpcError);
+    // Use direct table operations
 
     // Check eligibility
     const eligibility = await this.checkWithdrawalEligibility(request.potId);
@@ -842,19 +745,7 @@ export const potService = {
    * Close a pot
    */
   async closePot(potId: string, destinationWalletId: string): Promise<boolean> {
-    // Try RPC function first
-    const { data, error: rpcError } = await supabase.rpc('close_pot', {
-      p_pot_id: potId,
-      p_destination_wallet_id: destinationWalletId,
-    });
-
-    if (!rpcError && data) {
-      return true;
-    }
-
-    // Fallback: Manual close
-    console.warn('RPC close_pot failed, using fallback:', rpcError);
-
+    // Use direct table operations
     const pot = await this.getPot(potId);
 
     if (pot.status === 'CLOSED') {
@@ -1122,16 +1013,8 @@ export const potService = {
     lock: boolean,
     reason?: string
   ): Promise<boolean> {
-    const { data, error } = await supabase.rpc('admin_toggle_pot_lock', {
-      p_pot_id: potId,
-      p_admin_id: adminId,
-      p_lock: lock,
-      p_reason: reason || null,
-    });
-
-    if (error) {
-      // Fallback
-      const { error: updateError } = await supabase
+    // Use direct table update
+    const { error: updateError } = await supabase
         .from('pots')
         .update({
           admin_locked: lock,
@@ -1142,13 +1025,10 @@ export const potService = {
         })
         .eq('id', potId);
 
-      if (updateError) {
-        throw new Error(updateError.message);
-      }
-      return true;
+    if (updateError) {
+      throw new Error(updateError.message);
     }
-
-    return !!data;
+    return true;
   },
 
   /**

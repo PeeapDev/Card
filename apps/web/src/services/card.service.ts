@@ -21,8 +21,21 @@ export interface UpdateCardLimitsRequest {
   monthlyLimit?: number;
 }
 
+// Card Feature Flags - These control actual card behavior
+export interface CardFeatureFlags {
+  allowNegativeBalance: boolean;    // Card can go into negative balance
+  allowBuyNowPayLater: boolean;     // BNPL feature enabled
+  highTransactionLimit: boolean;    // Higher than normal limits
+  noTransactionFees: boolean;       // No fees on transactions
+  cashbackEnabled: boolean;         // Cashback on purchases
+  cashbackPercentage: number;       // Cashback percentage
+  overdraftLimit: number;           // Max negative balance allowed
+  bnplMaxAmount: number;            // Max BNPL amount
+  bnplInterestRate: number;         // BNPL interest rate
+}
+
 // Card Types (Admin-configured card products)
-export interface CardType {
+export interface CardType extends Partial<CardFeatureFlags> {
   id: string;
   name: string;
   description: string;
@@ -36,7 +49,7 @@ export interface CardType {
   dailyLimit: number;
   monthlyLimit: number;
   colorGradient: string;
-  features: string[];
+  features: string[];  // Display features (text)
   createdAt: string;
   updatedAt: string;
 }
@@ -55,6 +68,16 @@ export interface CreateCardTypeRequest {
   monthlyLimit?: number;
   colorGradient?: string;
   features?: string[];
+  // Feature flags
+  allowNegativeBalance?: boolean;
+  allowBuyNowPayLater?: boolean;
+  highTransactionLimit?: boolean;
+  noTransactionFees?: boolean;
+  cashbackEnabled?: boolean;
+  cashbackPercentage?: number;
+  overdraftLimit?: number;
+  bnplMaxAmount?: number;
+  bnplInterestRate?: number;
 }
 
 // Card Orders (User purchase requests)
@@ -155,6 +178,16 @@ const mapCardType = (row: any): CardType => ({
   features: row.features || [],
   createdAt: row.created_at,
   updatedAt: row.updated_at,
+  // Feature flags
+  allowNegativeBalance: row.allow_negative_balance ?? false,
+  allowBuyNowPayLater: row.allow_buy_now_pay_later ?? false,
+  highTransactionLimit: row.high_transaction_limit ?? false,
+  noTransactionFees: row.no_transaction_fees ?? false,
+  cashbackEnabled: row.cashback_enabled ?? false,
+  cashbackPercentage: parseFloat(row.cashback_percentage) || 0,
+  overdraftLimit: parseFloat(row.overdraft_limit) || 0,
+  bnplMaxAmount: parseFloat(row.bnpl_max_amount) || 0,
+  bnplInterestRate: parseFloat(row.bnpl_interest_rate) || 0,
 });
 
 // Map database row to CardOrder
@@ -484,23 +517,37 @@ export const cardService = {
    * Create a new card type (Admin only)
    */
   async createCardType(data: CreateCardTypeRequest): Promise<CardType> {
+    const insertData: any = {
+      name: data.name,
+      description: data.description,
+      card_image_url: data.cardImageUrl,
+      price: data.price,
+      transaction_fee_percentage: data.transactionFeePercentage || 0,
+      transaction_fee_fixed: data.transactionFeeFixed || 0,
+      required_kyc_level: data.requiredKycLevel || 1,
+      card_type: data.cardType,
+      is_active: data.isActive ?? true,
+      daily_limit: data.dailyLimit || 1000,
+      monthly_limit: data.monthlyLimit || 10000,
+      color_gradient: data.colorGradient || 'from-blue-600 to-blue-800',
+      features: data.features || [],
+      // Feature flags
+      allow_negative_balance: data.allowNegativeBalance ?? false,
+      allow_buy_now_pay_later: data.allowBuyNowPayLater ?? false,
+      high_transaction_limit: data.highTransactionLimit ?? false,
+      no_transaction_fees: data.noTransactionFees ?? false,
+      cashback_enabled: data.cashbackEnabled ?? false,
+      cashback_percentage: data.cashbackPercentage || 0,
+      overdraft_limit: data.overdraftLimit || 0,
+      bnpl_max_amount: data.bnplMaxAmount || 0,
+      bnpl_interest_rate: data.bnplInterestRate || 0,
+    };
+
+    console.log('Creating card type with data:', insertData);
+
     const { data: cardType, error } = await supabase
       .from('card_types')
-      .insert({
-        name: data.name,
-        description: data.description,
-        card_image_url: data.cardImageUrl,
-        price: data.price,
-        transaction_fee_percentage: data.transactionFeePercentage || 0,
-        transaction_fee_fixed: data.transactionFeeFixed || 0,
-        required_kyc_level: data.requiredKycLevel || 1,
-        card_type: data.cardType,
-        is_active: data.isActive ?? true,
-        daily_limit: data.dailyLimit || 1000,
-        monthly_limit: data.monthlyLimit || 10000,
-        color_gradient: data.colorGradient || 'from-blue-600 to-blue-800',
-        features: data.features || [],
-      })
+      .insert(insertData)
       .select()
       .single();
 
@@ -531,6 +578,16 @@ export const cardService = {
     if (data.monthlyLimit !== undefined) updates.monthly_limit = data.monthlyLimit;
     if (data.colorGradient !== undefined) updates.color_gradient = data.colorGradient;
     if (data.features !== undefined) updates.features = data.features;
+    // Feature flags
+    if (data.allowNegativeBalance !== undefined) updates.allow_negative_balance = data.allowNegativeBalance;
+    if (data.allowBuyNowPayLater !== undefined) updates.allow_buy_now_pay_later = data.allowBuyNowPayLater;
+    if (data.highTransactionLimit !== undefined) updates.high_transaction_limit = data.highTransactionLimit;
+    if (data.noTransactionFees !== undefined) updates.no_transaction_fees = data.noTransactionFees;
+    if (data.cashbackEnabled !== undefined) updates.cashback_enabled = data.cashbackEnabled;
+    if (data.cashbackPercentage !== undefined) updates.cashback_percentage = data.cashbackPercentage;
+    if (data.overdraftLimit !== undefined) updates.overdraft_limit = data.overdraftLimit;
+    if (data.bnplMaxAmount !== undefined) updates.bnpl_max_amount = data.bnplMaxAmount;
+    if (data.bnplInterestRate !== undefined) updates.bnpl_interest_rate = data.bnplInterestRate;
 
     const { data: cardType, error } = await supabase
       .from('card_types')
