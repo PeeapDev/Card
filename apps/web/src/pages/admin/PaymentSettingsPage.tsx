@@ -319,36 +319,19 @@ export function PaymentSettingsPage() {
         cancelUrl,
       });
 
-      // Call Monime API directly via proxy
-      const response = await fetch('/monime-api/v1/checkout-sessions', {
+      // Call Monime API via serverless function
+      const response = await fetch('/api/test-monime', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${monimeConfig.accessToken}`,
           'Content-Type': 'application/json',
-          'Monime-Space-Id': monimeConfig.spaceId,
-          'Idempotency-Key': idempotencyKey,
         },
         body: JSON.stringify({
-          name: 'Test Payment - Admin Dashboard',
-          lineItems: [
-            {
-              type: 'custom',
-              name: 'Test Payment',
-              price: {
-                currency: 'SLE',
-                value: testAmount,
-              },
-              quantity: 1,
-              description: 'Test payment from admin dashboard',
-            },
-          ],
+          accessToken: monimeConfig.accessToken,
+          spaceId: monimeConfig.spaceId,
+          amount: testAmount,
+          currency: 'SLE',
           successUrl,
           cancelUrl,
-          metadata: {
-            type: 'test_payment',
-            initiated_by: 'admin_dashboard',
-            idempotencyKey,
-          },
         }),
       });
 
@@ -376,10 +359,10 @@ export function PaymentSettingsPage() {
       }
 
       // Open Monime checkout page in new tab
-      if (data?.result?.redirectUrl) {
-        console.log('[Monime Test] Success! Redirect URL:', data.result.redirectUrl);
-        window.open(data.result.redirectUrl, '_blank');
-        setSuccess(`Checkout session created! Order: ${data.result.orderNumber || 'N/A'}`);
+      if (data?.url) {
+        console.log('[Monime Test] Success! Redirect URL:', data.url);
+        window.open(data.url, '_blank');
+        setSuccess(`Checkout session created! Order: ${data.orderNumber || 'N/A'}`);
         setTimeout(() => setSuccess(null), 5000);
       } else {
         console.error('[Monime Test] No redirect URL in response');
