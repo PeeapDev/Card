@@ -19,14 +19,14 @@ export default defineConfig({
         secure: true,
       },
       '/api/monime': {
-        target: 'http://localhost:3002',
+        target: 'https://my.peeap.com',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
+        secure: true,
       },
       '/api/settings': {
-        target: 'http://localhost:3002',
+        target: 'https://my.peeap.com',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
+        secure: true,
       },
       '/api': {
         target: 'http://localhost:3000',
