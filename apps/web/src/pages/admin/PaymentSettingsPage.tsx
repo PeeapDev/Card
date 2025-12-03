@@ -302,13 +302,10 @@ export function PaymentSettingsPage() {
         throw new Error('Test amount must be greater than 0.');
       }
 
-      // Generate idempotency key
-      const idempotencyKey = `test_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-
-      // Use configured URLs
-      const baseUrl = monimeConfig.frontendUrl;
-      const successUrl = `${baseUrl}/deposit/success?sessionId={CHECKOUT_SESSION_ID}`;
-      const cancelUrl = `${baseUrl}/deposit/cancel?sessionId={CHECKOUT_SESSION_ID}`;
+      // Use configured URLs (clean URLs without placeholders)
+      const baseUrl = monimeConfig.frontendUrl.replace(/\/$/, ''); // Remove trailing slash
+      const successUrl = `${baseUrl}/deposit/success`;
+      const cancelUrl = `${baseUrl}/deposit/cancel`;
 
       console.log('[Monime Test] Starting checkout session creation...');
       console.log('[Monime Test] Config:', {

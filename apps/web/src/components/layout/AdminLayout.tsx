@@ -33,6 +33,7 @@ import {
   Store,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { NotificationBell } from '@/components/ui/NotificationBell';
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -333,10 +334,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
               <span className="px-3 py-1 rounded-full text-xs font-medium bg-primary-100 text-primary-700">
                 Admin Portal
               </span>
-              <button className="relative p-2 hover:bg-gray-100 rounded-lg">
-                <Bell className="w-5 h-5 text-gray-600" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
-              </button>
+              <NotificationBell />
             </div>
           </div>
         </header>

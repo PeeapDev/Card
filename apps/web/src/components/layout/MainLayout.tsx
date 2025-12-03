@@ -15,6 +15,7 @@ import {
   PiggyBank,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { NotificationBell } from '@/components/ui/NotificationBell';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -135,7 +136,7 @@ export function MainLayout({ children }: MainLayoutProps) {
               <Menu className="w-6 h-6" />
             </button>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-500">
+              <span className="text-sm text-gray-500 hidden sm:inline">
                 KYC Status:{' '}
                 <span
                   className={clsx(
@@ -148,6 +149,7 @@ export function MainLayout({ children }: MainLayoutProps) {
                   {user?.kycStatus}
                 </span>
               </span>
+              <NotificationBell />
             </div>
           </div>
         </header>
