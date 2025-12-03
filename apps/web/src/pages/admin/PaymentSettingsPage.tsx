@@ -288,13 +288,36 @@ export function PaymentSettingsPage() {
     setError(null);
 
     try {
+      // Validate required fields first
+      if (!monimeConfig.accessToken) {
+        throw new Error('Access Token is required. Please enter your Monime API key.');
+      }
+      if (!monimeConfig.spaceId) {
+        throw new Error('Space ID is required. Please enter your Monime Space ID.');
+      }
+      if (!monimeConfig.frontendUrl) {
+        throw new Error('Frontend URL is required. Please enter your app URL (e.g., https://my.peeap.com).');
+      }
+      if (testAmount <= 0) {
+        throw new Error('Test amount must be greater than 0.');
+      }
+
       // Generate idempotency key
       const idempotencyKey = `test_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
-      // Use configured URLs or fallback to current origin
-      const baseUrl = monimeConfig.frontendUrl || window.location.origin;
+      // Use configured URLs
+      const baseUrl = monimeConfig.frontendUrl;
       const successUrl = `${baseUrl}/deposit/success?sessionId={CHECKOUT_SESSION_ID}`;
       const cancelUrl = `${baseUrl}/deposit/cancel?sessionId={CHECKOUT_SESSION_ID}`;
+
+      console.log('[Monime Test] Starting checkout session creation...');
+      console.log('[Monime Test] Config:', {
+        spaceId: monimeConfig.spaceId,
+        tokenPrefix: monimeConfig.accessToken.substring(0, 10) + '...',
+        amount: testAmount,
+        successUrl,
+        cancelUrl,
+      });
 
       // Call Monime API directly via proxy
       const response = await fetch('/monime-api/v1/checkout-sessions', {
@@ -329,22 +352,43 @@ export function PaymentSettingsPage() {
         }),
       });
 
-      const data = await response.json() as any;
+      console.log('[Monime Test] Response status:', response.status, response.statusText);
 
-      if (!response.ok || !data.success) {
-        throw new Error(data?.error?.message || data?.message || 'Failed to create checkout session');
+      const data = await response.json() as any;
+      console.log('[Monime Test] Response data:', JSON.stringify(data, null, 2));
+
+      if (!response.ok) {
+        // Parse detailed error from Monime
+        const errorMsg = data?.error?.message
+          || data?.message
+          || data?.error
+          || `HTTP ${response.status}: ${response.statusText}`;
+        const errorDetails = data?.error?.details || data?.details || '';
+        const fullError = errorDetails ? `${errorMsg} - ${JSON.stringify(errorDetails)}` : errorMsg;
+        console.error('[Monime Test] API Error:', fullError);
+        throw new Error(fullError);
+      }
+
+      if (!data.success) {
+        const errorMsg = data?.error?.message || data?.message || 'Unknown error from Monime';
+        console.error('[Monime Test] Success=false:', errorMsg);
+        throw new Error(errorMsg);
       }
 
       // Open Monime checkout page in new tab
       if (data?.result?.redirectUrl) {
+        console.log('[Monime Test] Success! Redirect URL:', data.result.redirectUrl);
         window.open(data.result.redirectUrl, '_blank');
-        setSuccess('Checkout session created! Opening Monime payment page...');
+        setSuccess(`Checkout session created! Order: ${data.result.orderNumber || 'N/A'}`);
         setTimeout(() => setSuccess(null), 5000);
       } else {
-        throw new Error('No checkout URL returned from Monime');
+        console.error('[Monime Test] No redirect URL in response');
+        throw new Error('No checkout URL returned from Monime. Response: ' + JSON.stringify(data));
       }
     } catch (err: any) {
-      setError('Test payment failed: ' + (err.message || 'Unknown error'));
+      console.error('[Monime Test] Error:', err);
+      const errorMessage = err.message || 'Unknown error';
+      setError(`Monime Error: ${errorMessage}`);
     } finally {
       setTesting(false);
     }
