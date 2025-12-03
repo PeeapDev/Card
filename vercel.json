@@ -5,12 +5,11 @@
   "outputDirectory": "apps/web/dist",
   "framework": "vite",
   "functions": {
-    "apps/web/api/**/*.ts": {
+    "api/**/*.ts": {
       "runtime": "@vercel/node@3.2.0"
     }
   },
   "rewrites": [
-    { "source": "/api/:path*", "destination": "/apps/web/api/:path*" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
