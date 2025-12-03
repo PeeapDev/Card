@@ -41,6 +41,7 @@ import { ProfileAvatar } from '@/components/ui/ProfileAvatar';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { qrEngine, QRValidationResult } from '@/services/qr-engine';
+import { currencyService, Currency } from '@/services/currency.service';
 
 interface Recipient {
   id: string;
@@ -99,6 +100,21 @@ export function SendMoneyPage() {
 
   // Recent transfers
   const [recentTransfers, setRecentTransfers] = useState<RecentTransfer[]>([]);
+
+  // Currency state
+  const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
+
+  useEffect(() => {
+    currencyService.getDefaultCurrency().then(setDefaultCurrency);
+  }, []);
+
+  // Get currency symbol
+  const currencySymbol = defaultCurrency?.symbol || '';
+
+  // Format amount with currency
+  const formatCurrency = (amt: number): string => {
+    return `${currencySymbol}${amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
 
   useEffect(() => {
     if (user?.id) {
@@ -450,7 +466,7 @@ export function SendMoneyPage() {
             <div>
               <p className="text-sm text-primary-100">Available Balance</p>
               <p className="text-3xl font-bold">
-                ${walletBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                {formatCurrency(walletBalance)}
               </p>
             </div>
             <div className="p-3 bg-white/20 rounded-xl">
@@ -664,7 +680,7 @@ export function SendMoneyPage() {
                     disabled={quickAmount > walletBalance}
                     className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 font-medium"
                   >
-                    ${quickAmount}
+                    {currencySymbol}{quickAmount}
                   </button>
                 ))}
               </div>
@@ -674,12 +690,12 @@ export function SendMoneyPage() {
                 <div className="mt-4 p-3 bg-gray-50 rounded-lg">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-500">Transfer fee (1%)</span>
-                    <span className="text-gray-700">${fee.toFixed(2)}</span>
+                    <span className="text-gray-700">{formatCurrency(fee)}</span>
                   </div>
                   <div className="flex justify-between text-sm mt-1">
                     <span className="text-gray-500">Recipient receives</span>
                     <span className="font-medium text-gray-900">
-                      ${(parseFloat(amount) - fee).toFixed(2)}
+                      {formatCurrency(parseFloat(amount) - fee)}
                     </span>
                   </div>
                 </div>
@@ -732,10 +748,10 @@ export function SendMoneyPage() {
             {/* Amount Display */}
             <div className="text-center py-4">
               <p className="text-4xl font-bold text-primary-600">
-                ${parseFloat(amount).toFixed(2)}
+                {formatCurrency(parseFloat(amount))}
               </p>
               <p className="text-sm text-gray-500 mt-1">
-                Recipient receives ${(parseFloat(amount) - fee).toFixed(2)}
+                Recipient receives {formatCurrency(parseFloat(amount) - fee)}
               </p>
             </div>
 
@@ -753,11 +769,11 @@ export function SendMoneyPage() {
               )}
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">Amount</span>
-                <span className="font-medium">${parseFloat(amount).toFixed(2)}</span>
+                <span className="font-medium">{formatCurrency(parseFloat(amount))}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">Fee</span>
-                <span className="text-gray-700">${fee.toFixed(2)}</span>
+                <span className="text-gray-700">{formatCurrency(fee)}</span>
               </div>
               {note && (
                 <div className="border-t border-gray-200 pt-3">
@@ -813,7 +829,7 @@ export function SendMoneyPage() {
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900">Transfer Successful!</h2>
                   <p className="text-gray-500 mt-2">
-                    You sent ${parseFloat(amount).toFixed(2)} to {recipient?.name}
+                    You sent {formatCurrency(parseFloat(amount))} to {recipient?.name}
                   </p>
                 </div>
                 {result.transactionId && (

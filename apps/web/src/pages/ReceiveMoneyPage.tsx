@@ -24,6 +24,7 @@ import { PaymentQRCode } from '@/components/payment/PaymentQRCode';
 import { NFCPayment } from '@/components/payment/NFCPayment';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { currencyService, Currency } from '@/services/currency.service';
 
 type ReceiveMethod = 'qr' | 'nfc' | 'link';
 
@@ -39,6 +40,19 @@ export function ReceiveMoneyPage() {
   const [showAmountInput, setShowAmountInput] = useState(false);
   const [walletLoading, setWalletLoading] = useState(true);
   const [walletError, setWalletError] = useState<string | null>(null);
+
+  // Currency state
+  const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
+
+  useEffect(() => {
+    currencyService.getDefaultCurrency().then(setDefaultCurrency);
+  }, []);
+
+  const currencySymbol = defaultCurrency?.symbol || '';
+
+  const formatCurrency = (amount: number): string => {
+    return `${currencySymbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
 
   useEffect(() => {
     if (user?.id) {
@@ -103,7 +117,7 @@ export function ReceiveMoneyPage() {
       try {
         await navigator.share({
           title: 'Payment Request',
-          text: amount ? `Pay me $${amount}` : 'Send me money',
+          text: amount ? `Pay me ${currencySymbol}${amount}` : 'Send me money',
           url: link,
         });
       } catch {
@@ -129,7 +143,7 @@ export function ReceiveMoneyPage() {
             <div>
               <p className="text-sm text-green-100">Current Balance</p>
               <p className="text-3xl font-bold">
-                ${walletBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                {formatCurrency(walletBalance)}
               </p>
             </div>
             <div className="p-3 bg-white/20 rounded-xl">
@@ -327,7 +341,7 @@ export function ReceiveMoneyPage() {
                 <div className="text-center p-4 bg-green-50 rounded-lg">
                   <p className="text-sm text-green-600">Requesting</p>
                   <p className="text-2xl font-bold text-green-700">
-                    ${parsedAmount.toFixed(2)}
+                    {formatCurrency(parsedAmount)}
                   </p>
                 </div>
               )}

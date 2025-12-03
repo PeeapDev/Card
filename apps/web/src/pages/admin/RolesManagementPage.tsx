@@ -136,13 +136,16 @@ export function RolesManagementPage() {
   const fetchRoleCounts = async () => {
     setLoading(true);
     try {
-      // Get user counts per role
-      const { data: users } = await supabase.from('users').select('role');
+      // Get user counts per role - database uses 'roles' column (comma-separated)
+      const { data: users } = await supabase.from('users').select('roles');
 
       const roleCounts = new Map<string, number>();
       users?.forEach(user => {
-        const role = user.role || 'user';
-        roleCounts.set(role, (roleCounts.get(role) || 0) + 1);
+        // Handle comma-separated roles like "superadmin,admin"
+        const userRoles = (user.roles || 'user').split(',').map((r: string) => r.trim());
+        userRoles.forEach((role: string) => {
+          roleCounts.set(role, (roleCounts.get(role) || 0) + 1);
+        });
       });
 
       setRoles(prev => prev.map(role => ({

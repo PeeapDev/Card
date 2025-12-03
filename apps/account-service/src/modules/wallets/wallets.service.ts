@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, EntityManager } from 'typeorm';
-import { Wallet, WalletStatus } from '@payment-system/database';
+import { Wallet, WalletStatus, WalletOwnerType } from '@payment-system/database';
 import { LedgerService } from '../ledger/ledger.service';
 import { CreateWalletDto } from './dto/create-wallet.dto';
 import { TopUpWalletDto } from './dto/topup-wallet.dto';
@@ -26,7 +26,7 @@ export class WalletsService {
   async createWallet(userId: string, dto: CreateWalletDto): Promise<Wallet> {
     // Check if user already has a wallet for this currency
     const existingWallet = await this.walletRepository.findOne({
-      where: { userId, currencyCode: dto.currencyCode },
+      where: { ownerId: userId, ownerType: WalletOwnerType.USER, currencyCode: dto.currencyCode },
     });
 
     if (existingWallet) {
@@ -36,7 +36,9 @@ export class WalletsService {
     }
 
     const wallet = this.walletRepository.create({
-      userId,
+      ownerId: userId,
+      ownerType: WalletOwnerType.USER,
+      externalId: `wallet_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       currencyCode: dto.currencyCode,
       availableBalance: 0,
       heldBalance: 0,
@@ -67,7 +69,7 @@ export class WalletsService {
 
   async getWalletByUser(userId: string, currencyCode: string = 'USD'): Promise<Wallet> {
     const wallet = await this.walletRepository.findOne({
-      where: { userId, currencyCode },
+      where: { ownerId: userId, ownerType: WalletOwnerType.USER, currencyCode },
     });
 
     if (!wallet) {
@@ -79,7 +81,7 @@ export class WalletsService {
 
   async getUserWallets(userId: string): Promise<Wallet[]> {
     return this.walletRepository.find({
-      where: { userId },
+      where: { ownerId: userId, ownerType: WalletOwnerType.USER },
       order: { currencyCode: 'ASC' },
     });
   }
@@ -280,7 +282,7 @@ export class WalletsService {
   async suspendWallet(walletId: string, reason: string): Promise<Wallet> {
     const wallet = await this.getWallet(walletId);
 
-    wallet.status = WalletStatus.SUSPENDED;
+    wallet.status = WalletStatus.FROZEN;
     await this.walletRepository.save(wallet);
 
     this.logger.warn(`Wallet ${walletId} suspended: ${reason}`);

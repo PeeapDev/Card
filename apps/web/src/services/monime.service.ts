@@ -5,6 +5,7 @@
  */
 
 import { api } from '@/lib/api';
+import { toMinorUnits as toMinor, fromMinorUnits as fromMinor } from '@/lib/currency';
 
 // Types
 export type DepositMethod = 'CHECKOUT_SESSION' | 'PAYMENT_CODE' | 'MOBILE_MONEY';
@@ -75,6 +76,7 @@ export interface MonimeTransaction {
   status: MonimeTransactionStatus;
   monimeReference: string;
   walletId: string;
+  userId?: string;
   amount: number;
   currency: string;
   fee?: number;
@@ -99,11 +101,9 @@ export interface Bank {
   payoutSupported: boolean;
 }
 
-// Helper to convert amount to minor units
-export const toMinorUnits = (amount: number): number => Math.round(amount * 100);
-
-// Helper to convert from minor units to display amount
-export const fromMinorUnits = (amount: number): number => amount / 100;
+// Re-export currency utilities for backwards compatibility
+export const toMinorUnits = toMinor;
+export const fromMinorUnits = fromMinor;
 
 export const monimeService = {
   /**
@@ -225,5 +225,18 @@ export const monimeService = {
   dialUssd(ussdCode: string): void {
     const formatted = ussdCode.replace('#', '%23'); // URL encode hash
     window.location.href = `tel:${formatted}`;
+  },
+
+  /**
+   * Get all deposits (admin)
+   */
+  async getAllDeposits(limit: number = 50, offset: number = 0): Promise<{
+    data: MonimeTransaction[];
+    total: number;
+  }> {
+    const response = await api.get<{ data: MonimeTransaction[]; total: number }>(
+      `/monime/deposits?limit=${limit}&offset=${offset}`
+    );
+    return response;
   },
 };

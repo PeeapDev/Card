@@ -25,11 +25,11 @@ interface Agent {
   first_name: string;
   last_name: string;
   phone: string;
-  is_active: boolean;
+  status: string; // Database uses 'ACTIVE', 'INACTIVE', etc.
   created_at: string;
   tickets_resolved?: number;
   avg_rating?: number;
-  status?: 'online' | 'offline' | 'busy';
+  online_status?: 'online' | 'offline' | 'busy';
 }
 
 export function AgentsManagementPage() {
@@ -45,10 +45,11 @@ export function AgentsManagementPage() {
   const fetchAgents = async () => {
     setLoading(true);
     try {
+      // Database uses 'roles' column (plural), may contain comma-separated values
       const { data, error } = await supabase
         .from('users')
         .select('*')
-        .eq('role', 'agent')
+        .ilike('roles', '%agent%')
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -70,33 +71,37 @@ export function AgentsManagementPage() {
       agent.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       `${agent.first_name} ${agent.last_name}`.toLowerCase().includes(searchTerm.toLowerCase());
 
+    const isActive = agent.status === 'ACTIVE';
     const matchesStatus = statusFilter === 'all' ||
-      (statusFilter === 'active' && agent.is_active) ||
-      (statusFilter === 'inactive' && !agent.is_active) ||
-      (statusFilter === 'online' && agent.status === 'online');
+      (statusFilter === 'active' && isActive) ||
+      (statusFilter === 'inactive' && !isActive) ||
+      (statusFilter === 'online' && agent.online_status === 'online');
 
     return matchesSearch && matchesStatus;
   });
 
-  const getStatusBadge = (status?: string, isActive?: boolean) => {
+  const getStatusBadge = (onlineStatus?: string, dbStatus?: string) => {
+    const isActive = dbStatus === 'ACTIVE';
     if (!isActive) {
       return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">Inactive</span>;
     }
-    switch (status) {
+    switch (onlineStatus) {
       case 'online':
         return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700"><span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" /> Online</span>;
       case 'busy':
         return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700"><span className="w-2 h-2 bg-yellow-500 rounded-full" /> Busy</span>;
       default:
-        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600"><span className="w-2 h-2 bg-gray-400 rounded-full" /> Offline</span>;
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-600"><span className="w-2 h-2 bg-green-400 rounded-full" /> Active</span>;
     }
   };
 
   const toggleAgentStatus = async (agentId: string, currentStatus: boolean) => {
     try {
+      // Database uses 'status' column ('ACTIVE' or 'INACTIVE'), not 'is_active'
+      const newStatus = currentStatus ? 'INACTIVE' : 'ACTIVE';
       const { error } = await supabase
         .from('users')
-        .update({ is_active: !currentStatus })
+        .update({ status: newStatus })
         .eq('id', agentId);
 
       if (error) {
@@ -254,7 +259,7 @@ export function AgentsManagementPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      {getStatusBadge(agent.status, agent.is_active)}
+                      {getStatusBadge(agent.online_status, agent.status)}
                     </td>
                     <td className="px-6 py-4">
                       <div className="space-y-1">
@@ -285,11 +290,11 @@ export function AgentsManagementPage() {
                           <MessageSquare className="w-4 h-4 text-gray-500" />
                         </button>
                         <button
-                          onClick={() => toggleAgentStatus(agent.id, agent.is_active)}
-                          className={`p-2 hover:bg-gray-100 rounded-lg ${agent.is_active ? 'text-red-500' : 'text-green-500'}`}
-                          title={agent.is_active ? 'Deactivate' : 'Activate'}
+                          onClick={() => toggleAgentStatus(agent.id, agent.status === 'ACTIVE')}
+                          className={`p-2 hover:bg-gray-100 rounded-lg ${agent.status === 'ACTIVE' ? 'text-red-500' : 'text-green-500'}`}
+                          title={agent.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
                         >
-                          {agent.is_active ? <Ban className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                          {agent.status === 'ACTIVE' ? <Ban className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
                         </button>
                       </div>
                     </td>

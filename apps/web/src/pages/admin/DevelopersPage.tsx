@@ -42,95 +42,11 @@ interface DocSection {
   status: 'published' | 'draft';
 }
 
-const mockSDKs: SDKVersion[] = [
-  {
-    id: '1',
-    name: 'JavaScript/TypeScript SDK',
-    version: '1.0.0',
-    language: 'javascript',
-    size: '245 KB',
-    downloads: 1234,
-    updatedAt: '2024-01-15',
-    downloadUrl: '/sdk/cardpay-sdk-1.0.0.tgz',
-    isActive: true,
-  },
-  {
-    id: '2',
-    name: 'Python SDK',
-    version: '1.0.0',
-    language: 'python',
-    size: '180 KB',
-    downloads: 856,
-    updatedAt: '2024-01-15',
-    downloadUrl: '/sdk/cardpay-sdk-1.0.0.tar.gz',
-    isActive: true,
-  },
-  {
-    id: '3',
-    name: 'PHP SDK',
-    version: '1.0.0',
-    language: 'php',
-    size: '156 KB',
-    downloads: 432,
-    updatedAt: '2024-01-15',
-    downloadUrl: '/sdk/cardpay-sdk-1.0.0.zip',
-    isActive: true,
-  },
-  {
-    id: '4',
-    name: 'Go SDK',
-    version: '0.9.0',
-    language: 'go',
-    size: '312 KB',
-    downloads: 287,
-    updatedAt: '2024-01-10',
-    downloadUrl: '/sdk/cardpay-sdk-0.9.0.tar.gz',
-    isActive: false,
-  },
-];
-
-const mockDocs: DocSection[] = [
-  {
-    id: '1',
-    title: 'Getting Started',
-    description: 'Introduction to the SDK and quick start guide',
-    lastUpdated: '2024-01-15',
-    status: 'published',
-  },
-  {
-    id: '2',
-    title: 'Authentication',
-    description: 'API key management and authentication flows',
-    lastUpdated: '2024-01-14',
-    status: 'published',
-  },
-  {
-    id: '3',
-    title: 'Payments API',
-    description: 'Processing payments, refunds, and captures',
-    lastUpdated: '2024-01-13',
-    status: 'published',
-  },
-  {
-    id: '4',
-    title: 'Webhooks',
-    description: 'Setting up and handling webhook events',
-    lastUpdated: '2024-01-12',
-    status: 'published',
-  },
-  {
-    id: '5',
-    title: 'Error Handling',
-    description: 'Error codes and troubleshooting guide',
-    lastUpdated: '2024-01-10',
-    status: 'draft',
-  },
-];
 
 export function DevelopersPage() {
   const [activeTab, setActiveTab] = useState<'sdks' | 'docs' | 'settings'>('sdks');
-  const [sdks, setSDKs] = useState<SDKVersion[]>(mockSDKs);
-  const [docs, setDocs] = useState<DocSection[]>(mockDocs);
+  const [sdks, setSDKs] = useState<SDKVersion[]>([]);
+  const [docs, setDocs] = useState<DocSection[]>([]);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showDocEditor, setShowDocEditor] = useState(false);
   const [editingDoc, setEditingDoc] = useState<DocSection | null>(null);

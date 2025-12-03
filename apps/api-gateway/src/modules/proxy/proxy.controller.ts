@@ -29,6 +29,7 @@ const SERVICE_ROUTES: Record<string, { service: string; requiresAuth: boolean }>
   // Account Service
   'wallets': { service: 'account', requiresAuth: true },
   'ledger': { service: 'account', requiresAuth: true },
+  'monime': { service: 'account', requiresAuth: true },
 
   // Card Service
   'cards': { service: 'card', requiresAuth: true },

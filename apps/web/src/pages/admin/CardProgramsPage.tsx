@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Layers,
   Plus,
@@ -21,6 +21,7 @@ import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { useCardTypes, useCreateCardType, useUpdateCardType, useDeleteCardType } from '@/hooks/useCards';
 import type { CardType, CreateCardTypeRequest } from '@/services/card.service';
+import { currencyService, Currency } from '@/services/currency.service';
 
 // Predefined gradient options
 const GRADIENT_OPTIONS = [
@@ -117,6 +118,19 @@ export function CardProgramsPage() {
   const [newFeatureText, setNewFeatureText] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
+  // Currency state
+  const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
+
+  useEffect(() => {
+    currencyService.getDefaultCurrency().then(setDefaultCurrency);
+  }, []);
+
+  const currencySymbol = defaultCurrency?.symbol || '';
+
+  const formatCurrency = (amount: number): string => {
+    return `${currencySymbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
   // Hooks
   const { data: cardTypes, isLoading } = useCardTypes(true);
   const createCardType = useCreateCardType();
@@ -184,9 +198,10 @@ export function CardProgramsPage() {
       setShowModal(false);
       setEditingCard(null);
       setFormData(DEFAULT_FORM);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving card program:', error);
-      alert('Failed to save card program. Please try again.');
+      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      alert(`Failed to save card program: ${errorMessage}`);
     }
   };
 
@@ -239,14 +254,6 @@ export function CardProgramsPage() {
     }
     return true;
   }) || [];
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-SL', {
-      style: 'currency',
-      currency: 'SLE',
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
 
   // Get active features for display
   const getActiveFeatures = (cardType: CardType) => {
@@ -537,7 +544,7 @@ export function CardProgramsPage() {
                       </div>
                       <div className="flex justify-between items-end">
                         <p className="text-xl font-bold">
-                          {formData.price === 0 ? 'FREE' : `SLE ${formData.price}`}
+                          {formData.price === 0 ? 'FREE' : `${currencySymbol}${formData.price}`}
                         </p>
                         <p className="text-sm opacity-70">KYC {formData.requiredKycLevel}</p>
                       </div>

@@ -33,3 +33,5 @@ coverage/
 # Misc
 *.tgz
 .turbo
+.vercel
+.env*.local

@@ -16,6 +16,7 @@ import {
   QrCode,
 } from 'lucide-react';
 import { qrEngine, GeneratedQR } from '@/services/qr-engine';
+import { currencyService, Currency } from '@/services/currency.service';
 
 interface PaymentQRCodeProps {
   userId: string;
@@ -26,6 +27,7 @@ interface PaymentQRCodeProps {
   merchantName?: string;
   onGenerated?: (qr: GeneratedQR) => void;
   size?: number;
+  currency?: string;
 }
 
 export function PaymentQRCode({
@@ -37,12 +39,28 @@ export function PaymentQRCode({
   merchantName,
   onGenerated,
   size = 200,
+  currency,
 }: PaymentQRCodeProps) {
   const [qrData, setQrData] = useState<GeneratedQR | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [currencySymbol, setCurrencySymbol] = useState<string>('');
+
+  // Fetch currency symbol
+  useEffect(() => {
+    const fetchSymbol = async () => {
+      if (currency) {
+        const sym = await currencyService.getCurrencySymbol(currency);
+        setCurrencySymbol(sym);
+      } else {
+        const defaultCurrency = await currencyService.getDefaultCurrency();
+        setCurrencySymbol(defaultCurrency.symbol);
+      }
+    };
+    fetchSymbol();
+  }, [currency]);
 
   const generateQR = async () => {
     setLoading(true);
@@ -122,7 +140,7 @@ export function PaymentQRCode({
       try {
         await navigator.share({
           title: 'Payment Request',
-          text: amount ? `Pay $${amount.toFixed(2)}` : 'Send me money',
+          text: amount ? `Pay ${currencySymbol}${amount.toFixed(2)}` : 'Send me money',
           url: qrData.deepLink,
         });
       } catch (error) {
@@ -165,7 +183,7 @@ export function PaymentQRCode({
         <div className="mb-4 text-center">
           <p className="text-sm text-gray-500">Amount to receive</p>
           <p className="text-3xl font-bold text-gray-900">
-            ${amount.toFixed(2)}
+            {currencySymbol}{amount.toFixed(2)}
           </p>
         </div>
       )}

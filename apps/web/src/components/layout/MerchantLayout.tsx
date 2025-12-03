@@ -1,4 +1,4 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import {
@@ -17,6 +17,11 @@ import {
   HelpCircle,
   Code2,
   ExternalLink,
+  Link2,
+  User,
+  Building2,
+  Sparkles,
+  Crown,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useDeveloperMode } from '@/context/DeveloperModeContext';
@@ -27,18 +32,25 @@ interface MerchantLayoutProps {
 
 const navItems = [
   { path: '/merchant', label: 'Dashboard', icon: LayoutDashboard },
+  { path: '/merchant/shops', label: 'My Shops', icon: Building2 },
   { path: '/merchant/transactions', label: 'Transactions', icon: ArrowLeftRight },
   { path: '/merchant/payouts', label: 'Payouts', icon: DollarSign },
   { path: '/merchant/refunds', label: 'Refunds', icon: RefreshCw },
   { path: '/merchant/reports', label: 'Reports', icon: BarChart3 },
-  { path: '/merchant/payment-links', label: 'Payment Links', icon: CreditCard },
+  { path: '/merchant/payment-links', label: 'Payment Links', icon: Link2 },
+  { path: '/merchant/profile', label: 'Business Profile', icon: Store },
   { path: '/merchant/settings', label: 'Settings', icon: Settings },
 ];
 
 export function MerchantLayout({ children }: MerchantLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, logout } = useAuth();
-  const { isDeveloperMode } = useDeveloperMode();
+  const { isDeveloperMode, checkBusinesses, hasBusinesses, businessCount } = useDeveloperMode();
+
+  // Check for businesses when layout mounts
+  useEffect(() => {
+    checkBusinesses();
+  }, []);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -166,10 +178,18 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
             >
               <Menu className="w-6 h-6" />
             </button>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-4">
               <span className="hidden sm:inline-flex px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
                 Merchant Portal
               </span>
+              {/* Merchant+ Upgrade Button */}
+              <Link
+                to="/merchant/upgrade"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-full text-xs font-medium hover:from-amber-600 hover:to-orange-600 transition-all shadow-sm"
+              >
+                <Crown className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Upgrade to</span> Merchant+
+              </Link>
               {isDeveloperMode && (
                 <Link
                   to="/merchant/developer"

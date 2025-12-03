@@ -8,6 +8,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { currencyService } from './currency.service';
 
 export interface QRPaymentData {
   type: 'payment' | 'request' | 'merchant';
@@ -119,19 +120,22 @@ class QREngineService {
   /**
    * Generate a static QR code for receiving payments (no amount)
    */
-  async generateStaticQR(userId: string, walletId: string): Promise<GeneratedQR> {
+  async generateStaticQR(userId: string, walletId: string, currency?: string): Promise<GeneratedQR> {
     if (!userId || !walletId) {
       throw new Error('userId and walletId are required');
     }
 
     const reference = this.generateReference();
 
+    // Get default currency if not provided
+    const defaultCurrency = currency || (await currencyService.getDefaultCurrency()).code;
+
     const data: QRPaymentData = {
       type: 'payment',
       version: this.QR_VERSION,
       userId,
       walletId,
-      currency: 'USD',
+      currency: defaultCurrency,
       reference,
     };
 
@@ -169,7 +173,8 @@ class QREngineService {
     walletId: string,
     amount: number,
     description?: string,
-    expirationMinutes: number = 15
+    expirationMinutes: number = 15,
+    currency?: string
   ): Promise<GeneratedQR> {
     if (!userId || !walletId) {
       throw new Error('userId and walletId are required');
@@ -178,13 +183,16 @@ class QREngineService {
     const reference = this.generateReference();
     const expiresAt = this.getExpiration(expirationMinutes);
 
+    // Get default currency if not provided
+    const defaultCurrency = currency || (await currencyService.getDefaultCurrency()).code;
+
     const data: QRPaymentData = {
       type: 'request',
       version: this.QR_VERSION,
       userId,
       walletId,
       amount,
-      currency: 'USD',
+      currency: defaultCurrency,
       reference,
       expiresAt,
       description,
@@ -225,10 +233,14 @@ class QREngineService {
     userId: string,
     walletId: string,
     merchantName: string,
-    amount?: number
+    amount?: number,
+    currency?: string
   ): Promise<GeneratedQR> {
     const reference = this.generateReference();
     const expiresAt = amount ? this.getExpiration(60) : ''; // 1 hour for amount-specific
+
+    // Get default currency if not provided
+    const defaultCurrency = currency || (await currencyService.getDefaultCurrency()).code;
 
     const data: QRPaymentData = {
       type: 'merchant',
@@ -236,7 +248,7 @@ class QREngineService {
       userId,
       walletId,
       amount,
-      currency: 'USD',
+      currency: defaultCurrency,
       reference,
       expiresAt: expiresAt || undefined,
       merchantName,

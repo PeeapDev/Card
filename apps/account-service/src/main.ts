@@ -9,10 +9,10 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService);
 
+  // Validation pipe - disabled whitelist for users endpoint
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
+      whitelist: false,
       transform: true,
       transformOptions: {
         enableImplicitConversion: true,

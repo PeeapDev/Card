@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Wallet, Plus, ArrowDownRight, ArrowUpRight, MoreVertical, Snowflake, Send, QrCode, Copy, CheckCircle, Search, User, X, AlertCircle, PiggyBank, ChevronDown } from 'lucide-react';
+import { Wallet, Plus, ArrowDownRight, ArrowUpRight, MoreVertical, Snowflake, Send, QrCode, Copy, CheckCircle, Search, User, X, AlertCircle, PiggyBank, ChevronDown, Loader2 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, Button } from '@/components/ui';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { CreatePotModal } from '@/components/pots';
@@ -8,6 +8,10 @@ import { useWallets, useCreateWallet, useDeposit, useTransfer, useFreezeWallet, 
 import { clsx } from 'clsx';
 import type { Wallet as WalletType } from '@/types';
 import { supabase } from '@/lib/supabase';
+import { monimeService, toMinorUnits } from '@/services/monime.service';
+import { PaymentQRCode } from '@/components/payment/PaymentQRCode';
+import { useAuth } from '@/context/AuthContext';
+import { currencyService, Currency } from '@/services/currency.service';
 
 interface Recipient {
   id: string;
@@ -19,12 +23,31 @@ interface Recipient {
 
 export function WalletsPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { data: wallets, isLoading } = useWallets();
   const createWallet = useCreateWallet();
   const deposit = useDeposit();
   const transfer = useTransfer();
   const freezeWallet = useFreezeWallet();
   const unfreezeWallet = useUnfreezeWallet();
+
+  // Currencies for formatting
+  const [currencies, setCurrencies] = useState<Currency[]>([]);
+
+  useEffect(() => {
+    currencyService.getCurrencies().then(setCurrencies);
+  }, []);
+
+  // Get currency symbol by code
+  const getCurrencySymbol = (code: string): string => {
+    return currencies.find(c => c.code === code)?.symbol || code;
+  };
+
+  // Format amount with correct currency symbol
+  const formatCurrency = (amount: number, currencyCode: string): string => {
+    const symbol = getCurrencySymbol(currencyCode);
+    return `${symbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
 
   const [showCreateDropdown, setShowCreateDropdown] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -34,6 +57,8 @@ export function WalletsPage() {
   const [showReceiveModal, setShowReceiveModal] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState<WalletType | null>(null);
   const [depositAmount, setDepositAmount] = useState('');
+  const [depositLoading, setDepositLoading] = useState(false);
+  const [depositError, setDepositError] = useState('');
 
   // Transfer state
   const [transferAmount, setTransferAmount] = useState('');
@@ -144,16 +169,40 @@ export function WalletsPage() {
 
   const handleDeposit = async () => {
     if (!selectedWallet || !depositAmount) return;
+
+    const amount = parseFloat(depositAmount);
+    if (amount <= 0) {
+      setDepositError('Amount must be greater than 0');
+      return;
+    }
+
+    setDepositLoading(true);
+    setDepositError('');
+
     try {
-      await deposit.mutateAsync({
+      // Convert to minor units (cents) for Monime
+      const amountInMinorUnits = toMinorUnits(amount);
+
+      // Initiate deposit via Monime checkout
+      const response = await monimeService.initiateDeposit({
         walletId: selectedWallet.id,
-        amount: parseFloat(depositAmount),
+        amount: amountInMinorUnits,
+        currency: 'SLE',
+        method: 'CHECKOUT_SESSION',
+        description: `Deposit to ${selectedWallet.currency} wallet`,
       });
-      setShowDepositModal(false);
-      setDepositAmount('');
-      setSelectedWallet(null);
-    } catch (error) {
-      console.error('Failed to deposit:', error);
+
+      if (response.paymentUrl) {
+        // Redirect to Monime checkout page
+        window.location.href = response.paymentUrl;
+      } else {
+        setDepositError('Failed to get payment URL. Please try again.');
+      }
+    } catch (error: any) {
+      console.error('Failed to initiate deposit:', error);
+      setDepositError(error.message || 'Failed to initiate deposit. Please try again.');
+    } finally {
+      setDepositLoading(false);
     }
   };
 
@@ -275,7 +324,7 @@ export function WalletsPage() {
                 <div className="mb-4">
                   <p className="text-sm text-gray-500">Balance</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    ${wallet.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    {formatCurrency(wallet.balance, wallet.currency)}
                   </p>
                 </div>
 
@@ -283,13 +332,13 @@ export function WalletsPage() {
                   <div>
                     <p>Daily Limit</p>
                     <p className="font-medium text-gray-900">
-                      ${wallet.dailyLimit.toLocaleString()}
+                      {formatCurrency(wallet.dailyLimit, wallet.currency)}
                     </p>
                   </div>
                   <div>
                     <p>Monthly Limit</p>
                     <p className="font-medium text-gray-900">
-                      ${wallet.monthlyLimit.toLocaleString()}
+                      {formatCurrency(wallet.monthlyLimit, wallet.currency)}
                     </p>
                   </div>
                 </div>
@@ -320,6 +369,18 @@ export function WalletsPage() {
                   >
                     <ArrowUpRight className="w-4 h-4 mr-1" />
                     Send
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedWallet(wallet);
+                      setShowReceiveModal(true);
+                    }}
+                    disabled={wallet.status !== 'ACTIVE'}
+                    title="Receive Money"
+                  >
+                    <QrCode className="w-4 h-4" />
                   </Button>
                   <Button
                     variant="ghost"
@@ -379,43 +440,123 @@ export function WalletsPage() {
 
       {/* Deposit Modal */}
       {showDepositModal && selectedWallet && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
           <Card className="w-full max-w-md">
-            <CardHeader>
-              <CardTitle>Deposit to Wallet</CardTitle>
-            </CardHeader>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={depositAmount}
-                  onChange={(e) => setDepositAmount(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  placeholder="0.00"
-                />
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <ArrowDownRight className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Add Funds</h2>
+                  <p className="text-sm text-gray-500">Deposit to {selectedWallet.currency} Wallet</p>
+                </div>
               </div>
-              <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowDepositModal(false);
+                  setDepositAmount('');
+                  setDepositError('');
+                  setSelectedWallet(null);
+                }}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Current Balance */}
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <p className="text-sm text-gray-500">Current Balance</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  Le {selectedWallet.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+
+              {/* Amount Input */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Amount to Deposit</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">Le</span>
+                  <input
+                    type="number"
+                    min="1"
+                    step="0.01"
+                    value={depositAmount}
+                    onChange={(e) => {
+                      setDepositAmount(e.target.value);
+                      setDepositError('');
+                    }}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="0.00"
+                    disabled={depositLoading}
+                  />
+                </div>
+                {/* Quick amount buttons */}
+                <div className="flex gap-2 mt-2">
+                  {[10, 50, 100, 500].map((amount) => (
+                    <button
+                      key={amount}
+                      onClick={() => setDepositAmount(amount.toString())}
+                      className="flex-1 px-2 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded text-gray-700"
+                      disabled={depositLoading}
+                    >
+                      Le {amount}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Payment Notice */}
+              <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <ArrowDownRight className="w-4 h-4 text-orange-600 mt-0.5" />
+                  <p className="text-sm text-orange-800">
+                    Add money with Orange Money
+                  </p>
+                </div>
+              </div>
+
+              {/* Error Message */}
+              {depositError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+                  <AlertCircle className="w-4 h-4" />
+                  <span className="text-sm">{depositError}</span>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-2">
                 <Button
                   variant="outline"
                   className="flex-1"
                   onClick={() => {
                     setShowDepositModal(false);
                     setDepositAmount('');
+                    setDepositError('');
                     setSelectedWallet(null);
                   }}
+                  disabled={depositLoading}
                 >
                   Cancel
                 </Button>
                 <Button
                   className="flex-1"
                   onClick={handleDeposit}
-                  isLoading={deposit.isPending}
-                  disabled={!depositAmount || parseFloat(depositAmount) <= 0}
+                  disabled={!depositAmount || parseFloat(depositAmount) <= 0 || depositLoading}
                 >
-                  Deposit
+                  {depositLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <ArrowDownRight className="w-4 h-4 mr-2" />
+                      Deposit Le {depositAmount || '0.00'}
+                    </>
+                  )}
                 </Button>
               </div>
             </div>
@@ -455,7 +596,7 @@ export function WalletsPage() {
                 </div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Transfer Successful!</h3>
                 <p className="text-gray-500">
-                  ${transferAmount} has been sent to {selectedRecipient?.firstName} {selectedRecipient?.lastName}
+                  {getCurrencySymbol(selectedWallet.currency)}{transferAmount} has been sent to {selectedRecipient?.firstName} {selectedRecipient?.lastName}
                 </p>
               </div>
             ) : (
@@ -464,7 +605,7 @@ export function WalletsPage() {
                 <div className="p-4 bg-gray-50 rounded-lg">
                   <p className="text-sm text-gray-500">Available Balance</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    ${selectedWallet.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    {formatCurrency(selectedWallet.balance, selectedWallet.currency)}
                   </p>
                 </div>
 
@@ -544,14 +685,14 @@ export function WalletsPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
+                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">{getCurrencySymbol(selectedWallet.currency)}</span>
                     <input
                       type="number"
                       min="0"
                       step="0.01"
                       value={transferAmount}
                       onChange={(e) => setTransferAmount(e.target.value)}
-                      className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                       placeholder="0.00"
                     />
                   </div>
@@ -563,7 +704,7 @@ export function WalletsPage() {
                         onClick={() => setTransferAmount(amount.toString())}
                         className="flex-1 px-2 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded text-gray-700"
                       >
-                        ${amount}
+                        {getCurrencySymbol(selectedWallet.currency)}{amount}
                       </button>
                     ))}
                   </div>
@@ -610,7 +751,7 @@ export function WalletsPage() {
                     disabled={!selectedRecipient || !transferAmount || parseFloat(transferAmount) <= 0}
                   >
                     <Send className="w-4 h-4 mr-2" />
-                    Send ${transferAmount || '0.00'}
+                    Send {getCurrencySymbol(selectedWallet.currency)}{transferAmount || '0.00'}
                   </Button>
                 </div>
               </div>
@@ -642,12 +783,18 @@ export function WalletsPage() {
             </div>
 
             <div className="space-y-4">
-              {/* QR Code Placeholder */}
-              <div className="flex justify-center p-6 bg-gray-50 rounded-lg">
-                <div className="w-48 h-48 bg-white border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
-                  <QrCode className="w-16 h-16 text-gray-400" />
+              {/* QR Code - Generated for this wallet */}
+              {user && (
+                <div className="flex justify-center p-4 bg-gray-50 rounded-lg">
+                  <PaymentQRCode
+                    userId={user.id}
+                    walletId={selectedWallet.id}
+                    type="static"
+                    size={180}
+                    currency={selectedWallet.currency}
+                  />
                 </div>
-              </div>
+              )}
 
               {/* Wallet ID */}
               <div>
@@ -675,7 +822,7 @@ export function WalletsPage() {
               </div>
 
               <p className="text-sm text-gray-500 text-center">
-                Share this wallet ID with others to receive money
+                Scan this QR code or share your wallet ID to receive money
               </p>
 
               <Button

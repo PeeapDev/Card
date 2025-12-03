@@ -20,6 +20,7 @@ import {
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
+import { useNavigate } from 'react-router-dom';
 
 interface Merchant {
   id: string;
@@ -28,8 +29,9 @@ interface Merchant {
   last_name: string;
   phone: string;
   business_name?: string;
+  business_category_id?: string;
   kyc_status: string;
-  is_active: boolean;
+  status: string; // Database uses 'status' column ('ACTIVE', 'INACTIVE')
   created_at: string;
   subscription_status?: string;
   subscription_plan?: string;
@@ -37,12 +39,11 @@ interface Merchant {
 }
 
 export function MerchantsManagementPage() {
+  const navigate = useNavigate();
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [showMerchantModal, setShowMerchantModal] = useState(false);
-  const [selectedMerchant, setSelectedMerchant] = useState<Merchant | null>(null);
 
   useEffect(() => {
     fetchMerchants();
@@ -51,10 +52,11 @@ export function MerchantsManagementPage() {
   const fetchMerchants = async () => {
     setLoading(true);
     try {
+      // Database uses 'roles' column (plural), may contain comma-separated values
       const { data, error } = await supabase
         .from('users')
         .select('*')
-        .eq('role', 'merchant')
+        .ilike('roles', '%merchant%')
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -75,11 +77,13 @@ export function MerchantsManagementPage() {
     const matchesSearch =
       merchant.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       `${merchant.first_name} ${merchant.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      merchant.phone?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       merchant.business_name?.toLowerCase().includes(searchTerm.toLowerCase());
 
+    const isActive = merchant.status === 'ACTIVE';
     const matchesStatus = statusFilter === 'all' ||
-      (statusFilter === 'active' && merchant.is_active) ||
-      (statusFilter === 'inactive' && !merchant.is_active) ||
+      (statusFilter === 'active' && isActive) ||
+      (statusFilter === 'inactive' && !isActive) ||
       (statusFilter === 'subscribed' && merchant.subscription_status === 'active');
 
     return matchesSearch && matchesStatus;
@@ -103,9 +107,11 @@ export function MerchantsManagementPage() {
 
   const toggleMerchantStatus = async (merchantId: string, currentStatus: boolean) => {
     try {
+      // Database uses 'status' column ('ACTIVE' or 'INACTIVE')
+      const newStatus = currentStatus ? 'INACTIVE' : 'ACTIVE';
       const { error } = await supabase
         .from('users')
-        .update({ is_active: !currentStatus })
+        .update({ status: newStatus })
         .eq('id', merchantId);
 
       if (error) {
@@ -118,6 +124,7 @@ export function MerchantsManagementPage() {
     }
   };
 
+
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -127,7 +134,10 @@ export function MerchantsManagementPage() {
             <h1 className="text-2xl font-bold text-gray-900">Merchant Management</h1>
             <p className="text-gray-500">Manage merchant accounts, subscriptions and settings</p>
           </div>
-          <button className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2">
+          <button
+            onClick={() => navigate('/admin/merchants/create')}
+            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2"
+          >
             <Plus className="w-4 h-4" />
             Add Merchant
           </button>
@@ -153,7 +163,7 @@ export function MerchantsManagementPage() {
               </div>
               <div>
                 <p className="text-sm text-gray-500">Active</p>
-                <p className="text-xl font-semibold">{merchants.filter(m => m.is_active).length}</p>
+                <p className="text-xl font-semibold">{merchants.filter(m => m.status === 'ACTIVE').length}</p>
               </div>
             </div>
           </Card>
@@ -188,7 +198,7 @@ export function MerchantsManagementPage() {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search merchants by name, email or business..."
+                placeholder="Search by name, business, email or phone..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
@@ -239,8 +249,11 @@ export function MerchantsManagementPage() {
                           <Store className="w-5 h-5 text-green-600" />
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900">{merchant.business_name || `${merchant.first_name} ${merchant.last_name}`}</p>
-                          <p className="text-sm text-gray-500">{merchant.first_name} {merchant.last_name}</p>
+                          <p className="font-medium text-gray-900">{merchant.first_name} {merchant.last_name}</p>
+                          {merchant.business_name && (
+                            <p className="text-sm text-primary-600 font-medium">{merchant.business_name}</p>
+                          )}
+                          <p className="text-sm text-gray-500">{merchant.email}</p>
                         </div>
                       </div>
                     </td>
@@ -263,9 +276,9 @@ export function MerchantsManagementPage() {
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                        merchant.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        merchant.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                       }`}>
-                        {merchant.is_active ? 'Active' : 'Inactive'}
+                        {merchant.status === 'ACTIVE' ? 'Active' : 'Inactive'}
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -285,11 +298,11 @@ export function MerchantsManagementPage() {
                           <Settings className="w-4 h-4 text-gray-500" />
                         </button>
                         <button
-                          onClick={() => toggleMerchantStatus(merchant.id, merchant.is_active)}
-                          className={`p-2 hover:bg-gray-100 rounded-lg ${merchant.is_active ? 'text-red-500' : 'text-green-500'}`}
-                          title={merchant.is_active ? 'Deactivate' : 'Activate'}
+                          onClick={() => toggleMerchantStatus(merchant.id, merchant.status === 'ACTIVE')}
+                          className={`p-2 hover:bg-gray-100 rounded-lg ${merchant.status === 'ACTIVE' ? 'text-red-500' : 'text-green-500'}`}
+                          title={merchant.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
                         >
-                          {merchant.is_active ? <Ban className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                          {merchant.status === 'ACTIVE' ? <Ban className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
                         </button>
                       </div>
                     </td>

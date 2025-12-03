@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Store,
   DollarSign,
@@ -13,24 +13,31 @@ import {
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
+import { currencyService, Currency } from '@/services/currency.service';
 
 export function MerchantDashboard() {
+  // Currency state
+  const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
+
+  useEffect(() => {
+    currencyService.getDefaultCurrency().then(setDefaultCurrency);
+  }, []);
+
+  const currencySymbol = defaultCurrency?.symbol || '';
+
+  const formatCurrency = (amount: number): string => {
+    return `${currencySymbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
   const [stats] = useState({
-    todayRevenue: 4567.89,
-    monthlyRevenue: 125430.50,
-    totalTransactions: 1234,
-    avgTicket: 45.67,
-    successRate: 98.5,
-    pendingPayouts: 8456.23,
+    todayRevenue: 0,
+    monthlyRevenue: 0,
+    totalTransactions: 0,
+    avgTicket: 0,
+    successRate: 0,
+    pendingPayouts: 0,
   });
 
-  const [recentTransactions] = useState([
-    { id: 'TXN001', amount: 125.00, status: 'completed', time: '2 mins ago', cardLast4: '4242' },
-    { id: 'TXN002', amount: 89.99, status: 'completed', time: '5 mins ago', cardLast4: '1234' },
-    { id: 'TXN003', amount: 250.00, status: 'pending', time: '12 mins ago', cardLast4: '5678' },
-    { id: 'TXN004', amount: 45.50, status: 'completed', time: '25 mins ago', cardLast4: '9012' },
-    { id: 'TXN005', amount: 199.99, status: 'refunded', time: '1 hour ago', cardLast4: '3456' },
-  ]);
+  const [recentTransactions] = useState<{id: string; amount: number; status: string; time: string; cardLast4: string}[]>([]);
 
   return (
     <MerchantLayout>
@@ -39,7 +46,7 @@ export function MerchantDashboard() {
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Merchant Dashboard</h1>
-            <p className="text-gray-500">Welcome back, Acme Store</p>
+            <p className="text-gray-500">Overview of your merchant account</p>
           </div>
           <div className="flex gap-3">
             <button className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
@@ -59,7 +66,7 @@ export function MerchantDashboard() {
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-green-100 text-sm font-medium">Today's Revenue</p>
-                <p className="text-3xl font-bold mt-2">${stats.todayRevenue.toLocaleString()}</p>
+                <p className="text-3xl font-bold mt-2">{formatCurrency(stats.todayRevenue)}</p>
                 <div className="flex items-center gap-1 mt-2 text-green-100">
                   <ArrowUpRight className="w-4 h-4" />
                   <span className="text-sm">+12.5% vs yesterday</span>
@@ -75,7 +82,7 @@ export function MerchantDashboard() {
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-blue-100 text-sm font-medium">Monthly Revenue</p>
-                <p className="text-3xl font-bold mt-2">${stats.monthlyRevenue.toLocaleString()}</p>
+                <p className="text-3xl font-bold mt-2">{formatCurrency(stats.monthlyRevenue)}</p>
                 <div className="flex items-center gap-1 mt-2 text-blue-100">
                   <ArrowUpRight className="w-4 h-4" />
                   <span className="text-sm">+8.3% vs last month</span>
@@ -91,7 +98,7 @@ export function MerchantDashboard() {
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-purple-100 text-sm font-medium">Pending Payouts</p>
-                <p className="text-3xl font-bold mt-2">${stats.pendingPayouts.toLocaleString()}</p>
+                <p className="text-3xl font-bold mt-2">{formatCurrency(stats.pendingPayouts)}</p>
                 <div className="flex items-center gap-1 mt-2 text-purple-100">
                   <RefreshCw className="w-4 h-4" />
                   <span className="text-sm">Next payout: Tomorrow</span>
@@ -122,7 +129,7 @@ export function MerchantDashboard() {
             </div>
             <div>
               <p className="text-sm text-gray-500">Average Ticket</p>
-              <p className="text-xl font-semibold">${stats.avgTicket.toFixed(2)}</p>
+              <p className="text-xl font-semibold">{formatCurrency(stats.avgTicket)}</p>
             </div>
           </Card>
 
@@ -160,7 +167,7 @@ export function MerchantDashboard() {
                     <tr key={txn.id} className="border-b last:border-0">
                       <td className="py-3 text-sm font-medium">{txn.id}</td>
                       <td className="py-3 text-sm text-gray-600">****{txn.cardLast4}</td>
-                      <td className="py-3 text-sm font-medium">${txn.amount.toFixed(2)}</td>
+                      <td className="py-3 text-sm font-medium">{formatCurrency(txn.amount)}</td>
                       <td className="py-3">
                         <span className={`px-2 py-1 text-xs rounded-full ${
                           txn.status === 'completed' ? 'bg-green-100 text-green-700' :

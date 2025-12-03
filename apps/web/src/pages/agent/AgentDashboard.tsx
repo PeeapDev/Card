@@ -23,6 +23,7 @@ import { Card } from '@/components/ui/Card';
 import { AgentLayout } from '@/components/layout/AgentLayout';
 import { supabase } from '@/lib/supabase';
 import { AgentPlusUpgradeModal } from '@/components/agent/AgentPlusUpgradeModal';
+import { currencyService, Currency } from '@/services/currency.service';
 
 interface Ticket {
   id: string;
@@ -48,9 +49,19 @@ export function AgentDashboard() {
   const [agentTier, setAgentTier] = useState<'basic' | 'standard' | 'agent_plus'>('basic');
   const [walletBalance, setWalletBalance] = useState(0);
 
+  // Currency state
+  const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
+
   useEffect(() => {
+    currencyService.getDefaultCurrency().then(setDefaultCurrency);
     fetchDashboardData();
   }, []);
+
+  const currencySymbol = defaultCurrency?.symbol || '';
+
+  const formatCurrency = (amount: number): string => {
+    return `${currencySymbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
 
   const fetchDashboardData = async () => {
     setLoading(true);
@@ -185,7 +196,7 @@ export function AgentDashboard() {
             </div>
             <p className="text-sm text-orange-100">Available Balance</p>
             <p className="text-3xl font-bold">
-              ${walletBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              {formatCurrency(walletBalance)}
             </p>
             <div className="flex gap-2 mt-4">
               <button className="flex-1 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1">
@@ -229,7 +240,7 @@ export function AgentDashboard() {
                   </div>
                   <span className="text-sm text-gray-600">Cash In</span>
                 </div>
-                <span className="font-semibold text-green-600">$0.00</span>
+                <span className="font-semibold text-green-600">{formatCurrency(0)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -238,7 +249,7 @@ export function AgentDashboard() {
                   </div>
                   <span className="text-sm text-gray-600">Cash Out</span>
                 </div>
-                <span className="font-semibold text-red-600">$0.00</span>
+                <span className="font-semibold text-red-600">{formatCurrency(0)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">

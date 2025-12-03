@@ -1,15 +1,13 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { RabbitMQModule } from '@golevelup/nestjs-rabbitmq';
-import { RedisModule } from '@nestjs-modules/ioredis';
-import { WalletsModule } from './modules/wallets/wallets.module';
-import { LedgerModule } from './modules/ledger/ledger.module';
 import { HealthModule } from './modules/health/health.module';
 import { MonimeModule } from './modules/monime/monime.module';
-import { Wallet, Account, LedgerEntry, JournalEntry } from '@payment-system/database';
+import { SettingsModule } from './modules/settings/settings.module';
+import { UsersModule } from './modules/users/users.module';
+import { UploadModule } from './modules/upload/upload.module';
+import { PaymentSettings } from '@payment-system/database';
 import { MonimeTransaction } from './modules/monime/entities/monime-transaction.entity';
-import { EXCHANGES } from '@payment-system/events';
 
 @Module({
   imports: [
@@ -18,50 +16,49 @@ import { EXCHANGES } from '@payment-system/events';
       envFilePath: ['.env.local', '.env'],
     }),
 
+    // Use Supabase PostgreSQL via direct connection
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        host: configService.get('DB_HOST', 'localhost'),
-        port: configService.get('DB_PORT', 5432),
-        username: configService.get('DB_USER', 'account_user'),
-        password: configService.get('DB_PASSWORD', 'account_pass'),
-        database: configService.get('DB_NAME', 'account_db'),
-        entities: [Wallet, Account, LedgerEntry, JournalEntry, MonimeTransaction],
-        synchronize: configService.get('NODE_ENV') === 'development',
-        logging: configService.get('NODE_ENV') === 'development',
-      }),
-    }),
+      useFactory: (configService: ConfigService) => {
+        const supabaseUrl = configService.get('SUPABASE_URL', '');
+        const supabaseDbPassword = configService.get('SUPABASE_DB_PASSWORD');
 
-    RedisModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'single',
-        url: configService.get('REDIS_URL', 'redis://localhost:6379'),
-      }),
-    }),
+        // Extract project ref from Supabase URL
+        const projectRef = supabaseUrl.replace('https://', '').replace('.supabase.co', '');
+        const host = supabaseDbPassword
+          ? `db.${projectRef}.supabase.co`
+          : configService.get('DB_HOST', 'localhost');
 
-    RabbitMQModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        exchanges: [
-          {
-            name: EXCHANGES.PAYMENT_EVENTS,
-            type: 'topic',
+        console.log(`Connecting to database at: ${host}`);
+
+        return {
+          type: 'postgres',
+          host,
+          port: configService.get<number>('DB_PORT', 5432),
+          username: configService.get('DB_USER', 'postgres'),
+          password: supabaseDbPassword || configService.get('DB_PASSWORD', 'postgres'),
+          database: configService.get('DB_NAME', 'postgres'),
+          // Only include entities we need for Monime checkout flow
+          entities: [MonimeTransaction, PaymentSettings],
+          // Don't sync in production - use migrations
+          synchronize: configService.get('NODE_ENV') === 'development',
+          logging: configService.get('DB_LOGGING', 'false') === 'true',
+          ssl: supabaseDbPassword ? { rejectUnauthorized: false } : false,
+          // Connection pool settings for production
+          extra: {
+            max: 10,
+            connectionTimeoutMillis: 5000,
           },
-        ],
-        uri: configService.get('RABBITMQ_URL', 'amqp://localhost:5672'),
-        connectionInitOptions: { wait: true },
-      }),
+        };
+      },
     }),
 
-    WalletsModule,
-    LedgerModule,
     HealthModule,
     MonimeModule,
+    SettingsModule,
+    UsersModule,
+    UploadModule,
   ],
 })
 export class AppModule {}

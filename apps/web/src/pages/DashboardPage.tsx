@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Wallet, CreditCard, ArrowUpRight, ArrowDownRight, TrendingUp, Send, Users } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui';
@@ -8,6 +9,7 @@ import { useCards } from '@/hooks/useCards';
 import { useTransactions } from '@/hooks/useTransactions';
 import { UserSearch, SearchResult } from '@/components/ui/UserSearch';
 import { clsx } from 'clsx';
+import { currencyService, Currency } from '@/services/currency.service';
 
 export function DashboardPage() {
   const navigate = useNavigate();
@@ -15,6 +17,34 @@ export function DashboardPage() {
   const { data: wallets, isLoading: walletsLoading, error: walletsError } = useWallets();
   const { data: cards, isLoading: cardsLoading, error: cardsError } = useCards();
   const { data: transactions, isLoading: transactionsLoading, error: transactionsError } = useTransactions();
+
+  // Currencies for formatting
+  const [currencies, setCurrencies] = useState<Currency[]>([]);
+  const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
+
+  useEffect(() => {
+    const loadCurrencies = async () => {
+      const [allCurrencies, defCurrency] = await Promise.all([
+        currencyService.getCurrencies(),
+        currencyService.getDefaultCurrency()
+      ]);
+      setCurrencies(allCurrencies);
+      setDefaultCurrency(defCurrency);
+    };
+    loadCurrencies();
+  }, []);
+
+  // Get currency symbol by code
+  const getCurrencySymbol = (code?: string): string => {
+    if (!code) return defaultCurrency?.symbol || '';
+    return currencies.find(c => c.code === code)?.symbol || code;
+  };
+
+  // Format amount with correct currency symbol
+  const formatCurrency = (amount: number, currencyCode?: string): string => {
+    const symbol = getCurrencySymbol(currencyCode);
+    return `${symbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
 
   const totalBalance = wallets?.reduce((sum, w) => sum + (w.balance || 0), 0) || 0;
   const activeCards = cards?.filter((c) => c.status === 'ACTIVE').length || 0;
@@ -44,7 +74,7 @@ export function DashboardPage() {
               <div>
                 <p className="text-sm font-medium text-gray-500">Total Balance</p>
                 <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {walletsLoading ? '...' : `$${totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+                  {walletsLoading ? '...' : formatCurrency(totalBalance)}
                 </p>
               </div>
               <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center">
@@ -215,7 +245,7 @@ export function DashboardPage() {
                         "text-sm font-semibold",
                         isCredit ? "text-green-600" : "text-red-600"
                       )}>
-                        {isCredit ? '+' : ''}${txn.amount.toFixed(2)}
+                        {isCredit ? '+' : ''}{formatCurrency(Math.abs(txn.amount))}
                       </p>
                     </div>
                   );

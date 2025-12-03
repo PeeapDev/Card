@@ -18,6 +18,7 @@ import {
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
+import { currencyService, Currency } from '@/services/currency.service';
 
 interface FeeConfig {
   id: string;
@@ -46,6 +47,19 @@ export function FeesPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Currency state
+  const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
+
+  useEffect(() => {
+    currencyService.getDefaultCurrency().then(setDefaultCurrency);
+  }, []);
+
+  const currencySymbol = defaultCurrency?.symbol || '';
+
+  const formatCurrency = (amount: number): string => {
+    return `${currencySymbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
 
   const [fees, setFees] = useState<FeeConfig[]>([
     // P2P Transfer Fees by User Type
@@ -277,7 +291,7 @@ export function FeesPage() {
                       />
                     ) : (
                       <p className="text-xl font-bold text-gray-900">
-                        ${limit.dailyLimit.toLocaleString()}
+                        {currencySymbol}{limit.dailyLimit.toLocaleString()}
                       </p>
                     )}
                   </div>
@@ -292,7 +306,7 @@ export function FeesPage() {
                       />
                     ) : (
                       <p className="text-xl font-bold text-gray-900">
-                        ${limit.monthlyLimit.toLocaleString()}
+                        {currencySymbol}{limit.monthlyLimit.toLocaleString()}
                       </p>
                     )}
                   </div>
@@ -307,7 +321,7 @@ export function FeesPage() {
                       />
                     ) : (
                       <p className="text-xl font-bold text-gray-900">
-                        ${limit.perTransactionLimit.toLocaleString()}
+                        {currencySymbol}{limit.perTransactionLimit.toLocaleString()}
                       </p>
                     )}
                   </div>
@@ -323,7 +337,7 @@ export function FeesPage() {
                       />
                     ) : (
                       <p className="text-xl font-bold text-gray-900">
-                        ${limit.minAmount.toFixed(2)}
+                        {formatCurrency(limit.minAmount)}
                       </p>
                     )}
                   </div>
@@ -356,9 +370,9 @@ export function FeesPage() {
                       <p className="text-sm text-gray-500">{fee.description}</p>
                       {(fee.minFee !== undefined || fee.maxFee !== undefined) && (
                         <p className="text-xs text-gray-400 mt-2">
-                          {fee.minFee !== undefined && `Min Fee: $${fee.minFee.toFixed(2)}`}
+                          {fee.minFee !== undefined && `Min Fee: ${formatCurrency(fee.minFee)}`}
                           {fee.minFee !== undefined && fee.maxFee !== undefined && ' | '}
-                          {fee.maxFee !== undefined && `Max Fee: $${fee.maxFee.toFixed(2)}`}
+                          {fee.maxFee !== undefined && `Max Fee: ${formatCurrency(fee.maxFee)}`}
                         </p>
                       )}
                     </div>
@@ -381,7 +395,7 @@ export function FeesPage() {
                     ) : (
                       <div className="text-right">
                         <p className="text-2xl font-bold text-gray-900">
-                          {fee.type === 'percentage' ? `${fee.value}%` : `$${fee.value.toFixed(2)}`}
+                          {fee.type === 'percentage' ? `${fee.value}%` : formatCurrency(fee.value)}
                         </p>
                         <p className="text-xs text-gray-500 capitalize">{fee.type}</p>
                       </div>

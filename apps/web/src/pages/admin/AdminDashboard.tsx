@@ -17,6 +17,7 @@ import {
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
+import { currencyService, Currency } from '@/services/currency.service';
 
 interface DashboardStats {
   totalAccounts: number;
@@ -77,25 +78,34 @@ export function AdminDashboard() {
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Currency state
+  const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
+
   useEffect(() => {
+    currencyService.getDefaultCurrency().then(setDefaultCurrency);
     fetchDashboardData();
   }, []);
+
+  const currencySymbol = defaultCurrency?.symbol || '';
+
+  const formatCurrency = (amount: number): string => {
+    return `${currencySymbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
 
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      // Fetch user counts
-      const { data: allUsers } = await supabase.from('users').select('id, is_active, kyc_status, role');
-      const users = allUsers?.filter(u => u.role === 'user') || [];
-      const merchants = allUsers?.filter(u => u.role === 'merchant') || [];
-      const agents = allUsers?.filter(u => u.role === 'agent') || [];
+      // Fetch user counts - using correct column names (roles, status)
+      const { data: allUsers } = await supabase.from('users').select('id, status, kyc_status, roles');
+      const users = allUsers?.filter(u => u.roles?.includes('user') && !u.roles?.includes('merchant') && !u.roles?.includes('agent')) || [];
+      const merchants = allUsers?.filter(u => u.roles?.includes('merchant')) || [];
+      const agents = allUsers?.filter(u => u.roles?.includes('agent')) || [];
 
       // Fetch card counts
       const { data: cards } = await supabase.from('cards').select('id, status, type');
 
-      // Fetch API keys count (developers)
-      const { data: apiKeys } = await supabase.from('api_keys').select('id, user_id');
-      const developerIds = new Set(apiKeys?.map(k => k.user_id) || []);
+      // Note: api_keys table doesn't exist yet, using 0 for active developers
+      const developerIds = new Set<string>();
 
       // Fetch recent transactions
       const { data: transactions } = await supabase
@@ -111,7 +121,7 @@ export function AdminDashboard() {
       // Calculate stats
       setStats({
         totalAccounts: allUsers?.length || 0,
-        activeAccounts: allUsers?.filter(u => u.is_active).length || 0,
+        activeAccounts: allUsers?.filter(u => u.status === 'ACTIVE').length || 0,
         totalCustomers: users.length,
         verifiedCustomers: users.filter(u => u.kyc_status === 'VERIFIED').length,
         totalCards: cards?.length || 0,
@@ -164,7 +174,7 @@ export function AdminDashboard() {
         });
       }
 
-      const inactiveUsers = users.filter(u => !u.is_active).length;
+      const inactiveUsers = users.filter(u => u.status !== 'ACTIVE').length;
       if (inactiveUsers > 0) {
         newPendingItems.push({
           type: 'users',
@@ -251,7 +261,7 @@ export function AdminDashboard() {
               </div>
             </div>
             <p className="text-sm font-medium text-gray-500">Total Volume</p>
-            <p className="text-2xl font-bold text-gray-900">${(stats.totalVolume / 1000000).toFixed(2)}M</p>
+            <p className="text-2xl font-bold text-gray-900">{currencySymbol}{(stats.totalVolume / 1000000).toFixed(2)}M</p>
             <p className="text-xs text-gray-400 mt-1">This month</p>
           </Card>
         </div>
@@ -338,7 +348,7 @@ export function AdminDashboard() {
                     <tr key={txn.id} className="text-sm">
                       <td className="py-3 font-mono text-gray-600">{txn.id}</td>
                       <td className="py-3 text-gray-900">{txn.customer}</td>
-                      <td className="py-3 font-medium">${txn.amount.toLocaleString()}</td>
+                      <td className="py-3 font-medium">{formatCurrency(txn.amount)}</td>
                       <td className="py-3">
                         <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
                           txn.status === 'completed' ? 'bg-green-100 text-green-700' :

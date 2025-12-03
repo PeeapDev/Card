@@ -21,6 +21,7 @@ import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
 import { normalizePhoneNumber, getPhoneValidationError } from '@/utils/phone';
+import { currencyService, Currency } from '@/services/currency.service';
 
 interface User {
   id: string;
@@ -53,6 +54,15 @@ export function UsersManagementPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+
+  // Currency state
+  const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
+
+  useEffect(() => {
+    currencyService.getDefaultCurrency().then(setDefaultCurrency);
+  }, []);
+
+  const currencySymbol = defaultCurrency?.symbol || '';
 
   // Create modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -254,7 +264,7 @@ export function UsersManagementPage() {
       });
 
       if (!rpcError && rpcResult) {
-        setCreateSuccess(`User ${formData.firstName} created successfully with $${formData.initialBalance} balance!`);
+        setCreateSuccess(`User ${formData.firstName} created successfully with ${currencySymbol}${formData.initialBalance} balance!`);
       } else {
         console.log('RPC not available, trying direct insert:', rpcError?.message);
 
@@ -324,7 +334,7 @@ export function UsersManagementPage() {
             });
         }
 
-        setCreateSuccess(`User ${formData.firstName} created successfully with $${formData.initialBalance} balance!`);
+        setCreateSuccess(`User ${formData.firstName} created successfully with ${currencySymbol}${formData.initialBalance} balance!`);
       }
 
       setFormData({

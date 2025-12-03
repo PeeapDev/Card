@@ -15,7 +15,7 @@ import {
   ApiSecurity,
 } from '@nestjs/swagger';
 import { TransactionsService } from './transactions.service';
-import { TransactionEntryMode } from '@payment-system/database';
+import { PaymentChannel } from '@payment-system/database';
 
 class AuthorizeDto {
   cardToken: string;
@@ -25,7 +25,7 @@ class AuthorizeDto {
   merchantName?: string;
   merchantMcc?: string;
   terminalId?: string;
-  entryMode: TransactionEntryMode;
+  channel: PaymentChannel;
   description?: string;
 }
 
@@ -76,7 +76,7 @@ export class TransactionsController {
     return {
       transactionId: transaction.id,
       status: transaction.state,
-      capturedAmount: transaction.capturedAmount,
+      amount: transaction.amount,
       feeAmount: transaction.feeAmount,
       netAmount: transaction.netAmount,
     };
@@ -95,7 +95,7 @@ export class TransactionsController {
     return {
       transactionId: transaction.id,
       status: transaction.state,
-      voidedAt: transaction.voidedAt,
+      updatedAt: transaction.updatedAt,
     };
   }
 
@@ -116,7 +116,7 @@ export class TransactionsController {
       transactionId: transaction.id,
       status: transaction.state,
       refundedAmount: transaction.refundedAmount,
-      remainingAmount: Number(transaction.capturedAmount) - Number(transaction.refundedAmount),
+      remainingAmount: Number(transaction.amount) - Number(transaction.refundedAmount),
     };
   }
 

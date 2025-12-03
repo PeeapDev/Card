@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   CreditCard,
   Search,
@@ -29,6 +29,7 @@ import {
 } from '@/hooks/useCards';
 import type { CardOrder } from '@/services/card.service';
 import { clsx } from 'clsx';
+import { currencyService, Currency } from '@/services/currency.service';
 
 const STATUS_TABS = [
   { value: undefined, label: 'All Orders' },
@@ -39,6 +40,19 @@ const STATUS_TABS = [
 ];
 
 export function CardOrdersPage() {
+  // Currency state
+  const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
+
+  useEffect(() => {
+    currencyService.getDefaultCurrency().then(setDefaultCurrency);
+  }, []);
+
+  const currencySymbol = defaultCurrency?.symbol || '';
+
+  const formatCurrency = (amount: number): string => {
+    return `${currencySymbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<CardOrder | null>(null);
@@ -312,7 +326,7 @@ export function CardOrdersPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="font-medium">${order.amountPaid.toFixed(2)}</span>
+                        <span className="font-medium">{formatCurrency(order.amountPaid)}</span>
                       </td>
                       <td className="px-6 py-4">
                         {order.cardNumber ? (
@@ -424,7 +438,7 @@ export function CardOrdersPage() {
                     </p>
                     <p>
                       <span className="text-gray-500">Price:</span>{' '}
-                      <span className="font-medium">${selectedOrder.amountPaid.toFixed(2)}</span>
+                      <span className="font-medium">{formatCurrency(selectedOrder.amountPaid)}</span>
                     </p>
                     {selectedOrder.cardNumber && (
                       <p>
@@ -473,8 +487,7 @@ export function CardOrdersPage() {
                 <div>
                   <p className="text-sm text-gray-500">Payment from wallet</p>
                   <p className="font-medium">
-                    {selectedOrder.wallet?.currency} Wallet - Balance: $
-                    {selectedOrder.wallet?.balance.toFixed(2)}
+                    {selectedOrder.wallet?.currency} Wallet - Balance: {formatCurrency(selectedOrder.wallet?.balance || 0)}
                   </p>
                 </div>
               </div>

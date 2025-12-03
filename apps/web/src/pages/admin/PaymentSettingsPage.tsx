@@ -34,16 +34,19 @@ import {
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
-import { supabase } from '@/lib/supabase';
+
+// API endpoint for payment settings
+const SETTINGS_API = '/api/settings';
 
 interface MonimeConfig {
-  apiKey: string;
-  apiSecret: string;
+  accessToken: string;
+  spaceId: string;
   webhookSecret: string;
   sourceAccountId: string;
   payoutAccountId: string;
-  environment: 'sandbox' | 'production';
   isEnabled: boolean;
+  backendUrl: string;
+  frontendUrl: string;
 }
 
 interface WithdrawalSettings {
@@ -67,13 +70,14 @@ interface DepositSettings {
 }
 
 const DEFAULT_MONIME_CONFIG: MonimeConfig = {
-  apiKey: '',
-  apiSecret: '',
+  accessToken: '',
+  spaceId: '',
   webhookSecret: '',
   sourceAccountId: '',
   payoutAccountId: '',
-  environment: 'sandbox',
   isEnabled: false,
+  backendUrl: '',
+  frontendUrl: '',
 };
 
 const DEFAULT_WITHDRAWAL_SETTINGS: WithdrawalSettings = {
@@ -107,6 +111,7 @@ export function PaymentSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [showSecrets, setShowSecrets] = useState(false);
   const [activeTab, setActiveTab] = useState<'monime' | 'withdrawal' | 'deposit'>('monime');
+  const [testAmount, setTestAmount] = useState<number>(1000); // Default 10.00 SLE in minor units
 
   useEffect(() => {
     fetchSettings();
@@ -115,45 +120,37 @@ export function PaymentSettingsPage() {
   const fetchSettings = async () => {
     setLoading(true);
     try {
-      // Try to fetch from database
-      const { data: paymentSettings } = await supabase
-        .from('payment_settings')
-        .select('*')
-        .single();
+      const response = await fetch(SETTINGS_API);
 
-      if (paymentSettings) {
+      if (!response.ok) {
+        throw new Error('Failed to fetch settings from server');
+      }
+
+      const data = await response.json();
+
+      if (data.monimeConfig) {
         setMonimeConfig({
-          apiKey: paymentSettings.monime_api_key || '',
-          apiSecret: paymentSettings.monime_api_secret || '',
-          webhookSecret: paymentSettings.monime_webhook_secret || '',
-          sourceAccountId: paymentSettings.monime_source_account_id || '',
-          payoutAccountId: paymentSettings.monime_payout_account_id || '',
-          environment: paymentSettings.monime_environment || 'sandbox',
-          isEnabled: paymentSettings.monime_enabled || false,
+          ...DEFAULT_MONIME_CONFIG,
+          ...data.monimeConfig,
         });
+      }
 
+      if (data.withdrawalSettings) {
         setWithdrawalSettings({
-          mobileMoneyEnabled: paymentSettings.withdrawal_mobile_money_enabled ?? true,
-          bankTransferEnabled: paymentSettings.withdrawal_bank_transfer_enabled ?? true,
-          minWithdrawalAmount: paymentSettings.min_withdrawal_amount || 1000,
-          maxWithdrawalAmount: paymentSettings.max_withdrawal_amount || 50000000,
-          dailyWithdrawalLimit: paymentSettings.daily_withdrawal_limit || 100000000,
-          withdrawalFeePercent: paymentSettings.withdrawal_fee_percent || 1.5,
-          withdrawalFeeFlat: paymentSettings.withdrawal_fee_flat || 100,
-          requirePin: paymentSettings.withdrawal_require_pin ?? true,
-          autoApproveUnder: paymentSettings.withdrawal_auto_approve_under || 1000000,
+          ...DEFAULT_WITHDRAWAL_SETTINGS,
+          ...data.withdrawalSettings,
         });
+      }
 
+      if (data.depositSettings) {
         setDepositSettings({
-          checkoutSessionEnabled: paymentSettings.deposit_checkout_enabled ?? true,
-          paymentCodeEnabled: paymentSettings.deposit_payment_code_enabled ?? true,
-          mobileMoneyEnabled: paymentSettings.deposit_mobile_money_enabled ?? true,
-          minDepositAmount: paymentSettings.min_deposit_amount || 100,
-          maxDepositAmount: paymentSettings.max_deposit_amount || 100000000,
+          ...DEFAULT_DEPOSIT_SETTINGS,
+          ...data.depositSettings,
         });
       }
     } catch (err) {
       console.error('Failed to fetch settings:', err);
+      setError('Failed to load settings from server. Make sure account-service is running.');
     } finally {
       setLoading(false);
     }
@@ -164,39 +161,47 @@ export function PaymentSettingsPage() {
     setError(null);
 
     try {
+      // Transform to database format
       const settingsData = {
-        monime_api_key: monimeConfig.apiKey,
-        monime_api_secret: monimeConfig.apiSecret,
-        monime_webhook_secret: monimeConfig.webhookSecret,
-        monime_source_account_id: monimeConfig.sourceAccountId,
-        monime_payout_account_id: monimeConfig.payoutAccountId,
-        monime_environment: monimeConfig.environment,
-        monime_enabled: monimeConfig.isEnabled,
-        withdrawal_mobile_money_enabled: withdrawalSettings.mobileMoneyEnabled,
-        withdrawal_bank_transfer_enabled: withdrawalSettings.bankTransferEnabled,
-        min_withdrawal_amount: withdrawalSettings.minWithdrawalAmount,
-        max_withdrawal_amount: withdrawalSettings.maxWithdrawalAmount,
-        daily_withdrawal_limit: withdrawalSettings.dailyWithdrawalLimit,
-        withdrawal_fee_percent: withdrawalSettings.withdrawalFeePercent,
-        withdrawal_fee_flat: withdrawalSettings.withdrawalFeeFlat,
-        withdrawal_require_pin: withdrawalSettings.requirePin,
-        withdrawal_auto_approve_under: withdrawalSettings.autoApproveUnder,
-        deposit_checkout_enabled: depositSettings.checkoutSessionEnabled,
-        deposit_payment_code_enabled: depositSettings.paymentCodeEnabled,
-        deposit_mobile_money_enabled: depositSettings.mobileMoneyEnabled,
-        min_deposit_amount: depositSettings.minDepositAmount,
-        max_deposit_amount: depositSettings.maxDepositAmount,
-        updated_at: new Date().toISOString(),
+        // Monime Config
+        monimeAccessToken: monimeConfig.accessToken,
+        monimeSpaceId: monimeConfig.spaceId,
+        monimeWebhookSecret: monimeConfig.webhookSecret,
+        monimeSourceAccountId: monimeConfig.sourceAccountId,
+        monimePayoutAccountId: monimeConfig.payoutAccountId,
+        monimeEnabled: monimeConfig.isEnabled,
+        // URL Configuration (required for Monime checkout redirects)
+        backendUrl: monimeConfig.backendUrl,
+        frontendUrl: monimeConfig.frontendUrl,
+        // Withdrawal Settings
+        withdrawalMobileMoneyEnabled: withdrawalSettings.mobileMoneyEnabled,
+        withdrawalBankTransferEnabled: withdrawalSettings.bankTransferEnabled,
+        minWithdrawalAmount: withdrawalSettings.minWithdrawalAmount,
+        maxWithdrawalAmount: withdrawalSettings.maxWithdrawalAmount,
+        dailyWithdrawalLimit: withdrawalSettings.dailyWithdrawalLimit,
+        withdrawalFeePercent: withdrawalSettings.withdrawalFeePercent,
+        withdrawalFeeFlat: withdrawalSettings.withdrawalFeeFlat,
+        withdrawalRequirePin: withdrawalSettings.requirePin,
+        withdrawalAutoApproveUnder: withdrawalSettings.autoApproveUnder,
+        // Deposit Settings
+        depositCheckoutEnabled: depositSettings.checkoutSessionEnabled,
+        depositPaymentCodeEnabled: depositSettings.paymentCodeEnabled,
+        depositMobileMoneyEnabled: depositSettings.mobileMoneyEnabled,
+        minDepositAmount: depositSettings.minDepositAmount,
+        maxDepositAmount: depositSettings.maxDepositAmount,
       };
 
-      // Upsert settings
-      const { error: upsertError } = await supabase
-        .from('payment_settings')
-        .upsert(settingsData, { onConflict: 'id' });
+      const response = await fetch(SETTINGS_API, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(settingsData),
+      });
 
-      if (upsertError) {
-        // Table might not exist, show success anyway (settings stored locally)
-        console.warn('Could not save to database:', upsertError);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to save settings');
       }
 
       setSuccess('Payment settings saved successfully');
@@ -213,12 +218,38 @@ export function PaymentSettingsPage() {
     setError(null);
 
     try {
-      // TODO: Call backend API to test Monime connection
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      setSuccess('Connection test successful! Monime API is reachable.');
-      setTimeout(() => setSuccess(null), 3000);
+      // Call backend endpoint to create checkout session
+      // Note: successUrl and cancelUrl are handled by the backend to ensure proper payment verification
+      const response = await fetch(`${SETTINGS_API}/test-checkout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          accessToken: monimeConfig.accessToken,
+          spaceId: monimeConfig.spaceId,
+          amount: testAmount,
+          currency: 'SLE',
+          // Don't pass successUrl/cancelUrl - let backend handle them for proper verification flow
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to create checkout session');
+      }
+
+      // Open Monime checkout page in new tab
+      if (data.url) {
+        window.open(data.url, '_blank');
+        setSuccess('Checkout session created! Opening Monime payment page...');
+        setTimeout(() => setSuccess(null), 5000);
+      } else {
+        throw new Error('No checkout URL returned from Monime');
+      }
     } catch (err: any) {
-      setError('Connection test failed: ' + (err.message || 'Unknown error'));
+      setError('Test payment failed: ' + (err.message || 'Unknown error'));
     } finally {
       setTesting(false);
     }
@@ -327,6 +358,15 @@ export function PaymentSettingsPage() {
                     <h2 className="text-lg font-semibold text-gray-900">Monime Payment Gateway</h2>
                     <p className="text-sm text-gray-500">Enable Monime for deposits and withdrawals</p>
                   </div>
+                  {monimeConfig.accessToken && (
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                      monimeConfig.accessToken.startsWith('mon_test_')
+                        ? 'bg-yellow-100 text-yellow-700'
+                        : 'bg-green-100 text-green-700'
+                    }`}>
+                      {monimeConfig.accessToken.startsWith('mon_test_') ? 'Test Mode' : 'Live Mode'}
+                    </span>
+                  )}
                 </div>
                 <button
                   onClick={() => setMonimeConfig(prev => ({ ...prev, isEnabled: !prev.isEnabled }))}
@@ -364,37 +404,29 @@ export function PaymentSettingsPage() {
 
               <div className="grid gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Environment</label>
-                  <select
-                    value={monimeConfig.environment}
-                    onChange={(e) => setMonimeConfig(prev => ({ ...prev, environment: e.target.value as any }))}
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Access Token</label>
+                  <input
+                    type={showSecrets ? 'text' : 'password'}
+                    value={monimeConfig.accessToken}
+                    onChange={(e) => setMonimeConfig(prev => ({ ...prev, accessToken: e.target.value }))}
+                    placeholder="mon_test_xxxxx (test) or mon_xxxxx (live)"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                  >
-                    <option value="sandbox">Sandbox (Testing)</option>
-                    <option value="production">Production (Live)</option>
-                  </select>
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Token prefix determines environment: <code className="bg-gray-100 px-1 rounded">mon_test_</code> for testing, <code className="bg-gray-100 px-1 rounded">mon_</code> for live
+                  </p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Space ID</label>
                   <input
-                    type={showSecrets ? 'text' : 'password'}
-                    value={monimeConfig.apiKey}
-                    onChange={(e) => setMonimeConfig(prev => ({ ...prev, apiKey: e.target.value }))}
-                    placeholder="pk_live_xxxxx or pk_test_xxxxx"
+                    type="text"
+                    value={monimeConfig.spaceId}
+                    onChange={(e) => setMonimeConfig(prev => ({ ...prev, spaceId: e.target.value }))}
+                    placeholder="spc_xxxxx"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
                   />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">API Secret</label>
-                  <input
-                    type={showSecrets ? 'text' : 'password'}
-                    value={monimeConfig.apiSecret}
-                    onChange={(e) => setMonimeConfig(prev => ({ ...prev, apiSecret: e.target.value }))}
-                    placeholder="sk_live_xxxxx or sk_test_xxxxx"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                  />
+                  <p className="text-xs text-gray-500 mt-1">Your Monime workspace identifier</p>
                 </div>
 
                 <div>
@@ -406,6 +438,32 @@ export function PaymentSettingsPage() {
                     placeholder="whsec_xxxxx"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
                   />
+                  <p className="text-xs text-gray-500 mt-1">Used to verify webhook signatures</p>
+                </div>
+
+                {/* Webhook URL */}
+                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Webhook URL</label>
+                  <p className="text-xs text-gray-500 mb-2">Use this URL when configuring webhooks in your Monime dashboard</p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-mono text-gray-800 overflow-x-auto">
+                      {window.location.origin}/api/webhooks/monime
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${window.location.origin}/api/webhooks/monime`);
+                        setSuccess('Webhook URL copied to clipboard!');
+                        setTimeout(() => setSuccess(null), 2000);
+                      }}
+                      className="px-3 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm font-medium text-gray-700 transition-colors"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    For production, replace with your actual domain: <code className="bg-gray-100 px-1 rounded">https://yourdomain.com/api/webhooks/monime</code>
+                  </p>
                 </div>
               </div>
             </Card>
@@ -449,25 +507,110 @@ export function PaymentSettingsPage() {
               </div>
             </Card>
 
-            {/* Test Connection */}
-            <Card className="p-6 bg-blue-50 border-blue-200">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <TestTube className="w-5 h-5 text-blue-600" />
-                  <div>
-                    <h3 className="font-medium text-blue-900">Test Connection</h3>
-                    <p className="text-sm text-blue-700">Verify your Monime API credentials</p>
-                  </div>
+            {/* URL Configuration */}
+            <Card className="p-6 border-orange-200 bg-orange-50">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-orange-100 rounded-lg">
+                  <LinkIcon className="w-5 h-5 text-orange-600" />
                 </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">URL Configuration</h2>
+                  <p className="text-sm text-gray-500">Required for Monime checkout redirects</p>
+                </div>
+                <span className="ml-auto px-2 py-1 text-xs font-medium rounded-full bg-orange-200 text-orange-700">
+                  Required
+                </span>
+              </div>
+
+              <div className="space-y-4">
+                <div className="p-3 bg-white rounded-lg border border-orange-200">
+                  <p className="text-sm text-orange-800">
+                    <strong>Important:</strong> These URLs are required for Monime to redirect users after payment.
+                    They must be publicly accessible URLs (not localhost).
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Backend API URL</label>
+                  <input
+                    type="text"
+                    value={monimeConfig.backendUrl}
+                    onChange={(e) => setMonimeConfig(prev => ({ ...prev, backendUrl: e.target.value }))}
+                    placeholder="https://api.yourdomain.com"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    The URL where your backend API is hosted (e.g., https://api.yourdomain.com)
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Frontend App URL</label>
+                  <input
+                    type="text"
+                    value={monimeConfig.frontendUrl}
+                    onChange={(e) => setMonimeConfig(prev => ({ ...prev, frontendUrl: e.target.value }))}
+                    placeholder="https://app.yourdomain.com"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    The URL where your frontend app is hosted (e.g., https://app.yourdomain.com)
+                  </p>
+                </div>
+
+                {(!monimeConfig.backendUrl || !monimeConfig.frontendUrl) && (
+                  <div className="p-3 bg-red-50 rounded-lg border border-red-200 flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-red-700">
+                      Both URLs must be configured for Monime payments to work. Without these, checkout sessions will fail with "successUrl must be a URL address" error.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            {/* Test Payment */}
+            <Card className="p-6 bg-blue-50 border-blue-200">
+              <div className="flex items-center gap-3 mb-4">
+                <TestTube className="w-5 h-5 text-blue-600" />
+                <div>
+                  <h3 className="font-medium text-blue-900">Test Payment</h3>
+                  <p className="text-sm text-blue-700">Create a test checkout session to verify your Monime integration</p>
+                </div>
+              </div>
+
+              <div className="flex items-end gap-4">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-blue-900 mb-1">Test Amount (SLE)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2 text-gray-500">Le</span>
+                    <input
+                      type="text"
+                      value={formatAmount(testAmount)}
+                      onChange={(e) => setTestAmount(parseAmount(e.target.value))}
+                      placeholder="10.00"
+                      className="w-full pl-10 pr-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                    />
+                  </div>
+                  <p className="text-xs text-blue-600 mt-1">Enter any amount for testing</p>
+                </div>
+
                 <button
                   onClick={testConnection}
-                  disabled={testing || !monimeConfig.apiKey}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50"
+                  disabled={testing || !monimeConfig.accessToken || !monimeConfig.spaceId || testAmount <= 0}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed h-[42px]"
                 >
-                  {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <LinkIcon className="w-4 h-4" />}
-                  Test Connection
+                  {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
+                  {testing ? 'Creating...' : 'Open Checkout'}
                 </button>
               </div>
+
+              {(!monimeConfig.accessToken || !monimeConfig.spaceId) && (
+                <p className="text-xs text-red-600 mt-3 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  Please enter your Access Token and Space ID above to test payments
+                </p>
+              )}
             </Card>
           </div>
         )}

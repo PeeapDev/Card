@@ -16,7 +16,7 @@ const loginSchema = z.object({
 
 type LoginFormData = z.infer<typeof loginSchema>;
 
-// Real database users with their credentials
+// Real database users with their credentials (actual values in database)
 const QUICK_LOGIN_USERS = [
   { email: 'superadmin@cardpay.com', password: 'admin123', label: 'Super Admin', icon: Shield, color: 'bg-black hover:bg-gray-800' },
   { email: 'admin@cardpay.com', password: 'admin123', label: 'Admin', icon: Shield, color: 'bg-red-500 hover:bg-red-600' },

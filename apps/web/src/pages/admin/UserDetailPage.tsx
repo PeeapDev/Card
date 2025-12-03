@@ -28,6 +28,7 @@ import {
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
+import { currencyService, Currency } from '@/services/currency.service';
 
 interface UserData {
   id: string;
@@ -104,6 +105,19 @@ export function UserDetailPage() {
   });
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  // Currency state
+  const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
+
+  useEffect(() => {
+    currencyService.getDefaultCurrency().then(setDefaultCurrency);
+  }, []);
+
+  const currencySymbol = defaultCurrency?.symbol || '';
+
+  const formatCurrency = (amount: number): string => {
+    return `${currencySymbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
 
   useEffect(() => {
     if (userId) {
@@ -472,7 +486,7 @@ export function UserDetailPage() {
               <div>
                 <p className="text-primary-100 text-sm">Total Balance</p>
                 <p className="text-3xl font-bold mt-1">
-                  ${totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  {formatCurrency(totalBalance)}
                 </p>
               </div>
               <div className="p-3 bg-white/20 rounded-xl">
@@ -607,10 +621,10 @@ export function UserDetailPage() {
                         </span>
                       </div>
                       <p className="text-2xl font-bold text-gray-900">
-                        ${wallet.balance?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        {formatCurrency(wallet.balance || 0)}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
-                        Daily Limit: ${wallet.daily_limit?.toLocaleString()} | Monthly: ${wallet.monthly_limit?.toLocaleString()}
+                        Daily Limit: {currencySymbol}{wallet.daily_limit?.toLocaleString()} | Monthly: {currencySymbol}{wallet.monthly_limit?.toLocaleString()}
                       </p>
                     </div>
                   ))}
@@ -750,17 +764,17 @@ export function UserDetailPage() {
                     </span>
                   </div>
                   <p className="text-3xl font-bold text-gray-900 mb-3">
-                    ${wallet.balance?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    {formatCurrency(wallet.balance || 0)}
                     <span className="text-sm text-gray-500 ml-2">{wallet.currency}</span>
                   </p>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
                       <p className="text-gray-500">Daily Limit</p>
-                      <p className="font-medium">${wallet.daily_limit?.toLocaleString()}</p>
+                      <p className="font-medium">{currencySymbol}{wallet.daily_limit?.toLocaleString()}</p>
                     </div>
                     <div>
                       <p className="text-gray-500">Monthly Limit</p>
-                      <p className="font-medium">${wallet.monthly_limit?.toLocaleString()}</p>
+                      <p className="font-medium">{currencySymbol}{wallet.monthly_limit?.toLocaleString()}</p>
                     </div>
                   </div>
                 </div>

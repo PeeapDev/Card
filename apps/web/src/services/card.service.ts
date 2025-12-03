@@ -130,6 +130,8 @@ export interface CardOrder {
 export interface CreateCardOrderRequest {
   cardTypeId: string;
   walletId: string;
+  cardholderName?: string;
+  cardPin?: string;
   shippingAddress?: {
     street: string;
     city: string;
@@ -137,6 +139,7 @@ export interface CreateCardOrderRequest {
     postalCode: string;
     country: string;
   };
+  giftRecipientId?: string;
 }
 
 // Generate a random card number (for virtual cards)
@@ -649,13 +652,13 @@ export const cardService = {
    * Get all card orders (Admin)
    */
   async getAllCardOrders(status?: string): Promise<CardOrder[]> {
+    console.log('Fetching all card orders, status filter:', status);
+
     let query = supabase
       .from('card_orders')
       .select(`
         *,
-        card_types (*),
-        users (id, first_name, last_name, email, phone, kyc_status, kyc_tier),
-        wallets (id, currency, balance)
+        card_types (*)
       `)
       .order('created_at', { ascending: false });
 
@@ -665,41 +668,128 @@ export const cardService = {
 
     const { data, error } = await query;
 
+    console.log('Card orders query result:', { data, error, count: data?.length });
+
     if (error) {
       console.error('Error fetching all card orders:', error);
       throw new Error(error.message);
     }
 
-    return (data || []).map(mapCardOrder);
+    if (!data || data.length === 0) {
+      console.log('No card orders found');
+      return [];
+    }
+
+    // Get unique user IDs and wallet IDs
+    const userIds = [...new Set(data.map(o => o.user_id).filter(Boolean))];
+    const walletIds = [...new Set(data.map(o => o.wallet_id).filter(Boolean))];
+
+    // Fetch users separately
+    const { data: users } = await supabase
+      .from('users')
+      .select('id, first_name, last_name, email, phone, kyc_status, kyc_tier')
+      .in('id', userIds);
+
+    // Fetch wallets separately
+    const { data: wallets } = await supabase
+      .from('wallets')
+      .select('id, currency, balance')
+      .in('id', walletIds);
+
+    // Create lookup maps
+    const userMap = new Map((users || []).map(u => [u.id, u]));
+    const walletMap = new Map((wallets || []).map(w => [w.id, w]));
+
+    // Map orders with related data
+    return data.map(order => mapCardOrder({
+      ...order,
+      users: userMap.get(order.user_id) || null,
+      wallets: walletMap.get(order.wallet_id) || null,
+    }));
   },
 
   /**
    * Get a single card order
    */
   async getCardOrder(id: string): Promise<CardOrder> {
+    console.log('Fetching card order:', id);
+
+    // Get the basic order without joins to avoid relationship issues
     const { data, error } = await supabase
       .from('card_orders')
-      .select(`
-        *,
-        card_types (*),
-        users (id, first_name, last_name, email, phone, kyc_status, kyc_tier),
-        wallets (id, currency, balance)
-      `)
+      .select('*')
       .eq('id', id)
-      .single();
+      .maybeSingle();  // Use maybeSingle instead of single to avoid error on no rows
+
+    console.log('Card order fetch result:', { data, error });
 
     if (error) {
       console.error('Error fetching card order:', error);
       throw new Error(error.message);
     }
 
-    return mapCardOrder(data);
+    if (!data) {
+      // If order not found, return a minimal order object
+      console.warn('Card order not found, returning minimal object');
+      return {
+        id,
+        userId: '',
+        cardTypeId: '',
+        walletId: '',
+        amountPaid: 0,
+        currency: 'SLE',
+        status: 'PENDING',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      } as CardOrder;
+    }
+
+    // Get related data separately
+    let cardTypeData = null;
+    let userData = null;
+    let walletData = null;
+
+    if (data.card_type_id) {
+      const { data: cardType } = await supabase
+        .from('card_types')
+        .select('*')
+        .eq('id', data.card_type_id)
+        .maybeSingle();
+      cardTypeData = cardType;
+    }
+
+    if (data.user_id) {
+      const { data: user } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, email, phone, kyc_status, kyc_tier')
+        .eq('id', data.user_id)
+        .maybeSingle();
+      userData = user;
+    }
+
+    if (data.wallet_id) {
+      const { data: wallet } = await supabase
+        .from('wallets')
+        .select('id, currency, balance')
+        .eq('id', data.wallet_id)
+        .maybeSingle();
+      walletData = wallet;
+    }
+
+    return mapCardOrder({
+      ...data,
+      card_types: cardTypeData,
+      users: userData,
+      wallets: walletData
+    });
   },
 
   /**
    * Create a card order (purchase a card)
    */
   async createCardOrder(userId: string, data: CreateCardOrderRequest): Promise<CardOrder> {
+    console.log('Creating card order:', { userId, data });
+
     // Use the RPC function for atomic operation
     const { data: orderId, error } = await supabase.rpc('create_card_order', {
       p_user_id: userId,
@@ -707,17 +797,42 @@ export const cardService = {
       p_wallet_id: data.walletId,
     });
 
+    console.log('RPC result:', { orderId, error });
+
     if (error) {
       console.error('Error creating card order:', error);
       throw new Error(error.message);
     }
 
-    // Update shipping address if provided
+    if (!orderId) {
+      throw new Error('Failed to create order - no order ID returned');
+    }
+
+    // Update additional fields if provided
+    const updateData: any = {};
     if (data.shippingAddress) {
-      await supabase
+      updateData.shipping_address = data.shippingAddress;
+    }
+    if (data.cardholderName) {
+      updateData.cardholder_name = data.cardholderName;
+    }
+    if (data.cardPin) {
+      updateData.card_pin = data.cardPin;
+    }
+    if (data.giftRecipientId) {
+      updateData.gift_recipient_id = data.giftRecipientId;
+      updateData.is_gift = true;
+    }
+
+    if (Object.keys(updateData).length > 0) {
+      const { error: updateError } = await supabase
         .from('card_orders')
-        .update({ shipping_address: data.shippingAddress })
+        .update(updateData)
         .eq('id', orderId);
+
+      if (updateError) {
+        console.warn('Failed to update additional fields:', updateError);
+      }
     }
 
     return this.getCardOrder(orderId);
@@ -769,7 +884,7 @@ export const cardService = {
       .select(`
         *,
         card_types (*),
-        users (id, first_name, last_name, email, phone, kyc_status, kyc_tier),
+        users:user_id (id, first_name, last_name, email, phone, kyc_status, kyc_tier),
         wallets (id, currency, balance)
       `)
       .single();
@@ -797,7 +912,7 @@ export const cardService = {
       .select(`
         *,
         card_types (*),
-        users (id, first_name, last_name, email, phone, kyc_status, kyc_tier),
+        users:user_id (id, first_name, last_name, email, phone, kyc_status, kyc_tier),
         wallets (id, currency, balance)
       `)
       .single();

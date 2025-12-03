@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { CreditCard, Plus, Eye, EyeOff, Lock, Unlock, MoreVertical } from 'lucide-react';
 import { Card, CardHeader, CardTitle, Button, Input } from '@/components/ui';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -6,10 +6,20 @@ import { useCards, useCreateCard, useBlockCard, useUnblockCard, useActivateCard 
 import { useWallets } from '@/hooks/useWallets';
 import { clsx } from 'clsx';
 import type { Card as CardType } from '@/types';
+import { currencyService, Currency } from '@/services/currency.service';
 
 export function CardsPage() {
   const { data: cards, isLoading } = useCards();
   const { data: wallets } = useWallets();
+
+  // Currency state
+  const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
+
+  useEffect(() => {
+    currencyService.getDefaultCurrency().then(setDefaultCurrency);
+  }, []);
+
+  const currencySymbol = defaultCurrency?.symbol || '';
   const createCard = useCreateCard();
   const blockCard = useBlockCard();
   const unblockCard = useUnblockCard();
@@ -133,7 +143,7 @@ export function CardsPage() {
                   <div className="flex items-center justify-between">
                     <div className="text-sm">
                       <p className="text-gray-500">Daily Limit</p>
-                      <p className="font-medium">${card.dailyLimit.toLocaleString()}</p>
+                      <p className="font-medium">{currencySymbol}{card.dailyLimit.toLocaleString()}</p>
                     </div>
                     <div className="flex gap-2">
                       <Button
@@ -213,7 +223,7 @@ export function CardsPage() {
                   <option value="">Select a wallet</option>
                   {wallets?.map((wallet) => (
                     <option key={wallet.id} value={wallet.id}>
-                      {wallet.currency} Wallet - ${wallet.balance.toLocaleString()}
+                      {wallet.currency} Wallet - {currencySymbol}{wallet.balance.toLocaleString()}
                     </option>
                   ))}
                 </select>

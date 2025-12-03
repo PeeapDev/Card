@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   CreditCard,
   Plus,
@@ -33,6 +33,7 @@ import { useWallets } from '@/hooks/useWallets';
 import { clsx } from 'clsx';
 import type { Card as CardType } from '@/types';
 import { useNavigate } from 'react-router-dom';
+import { currencyService, Currency } from '@/services/currency.service';
 
 export function MyCardsPage() {
   const navigate = useNavigate();
@@ -43,6 +44,19 @@ export function MyCardsPage() {
   const unblockCard = useUnblockCard();
   const activateCard = useActivateCard();
   const activateByQR = useActivateCardByQR();
+
+  // Currency state
+  const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
+
+  useEffect(() => {
+    currencyService.getDefaultCurrency().then(setDefaultCurrency);
+  }, []);
+
+  const currencySymbol = defaultCurrency?.symbol || '';
+
+  const formatCurrency = (amount: number): string => {
+    return `${currencySymbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
 
   const [selectedCard, setSelectedCard] = useState<CardType | null>(null);
   const [showCardDetails, setShowCardDetails] = useState<string | null>(null);
@@ -191,6 +205,7 @@ export function MyCardsPage() {
                         setShowCardModal(true);
                       }}
                       isBlocking={blockCard.isPending || unblockCard.isPending}
+                      currencySymbol={currencySymbol}
                     />
                   ))}
                 </div>
@@ -223,6 +238,7 @@ export function MyCardsPage() {
                       }}
                       isBlocking={blockCard.isPending || unblockCard.isPending}
                       isActivating={activateCard.isPending}
+                      currencySymbol={currencySymbol}
                     />
                   ))}
                 </div>
@@ -313,6 +329,7 @@ export function MyCardsPage() {
             setShowCardModal(false);
             setSelectedCard(null);
           }}
+          currencySymbol={currencySymbol}
         />
       )}
     </MainLayout>
@@ -332,6 +349,7 @@ interface CardItemProps {
   onViewDetails: () => void;
   isBlocking: boolean;
   isActivating?: boolean;
+  currencySymbol: string;
 }
 
 function CardItem({
@@ -346,6 +364,7 @@ function CardItem({
   onViewDetails,
   isBlocking,
   isActivating,
+  currencySymbol,
 }: CardItemProps) {
   const getCardGradient = (type: string, idx: number) => {
     const gradients = [
@@ -437,7 +456,7 @@ function CardItem({
         <div className="flex items-center justify-between">
           <div className="text-sm">
             <p className="text-gray-500">Daily Limit</p>
-            <p className="font-medium">${card.dailyLimit.toLocaleString()}</p>
+            <p className="font-medium">{currencySymbol}{card.dailyLimit.toLocaleString()}</p>
           </div>
           <div className="flex gap-2">
             <Button variant="ghost" size="sm" onClick={onToggleDetails} title="Toggle card number">
@@ -479,9 +498,10 @@ function CardItem({
 interface CardDetailsModalProps {
   card: CardType;
   onClose: () => void;
+  currencySymbol: string;
 }
 
-function CardDetailsModal({ card, onClose }: CardDetailsModalProps) {
+function CardDetailsModal({ card, onClose, currencySymbol }: CardDetailsModalProps) {
   const { data: cardWithType } = useCardWithType(card.id);
   const [showSensitive, setShowSensitive] = useState(false);
 
@@ -546,11 +566,11 @@ function CardDetailsModal({ card, onClose }: CardDetailsModalProps) {
             </div>
             <div className="flex items-center justify-between py-2 border-b">
               <span className="text-gray-500">Daily Limit</span>
-              <span className="font-medium">${card.dailyLimit.toLocaleString()}</span>
+              <span className="font-medium">{currencySymbol}{card.dailyLimit.toLocaleString()}</span>
             </div>
             <div className="flex items-center justify-between py-2 border-b">
               <span className="text-gray-500">Monthly Limit</span>
-              <span className="font-medium">${card.monthlyLimit.toLocaleString()}</span>
+              <span className="font-medium">{currencySymbol}{card.monthlyLimit.toLocaleString()}</span>
             </div>
             <div className="flex items-center justify-between py-2">
               <span className="text-gray-500">Created</span>

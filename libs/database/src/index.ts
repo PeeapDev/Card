@@ -8,6 +8,7 @@ export * from './entities/account/wallet.entity';
 export * from './entities/account/account.entity';
 export * from './entities/account/ledger-entry.entity';
 export * from './entities/account/journal-entry.entity';
+export * from './entities/account/payment-settings.entity';
 
 // Card Entities
 export * from './entities/card/card.entity';

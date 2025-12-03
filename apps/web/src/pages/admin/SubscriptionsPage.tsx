@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   CreditCard,
   DollarSign,
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { currencyService, Currency } from '@/services/currency.service';
 
 interface SubscriptionPlan {
   id: string;
@@ -40,77 +41,20 @@ export function SubscriptionsPage() {
   const [saved, setSaved] = useState(false);
   const [showAddPlan, setShowAddPlan] = useState(false);
 
-  const [plans, setPlans] = useState<SubscriptionPlan[]>([
-    {
-      id: '1',
-      name: 'Starter',
-      description: 'Perfect for small businesses just getting started',
-      monthlyPrice: 29,
-      yearlyPrice: 290,
-      features: [
-        'Up to 100 transactions/month',
-        'Basic analytics',
-        'Email support',
-        'Standard payment processing',
-        '1 team member',
-      ],
-      limits: {
-        transactions: 100,
-        apiCalls: 1000,
-        teamMembers: 1,
-      },
-      isPopular: false,
-      isActive: true,
-    },
-    {
-      id: '2',
-      name: 'Business',
-      description: 'For growing businesses with higher volume',
-      monthlyPrice: 99,
-      yearlyPrice: 990,
-      features: [
-        'Up to 1,000 transactions/month',
-        'Advanced analytics',
-        'Priority email support',
-        'Lower processing fees',
-        '5 team members',
-        'Custom branding',
-        'Webhook integrations',
-      ],
-      limits: {
-        transactions: 1000,
-        apiCalls: 10000,
-        teamMembers: 5,
-      },
-      isPopular: true,
-      isActive: true,
-    },
-    {
-      id: '3',
-      name: 'Enterprise',
-      description: 'For large organizations with custom needs',
-      monthlyPrice: 299,
-      yearlyPrice: 2990,
-      features: [
-        'Unlimited transactions',
-        'Real-time analytics',
-        '24/7 phone & email support',
-        'Lowest processing fees',
-        'Unlimited team members',
-        'White-label solution',
-        'Dedicated account manager',
-        'Custom API limits',
-        'SLA guarantee',
-      ],
-      limits: {
-        transactions: -1,
-        apiCalls: -1,
-        teamMembers: -1,
-      },
-      isPopular: false,
-      isActive: true,
-    },
-  ]);
+  // Currency state
+  const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
+
+  useEffect(() => {
+    currencyService.getDefaultCurrency().then(setDefaultCurrency);
+  }, []);
+
+  const currencySymbol = defaultCurrency?.symbol || '';
+
+  const formatCurrency = (amount: number): string => {
+    return `${currencySymbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
 
   const handleSave = () => {
     setSaved(true);
@@ -204,7 +148,7 @@ export function SubscriptionsPage() {
               </div>
               <div>
                 <p className="text-sm text-gray-500">Monthly Revenue</p>
-                <p className="text-xl font-semibold">${stats.monthlyRevenue.toLocaleString()}</p>
+                <p className="text-xl font-semibold">{formatCurrency(stats.monthlyRevenue)}</p>
               </div>
             </div>
           </Card>
@@ -295,7 +239,7 @@ export function SubscriptionsPage() {
                   {isEditing ? (
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-gray-500">$</span>
+                        <span className="text-gray-500">{currencySymbol}</span>
                         <input
                           type="number"
                           value={plan.monthlyPrice}
@@ -305,7 +249,7 @@ export function SubscriptionsPage() {
                         <span className="text-gray-500">/month</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-gray-500 text-sm">$</span>
+                        <span className="text-gray-500 text-sm">{currencySymbol}</span>
                         <input
                           type="number"
                           value={plan.yearlyPrice}
@@ -318,10 +262,10 @@ export function SubscriptionsPage() {
                   ) : (
                     <>
                       <div className="flex items-baseline gap-1">
-                        <span className="text-3xl font-bold text-gray-900">${plan.monthlyPrice}</span>
+                        <span className="text-3xl font-bold text-gray-900">{currencySymbol}{plan.monthlyPrice}</span>
                         <span className="text-gray-500">/month</span>
                       </div>
-                      <p className="text-sm text-gray-500">or ${plan.yearlyPrice}/year (save 17%)</p>
+                      <p className="text-sm text-gray-500">or {currencySymbol}{plan.yearlyPrice}/year (save 17%)</p>
                     </>
                   )}
                 </div>

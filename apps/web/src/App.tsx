@@ -39,20 +39,45 @@ import { DevelopersPage } from '@/pages/admin/DevelopersPage';
 import { UsersManagementPage } from '@/pages/admin/UsersManagementPage';
 import { UserDetailPage } from '@/pages/admin/UserDetailPage';
 import { MerchantsManagementPage } from '@/pages/admin/MerchantsManagementPage';
+import { CreateMerchantPage } from '@/pages/admin/CreateMerchantPage';
 import { AgentsManagementPage } from '@/pages/admin/AgentsManagementPage';
 import { FeesPage } from '@/pages/admin/FeesPage';
 import { FeeSettingsPage } from '@/pages/admin/FeeSettingsPage';
 import { PaymentSettingsPage } from '@/pages/admin/PaymentSettingsPage';
+import { DepositsPage } from '@/pages/admin/DepositsPage';
 import { SubscriptionsPage } from '@/pages/admin/SubscriptionsPage';
 import { RolesManagementPage } from '@/pages/admin/RolesManagementPage';
 import { PotsManagementPage } from '@/pages/admin/PotsManagementPage';
+import { BusinessCategoriesPage } from '@/pages/admin/BusinessCategoriesPage';
+import { BusinessesPage } from '@/pages/admin/BusinessesPage';
 import { PaymentCheckoutPage } from '@/pages/PaymentCheckoutPage';
 import { PayPage } from '@/pages/PayPage';
+import { PaymentSuccessPage } from '@/pages/PaymentSuccessPage';
+import { PaymentCancelPage } from '@/pages/PaymentCancelPage';
+import { DepositSuccessPage } from '@/pages/DepositSuccessPage';
+import { DepositCancelPage } from '@/pages/DepositCancelPage';
+import { BusinessCheckoutPage } from '@/pages/BusinessCheckoutPage';
+import { CheckoutPage } from '@/pages/CheckoutPage';
+import { AppPaymentRedirectPage } from '@/pages/AppPaymentRedirectPage';
 
 // Merchant Pages
 import { MerchantDashboard } from '@/pages/merchant/MerchantDashboard';
 import { MerchantSettingsPage } from '@/pages/merchant/MerchantSettingsPage';
 import { MerchantDeveloperPage } from '@/pages/merchant/MerchantDeveloperPage';
+import { MerchantTransactionsPage } from '@/pages/merchant/MerchantTransactionsPage';
+import { MerchantPayoutsPage } from '@/pages/merchant/MerchantPayoutsPage';
+import { MerchantRefundsPage } from '@/pages/merchant/MerchantRefundsPage';
+import { MerchantReportsPage } from '@/pages/merchant/MerchantReportsPage';
+import { MerchantPaymentLinksPage } from '@/pages/merchant/MerchantPaymentLinksPage';
+import { MerchantProfilePage } from '@/pages/merchant/MerchantProfilePage';
+import { CreateBusinessPage } from '@/pages/merchant/CreateBusinessPage';
+import { CreateDeveloperBusinessPage } from '@/pages/merchant/CreateDeveloperBusinessPage';
+import { MerchantShopsPage } from '@/pages/merchant/MerchantShopsPage';
+import { MerchantUpgradePage } from '@/pages/merchant/MerchantUpgradePage';
+import { ShopDetailPage } from '@/pages/merchant/ShopDetailPage';
+import { ShopTransactionsPage } from '@/pages/merchant/ShopTransactionsPage';
+import { ShopDisputesPage } from '@/pages/merchant/ShopDisputesPage';
+import { ShopSettingsPage } from '@/pages/merchant/ShopSettingsPage';
 
 // Agent Pages
 import { AgentDashboard } from '@/pages/agent/AgentDashboard';
@@ -87,6 +112,22 @@ function App() {
 
               {/* Payment Link Route (query params) */}
               <Route path="/pay" element={<PayPage />} />
+
+              {/* Payment Success/Cancel Routes */}
+              <Route path="/payment/success" element={<PaymentSuccessPage />} />
+              <Route path="/payment/cancel" element={<PaymentCancelPage />} />
+
+              {/* Deposit Success/Cancel Routes */}
+              <Route path="/deposit/success" element={<DepositSuccessPage />} />
+              <Route path="/deposit/cancel" element={<DepositCancelPage />} />
+
+              {/* Payment Checkout Route - handles both business checkout and payment checkout */}
+              {/* If amount query param exists, it's a payment checkout, otherwise business checkout */}
+              <Route path="/checkout/:id" element={<CheckoutPage />} />
+
+              {/* App Payment Redirect - Smart deep link handler for QR scans */}
+              {/* Redirects to app if installed, or app store if not */}
+              <Route path="/app/pay/:paymentId" element={<AppPaymentRedirectPage />} />
 
               {/* Regular User Protected Routes */}
               <Route
@@ -284,6 +325,14 @@ function App() {
                 }
               />
               <Route
+                path="/admin/merchants/create"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <CreateMerchantPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
                 path="/admin/agents"
                 element={
                   <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
@@ -316,6 +365,14 @@ function App() {
                 }
               />
               <Route
+                path="/admin/deposits"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <DepositsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
                 path="/admin/subscriptions"
                 element={
                   <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
@@ -336,6 +393,22 @@ function App() {
                 element={
                   <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
                     <PotsManagementPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/admin/business-categories"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <BusinessCategoriesPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/admin/businesses"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <BusinessesPage />
                   </RoleBasedRoute>
                 }
               />
@@ -374,10 +447,122 @@ function App() {
                 }
               />
               <Route
+                path="/merchant/transactions"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <MerchantTransactionsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/payouts"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <MerchantPayoutsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/refunds"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <MerchantRefundsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/reports"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <MerchantReportsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/payment-links"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <MerchantPaymentLinksPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/profile"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <MerchantProfilePage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/create-business"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <CreateBusinessPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
                 path="/merchant/settings"
                 element={
                   <RoleBasedRoute allowedRoles={['merchant']}>
                     <MerchantSettingsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/shops"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <MerchantShopsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/upgrade"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <MerchantUpgradePage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/shops/:businessId"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <ShopDetailPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/shops/:businessId/transactions"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <ShopTransactionsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/shops/:businessId/disputes"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <ShopDisputesPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/shops/:businessId/settings"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <ShopSettingsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/developer/create-business"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <CreateDeveloperBusinessPage />
                   </RoleBasedRoute>
                 }
               />

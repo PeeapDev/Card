@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import type { User, AuthTokens, LoginRequest, RegisterRequest } from '@/types';
+import type { User, AuthTokens, LoginRequest, RegisterRequest, UserRole } from '@/types';
 import { normalizePhoneNumber } from '@/utils/phone';
 
 export const authService = {
@@ -67,13 +67,21 @@ export const authService = {
     }
 
     // Create user object
+    // Handle both 'roles' (comma-separated) and 'role' (single value) columns
+    let userRoles: UserRole[] = ['user'];
+    if (dbUser.roles) {
+      userRoles = dbUser.roles.split(',').map((r: string) => r.trim()) as UserRole[];
+    } else if (dbUser.role) {
+      userRoles = [dbUser.role] as UserRole[];
+    }
+
     const user: User = {
       id: dbUser.id,
       email: dbUser.email,
       firstName: dbUser.first_name,
       lastName: dbUser.last_name,
       phone: dbUser.phone,
-      roles: dbUser.roles?.split(',') || ['user'],
+      roles: userRoles,
       kycStatus: dbUser.kyc_status,
       kycTier: dbUser.kyc_tier,
       emailVerified: dbUser.email_verified,
@@ -212,13 +220,22 @@ export const authService = {
       }
 
       const dbUser = users[0];
+
+      // Handle both 'roles' (comma-separated) and 'role' (single value) columns
+      let userRoles: UserRole[] = ['user'];
+      if (dbUser.roles) {
+        userRoles = dbUser.roles.split(',').map((r: string) => r.trim()) as UserRole[];
+      } else if (dbUser.role) {
+        userRoles = [dbUser.role] as UserRole[];
+      }
+
       return {
         id: dbUser.id,
         email: dbUser.email,
         firstName: dbUser.first_name,
         lastName: dbUser.last_name,
         phone: dbUser.phone,
-        roles: dbUser.roles?.split(',') || ['user'],
+        roles: userRoles,
         kycStatus: dbUser.kyc_status,
         kycTier: dbUser.kyc_tier,
         emailVerified: dbUser.email_verified,
@@ -247,11 +264,20 @@ export const authService = {
       }
 
       const dbUser = users[0];
+
+      // Handle both 'roles' (comma-separated) and 'role' (single value) columns
+      let userRoles: string[] = ['user'];
+      if (dbUser.roles) {
+        userRoles = dbUser.roles.split(',').map((r: string) => r.trim());
+      } else if (dbUser.role) {
+        userRoles = [dbUser.role];
+      }
+
       return {
         accessToken: btoa(JSON.stringify({
           userId: dbUser.id,
           email: dbUser.email,
-          roles: dbUser.roles?.split(',') || ['user'],
+          roles: userRoles,
           exp: Date.now() + 3600000
         })),
         refreshToken: btoa(JSON.stringify({

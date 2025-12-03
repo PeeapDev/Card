@@ -19,6 +19,7 @@ import {
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
+import { currencyService, Currency } from '@/services/currency.service';
 
 interface Transaction {
   id: string;
@@ -54,9 +55,15 @@ export function TransactionsPage() {
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
 
+  // Currency state
+  const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
+
   useEffect(() => {
+    currencyService.getDefaultCurrency().then(setDefaultCurrency);
     fetchTransactions();
   }, []);
+
+  const currencySymbol = defaultCurrency?.symbol || '';
 
   const fetchTransactions = async () => {
     setLoading(true);
@@ -205,7 +212,7 @@ export function TransactionsPage() {
           </Card>
           <Card className="p-4">
             <p className="text-sm text-gray-500">Total Volume</p>
-            <p className="text-2xl font-bold">${(stats.volume / 1000000).toFixed(2)}M</p>
+            <p className="text-2xl font-bold">{currencySymbol}{(stats.volume / 1000000).toFixed(2)}M</p>
           </Card>
           <Card className="p-4">
             <p className="text-sm text-gray-500">Pending</p>
@@ -217,7 +224,7 @@ export function TransactionsPage() {
           </Card>
           <Card className="p-4">
             <p className="text-sm text-gray-500">Avg Transaction</p>
-            <p className="text-2xl font-bold">${stats.avgValue}</p>
+            <p className="text-2xl font-bold">{currencySymbol}{stats.avgValue.toFixed(2)}</p>
           </Card>
           <Card className="p-4">
             <p className="text-sm text-gray-500">Success Rate</p>

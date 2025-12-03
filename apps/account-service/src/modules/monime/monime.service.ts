@@ -1,35 +1,82 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
 import { MonimeApiService } from './monime-api.service';
 import { MonimeTransaction, MonimeTransactionType, MonimeTransactionStatus, MonimeDepositMethod, MonimeWithdrawMethod } from './entities/monime-transaction.entity';
 import { InitiateDepositDto, DepositResponseDto, DepositMethod } from './dto/deposit.dto';
 import { InitiateWithdrawDto, WithdrawResponseDto, WithdrawMethod } from './dto/withdraw.dto';
-import { WalletsService } from '../wallets/wallets.service';
-import { LedgerService } from '../ledger/ledger.service';
+import { getSupabaseWallet, creditSupabaseWallet, SupabaseWallet } from '../../lib/supabase';
+import { SettingsService } from '../settings/settings.service';
 
 @Injectable()
 export class MonimeService {
   private readonly logger = new Logger(MonimeService.name);
-  private readonly callbackBaseUrl: string;
 
   constructor(
     @InjectRepository(MonimeTransaction)
     private readonly transactionRepo: Repository<MonimeTransaction>,
     private readonly monimeApi: MonimeApiService,
-    private readonly walletsService: WalletsService,
-    private readonly ledgerService: LedgerService,
     private readonly configService: ConfigService,
-    private readonly dataSource: DataSource,
-  ) {
-    this.callbackBaseUrl = this.configService.get('APP_URL', 'http://localhost:3002');
+    @Inject(forwardRef(() => SettingsService))
+    private readonly settingsService: SettingsService,
+  ) {}
+
+  /**
+   * Get callback URLs from settings or fallback to config
+   */
+  private async getUrls(): Promise<{ backendUrl: string; frontendUrl: string }> {
+    // First try environment variables (most reliable for deployment)
+    let backendUrl = this.configService.get<string>('APP_URL') || '';
+    let frontendUrl = this.configService.get<string>('FRONTEND_URL') || '';
+
+    // Try settings if env vars are not set
+    if (!backendUrl || !frontendUrl) {
+      try {
+        const config = await this.settingsService.getMonimeConfig();
+        if (config?.backendUrl && config.backendUrl.startsWith('http')) {
+          backendUrl = config.backendUrl;
+        }
+        if (config?.frontendUrl && config.frontendUrl.startsWith('http')) {
+          frontendUrl = config.frontendUrl;
+        }
+      } catch (e) {
+        this.logger.debug('Could not get URLs from settings');
+      }
+    }
+
+    // Final fallback to localhost defaults
+    if (!backendUrl || !backendUrl.startsWith('http')) {
+      backendUrl = 'http://localhost:3002';
+    }
+    if (!frontendUrl || !frontendUrl.startsWith('http')) {
+      frontendUrl = 'http://localhost:5173';
+    }
+
+    // Remove trailing slashes
+    backendUrl = backendUrl.replace(/\/$/, '');
+    frontendUrl = frontendUrl.replace(/\/$/, '');
+
+    this.logger.log(`Using URLs: backend=${backendUrl}, frontend=${frontendUrl}`);
+    return { backendUrl, frontendUrl };
   }
 
   async initiateDeposit(userId: string, dto: InitiateDepositDto): Promise<DepositResponseDto> {
-    const wallet = await this.walletsService.getWallet(dto.walletId);
-    if (!wallet) throw new NotFoundException('Wallet not found');
+    // Use Supabase to verify wallet exists (frontend uses Supabase for wallets)
+    const supabaseWallet = await getSupabaseWallet(dto.walletId);
+    if (!supabaseWallet) {
+      this.logger.warn(`Wallet not found in Supabase: ${dto.walletId}`);
+      throw new NotFoundException('Wallet not found');
+    }
+    this.logger.log(`Found wallet in Supabase: ${supabaseWallet.id}, balance: ${supabaseWallet.balance}`);
+
+    // Use the wallet's user_id if not provided via header
+    const effectiveUserId = userId || supabaseWallet.user_id;
+    if (!effectiveUserId) {
+      this.logger.error('No userId provided and wallet has no user_id');
+      throw new BadRequestException('User ID is required');
+    }
 
     const idempotencyKey = uuidv4();
     const transaction = this.transactionRepo.create({
@@ -37,7 +84,7 @@ export class MonimeService {
       type: MonimeTransactionType.DEPOSIT,
       status: MonimeTransactionStatus.PENDING,
       walletId: dto.walletId,
-      userId,
+      userId: effectiveUserId,
       amount: dto.amount,
       currencyCode: dto.currency,
       depositMethod: dto.method as unknown as MonimeDepositMethod,
@@ -46,15 +93,37 @@ export class MonimeService {
     });
 
     if (dto.method === DepositMethod.CHECKOUT_SESSION) {
+      // Get URLs from settings or config
+      const urls = await this.getUrls();
+
+      // Build success/cancel URLs that go through backend first
+      const successUrl = `${urls.backendUrl}/monime/deposit/success?sessionId={CHECKOUT_SESSION_ID}&walletId=${dto.walletId}&redirect=${encodeURIComponent(urls.frontendUrl + '/deposit/success')}`;
+      const cancelUrl = `${urls.backendUrl}/monime/deposit/cancel?sessionId={CHECKOUT_SESSION_ID}&walletId=${dto.walletId}&redirect=${encodeURIComponent(urls.frontendUrl + '/deposit/cancel')}`;
+
+      this.logger.log(`Creating checkout session with successUrl: ${successUrl}`);
+      this.logger.log(`Creating checkout session with cancelUrl: ${cancelUrl}`);
+
       const response = await this.monimeApi.createCheckoutSession({
-        amount: { currency: dto.currency, value: dto.amount },
-        successUrl: dto.successUrl || `${this.callbackBaseUrl}/deposit/success`,
-        cancelUrl: dto.cancelUrl || `${this.callbackBaseUrl}/deposit/cancel`,
-        metadata: { walletId: dto.walletId, idempotencyKey },
+        name: 'Wallet Deposit',
+        lineItems: [
+          {
+            type: 'custom',
+            name: 'Wallet Deposit',
+            price: {
+              currency: dto.currency,
+              value: dto.amount,
+            },
+            quantity: 1,
+            description: dto.description || 'Add funds to your wallet',
+          },
+        ],
+        successUrl,
+        cancelUrl,
+        metadata: { walletId: dto.walletId, userId, idempotencyKey, type: 'deposit' },
       }, idempotencyKey);
 
-      transaction.monimeReference = response.result.id;
-      transaction.paymentUrl = response.result.url;
+      transaction.monimeReference = (response as any).result?.id;
+      transaction.paymentUrl = (response as any).result?.redirectUrl || (response as any).result?.url;
       transaction.monimeResponse = response;
     } else if (dto.method === DepositMethod.PAYMENT_CODE) {
       const response = await this.monimeApi.createPaymentCode({
@@ -65,8 +134,8 @@ export class MonimeService {
         metadata: { walletId: dto.walletId, idempotencyKey },
       }, idempotencyKey);
 
-      transaction.monimeReference = response.result.id;
-      transaction.ussdCode = response.result.ussdCode;
+      transaction.monimeReference = (response as any).result?.id;
+      transaction.ussdCode = (response as any).result?.ussdCode;
       transaction.monimeResponse = response;
     }
 
@@ -86,16 +155,16 @@ export class MonimeService {
   }
 
   async initiateWithdraw(userId: string, dto: InitiateWithdrawDto): Promise<WithdrawResponseDto> {
-    const wallet = await this.walletsService.getWallet(dto.walletId);
+    // Verify wallet exists via Supabase
+    const wallet = await getSupabaseWallet(dto.walletId);
     if (!wallet) throw new NotFoundException('Wallet not found');
-    if (Number(wallet.availableBalance) < dto.amount) {
+
+    const currentBalance = parseFloat(wallet.balance?.toString() || '0');
+    if (currentBalance < dto.amount) {
       throw new BadRequestException('Insufficient funds');
     }
 
     const idempotencyKey = uuidv4();
-
-    // Hold funds first
-    await this.walletsService.holdFunds(dto.walletId, dto.amount, idempotencyKey);
 
     const transaction = this.transactionRepo.create({
       idempotencyKey,
@@ -114,7 +183,7 @@ export class MonimeService {
     });
 
     try {
-      // For now, use internal transfer API - adjust based on actual Monime payout API
+      // Use internal transfer API for payout
       const response = await this.monimeApi.createInternalTransfer({
         amount: { currency: dto.currency, value: dto.amount },
         sourceFinancialAccount: this.configService.get('MONIME_SOURCE_ACCOUNT_ID'),
@@ -123,11 +192,10 @@ export class MonimeService {
         metadata: { walletId: dto.walletId, idempotencyKey, userId },
       }, idempotencyKey);
 
-      transaction.monimeReference = response.result.id;
+      transaction.monimeReference = (response as any).result?.id;
       transaction.monimeResponse = response;
     } catch (error) {
-      // Release hold on failure
-      await this.walletsService.releaseHold(dto.walletId, dto.amount, idempotencyKey);
+      this.logger.error(`Withdrawal failed: ${error}`);
       throw error;
     }
 
@@ -203,46 +271,35 @@ export class MonimeService {
   }
 
   private async completeDeposit(transaction: MonimeTransaction, data: any): Promise<void> {
-    await this.dataSource.transaction(async (manager) => {
-      // Credit wallet
-      const wallet = await this.walletsService.getWallet(transaction.walletId);
-      await this.walletsService.topUp(transaction.walletId, {
-        amount: Number(transaction.amount),
-        reference: transaction.monimeReference,
-        paymentMethod: 'BANK_TRANSFER' as any, // Monime deposit
-        description: `Monime deposit - ${transaction.id}`,
-      });
+    try {
+      // Credit wallet via Supabase
+      await creditSupabaseWallet(
+        transaction.walletId,
+        Number(transaction.amount) / 100, // Convert from minor units
+        transaction.monimeReference,
+        `Monime deposit - ${transaction.id}`,
+      );
 
       transaction.status = MonimeTransactionStatus.COMPLETED;
       transaction.completedAt = new Date();
       transaction.fee = data.fees?.value || 0;
       transaction.netAmount = Number(transaction.amount) - (transaction.fee || 0);
-    });
 
-    this.logger.log(`Deposit completed: ${transaction.id}`);
+      this.logger.log(`Deposit completed: ${transaction.id}`);
+    } catch (error) {
+      this.logger.error(`Failed to complete deposit ${transaction.id}: ${error}`);
+      throw error;
+    }
   }
 
   private async completeWithdrawal(transaction: MonimeTransaction, data: any): Promise<void> {
-    // Capture the held funds
-    await this.walletsService.captureHold(
-      transaction.walletId,
-      Number(transaction.amount),
-      transaction.id,
-    );
-
+    // TODO: Debit wallet via Supabase for withdrawal
     transaction.status = MonimeTransactionStatus.COMPLETED;
     transaction.completedAt = new Date();
     this.logger.log(`Withdrawal completed: ${transaction.id}`);
   }
 
   private async failWithdrawal(transaction: MonimeTransaction, data: any): Promise<void> {
-    // Release the held funds back to available
-    await this.walletsService.releaseHold(
-      transaction.walletId,
-      Number(transaction.amount),
-      transaction.id,
-    );
-
     transaction.status = MonimeTransactionStatus.FAILED;
     transaction.failureReason = data.failureDetail?.message || 'Withdrawal failed';
     this.logger.error(`Withdrawal failed: ${transaction.id} - ${transaction.failureReason}`);
@@ -262,5 +319,157 @@ export class MonimeService {
 
   async listBanks() {
     return this.monimeApi.listBanks('SL');
+  }
+
+  /**
+   * Complete deposit from checkout session callback
+   * This is called when user returns from Monime checkout
+   */
+  async completeDepositFromCallback(sessionId: string, walletId: string): Promise<{
+    status: string;
+    amount: number;
+    currency: string;
+    newBalance?: number;
+  }> {
+    // Find the transaction by Monime reference
+    let transaction = await this.transactionRepo.findOne({
+      where: { monimeReference: sessionId },
+    });
+
+    // If no transaction found, try to verify the session directly with Monime
+    const sessionData = await this.monimeApi.getCheckoutSession(sessionId) as any;
+    const sessionStatus = sessionData?.result?.status;
+
+    this.logger.log(`Deposit callback - Session ${sessionId} status: ${sessionStatus}`);
+
+    if (!transaction) {
+      // Session exists in Monime but not in our DB - this shouldn't happen normally
+      // but we handle it gracefully
+      this.logger.warn(`No transaction found for session ${sessionId}, session status: ${sessionStatus}`);
+
+      // Get amount from session
+      const lineItem = sessionData?.result?.lineItems?.data?.[0];
+      const amount = lineItem?.price?.value || 0;
+      const currency = lineItem?.price?.currency || 'SLE';
+
+      if (sessionStatus === 'completed') {
+        // Credit the wallet via Supabase (frontend wallet database)
+        try {
+          const { wallet } = await creditSupabaseWallet(
+            walletId,
+            amount / 100, // Convert from minor units
+            sessionId,
+            `Monime deposit - ${sessionId}`,
+          );
+
+          return {
+            status: 'completed',
+            amount,
+            currency,
+            newBalance: wallet ? parseFloat(wallet.balance?.toString() || '0') : undefined,
+          };
+        } catch (error) {
+          this.logger.error(`Failed to credit wallet via Supabase: ${error}`);
+          return {
+            status: 'completed',
+            amount,
+            currency,
+          };
+        }
+      }
+
+      return {
+        status: sessionStatus || 'unknown',
+        amount,
+        currency,
+      };
+    }
+
+    // Check if already completed
+    if (transaction.status === MonimeTransactionStatus.COMPLETED) {
+      const wallet = await getSupabaseWallet(walletId);
+      return {
+        status: 'completed',
+        amount: Number(transaction.amount),
+        currency: transaction.currencyCode,
+        newBalance: wallet ? parseFloat(wallet.balance?.toString() || '0') : undefined,
+      };
+    }
+
+    // Verify session is completed
+    if (sessionStatus === 'completed') {
+      // Credit the wallet via Supabase
+      try {
+        const { wallet } = await creditSupabaseWallet(
+          transaction.walletId,
+          Number(transaction.amount) / 100, // Convert from minor units
+          transaction.monimeReference,
+          `Monime deposit - ${transaction.id}`,
+        );
+
+        // Update transaction status
+        transaction.status = MonimeTransactionStatus.COMPLETED;
+        transaction.completedAt = new Date();
+        await this.transactionRepo.save(transaction);
+
+        this.logger.log(`Deposit completed via callback: ${transaction.id}`);
+
+        return {
+          status: 'completed',
+          amount: Number(transaction.amount),
+          currency: transaction.currencyCode,
+          newBalance: wallet ? parseFloat(wallet.balance?.toString() || '0') : undefined,
+        };
+      } catch (error) {
+        this.logger.error(`Failed to credit wallet via Supabase: ${error}`);
+        // Still mark as completed in our system
+        transaction.status = MonimeTransactionStatus.COMPLETED;
+        transaction.completedAt = new Date();
+        await this.transactionRepo.save(transaction);
+
+        return {
+          status: 'completed',
+          amount: Number(transaction.amount),
+          currency: transaction.currencyCode,
+        };
+      }
+    }
+
+    return {
+      status: sessionStatus || transaction.status,
+      amount: Number(transaction.amount),
+      currency: transaction.currencyCode,
+    };
+  }
+
+  /**
+   * Cancel a deposit (mark as cancelled)
+   */
+  async cancelDeposit(sessionId: string): Promise<void> {
+    const transaction = await this.transactionRepo.findOne({
+      where: { monimeReference: sessionId },
+    });
+
+    if (transaction && transaction.status === MonimeTransactionStatus.PENDING) {
+      transaction.status = MonimeTransactionStatus.CANCELLED;
+      await this.transactionRepo.save(transaction);
+      this.logger.log(`Deposit cancelled: ${transaction.id}`);
+    }
+  }
+
+  /**
+   * Get all deposit transactions for admin view
+   */
+  async getAllDeposits(limit: number = 50, offset: number = 0): Promise<{
+    data: MonimeTransaction[];
+    total: number;
+  }> {
+    const [data, total] = await this.transactionRepo.findAndCount({
+      where: { type: MonimeTransactionType.DEPOSIT },
+      order: { createdAt: 'DESC' },
+      take: limit,
+      skip: offset,
+    });
+    return { data, total };
   }
 }

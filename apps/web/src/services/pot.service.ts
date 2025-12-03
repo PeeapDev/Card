@@ -267,31 +267,25 @@ export const potService = {
    * Create a new pot
    */
   async createPot(userId: string, request: CreatePotRequest): Promise<Pot> {
-    // Skip RPC and use direct table insertion since RPC may not exist
     console.log('Creating pot directly via table insertion');
+
+    // First check if pots table exists by trying to query it
+    const { error: tableCheckError } = await supabase
+      .from('pots')
+      .select('id')
+      .limit(1);
+
+    if (tableCheckError && tableCheckError.message.includes('does not exist')) {
+      throw new Error(
+        'Pots table does not exist. Please run the database migration first. ' +
+        'Go to Supabase SQL Editor and run the pot system migration.'
+      );
+    }
 
     // Generate unique external_id for pot wallet
     const externalId = `pot_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
 
-    // Create pot wallet
-    const { data: wallet, error: walletError } = await supabase
-      .from('wallets')
-      .insert({
-        external_id: externalId,
-        user_id: userId,
-        wallet_type: 'pot',
-        currency: 'SLE',
-        balance: 0,
-        status: 'ACTIVE',
-      })
-      .select()
-      .single();
-
-    if (walletError) {
-      throw new Error('Failed to create pot wallet: ' + walletError.message);
-    }
-
-    // Calculate lock end date
+    // Calculate lock end date first (before creating wallet)
     let lockEndDate = request.maturityDate;
     if (!lockEndDate && request.lockPeriodDays) {
       const endDate = new Date();
@@ -319,6 +313,27 @@ export const potService = {
       }
       nextAutoDepositDate = nextDate.toISOString();
     }
+
+    // Create pot wallet
+    const { data: wallet, error: walletError } = await supabase
+      .from('wallets')
+      .insert({
+        external_id: externalId,
+        user_id: userId,
+        wallet_type: 'pot',
+        currency: 'SLE',
+        balance: 0,
+        status: 'ACTIVE',
+      })
+      .select()
+      .single();
+
+    if (walletError) {
+      console.error('Failed to create pot wallet:', walletError);
+      throw new Error('Failed to create pot wallet: ' + walletError.message);
+    }
+
+    console.log('Pot wallet created:', wallet.id);
 
     // Create pot
     const { data: pot, error: potError } = await supabase
@@ -348,10 +363,16 @@ export const potService = {
       .single();
 
     if (potError) {
+      console.error('Failed to create pot, cleaning up wallet:', potError);
       // Cleanup wallet
-      await supabase.from('wallets').delete().eq('id', wallet.id);
+      const { error: deleteError } = await supabase.from('wallets').delete().eq('id', wallet.id);
+      if (deleteError) {
+        console.error('Failed to cleanup wallet:', deleteError);
+      }
       throw new Error('Failed to create pot: ' + potError.message);
     }
+
+    console.log('Pot created successfully:', pot.id);
 
     return {
       ...mapPot(pot),

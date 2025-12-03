@@ -10,7 +10,7 @@ interface FraudCheckRequest {
   currency: string;
   merchantId: string;
   merchantMcc?: string;
-  entryMode: string;
+  channel: string;
   ipAddress?: string;
   deviceId?: string;
   userId?: string;

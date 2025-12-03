@@ -3,10 +3,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import {
   LayoutDashboard,
-  Key,
   Webhook,
   Activity,
-  BookOpen,
   Settings,
   LogOut,
   Menu,
@@ -14,10 +12,10 @@ import {
   Bell,
   Code2,
   Terminal,
-  TestTube,
   FileCode,
   Home,
   ArrowLeft,
+  Store,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -40,12 +38,9 @@ export function StandaloneDeveloperLayout({
   const navigate = useNavigate();
 
   const navItems = [
-    { path: `${basePath}`, label: 'Dashboard', icon: LayoutDashboard, exact: true },
-    { path: `${basePath}/api-keys`, label: 'API Keys', icon: Key },
+    { path: `${basePath}`, label: 'Businesses', icon: Store, exact: true },
     { path: `${basePath}/webhooks`, label: 'Webhooks', icon: Webhook },
     { path: `${basePath}/logs`, label: 'Request Logs', icon: Activity },
-    { path: `${basePath}/sandbox`, label: 'Sandbox', icon: TestTube },
-    { path: `${basePath}/simulator`, label: 'Simulator', icon: Terminal },
     { path: `${basePath}/docs`, label: 'SDK & Libraries', icon: FileCode },
     { path: `${basePath}/settings`, label: 'Settings', icon: Settings },
   ];
@@ -96,14 +91,6 @@ export function StandaloneDeveloperLayout({
               <ArrowLeft className="w-4 h-4" />
               <span className="text-sm font-medium">Back to {homeLabel}</span>
             </Link>
-          </div>
-
-          {/* Environment Switcher */}
-          <div className="px-4 py-3 border-b border-gray-800">
-            <select className="w-full bg-gray-800 text-white text-sm rounded-lg px-3 py-2 border border-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-              <option value="test">Test Environment</option>
-              <option value="live">Live Environment</option>
-            </select>
           </div>
 
           {/* Navigation */}
@@ -176,11 +163,6 @@ export function StandaloneDeveloperLayout({
               >
                 <Menu className="w-6 h-6" />
               </button>
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">
-                  Test Mode
-                </span>
-              </div>
             </div>
             <div className="flex items-center gap-4">
               <Link

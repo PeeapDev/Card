@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   CreditCard,
   Plus,
@@ -22,6 +22,7 @@ import {
 } from '@/hooks/useCards';
 import type { CardType, CreateCardTypeRequest } from '@/services/card.service';
 import { clsx } from 'clsx';
+import { currencyService, Currency } from '@/services/currency.service';
 
 const KYC_LEVELS = [
   { value: 1, label: 'Basic', description: 'Email verification only' },
@@ -60,6 +61,19 @@ export function CardTypesPage() {
   const createCardType = useCreateCardType();
   const updateCardType = useUpdateCardType();
   const deleteCardType = useDeleteCardType();
+
+  // Currency state
+  const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
+
+  useEffect(() => {
+    currencyService.getDefaultCurrency().then(setDefaultCurrency);
+  }, []);
+
+  const currencySymbol = defaultCurrency?.symbol || '';
+
+  const formatCurrency = (amount: number): string => {
+    return `${currencySymbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
 
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -185,7 +199,7 @@ export function CardTypesPage() {
                       <div>
                         <p className="text-xs opacity-70">Price</p>
                         <p className="text-lg font-bold">
-                          {cardType.price === 0 ? 'FREE' : `$${cardType.price.toFixed(2)}`}
+                          {cardType.price === 0 ? 'FREE' : formatCurrency(cardType.price)}
                         </p>
                       </div>
                       <div className="text-right">
@@ -211,12 +225,12 @@ export function CardTypesPage() {
                     <div>
                       <p className="text-gray-500">Transaction Fee</p>
                       <p className="font-medium">
-                        {cardType.transactionFeePercentage}% + ${cardType.transactionFeeFixed.toFixed(2)}
+                        {cardType.transactionFeePercentage}% + {formatCurrency(cardType.transactionFeeFixed)}
                       </p>
                     </div>
                     <div>
                       <p className="text-gray-500">Daily Limit</p>
-                      <p className="font-medium">${cardType.dailyLimit.toLocaleString()}</p>
+                      <p className="font-medium">{currencySymbol}{cardType.dailyLimit.toLocaleString()}</p>
                     </div>
                   </div>
 

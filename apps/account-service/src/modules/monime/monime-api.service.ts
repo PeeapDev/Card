@@ -1,34 +1,49 @@
-import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, Logger, HttpException, HttpStatus, Inject, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
+import { SettingsService } from '../settings/settings.service';
+
+interface MonimeCredentials {
+  accessToken: string;
+  spaceId: string;
+}
 
 @Injectable()
 export class MonimeApiService {
   private readonly logger = new Logger(MonimeApiService.name);
   private readonly baseUrl: string;
-  private readonly accessToken: string;
-  private readonly spaceId: string;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    @Inject(forwardRef(() => SettingsService))
+    private readonly settingsService: SettingsService,
+  ) {
     this.baseUrl = this.configService.get<string>('MONIME_API_URL', 'https://api.monime.io');
-    this.accessToken = this.configService.get<string>('MONIME_ACCESS_TOKEN', '');
-    this.spaceId = this.configService.get<string>('MONIME_SPACE_ID', '');
   }
 
-  private getHeaders(idempotencyKey?: string): Record<string, string> {
+  private async getCredentials(): Promise<MonimeCredentials> {
+    const config = await this.settingsService.getMonimeConfig();
+    return {
+      accessToken: config.accessToken || '',
+      spaceId: config.spaceId || '',
+    };
+  }
+
+  private getHeaders(credentials: MonimeCredentials, idempotencyKey?: string): Record<string, string> {
     const headers: Record<string, string> = {
-      'Authorization': `Bearer ${this.accessToken}`,
+      'Authorization': `Bearer ${credentials.accessToken}`,
       'Content-Type': 'application/json',
-      'Monime-Space-Id': this.spaceId,
+      'Monime-Space-Id': credentials.spaceId,
     };
     if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
     return headers;
   }
 
   private async request<T>(method: string, endpoint: string, body?: any, idempotencyKey?: string): Promise<T> {
+    const credentials = await this.getCredentials();
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       method,
-      headers: this.getHeaders(idempotencyKey),
+      headers: this.getHeaders(credentials, idempotencyKey),
       body: body ? JSON.stringify(body) : undefined,
     });
     const data = await response.json();
@@ -68,7 +83,8 @@ export class MonimeApiService {
     return this.request('GET', `/v1/payments/${paymentId}`);
   }
 
-  isTestMode(): boolean {
-    return this.accessToken.startsWith('mon_test_');
+  async isTestMode(): Promise<boolean> {
+    const credentials = await this.getCredentials();
+    return credentials.accessToken.startsWith('mon_test_');
   }
 }

@@ -31,15 +31,28 @@ export class EventSourcingService {
       ? manager.getRepository(TransactionEvent)
       : this.eventRepository;
 
+    // Get the next version number for this aggregate
+    const lastEvent = await repo.findOne({
+      where: { aggregateId: data.transactionId },
+      order: { version: 'DESC' },
+    });
+    const nextVersion = lastEvent ? lastEvent.version + 1 : 1;
+
     const event = repo.create({
-      transactionId: data.transactionId,
+      aggregateId: data.transactionId,
+      aggregateType: 'Transaction',
       eventType: data.eventType,
-      previousState: data.previousState,
-      newState: data.newState,
-      amount: data.amount,
-      metadata: data.metadata,
-      performedBy: data.performedBy,
-      ipAddress: data.ipAddress,
+      eventData: {
+        previousState: data.previousState,
+        newState: data.newState,
+        amount: data.amount,
+        ...data.metadata,
+      },
+      version: nextVersion,
+      metadata: {
+        userId: data.performedBy,
+        ipAddress: data.ipAddress,
+      },
     });
 
     await repo.save(event);
@@ -53,7 +66,7 @@ export class EventSourcingService {
 
   async getTransactionHistory(transactionId: string): Promise<TransactionEvent[]> {
     return this.eventRepository.find({
-      where: { transactionId },
+      where: { aggregateId: transactionId },
       order: { createdAt: 'ASC' },
     });
   }
@@ -66,6 +79,6 @@ export class EventSourcingService {
     }
 
     const lastEvent = events[events.length - 1];
-    return lastEvent.newState || TransactionState.INITIATED;
+    return lastEvent.eventData?.newState || TransactionState.INITIATED;
   }
 }

@@ -22,6 +22,7 @@ import {
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
+import { currencyService, Currency } from '@/services/currency.service';
 
 interface Account {
   id: string;
@@ -53,17 +54,33 @@ export function AccountsPage() {
 
   const [accounts, setAccounts] = useState<Account[]>([]);
 
+  // Currency state
+  const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
+
   useEffect(() => {
+    currencyService.getDefaultCurrency().then(setDefaultCurrency);
     fetchAccounts();
   }, []);
+
+  const currencySymbol = defaultCurrency?.symbol || '';
 
   const fetchAccounts = async () => {
     setLoading(true);
     try {
-      // Fetch wallets from database
+      // Fetch wallets with user info using a join
       const { data: wallets, error } = await supabase
         .from('wallets')
-        .select('*')
+        .select(`
+          *,
+          users:user_id (
+            id,
+            first_name,
+            last_name,
+            email,
+            username,
+            role
+          )
+        `)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -73,31 +90,40 @@ export function AccountsPage() {
         return;
       }
 
-      // Get user info
-      const userIds = [...new Set(wallets?.map(w => w.user_id) || [])];
-      const { data: users } = await supabase
-        .from('users')
-        .select('id, first_name, last_name, role')
-        .in('id', userIds);
-
-      const userMap = new Map(users?.map(u => [u.id, u]) || []);
-
       // Transform wallets to account format
-      const formattedAccounts: Account[] = (wallets || []).map(wallet => {
-        const user = userMap.get(wallet.user_id);
+      const formattedAccounts: Account[] = (wallets || []).map((wallet: any) => {
+        // User data comes from the join
+        const user = wallet.users;
         let accountType: Account['type'] = 'wallet';
         if (user?.role === 'merchant') accountType = 'merchant';
         else if (user?.role === 'agent') accountType = 'agent';
 
+        // Determine status from is_active and is_frozen fields
+        let status: Account['status'] = 'active';
+        if (wallet.is_frozen) {
+          status = 'frozen';
+        } else if (wallet.is_active === false) {
+          status = 'closed';
+        }
+
+        // Build customer name with fallbacks
+        let customerName = 'Unknown';
+        if (user) {
+          const firstName = user.first_name || '';
+          const lastName = user.last_name || '';
+          const fullName = `${firstName} ${lastName}`.trim();
+          customerName = fullName || user.username || user.email || 'Unnamed User';
+        }
+
         return {
           id: wallet.id,
           customerId: wallet.user_id,
-          customerName: user ? `${user.first_name} ${user.last_name}` : 'Unknown',
+          customerName,
           type: accountType,
           currency: wallet.currency || 'USD',
           balance: wallet.balance || 0,
-          availableBalance: wallet.balance || 0,
-          status: wallet.status || 'active',
+          availableBalance: wallet.available_balance || wallet.balance || 0,
+          status,
           createdAt: wallet.created_at,
           lastTransaction: wallet.updated_at || null,
         };
@@ -201,7 +227,7 @@ export function AccountsPage() {
           </Card>
           <Card className="p-4">
             <p className="text-sm text-gray-500">Total Balance</p>
-            <p className="text-2xl font-bold">${(stats.totalBalance / 1000000).toFixed(2)}M</p>
+            <p className="text-2xl font-bold">{currencySymbol}{(stats.totalBalance / 1000000).toFixed(2)}M</p>
           </Card>
           <Card className="p-4">
             <p className="text-sm text-gray-500">Frozen</p>

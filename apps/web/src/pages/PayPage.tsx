@@ -37,6 +37,7 @@ import {
 import { Card } from '@/components/ui/Card';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { currencyService, Currency } from '@/services/currency.service';
 
 interface Recipient {
   id: string;
@@ -67,6 +68,21 @@ export function PayPage() {
   // Wallet state (for logged-in users)
   const [walletId, setWalletId] = useState<string>('');
   const [walletBalance, setWalletBalance] = useState(0);
+
+  // Currency state
+  const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
+
+  useEffect(() => {
+    currencyService.getDefaultCurrency().then(setDefaultCurrency);
+  }, []);
+
+  // Get currency symbol
+  const currencySymbol = defaultCurrency?.symbol || '';
+
+  // Format amount with currency
+  const formatCurrency = (amt: number): string => {
+    return `${currencySymbol}${amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
 
   // Fee calculation
   const feePercentage = 1;
@@ -398,7 +414,7 @@ export function PayPage() {
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Payment Successful!</h1>
           <p className="text-gray-600 mb-4">
-            You sent ${amount.toFixed(2)} to {recipient?.name}
+            You sent {formatCurrency(amount)} to {recipient?.name}
           </p>
           {transactionId && (
             <p className="text-xs text-gray-400 mb-6">
@@ -439,7 +455,7 @@ export function PayPage() {
           </div>
           <h1 className="text-xl font-bold text-gray-900 mb-2">Sign In to Complete Payment</h1>
           <p className="text-gray-600 mb-6">
-            Sign in to send ${amount.toFixed(2)} to {recipient?.name}
+            Sign in to send {formatCurrency(amount)} to {recipient?.name}
           </p>
           <button
             onClick={() => navigate('/login?redirect=' + encodeURIComponent(window.location.pathname + window.location.search))}
@@ -487,14 +503,14 @@ export function PayPage() {
 
           {/* Amount */}
           <div className="p-6 text-center border-b border-gray-100">
-            <p className="text-4xl font-bold text-gray-900">${amount.toFixed(2)}</p>
-            <p className="text-sm text-gray-500 mt-1">Fee: ${fee.toFixed(2)}</p>
+            <p className="text-4xl font-bold text-gray-900">{formatCurrency(amount)}</p>
+            <p className="text-sm text-gray-500 mt-1">Fee: {formatCurrency(fee)}</p>
           </div>
 
           {/* Balance */}
           <div className="p-4 bg-blue-50 flex items-center justify-between">
             <span className="text-sm text-blue-700">Your balance</span>
-            <span className="font-semibold text-blue-700">${walletBalance.toFixed(2)}</span>
+            <span className="font-semibold text-blue-700">{formatCurrency(walletBalance)}</span>
           </div>
 
           {amount > walletBalance && (
@@ -511,7 +527,7 @@ export function PayPage() {
               disabled={amount <= 0 || amount > walletBalance}
               className="w-full py-4 bg-primary-600 text-white rounded-xl font-semibold disabled:opacity-50"
             >
-              Send ${amount.toFixed(2)}
+              Send {formatCurrency(amount)}
             </button>
             <button
               onClick={() => navigate(-1)}
@@ -559,7 +575,7 @@ export function PayPage() {
           {amount > 0 && (
             <div className="p-6 text-center border-b border-gray-100 bg-gray-50">
               <p className="text-sm text-gray-500">Amount</p>
-              <p className="text-4xl font-bold text-gray-900">${amount.toFixed(2)}</p>
+              <p className="text-4xl font-bold text-gray-900">{formatCurrency(amount)}</p>
               {note && <p className="text-sm text-gray-500 mt-2">{note}</p>}
             </div>
           )}

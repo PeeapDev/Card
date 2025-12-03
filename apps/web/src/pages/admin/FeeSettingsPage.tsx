@@ -48,13 +48,13 @@ interface FeeConfig {
 }
 
 const DEFAULT_CURRENCIES: Currency[] = [
-  { code: 'USD', name: 'US Dollar', symbol: '$', isDefault: true, isActive: true },
-  { code: 'EUR', name: 'Euro', symbol: '€', isDefault: false, isActive: true },
-  { code: 'GBP', name: 'British Pound', symbol: '£', isDefault: false, isActive: true },
-  { code: 'NGN', name: 'Nigerian Naira', symbol: '₦', isDefault: false, isActive: true },
-  { code: 'KES', name: 'Kenyan Shilling', symbol: 'KSh', isDefault: false, isActive: false },
+  { code: 'SLE', name: 'Sierra Leone Leone', symbol: 'Le', isDefault: true, isActive: true },
+  { code: 'USD', name: 'US Dollar', symbol: '$', isDefault: false, isActive: true },
+  { code: 'EUR', name: 'Euro', symbol: '€', isDefault: false, isActive: false },
+  { code: 'GBP', name: 'British Pound', symbol: '£', isDefault: false, isActive: false },
+  { code: 'NGN', name: 'Nigerian Naira', symbol: '₦', isDefault: false, isActive: false },
+  { code: 'XOF', name: 'West African CFA Franc', symbol: 'CFA', isDefault: false, isActive: false },
   { code: 'GHS', name: 'Ghanaian Cedi', symbol: 'GH₵', isDefault: false, isActive: false },
-  { code: 'ZAR', name: 'South African Rand', symbol: 'R', isDefault: false, isActive: false },
 ];
 
 const TRANSACTION_TYPES = [
@@ -77,14 +77,22 @@ export function FeeSettingsPage() {
 
   // Modal states
   const [showFeeModal, setShowFeeModal] = useState(false);
+  const [showCurrencyModal, setShowCurrencyModal] = useState(false);
   const [editingFee, setEditingFee] = useState<FeeConfig | null>(null);
   const [feeForm, setFeeForm] = useState<Partial<FeeConfig>>({
     transactionType: 'P2P_TRANSFER',
     percentage: 1,
-    minimumFee: 0.10,
+    minimumFee: 1,
     maximumFee: null,
     flatFee: 0,
-    currency: 'USD',
+    currency: 'SLE',
+    isActive: true,
+  });
+  const [currencyForm, setCurrencyForm] = useState<Partial<Currency>>({
+    code: '',
+    name: '',
+    symbol: '',
+    isDefault: false,
     isActive: true,
   });
 
@@ -95,8 +103,8 @@ export function FeeSettingsPage() {
   const fetchSettings = async () => {
     setLoading(true);
     try {
-      // Try to fetch from database
-      const { data: feeData } = await supabase
+      // Try to fetch fee settings from database
+      const { data: feeData, error: feeError } = await supabase
         .from('fee_settings')
         .select('*')
         .order('transaction_type');
@@ -113,17 +121,12 @@ export function FeeSettingsPage() {
           isActive: f.is_active,
         })));
       } else {
-        // Use default fee configs
-        setFeeConfigs([
-          { id: '1', transactionType: 'P2P_TRANSFER', percentage: 1, minimumFee: 0.10, maximumFee: 50, flatFee: 0, currency: 'USD', isActive: true },
-          { id: '2', transactionType: 'BANK_TRANSFER', percentage: 0.5, minimumFee: 1.00, maximumFee: 25, flatFee: 0, currency: 'USD', isActive: true },
-          { id: '3', transactionType: 'CARD_PAYMENT', percentage: 2.9, minimumFee: 0.30, maximumFee: null, flatFee: 0.30, currency: 'USD', isActive: true },
-          { id: '4', transactionType: 'WITHDRAWAL', percentage: 1, minimumFee: 1.00, maximumFee: 10, flatFee: 0, currency: 'USD', isActive: true },
-        ]);
+        // No fee data in database - start with empty list
+        setFeeConfigs([]);
       }
 
-      // Fetch currencies
-      const { data: currencyData } = await supabase
+      // Fetch currencies from database
+      const { data: currencyData, error: currencyError } = await supabase
         .from('currencies')
         .select('*');
 
@@ -136,9 +139,12 @@ export function FeeSettingsPage() {
           isActive: c.is_active,
         })));
       }
+      // If no currencies in database, use DEFAULT_CURRENCIES (already set in state)
 
     } catch (err) {
       console.error('Failed to fetch settings:', err);
+      // On error, keep default currencies, clear fee configs
+      setFeeConfigs([]);
     } finally {
       setLoading(false);
     }
@@ -271,12 +277,98 @@ export function FeeSettingsPage() {
     setFeeForm({
       transactionType: 'P2P_TRANSFER',
       percentage: 1,
-      minimumFee: 0.10,
+      minimumFee: 1,
       maximumFee: null,
       flatFee: 0,
-      currency: 'USD',
+      currency: 'SLE',
       isActive: true,
     });
+  };
+
+  const resetCurrencyForm = () => {
+    setCurrencyForm({
+      code: '',
+      name: '',
+      symbol: '',
+      isDefault: false,
+      isActive: true,
+    });
+  };
+
+  const saveCurrency = async () => {
+    if (!currencyForm.code || !currencyForm.name || !currencyForm.symbol) {
+      setError('Please fill in all currency fields');
+      return;
+    }
+
+    // Check if currency already exists
+    if (currencies.some(c => c.code === currencyForm.code?.toUpperCase())) {
+      setError('Currency with this code already exists');
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      const newCurrency: Currency = {
+        code: currencyForm.code.toUpperCase(),
+        name: currencyForm.name,
+        symbol: currencyForm.symbol,
+        isDefault: currencyForm.isDefault || false,
+        isActive: currencyForm.isActive ?? true,
+      };
+
+      // Try to save to database
+      try {
+        await supabase.from('currencies').insert({
+          code: newCurrency.code,
+          name: newCurrency.name,
+          symbol: newCurrency.symbol,
+          is_default: newCurrency.isDefault,
+          is_active: newCurrency.isActive,
+        });
+      } catch {
+        // Table might not exist, continue anyway
+      }
+
+      // If setting as default, unset other defaults
+      if (newCurrency.isDefault) {
+        setCurrencies(prev => prev.map(c => ({ ...c, isDefault: false })));
+      }
+
+      setCurrencies(prev => [...prev, newCurrency]);
+      setSuccess(`Currency ${newCurrency.code} added successfully`);
+      setShowCurrencyModal(false);
+      resetCurrencyForm();
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to add currency');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteCurrency = async (code: string) => {
+    // Don't allow deleting default currency
+    const currency = currencies.find(c => c.code === code);
+    if (currency?.isDefault) {
+      setError('Cannot delete the default currency');
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to delete ${code}?`)) return;
+
+    try {
+      await supabase.from('currencies').delete().eq('code', code);
+    } catch {
+      // Ignore errors
+    }
+
+    setCurrencies(prev => prev.filter(c => c.code !== code));
+    setSuccess(`Currency ${code} deleted`);
+    setTimeout(() => setSuccess(null), 3000);
   };
 
   const openEditFee = (fee: FeeConfig) => {
@@ -295,6 +387,17 @@ export function FeeSettingsPage() {
 
   const getTransactionTypeLabel = (type: string) => {
     return TRANSACTION_TYPES.find(t => t.value === type)?.label || type;
+  };
+
+  // Get currency symbol by code
+  const getCurrencySymbol = (code: string): string => {
+    return currencies.find(c => c.code === code)?.symbol || code;
+  };
+
+  // Format amount with correct currency symbol
+  const formatCurrency = (amount: number, currencyCode: string): string => {
+    const symbol = getCurrencySymbol(currencyCode);
+    return `${symbol}${amount.toFixed(2)}`;
   };
 
   if (loading) {
@@ -342,14 +445,26 @@ export function FeeSettingsPage() {
 
         {/* Currency Settings */}
         <Card className="p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <Globe className="w-5 h-5 text-blue-600" />
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <Globe className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Supported Currencies</h2>
+                <p className="text-sm text-gray-500">Enable currencies for transactions</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Supported Currencies</h2>
-              <p className="text-sm text-gray-500">Enable currencies for transactions</p>
-            </div>
+            <button
+              onClick={() => {
+                resetCurrencyForm();
+                setShowCurrencyModal(true);
+              }}
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Add Currency
+            </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -368,11 +483,22 @@ export function FeeSettingsPage() {
                       <p className="text-sm text-gray-500">{currency.name}</p>
                     </div>
                   </div>
-                  {currency.isDefault && (
-                    <span className="px-2 py-1 bg-primary-100 text-primary-700 text-xs font-medium rounded-full">
-                      Default
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {currency.isDefault && (
+                      <span className="px-2 py-1 bg-primary-100 text-primary-700 text-xs font-medium rounded-full">
+                        Default
+                      </span>
+                    )}
+                    {!currency.isDefault && (
+                      <button
+                        onClick={() => deleteCurrency(currency.code)}
+                        className="p-1 hover:bg-red-100 rounded"
+                        title="Delete currency"
+                      >
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex gap-2 mt-3">
@@ -451,12 +577,12 @@ export function FeeSettingsPage() {
                     </td>
                     <td className="px-4 py-4">
                       <span className="text-gray-700">
-                        {fee.flatFee > 0 ? `$${fee.flatFee.toFixed(2)}` : '-'}
+                        {fee.flatFee > 0 ? formatCurrency(fee.flatFee, fee.currency) : '-'}
                       </span>
                     </td>
                     <td className="px-4 py-4">
                       <span className="text-gray-700">
-                        ${fee.minimumFee.toFixed(2)} - {fee.maximumFee ? `$${fee.maximumFee.toFixed(2)}` : 'No max'}
+                        {formatCurrency(fee.minimumFee, fee.currency)} - {fee.maximumFee ? formatCurrency(fee.maximumFee, fee.currency) : 'No max'}
                       </span>
                     </td>
                     <td className="px-4 py-4">
@@ -518,11 +644,17 @@ export function FeeSettingsPage() {
                   fee = max(min(amount × percentage/100, maximumFee), minimumFee) + flatFee
                 </code>
               </p>
-              <p className="text-sm text-blue-600 mt-2">
-                Example: For a $100 transfer with 1% fee, $0.10 minimum, and $50 maximum:
-                <br />
-                fee = max(min($100 × 0.01, $50), $0.10) = max(min($1.00, $50), $0.10) = $1.00
-              </p>
+              {(() => {
+                const defaultCurrency = currencies.find(c => c.isDefault);
+                const symbol = defaultCurrency?.symbol || 'Le';
+                return (
+                  <p className="text-sm text-blue-600 mt-2">
+                    Example: For a {symbol}100 transfer with 1% fee, {symbol}0.10 minimum, and {symbol}50 maximum:
+                    <br />
+                    fee = max(min({symbol}100 × 0.01, {symbol}50), {symbol}0.10) = max(min({symbol}1.00, {symbol}50), {symbol}0.10) = {symbol}1.00
+                  </p>
+                );
+              })()}
             </div>
           </div>
         </Card>
@@ -571,7 +703,7 @@ export function FeeSettingsPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Flat Fee ($)
+                      Flat Fee ({getCurrencySymbol(feeForm.currency || 'SLE')})
                     </label>
                     <input
                       type="number"
@@ -587,7 +719,7 @@ export function FeeSettingsPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Minimum Fee ($)
+                      Minimum Fee ({getCurrencySymbol(feeForm.currency || 'SLE')})
                     </label>
                     <input
                       type="number"
@@ -600,7 +732,7 @@ export function FeeSettingsPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Maximum Fee ($)
+                      Maximum Fee ({getCurrencySymbol(feeForm.currency || 'SLE')})
                     </label>
                     <input
                       type="number"
@@ -670,6 +802,116 @@ export function FeeSettingsPage() {
                     <>
                       <Save className="w-4 h-4" />
                       Save
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Currency Modal */}
+        {showCurrencyModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+              <div className="p-6 border-b border-gray-200">
+                <h2 className="text-xl font-semibold text-gray-900">Add New Currency</h2>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Currency Code (e.g., SLE, USD)
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={3}
+                    value={currencyForm.code}
+                    onChange={(e) => setCurrencyForm({ ...currencyForm, code: e.target.value.toUpperCase() })}
+                    placeholder="SLE"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 uppercase"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Currency Name
+                  </label>
+                  <input
+                    type="text"
+                    value={currencyForm.name}
+                    onChange={(e) => setCurrencyForm({ ...currencyForm, name: e.target.value })}
+                    placeholder="Sierra Leone Leone"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Symbol
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={5}
+                    value={currencyForm.symbol}
+                    onChange={(e) => setCurrencyForm({ ...currencyForm, symbol: e.target.value })}
+                    placeholder="Le"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="currencyActive"
+                      checked={currencyForm.isActive}
+                      onChange={(e) => setCurrencyForm({ ...currencyForm, isActive: e.target.checked })}
+                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <label htmlFor="currencyActive" className="text-sm text-gray-700">
+                      Active
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="currencyDefault"
+                      checked={currencyForm.isDefault}
+                      onChange={(e) => setCurrencyForm({ ...currencyForm, isDefault: e.target.checked })}
+                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <label htmlFor="currencyDefault" className="text-sm text-gray-700">
+                      Set as Default
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-6 border-t border-gray-200 flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowCurrencyModal(false);
+                    resetCurrencyForm();
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveCurrency}
+                  disabled={saving || !currencyForm.code || !currencyForm.name || !currencyForm.symbol}
+                  className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Add Currency
                     </>
                   )}
                 </button>
