@@ -43,11 +43,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('[Monime API] Success URL:', successUrl);
     console.log('[Monime API] Cancel URL:', cancelUrl);
 
+    // Use API endpoints for callbacks (not frontend routes)
+    // Monime will redirect to these, and they will redirect to frontend
+    const baseUrl = 'https://my.peeap.com';
+    const apiSuccessUrl = `${baseUrl}/api/deposit/success`;
+    const apiCancelUrl = `${baseUrl}/api/deposit/cancel`;
+
     // Build request body matching Monime API spec exactly
     const requestBody = {
       name: 'Test Payment',
-      successUrl: successUrl || 'https://my.peeap.com/deposit/success',
-      cancelUrl: cancelUrl || 'https://my.peeap.com/deposit/cancel',
+      successUrl: successUrl || apiSuccessUrl,
+      cancelUrl: cancelUrl || apiCancelUrl,
       lineItems: [
         {
           type: 'custom',

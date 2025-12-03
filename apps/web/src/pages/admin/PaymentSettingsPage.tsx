@@ -302,10 +302,10 @@ export function PaymentSettingsPage() {
         throw new Error('Test amount must be greater than 0.');
       }
 
-      // Use configured URLs (clean URLs without placeholders)
+      // Use API endpoints for Monime callbacks (they handle POST/GET and redirect to frontend)
       const baseUrl = monimeConfig.frontendUrl.replace(/\/$/, ''); // Remove trailing slash
-      const successUrl = `${baseUrl}/deposit/success`;
-      const cancelUrl = `${baseUrl}/deposit/cancel`;
+      const successUrl = `${baseUrl}/api/deposit/success`;
+      const cancelUrl = `${baseUrl}/api/deposit/cancel`;
 
       console.log('[Monime Test] Starting checkout session creation...');
       console.log('[Monime Test] Config:', {

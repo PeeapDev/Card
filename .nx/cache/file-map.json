@@ -92,76 +92,296 @@
   "fileMap": {
     "nonProjectFiles": [
       {
-        "file": "apps/web/src/pages/LandingPage.tsx",
-        "hash": "12074022510134553787"
+        "file": "apps/web/src/pages/auth/LoginPage.tsx",
+        "hash": "18328958086593049458"
       },
       {
-        "file": "apps/web/src/utils/phone.ts",
-        "hash": "17661024990258577550"
+        "file": "apps/web/src/pages/merchant/MerchantShopsPage.tsx",
+        "hash": "2086946071024150152"
       },
       {
-        "file": "docs/api-reference/auth/login.mdx",
-        "hash": "6814132985541562997"
+        "file": "apps/web/src/pages/admin/RolesManagementPage.tsx",
+        "hash": "8267191390190256434"
       },
       {
-        "file": "apps/web/package.json",
-        "hash": "9632698389069415138"
+        "file": "apps/web/src/pages/merchant/MerchantReportsPage.tsx",
+        "hash": "13354374359654575039"
       },
       {
-        "file": "apps/web/src/hooks/useCards.ts",
-        "hash": "15789699852860642790"
+        "file": "apps/web/src/pages/merchant/MerchantSettingsPage.tsx",
+        "hash": "9781708171276430889"
       },
       {
-        "file": "apps/web/src/pages/merchant/MerchantRefundsPage.tsx",
-        "hash": "3906188622815591242"
+        "file": "apps/web/src/pages/PaymentCheckoutPage.tsx",
+        "hash": "6668650383337711963"
       },
       {
-        "file": "apps/web/src/components/ui/Card.tsx",
-        "hash": "4933224639467252715"
+        "file": "apps/web/src/pages/merchant/CreateBusinessPage.tsx",
+        "hash": "11161043285801934545"
       },
       {
-        "file": "apps/web/src/pages/merchant/MerchantDeveloperPage.tsx",
-        "hash": "2130727326027062942"
+        "file": "apps/web/src/components/layout/AdminLayout.tsx",
+        "hash": "7849155149429601373"
       },
       {
-        "file": "apps/web/src/pages/merchant/ShopSettingsPage.tsx",
-        "hash": "7291389430318608593"
+        "file": "apps/web/src/lib/api.ts",
+        "hash": "12740700852049031410"
+      },
+      {
+        "file": "packages/sdk/src/resources/settlement.ts",
+        "hash": "2014730379343291343"
+      },
+      {
+        "file": "apps/web/src/components/layout/MainLayout.tsx",
+        "hash": "7982555069957008917"
+      },
+      {
+        "file": "apps/web/src/pages/MyCardsPage.tsx",
+        "hash": "5406897426579817601"
+      },
+      {
+        "file": "apps/web/src/components/ui/NotificationWrapper.tsx",
+        "hash": "6545686020735411138"
+      },
+      {
+        "file": "docs/api-reference/wallets/transfer.mdx",
+        "hash": "13848409897233728755"
+      },
+      {
+        "file": "apps/web/src/components/payment/NFCPayment.tsx",
+        "hash": "6569899354380981573"
+      },
+      {
+        "file": "apps/web/src/pages/admin/AdminDashboard.tsx",
+        "hash": "17586884787631009874"
+      },
+      {
+        "file": "apps/web/tsconfig.json",
+        "hash": "5615780772269767385"
+      },
+      {
+        "file": "apps/web/src/pages/WalletsPage.tsx",
+        "hash": "14217269999396220035"
+      },
+      {
+        "file": "scripts/migrations/015_merchant_business_categories.sql",
+        "hash": "3343856446281384762"
+      },
+      {
+        "file": "apps/web/src/components/ui/Button.tsx",
+        "hash": "9165949486738955076"
+      },
+      {
+        "file": "apps/web/src/components/payment/PaymentQRCode.tsx",
+        "hash": "17714311817068937411"
+      },
+      {
+        "file": "apps/web/tailwind.config.js",
+        "hash": "1602260596839496656"
+      },
+      {
+        "file": "apps/web/tsconfig.node.json",
+        "hash": "8586866767247417612"
+      },
+      {
+        "file": "apps/web/src/pages/merchant/ShopDetailPage.tsx",
+        "hash": "8814214078791348619"
+      },
+      {
+        "file": "apps/web/src/pages/admin/BusinessCategoriesPage.tsx",
+        "hash": "3637768490053401590"
+      },
+      {
+        "file": "apps/web/src/services/pot.service.ts",
+        "hash": "3670861652487889690"
+      },
+      {
+        "file": "packages/sdk/src/resources/payments.ts",
+        "hash": "7594255848089447499"
+      },
+      {
+        "file": "docs/quickstart.mdx",
+        "hash": "7539162123710523817"
+      },
+      {
+        "file": "docs/sdks/javascript.mdx",
+        "hash": "9788227676720702799"
+      },
+      {
+        "file": "apps/web/src/lib/currency.ts",
+        "hash": "588008161858757010"
+      },
+      {
+        "file": "api/settings/checkout-callback.ts",
+        "hash": "3687631862251747706"
       },
       {
         "file": "packages/sdk/src/client.ts",
         "hash": "10734747761711629033"
       },
       {
-        "file": "apps/web/src/services/auth.service.ts",
-        "hash": "5595241604760302688"
-      },
-      {
-        "file": "apps/web/src/pages/merchant/MerchantProfilePage.tsx",
-        "hash": "12808978612658232642"
-      },
-      {
-        "file": "apps/web/src/pages/admin/DepositsPage.tsx",
-        "hash": "2476666073775041333"
-      },
-      {
-        "file": "docs/webhooks/overview.mdx",
-        "hash": "16557311592068373974"
-      },
-      {
-        "file": "docs/api-reference/transactions/get.mdx",
-        "hash": "3349263149760004893"
-      },
-      {
-        "file": "apps/web/src/pages/DepositSuccessPage.tsx",
-        "hash": "2898861718700053589"
+        "file": "apps/web/src/services/monime.service.ts",
+        "hash": "17400665290731631347"
       },
       {
         "file": "apps/web/src/services/currency.service.ts",
         "hash": "100682802339784621"
       },
       {
-        "file": "scripts/migrations/009_card_features_system.sql",
-        "hash": "16196747627718908789"
+        "file": "apps/web/postcss.config.js",
+        "hash": "1121830044826443979"
+      },
+      {
+        "file": "apps/web/vite.config.ts",
+        "hash": "5531567422441389551"
+      },
+      {
+        "file": "scripts/check-supabase.ts",
+        "hash": "15538336513706760464"
+      },
+      {
+        "file": "packages/sdk/src/types.ts",
+        "hash": "7463659020310105839"
+      },
+      {
+        "file": "scripts/migrations/002_username_and_phone_login.sql",
+        "hash": "7464407902017754084"
+      },
+      {
+        "file": "scripts/list-triggers.ts",
+        "hash": "5582005158202341820"
+      },
+      {
+        "file": "packages/sdk/src/resources/nfc.ts",
+        "hash": "6366216286841958888"
+      },
+      {
+        "file": "apps/web/src/pages/ReceiveMoneyPage.tsx",
+        "hash": "14283664133872373288"
+      },
+      {
+        "file": "apps/web/src/hooks/usePots.ts",
+        "hash": "14200551739090770490"
+      },
+      {
+        "file": "apps/web/src/pages/ApiDocsPage.tsx",
+        "hash": "11654751901500865661"
+      },
+      {
+        "file": "scripts/migrations/012_payment_settings.sql",
+        "hash": "11162769434250486354"
+      },
+      {
+        "file": "apps/web/src/context/DeveloperModeContext.tsx",
+        "hash": "1262309381881714652"
+      },
+      {
+        "file": "api/deposit/cancel.ts",
+        "hash": "15596886144597249582"
+      },
+      {
+        "file": "apps/web/src/pages/admin/DevelopersPage.tsx",
+        "hash": "13323240766640888820"
+      },
+      {
+        "file": "apps/web/src/pages/merchant/ShopTransactionsPage.tsx",
+        "hash": "78998827604907047"
+      },
+      {
+        "file": "apps/web/src/pages/admin/FeeSettingsPage.tsx",
+        "hash": "7753390211083299445"
+      },
+      {
+        "file": "apps/web/src/pages/AppPaymentRedirectPage.tsx",
+        "hash": "8329021836919593341"
+      },
+      {
+        "file": "apps/web/src/pages/admin/CardOrdersPage.tsx",
+        "hash": "8160179175937554229"
+      },
+      {
+        "file": "docs/api-reference/transactions/list.mdx",
+        "hash": "7328869344730664989"
+      },
+      {
+        "file": "apps/web/src/pages/DepositCancelPage.tsx",
+        "hash": "3485697533805933883"
+      },
+      {
+        "file": "apps/web/src/styles/index.css",
+        "hash": "6157626504740061430"
+      },
+      {
+        "file": "apps/web/src/pages/admin/CardTypesPage.tsx",
+        "hash": "1152267888077050472"
+      },
+      {
+        "file": "packages/sdk/tsconfig.json",
+        "hash": "2810744129777334042"
+      },
+      {
+        "file": "apps/web/src/lib/supabase.ts",
+        "hash": "9330122345141541609"
+      },
+      {
+        "file": "apps/web/src/context/AuthContext.tsx",
+        "hash": "1205456589270000858"
+      },
+      {
+        "file": "apps/web/src/pages/CardsPage.tsx",
+        "hash": "4369697915483617179"
+      },
+      {
+        "file": "apps/web/src/pages/SendMoneyPage.tsx",
+        "hash": "11456904395361120100"
+      },
+      {
+        "file": "scripts/add-second-user.ts",
+        "hash": "13899368535115440354"
+      },
+      {
+        "file": "apps/web/src/pages/admin/PotsManagementPage.tsx",
+        "hash": "6686659362964735287"
+      },
+      {
+        "file": "apps/web/src/hooks/useAppNotifications.ts",
+        "hash": "11417249763626296610"
+      },
+      {
+        "file": "apps/web/src/components/pots/ContributePotModal.tsx",
+        "hash": "3706285100860116373"
+      },
+      {
+        "file": ".gitignore",
+        "hash": "6259937844549831691"
+      },
+      {
+        "file": "packages/sdk/README.md",
+        "hash": "6352164554785915492"
+      },
+      {
+        "file": "docs/api-reference/auth/refresh.mdx",
+        "hash": "5686734884741601369"
+      },
+      {
+        "file": "apps/web/src/services/auth.service.ts",
+        "hash": "5595241604760302688"
+      },
+      {
+        "file": "scripts/migrations/013_add_business_name.sql",
+        "hash": "12513838896667279152"
+      },
+      {
+        "file": "apps/web/src/pages/admin/UserDetailPage.tsx",
+        "hash": "5027515184548120397"
+      },
+      {
+        "file": "apps/web/src/pages/merchant/ShopDisputesPage.tsx",
+        "hash": "15378863007384694781"
+      },
+      {
+        "file": "apps/web/src/App.tsx",
+        "hash": "230565479970150183"
       },
       {
         "file": "apps/web/src/services/rbac.service.ts",
@@ -172,256 +392,168 @@
         "hash": "13812593210262283757"
       },
       {
-        "file": "apps/web/src/pages/WalletsPage.tsx",
-        "hash": "14217269999396220035"
+        "file": "apps/web/src/pages/admin/AccountsPage.tsx",
+        "hash": "11226072539921069066"
       },
       {
-        "file": "apps/web/index.html",
-        "hash": "17948694475776292034"
+        "file": "packages/peeap-pay-sdk/package-lock.json",
+        "hash": "18054982811609686526"
       },
       {
-        "file": "scripts/add-second-user.ts",
-        "hash": "13899368535115440354"
+        "file": "apps/web/src/components/pots/PotCard.tsx",
+        "hash": "160062357752466509"
       },
       {
-        "file": "apps/web/src/pages/admin/FeeSettingsPage.tsx",
-        "hash": "7753390211083299445"
+        "file": "api/mobile-auth.ts",
+        "hash": "11497820527269863264"
       },
       {
-        "file": "apps/web/src/services/monime.service.ts",
-        "hash": "17400665290731631347"
-      },
-      {
-        "file": "apps/web/src/pages/merchant/ShopDetailPage.tsx",
-        "hash": "8814214078791348619"
-      },
-      {
-        "file": "apps/web/src/pages/admin/TransactionsPage.tsx",
-        "hash": "3531165836127726467"
-      },
-      {
-        "file": "apps/web/src/hooks/useAppNotifications.ts",
-        "hash": "11417249763626296610"
-      },
-      {
-        "file": "scripts/migrations/010_complete_card_system.sql",
-        "hash": "17497190679549839550"
-      },
-      {
-        "file": "apps/web/src/pages/merchant/CreateBusinessPage.tsx",
-        "hash": "11161043285801934545"
-      },
-      {
-        "file": "apps/web/src/components/ui/index.ts",
-        "hash": "7131740174793944577"
-      },
-      {
-        "file": "apps/web/src/pages/admin/BusinessCategoriesPage.tsx",
-        "hash": "3637768490053401590"
-      },
-      {
-        "file": ".npmrc",
-        "hash": "18085261541358865259"
-      },
-      {
-        "file": "scripts/migrations/019_rename_trial_transaction_fields.sql",
-        "hash": "893928233143480367"
-      },
-      {
-        "file": "apps/web/.gitignore",
-        "hash": "2168824243432662777"
-      },
-      {
-        "file": "docs/quickstart.mdx",
-        "hash": "7539162123710523817"
-      },
-      {
-        "file": "apps/web/src/components/layout/StandaloneDeveloperLayout.tsx",
-        "hash": "15205957237455645019"
-      },
-      {
-        "file": "docs/api-reference/cards/list.mdx",
-        "hash": "17190125124526595213"
-      },
-      {
-        "file": "apps/web/postcss.config.js",
-        "hash": "1121830044826443979"
-      },
-      {
-        "file": "apps/web/src/pages/admin/WebhooksPage.tsx",
-        "hash": "13874266602039677773"
-      },
-      {
-        "file": "apps/web/src/pages/merchant/MerchantTransactionsPage.tsx",
-        "hash": "11027517575734589904"
-      },
-      {
-        "file": "apps/web/src/services/upload.service.ts",
-        "hash": "12429206383845854839"
-      },
-      {
-        "file": "apps/web/src/lib/currency.ts",
-        "hash": "588008161858757010"
-      },
-      {
-        "file": "docs/introduction.mdx",
-        "hash": "11665568264946219343"
-      },
-      {
-        "file": "docs/authentication.mdx",
-        "hash": "4143068396221212753"
-      },
-      {
-        "file": "apps/web/src/components/layout/AdminLayout.tsx",
-        "hash": "7849155149429601373"
-      },
-      {
-        "file": ".gitignore",
-        "hash": "6259937844549831691"
-      },
-      {
-        "file": "apps/web/src/pages/admin/RolesManagementPage.tsx",
-        "hash": "8267191390190256434"
-      },
-      {
-        "file": "apps/web/src/pages/admin/UserDetailPage.tsx",
-        "hash": "5027515184548120397"
-      },
-      {
-        "file": "package-lock.json",
-        "hash": "11278684341643099979"
-      },
-      {
-        "file": "apps/web/src/components/ui/Button.tsx",
-        "hash": "9165949486738955076"
-      },
-      {
-        "file": "apps/web/src/pages/DepositCancelPage.tsx",
-        "hash": "3485697533805933883"
-      },
-      {
-        "file": "apps/web/src/components/ui/SlideToSend.tsx",
-        "hash": "4867804595120820312"
-      },
-      {
-        "file": "apps/web/src/pages/agent/AgentSettingsPage.tsx",
-        "hash": "705898706938053277"
-      },
-      {
-        "file": "apps/web/public/embed/peeap-sdk.js",
-        "hash": "9604287348259732819"
-      },
-      {
-        "file": "apps/web/src/main.tsx",
-        "hash": "17152941725224075869"
-      },
-      {
-        "file": "apps/web/src/pages/merchant/MerchantSettingsPage.tsx",
-        "hash": "9781708171276430889"
-      },
-      {
-        "file": "apps/web/src/components/ui/NotificationWrapper.tsx",
-        "hash": "6545686020735411138"
-      },
-      {
-        "file": "apps/web/src/services/api.ts",
-        "hash": "11123790169824791392"
-      },
-      {
-        "file": "scripts/migrations/015_merchant_business_categories.sql",
-        "hash": "3343856446281384762"
-      },
-      {
-        "file": "apps/web/src/components/agent/AgentPlusUpgradeModal.tsx",
-        "hash": "17568857897482927940"
-      },
-      {
-        "file": "apps/web/src/services/nfc-engine.ts",
-        "hash": "18405683315551942431"
-      },
-      {
-        "file": "apps/web/src/pages/admin/CardProgramsPage.tsx",
-        "hash": "3052737357681476289"
-      },
-      {
-        "file": "apps/web/src/hooks/useTransactions.ts",
-        "hash": "13180721035446815228"
-      },
-      {
-        "file": "packages/sdk/src/utils/webhooks.ts",
-        "hash": "5812794901586195225"
-      },
-      {
-        "file": "apps/web/src/services/qr-engine.ts",
-        "hash": "9606814543415948329"
-      },
-      {
-        "file": "apps/web/src/pages/merchant/MerchantPayoutsPage.tsx",
-        "hash": "7120151642224962099"
-      },
-      {
-        "file": "packages/sdk/src/resources/cards.ts",
-        "hash": "16746421897183231962"
-      },
-      {
-        "file": "docs/api-reference/auth/logout.mdx",
-        "hash": "17373317970129299777"
-      },
-      {
-        "file": "apps/web/src/pages/admin/DisputesPage.tsx",
-        "hash": "3110414110903259181"
+        "file": "packages/peeap-pay-sdk/README.md",
+        "hash": "8070167623386010428"
       },
       {
         "file": "nx.json",
         "hash": "7819490640706588900"
       },
       {
-        "file": "packages/sdk/src/index.ts",
-        "hash": "14334550906085466253"
+        "file": "apps/web/src/pages/admin/AuthorizationPage.tsx",
+        "hash": "11131470686565187167"
       },
       {
-        "file": "scripts/list-triggers.ts",
-        "hash": "5582005158202341820"
+        "file": "apps/web/src/components/payment/QRScanner.tsx",
+        "hash": "2614241629261867842"
       },
       {
-        "file": "scripts/migrations/014_business_categories.sql",
-        "hash": "11959672335502461577"
+        "file": "apps/web/src/pages/admin/CreateMerchantPage.tsx",
+        "hash": "3198748580216587336"
       },
       {
-        "file": "apps/web/src/components/pots/WithdrawPotModal.tsx",
-        "hash": "10862829669502371574"
+        "file": "apps/web/src/components/ui/UserSearch.tsx",
+        "hash": "11390689033530549555"
       },
       {
-        "file": "scripts/migrations/020_add_trial_transaction_columns.sql",
-        "hash": "558365518777619634"
+        "file": "apps/web/src/components/ui/index.ts",
+        "hash": "7131740174793944577"
       },
       {
-        "file": "apps/web/src/pages/admin/CompliancePage.tsx",
-        "hash": "4205319756654963577"
+        "file": "docs/concepts/wallets.mdx",
+        "hash": "17675580361326357658"
       },
       {
-        "file": "docs/api-reference/cards/create.mdx",
-        "hash": "9355005499568202784"
+        "file": "apps/web/src/pages/merchant/ShopSettingsPage.tsx",
+        "hash": "7291389430318608593"
       },
       {
-        "file": "apps/web/src/components/ui/SetupPinModal.tsx",
-        "hash": "14766747142359473965"
+        "file": "apps/web/src/services/nfc-engine.ts",
+        "hash": "18405683315551942431"
       },
       {
-        "file": "apps/web/src/lib/api.ts",
-        "hash": "12740700852049031410"
+        "file": "apps/web/src/pages/admin/SubscriptionsPage.tsx",
+        "hash": "14703690976727676759"
+      },
+      {
+        "file": "scripts/migrations/021_payment_settings_urls.sql",
+        "hash": "18242865208701023458"
+      },
+      {
+        "file": "docs/api-reference/cards/list.mdx",
+        "hash": "17190125124526595213"
       },
       {
         "file": "scripts/supabase-setup.ts",
         "hash": "8273119759643562045"
       },
       {
-        "file": "apps/web/src/pages/merchant/MerchantShopsPage.tsx",
-        "hash": "2086946071024150152"
+        "file": "scripts/seed.ts",
+        "hash": "5003467108922631340"
       },
       {
-        "file": "scripts/migrations/007_enhanced_card_management.sql",
-        "hash": "7781123305226203109"
+        "file": "apps/web/src/components/ui/ProfileAvatar.tsx",
+        "hash": "12582252356841503274"
+      },
+      {
+        "file": "apps/web/src/components/pots/index.ts",
+        "hash": "218690023740080911"
+      },
+      {
+        "file": "docs/introduction.mdx",
+        "hash": "11665568264946219343"
+      },
+      {
+        "file": "scripts/migrations/008_pot_system.sql",
+        "hash": "1490586296666029870"
+      },
+      {
+        "file": "tsconfig.base.json",
+        "hash": "3673170948560749694"
+      },
+      {
+        "file": "apps/web/src/components/ui/CardGenerator.tsx",
+        "hash": "16262732668657949791"
+      },
+      {
+        "file": "docs/api-reference/wallets/create.mdx",
+        "hash": "8995898404370852066"
+      },
+      {
+        "file": "apps/web/index.html",
+        "hash": "17948694475776292034"
+      },
+      {
+        "file": "apps/web/src/components/layout/AuthLayout.tsx",
+        "hash": "1040411838121546137"
+      },
+      {
+        "file": "apps/web/src/pages/merchant/MerchantPayoutsPage.tsx",
+        "hash": "7120151642224962099"
+      },
+      {
+        "file": "apps/web/src/pages/DashboardPage.tsx",
+        "hash": "14155551346536715136"
+      },
+      {
+        "file": "apps/web/src/pages/merchant/MerchantRefundsPage.tsx",
+        "hash": "3906188622815591242"
+      },
+      {
+        "file": "api/test-monime.ts",
+        "hash": "9548829552371885739"
+      },
+      {
+        "file": "docs/api-reference/cards/create.mdx",
+        "hash": "9355005499568202784"
+      },
+      {
+        "file": "scripts/setup-storage-and-rls.ts",
+        "hash": "2195141654586525947"
+      },
+      {
+        "file": "apps/web/src/pages/auth/RegisterPage.tsx",
+        "hash": "6905234555120537090"
+      },
+      {
+        "file": "scripts/seed-supabase.ts",
+        "hash": "12244473185524101119"
+      },
+      {
+        "file": "package.json",
+        "hash": "13789159643828972669"
+      },
+      {
+        "file": "apps/web/package.json",
+        "hash": "9632698389069415138"
+      },
+      {
+        "file": "apps/web/src/pages/admin/UsersManagementPage.tsx",
+        "hash": "5889855091603862126"
+      },
+      {
+        "file": "apps/web/src/pages/BusinessCheckoutPage.tsx",
+        "hash": "14570830837865994621"
+      },
+      {
+        "file": "packages/peeap-pay-sdk/tsconfig.json",
+        "hash": "45328404697835047"
       },
       {
         "file": "apps/web/src/pages/ProfilePage.tsx",
@@ -432,676 +564,552 @@
         "hash": "12946363841406869089"
       },
       {
-        "file": "scripts/migrations/013_add_business_name.sql",
-        "hash": "12513838896667279152"
-      },
-      {
-        "file": "apps/web/src/pages/auth/LoginPage.tsx",
-        "hash": "18328958086593049458"
-      },
-      {
-        "file": "scripts/migrations/016_fix_business_categories_rls.sql",
-        "hash": "16636700114800365572"
-      },
-      {
-        "file": "apps/web/src/services/wallet.service.ts",
-        "hash": "4648698806745928156"
-      },
-      {
-        "file": "scripts/migrations/005_fix_rbac_and_reset.sql",
-        "hash": "16933195565352578438"
-      },
-      {
-        "file": "docs/sdks/python.mdx",
-        "hash": "12206754749484890117"
-      },
-      {
-        "file": "packages/peeap-pay-sdk/tsconfig.json",
-        "hash": "45328404697835047"
-      },
-      {
-        "file": "docs/api-reference/transactions/list.mdx",
-        "hash": "7328869344730664989"
-      },
-      {
-        "file": "apps/web/src/context/AuthContext.tsx",
-        "hash": "1205456589270000858"
-      },
-      {
-        "file": "api/settings.ts",
-        "hash": "9723956457529561418"
-      },
-      {
-        "file": "apps/web/package-lock.json",
-        "hash": "621469898048537886"
-      },
-      {
-        "file": "apps/web/src/components/ui/NotificationBell.tsx",
-        "hash": "12376235525313651342"
-      },
-      {
-        "file": "apps/web/src/components/pots/PotCard.tsx",
-        "hash": "160062357752466509"
-      },
-      {
-        "file": "apps/web/src/pages/admin/CardsPage.tsx",
-        "hash": "13931024955953249635"
-      },
-      {
-        "file": "scripts/migrations/003_rbac_security.sql",
-        "hash": "8925684462170386170"
-      },
-      {
-        "file": "apps/web/src/lib/supabase.ts",
-        "hash": "9330122345141541609"
-      },
-      {
-        "file": "scripts/seed-argon2.ts",
-        "hash": "11687943880523341410"
-      },
-      {
-        "file": "packages/sdk/src/resources/qrcode.ts",
-        "hash": "7489902204528270749"
-      },
-      {
-        "file": "api/mobile-auth.ts",
-        "hash": "11497820527269863264"
-      },
-      {
-        "file": "packages/sdk/src/resources/transfers.ts",
-        "hash": "748830904939867310"
-      },
-      {
-        "file": "packages/sdk/src/resources/payments.ts",
-        "hash": "7594255848089447499"
-      },
-      {
         "file": "packages/peeap-pay-sdk/src/index.ts",
         "hash": "13124054790915412888"
-      },
-      {
-        "file": "apps/web/src/components/payment/QRScanner.tsx",
-        "hash": "2614241629261867842"
-      },
-      {
-        "file": "apps/web/src/pages/MyCardsPage.tsx",
-        "hash": "5406897426579817601"
-      },
-      {
-        "file": "packages/peeap-pay-sdk/package-lock.json",
-        "hash": "18054982811609686526"
-      },
-      {
-        "file": "apps/web/src/pages/BusinessCheckoutPage.tsx",
-        "hash": "14570830837865994621"
-      },
-      {
-        "file": "apps/web/src/pages/ReceiveMoneyPage.tsx",
-        "hash": "14283664133872373288"
-      },
-      {
-        "file": "docs/api-reference/auth/register.mdx",
-        "hash": "12360120628592776103"
-      },
-      {
-        "file": "scripts/seed-demo.ts",
-        "hash": "4696911734198581726"
-      },
-      {
-        "file": "apps/web/src/pages/admin/AdminDashboard.tsx",
-        "hash": "17586884787631009874"
-      },
-      {
-        "file": "docs/concepts/wallets.mdx",
-        "hash": "17675580361326357658"
-      },
-      {
-        "file": "apps/web/src/pages/AppPaymentRedirectPage.tsx",
-        "hash": "8329021836919593341"
-      },
-      {
-        "file": "scripts/migrations/011_monime_integration.sql",
-        "hash": "13795768515459653683"
-      },
-      {
-        "file": "packages/sdk/src/config.ts",
-        "hash": "15086550371068264871"
-      },
-      {
-        "file": "apps/web/src/pages/PayPage.tsx",
-        "hash": "11363377202397428"
-      },
-      {
-        "file": "docs/concepts/transactions.mdx",
-        "hash": "5472105780480421872"
-      },
-      {
-        "file": "apps/web/src/styles/index.css",
-        "hash": "6157626504740061430"
-      },
-      {
-        "file": "docs/api-reference/wallets/create.mdx",
-        "hash": "8995898404370852066"
-      },
-      {
-        "file": "api/settings/checkout-callback.ts",
-        "hash": "3687631862251747706"
-      },
-      {
-        "file": "apps/web/vite.config.ts",
-        "hash": "5531567422441389551"
-      },
-      {
-        "file": "packages/sdk/README.md",
-        "hash": "6352164554785915492"
-      },
-      {
-        "file": "apps/web/src/pages/PaymentCancelPage.tsx",
-        "hash": "7203241291756319704"
-      },
-      {
-        "file": "docs/mint.json",
-        "hash": "2975692452058918696"
-      },
-      {
-        "file": "apps/web/src/pages/admin/DevelopersPage.tsx",
-        "hash": "13323240766640888820"
-      },
-      {
-        "file": "apps/web/src/pages/merchant/MerchantReportsPage.tsx",
-        "hash": "13354374359654575039"
-      },
-      {
-        "file": "apps/web/src/pages/agent/AgentDashboard.tsx",
-        "hash": "14136706696445921334"
-      },
-      {
-        "file": "apps/web/src/components/ui/ProfileAvatar.tsx",
-        "hash": "12582252356841503274"
-      },
-      {
-        "file": "apps/web/src/pages/admin/CardOrdersPage.tsx",
-        "hash": "8160179175937554229"
-      },
-      {
-        "file": "apps/web/src/components/payment/PaymentQRCode.tsx",
-        "hash": "17714311817068937411"
-      },
-      {
-        "file": "packages/sdk/src/resources/developer.ts",
-        "hash": "14049241599784905738"
-      },
-      {
-        "file": "apps/web/tailwind.config.js",
-        "hash": "1602260596839496656"
-      },
-      {
-        "file": "docs/api-reference/cards/activate.mdx",
-        "hash": "10449286958431494674"
-      },
-      {
-        "file": "apps/web/src/components/ui/TransactionPinModal.tsx",
-        "hash": "10686516027324020426"
-      },
-      {
-        "file": "apps/web/src/hooks/usePots.ts",
-        "hash": "14200551739090770490"
-      },
-      {
-        "file": "apps/web/src/pages/CheckoutPage.tsx",
-        "hash": "12863859273831153510"
-      },
-      {
-        "file": "packages/sdk/package.json",
-        "hash": "14927580671530886852"
-      },
-      {
-        "file": "apps/web/src/pages/admin/AccountsPage.tsx",
-        "hash": "11226072539921069066"
-      },
-      {
-        "file": "docs/api-reference/wallets/transfer.mdx",
-        "hash": "13848409897233728755"
-      },
-      {
-        "file": "packages/sdk/tsconfig.json",
-        "hash": "2810744129777334042"
-      },
-      {
-        "file": "packages/sdk/src/resources/wallet.ts",
-        "hash": "16678720134228299170"
-      },
-      {
-        "file": "apps/web/src/components/layout/AuthLayout.tsx",
-        "hash": "1040411838121546137"
-      },
-      {
-        "file": "apps/web/src/components/ui/UserSearch.tsx",
-        "hash": "11390689033530549555"
-      },
-      {
-        "file": "apps/web/src/components/pots/index.ts",
-        "hash": "218690023740080911"
-      },
-      {
-        "file": "scripts/migrations/006_wallet_functions.sql",
-        "hash": "4601717632205101149"
-      },
-      {
-        "file": "scripts/migrations/008_default_superadmin.sql",
-        "hash": "11223492292919112828"
-      },
-      {
-        "file": "apps/web/src/pages/admin/CardTypesPage.tsx",
-        "hash": "1152267888077050472"
-      },
-      {
-        "file": "apps/web/src/services/pot.service.ts",
-        "hash": "3670861652487889690"
-      },
-      {
-        "file": "apps/web/src/pages/admin/MerchantsManagementPage.tsx",
-        "hash": "14134882974142742897"
-      },
-      {
-        "file": "apps/web/src/components/layout/MainLayout.tsx",
-        "hash": "7982555069957008917"
-      },
-      {
-        "file": "apps/web/src/services/card.service.ts",
-        "hash": "13299197022859107522"
-      },
-      {
-        "file": "scripts/migrations/015_merchant_businesses.sql",
-        "hash": "10215558737431299329"
-      },
-      {
-        "file": "docs/concepts/cards.mdx",
-        "hash": "18399792120025220711"
-      },
-      {
-        "file": "apps/web/src/components/layout/DeveloperLayout.tsx",
-        "hash": "18062574456798028259"
-      },
-      {
-        "file": "scripts/migrations/021_payment_settings_urls.sql",
-        "hash": "18242865208701023458"
-      },
-      {
-        "file": "apps/web/src/pages/admin/BusinessesPage.tsx",
-        "hash": "7936922934799044399"
-      },
-      {
-        "file": "docs/sdks/overview.mdx",
-        "hash": "8086721913295575132"
-      },
-      {
-        "file": "scripts/migrations/017_merchant_businesses.sql",
-        "hash": "14844487483936208128"
-      },
-      {
-        "file": "docs/api-reference/transactions/refund.mdx",
-        "hash": "13177006327461174956"
-      },
-      {
-        "file": "packages/peeap-pay-sdk/README.md",
-        "hash": "8070167623386010428"
-      },
-      {
-        "file": "docs/api-reference/auth/refresh.mdx",
-        "hash": "5686734884741601369"
       },
       {
         "file": "docs/api-reference/introduction.mdx",
         "hash": "14903127834094981175"
       },
       {
-        "file": "scripts/setup-storage-and-rls.ts",
-        "hash": "2195141654586525947"
+        "file": "apps/web/src/utils/phone.ts",
+        "hash": "17661024990258577550"
       },
       {
-        "file": "apps/web/src/pages/admin/FeesPage.tsx",
-        "hash": "7682473700709216908"
-      },
-      {
-        "file": "apps/web/src/context/DeveloperModeContext.tsx",
-        "hash": "1262309381881714652"
-      },
-      {
-        "file": "apps/web/src/pages/admin/SubscriptionsPage.tsx",
-        "hash": "14703690976727676759"
-      },
-      {
-        "file": "apps/web/src/pages/agent/AgentDeveloperPage.tsx",
-        "hash": "180024928082157982"
-      },
-      {
-        "file": "apps/web/src/pages/merchant/MerchantPaymentLinksPage.tsx",
-        "hash": "14758789150179601191"
-      },
-      {
-        "file": "scripts/migrations/001_p2p_and_fees.sql",
-        "hash": "9841243651836444752"
-      },
-      {
-        "file": "docs/sdks/javascript.mdx",
-        "hash": "9788227676720702799"
-      },
-      {
-        "file": "apps/web/vercel.json",
-        "hash": "459790152265701597"
-      },
-      {
-        "file": "apps/web/src/pages/PaymentSuccessPage.tsx",
-        "hash": "4754214900757657303"
-      },
-      {
-        "file": "packages/peeap-pay-sdk/package.json",
-        "hash": "15694995786794876375"
-      },
-      {
-        "file": "tsconfig.base.json",
-        "hash": "3673170948560749694"
-      },
-      {
-        "file": "scripts/seed.ts",
-        "hash": "5003467108922631340"
-      },
-      {
-        "file": "api/settings/test-checkout.ts",
-        "hash": "18329889250433156119"
-      },
-      {
-        "file": "apps/web/src/hooks/useRBAC.tsx",
-        "hash": "12876989309040161905"
-      },
-      {
-        "file": "docs/webhooks/events.mdx",
-        "hash": "17075934928005772758"
-      },
-      {
-        "file": "apps/web/src/pages/PaymentCheckoutPage.tsx",
-        "hash": "6668650383337711963"
-      },
-      {
-        "file": "apps/web/src/pages/auth/RegisterPage.tsx",
-        "hash": "6905234555120537090"
-      },
-      {
-        "file": "apps/web/src/components/RoleBasedRoute.tsx",
-        "hash": "2921725132739123373"
-      },
-      {
-        "file": "scripts/migrations/008_pot_system.sql",
-        "hash": "1490586296666029870"
-      },
-      {
-        "file": "apps/web/src/components/ProtectedRoute.tsx",
-        "hash": "2470425749051462303"
-      },
-      {
-        "file": "apps/web/src/pages/merchant/MerchantDashboard.tsx",
-        "hash": "5808193300953768529"
-      },
-      {
-        "file": "PROJECT_CONTEXT.md",
-        "hash": "10914407810863262241"
-      },
-      {
-        "file": "apps/web/src/components/payment/NFCPayment.tsx",
-        "hash": "6569899354380981573"
-      },
-      {
-        "file": "apps/web/src/pages/CardMarketplacePage.tsx",
-        "hash": "4073586570871898727"
-      },
-      {
-        "file": "packages/sdk/src/resources/merchants.ts",
-        "hash": "4978487408213167052"
-      },
-      {
-        "file": "apps/web/src/components/ui/CardGenerator.tsx",
-        "hash": "16262732668657949791"
-      },
-      {
-        "file": "apps/web/src/pages/CardsPage.tsx",
-        "hash": "4369697915483617179"
-      },
-      {
-        "file": "apps/web/src/types/index.ts",
-        "hash": "4083995510618323697"
-      },
-      {
-        "file": "scripts/migrations/004_search_users_rpc.sql",
-        "hash": "11467878064656707710"
-      },
-      {
-        "file": "apps/web/src/pages/developer/DeveloperDashboard.tsx",
-        "hash": "16587935862458790676"
-      },
-      {
-        "file": "package.json",
-        "hash": "13789159643828972669"
-      },
-      {
-        "file": "apps/web/src/pages/admin/AgentsManagementPage.tsx",
-        "hash": "10193278334371372298"
-      },
-      {
-        "file": "api/test-monime.ts",
-        "hash": "8681733187734091668"
-      },
-      {
-        "file": "apps/web/src/components/pots/ContributePotModal.tsx",
-        "hash": "3706285100860116373"
-      },
-      {
-        "file": "scripts/check-supabase.ts",
-        "hash": "15538336513706760464"
-      },
-      {
-        "file": "apps/web/src/pages/admin/UsersManagementPage.tsx",
-        "hash": "5889855091603862126"
-      },
-      {
-        "file": "apps/web/src/components/ui/Toast.tsx",
-        "hash": "4235026985114067335"
-      },
-      {
-        "file": ".env.example",
-        "hash": "12301329055614138383"
-      },
-      {
-        "file": "scripts/supabase-schema.ts",
-        "hash": "16272694091227205447"
-      },
-      {
-        "file": "apps/web/src/pages/PotDetailPage.tsx",
-        "hash": "14518185625360053838"
-      },
-      {
-        "file": "apps/web/src/pages/ApiDocsPage.tsx",
-        "hash": "11654751901500865661"
-      },
-      {
-        "file": "apps/web/src/pages/PotsPage.tsx",
-        "hash": "14981680967800146991"
-      },
-      {
-        "file": "apps/web/src/pages/DashboardPage.tsx",
-        "hash": "14155551346536715136"
-      },
-      {
-        "file": "apps/web/public/test-checkout.html",
-        "hash": "1460849670000046415"
-      },
-      {
-        "file": "docs/webhooks/signatures.mdx",
-        "hash": "16594348356150273169"
-      },
-      {
-        "file": "vercel.json",
-        "hash": "17803360977455181155"
-      },
-      {
-        "file": "apps/web/src/pages/admin/PaymentSettingsPage.tsx",
-        "hash": "15495894471721551564"
-      },
-      {
-        "file": "apps/web/src/pages/merchant/ShopTransactionsPage.tsx",
-        "hash": "78998827604907047"
-      },
-      {
-        "file": "apps/web/src/pages/admin/PotsManagementPage.tsx",
-        "hash": "6686659362964735287"
+        "file": "scripts/migrations/003_rbac_security.sql",
+        "hash": "8925684462170386170"
       },
       {
         "file": "docs/concepts/kyc.mdx",
         "hash": "6147415368509014914"
       },
       {
-        "file": "Screenshot 2025-12-02 at 19.40.49.png",
-        "hash": "13169621060698767230"
+        "file": "scripts/supabase-schema.ts",
+        "hash": "16272694091227205447"
       },
       {
-        "file": "apps/web/src/pages/admin/CustomersPage.tsx",
-        "hash": "5952611675218512091"
+        "file": "docs/webhooks/overview.mdx",
+        "hash": "16557311592068373974"
       },
       {
-        "file": "apps/web/src/pages/SendMoneyPage.tsx",
-        "hash": "11456904395361120100"
+        "file": "scripts/migrations/016_fix_business_categories_rls.sql",
+        "hash": "16636700114800365572"
       },
       {
-        "file": "docs/api-reference/wallets/get.mdx",
-        "hash": "1303040164003703676"
+        "file": "scripts/migrations/004_search_users_rpc.sql",
+        "hash": "11467878064656707710"
       },
       {
-        "file": "apps/web/src/pages/admin/CreateMerchantPage.tsx",
-        "hash": "3198748580216587336"
+        "file": "apps/web/src/pages/PaymentSuccessPage.tsx",
+        "hash": "4754214900757657303"
       },
       {
-        "file": "apps/web/src/components/pots/CreatePotModal.tsx",
-        "hash": "11263953085960672330"
+        "file": "apps/web/src/components/ui/Card.tsx",
+        "hash": "4933224639467252715"
       },
       {
-        "file": "apps/web/src/hooks/useWallets.ts",
-        "hash": "14886399282312022765"
+        "file": "docs/sdks/python.mdx",
+        "hash": "12206754749484890117"
       },
       {
-        "file": "apps/web/tsconfig.json",
-        "hash": "5615780772269767385"
+        "file": "apps/web/src/pages/PaymentCancelPage.tsx",
+        "hash": "7203241291756319704"
       },
       {
-        "file": "docs/api-reference/wallets/list.mdx",
-        "hash": "270982845205352877"
+        "file": "apps/web/src/components/layout/DeveloperLayout.tsx",
+        "hash": "18062574456798028259"
       },
       {
-        "file": "apps/web/tsconfig.node.json",
-        "hash": "8586866767247417612"
+        "file": "docs/api-reference/transactions/refund.mdx",
+        "hash": "13177006327461174956"
       },
       {
-        "file": "apps/web/src/pages/merchant/ShopDisputesPage.tsx",
-        "hash": "15378863007384694781"
+        "file": "apps/web/src/pages/merchant/MerchantProfilePage.tsx",
+        "hash": "12808978612658232642"
       },
       {
-        "file": "scripts/seed-wallets.ts",
-        "hash": "16656779562137700282"
-      },
-      {
-        "file": "packages/sdk/src/resources/nfc.ts",
-        "hash": "6366216286841958888"
-      },
-      {
-        "file": "packages/sdk/src/types.ts",
-        "hash": "7463659020310105839"
-      },
-      {
-        "file": "apps/web/src/App.tsx",
-        "hash": "230565479970150183"
-      },
-      {
-        "file": "apps/web/src/pages/TransactionsPage.tsx",
-        "hash": "223751117119920038"
-      },
-      {
-        "file": "apps/web/src/components/ui/Input.tsx",
-        "hash": "8228275474693993994"
-      },
-      {
-        "file": "scripts/seed.sql",
-        "hash": "18306056527637642224"
-      },
-      {
-        "file": "packages/sdk/package-lock.json",
-        "hash": "5237812162839492548"
-      },
-      {
-        "file": "apps/web/src/pages/merchant/CreateDeveloperBusinessPage.tsx",
-        "hash": "5701506986500010701"
-      },
-      {
-        "file": "packages/sdk/src/resources/settlement.ts",
-        "hash": "2014730379343291343"
-      },
-      {
-        "file": "scripts/seed-all-users.ts",
-        "hash": "8780602226633571873"
-      },
-      {
-        "file": "scripts/seed-supabase.ts",
-        "hash": "12244473185524101119"
-      },
-      {
-        "file": "apps/web/src/pages/admin/SimulatorPage.tsx",
-        "hash": "16315083430037439664"
-      },
-      {
-        "file": "docs/api-reference/cards/block.mdx",
-        "hash": "2420845849154114078"
-      },
-      {
-        "file": "scripts/migrations/002_username_and_phone_login.sql",
-        "hash": "7464407902017754084"
-      },
-      {
-        "file": "apps/web/src/context/NotificationContext.tsx",
-        "hash": "14193150809760760332"
-      },
-      {
-        "file": "apps/web/src/pages/admin/AuthorizationPage.tsx",
-        "hash": "11131470686565187167"
-      },
-      {
-        "file": "apps/web/src/components/developer/DeveloperPanel.tsx",
-        "hash": "2568850151205851673"
+        "file": "apps/web/src/hooks/useCards.ts",
+        "hash": "15789699852860642790"
       },
       {
         "file": "scripts/migrations/018_fix_merchant_businesses_rls.sql",
         "hash": "3709610559021807305"
       },
       {
-        "file": "apps/web/src/components/layout/AgentLayout.tsx",
-        "hash": "6131513164770511367"
+        "file": "apps/web/src/context/NotificationContext.tsx",
+        "hash": "14193150809760760332"
       },
       {
-        "file": "apps/web/src/services/business.service.ts",
-        "hash": "5560333421450502108"
+        "file": "apps/web/src/components/developer/DeveloperPanel.tsx",
+        "hash": "2568850151205851673"
+      },
+      {
+        "file": "packages/sdk/package-lock.json",
+        "hash": "5237812162839492548"
+      },
+      {
+        "file": "packages/sdk/src/resources/developer.ts",
+        "hash": "14049241599784905738"
+      },
+      {
+        "file": "apps/web/src/services/qr-engine.ts",
+        "hash": "9606814543415948329"
+      },
+      {
+        "file": "docs/api-reference/wallets/get.mdx",
+        "hash": "1303040164003703676"
+      },
+      {
+        "file": "docs/webhooks/signatures.mdx",
+        "hash": "16594348356150273169"
+      },
+      {
+        "file": "apps/web/src/services/card.service.ts",
+        "hash": "13299197022859107522"
+      },
+      {
+        "file": "scripts/migrations/005_fix_rbac_and_reset.sql",
+        "hash": "16933195565352578438"
+      },
+      {
+        "file": "scripts/migrations/006_wallet_functions.sql",
+        "hash": "4601717632205101149"
+      },
+      {
+        "file": "scripts/migrations/009_transaction_pin.sql",
+        "hash": "12462149883290404758"
+      },
+      {
+        "file": "apps/web/src/pages/agent/AgentSettingsPage.tsx",
+        "hash": "705898706938053277"
       },
       {
         "file": "apps/web/src/pages/merchant/MerchantUpgradePage.tsx",
         "hash": "10156731417662391981"
       },
       {
+        "file": "apps/web/src/hooks/useWallets.ts",
+        "hash": "14886399282312022765"
+      },
+      {
+        "file": "scripts/migrations/010_complete_card_system.sql",
+        "hash": "17497190679549839550"
+      },
+      {
+        "file": "docs/api-reference/transactions/get.mdx",
+        "hash": "3349263149760004893"
+      },
+      {
+        "file": "apps/web/src/main.tsx",
+        "hash": "17152941725224075869"
+      },
+      {
+        "file": "apps/web/src/services/upload.service.ts",
+        "hash": "12429206383845854839"
+      },
+      {
+        "file": "apps/web/src/components/pots/CreatePotModal.tsx",
+        "hash": "11263953085960672330"
+      },
+      {
+        "file": "apps/web/src/components/pots/WithdrawPotModal.tsx",
+        "hash": "10862829669502371574"
+      },
+      {
+        "file": "apps/web/src/services/business.service.ts",
+        "hash": "5560333421450502108"
+      },
+      {
+        "file": "scripts/seed-wallets.ts",
+        "hash": "16656779562137700282"
+      },
+      {
+        "file": "scripts/migrations/011_monime_integration.sql",
+        "hash": "13795768515459653683"
+      },
+      {
+        "file": "docs/api-reference/wallets/list.mdx",
+        "hash": "270982845205352877"
+      },
+      {
+        "file": "package-lock.json",
+        "hash": "11278684341643099979"
+      },
+      {
+        "file": "apps/web/src/pages/admin/DisputesPage.tsx",
+        "hash": "3110414110903259181"
+      },
+      {
+        "file": "docs/api-reference/cards/activate.mdx",
+        "hash": "10449286958431494674"
+      },
+      {
+        "file": "apps/web/src/pages/admin/TransactionsPage.tsx",
+        "hash": "3531165836127726467"
+      },
+      {
+        "file": "apps/web/src/pages/admin/PaymentSettingsPage.tsx",
+        "hash": "15021281403185131531"
+      },
+      {
+        "file": "scripts/migrations/020_add_trial_transaction_columns.sql",
+        "hash": "558365518777619634"
+      },
+      {
+        "file": "apps/web/src/pages/merchant/CreateDeveloperBusinessPage.tsx",
+        "hash": "5701506986500010701"
+      },
+      {
+        "file": "packages/sdk/src/utils/webhooks.ts",
+        "hash": "5812794901586195225"
+      },
+      {
+        "file": "scripts/migrations/001_p2p_and_fees.sql",
+        "hash": "9841243651836444752"
+      },
+      {
+        "file": "apps/web/src/hooks/useTransactions.ts",
+        "hash": "13180721035446815228"
+      },
+      {
+        "file": "apps/web/src/pages/PotDetailPage.tsx",
+        "hash": "14518185625360053838"
+      },
+      {
+        "file": "scripts/migrations/014_business_categories.sql",
+        "hash": "11959672335502461577"
+      },
+      {
+        "file": "apps/web/src/pages/agent/AgentDashboard.tsx",
+        "hash": "14136706696445921334"
+      },
+      {
+        "file": "apps/web/src/pages/agent/AgentDeveloperPage.tsx",
+        "hash": "180024928082157982"
+      },
+      {
+        "file": "apps/web/src/pages/admin/BusinessesPage.tsx",
+        "hash": "7936922934799044399"
+      },
+      {
+        "file": "docs/webhooks/events.mdx",
+        "hash": "17075934928005772758"
+      },
+      {
+        "file": "apps/web/src/pages/DepositSuccessPage.tsx",
+        "hash": "2898861718700053589"
+      },
+      {
+        "file": "apps/web/src/pages/merchant/MerchantDeveloperPage.tsx",
+        "hash": "2130727326027062942"
+      },
+      {
+        "file": "apps/web/src/pages/admin/DepositsPage.tsx",
+        "hash": "2476666073775041333"
+      },
+      {
+        "file": "scripts/seed-all-users.ts",
+        "hash": "8780602226633571873"
+      },
+      {
+        "file": "scripts/migrations/017_merchant_businesses.sql",
+        "hash": "14844487483936208128"
+      },
+      {
+        "file": "apps/web/src/pages/admin/WebhooksPage.tsx",
+        "hash": "13874266602039677773"
+      },
+      {
+        "file": "docs/api-reference/auth/register.mdx",
+        "hash": "12360120628592776103"
+      },
+      {
+        "file": "api/deposit/success.ts",
+        "hash": "4208186427650715940"
+      },
+      {
+        "file": "docs/concepts/cards.mdx",
+        "hash": "18399792120025220711"
+      },
+      {
+        "file": "packages/sdk/src/resources/cards.ts",
+        "hash": "16746421897183231962"
+      },
+      {
+        "file": "docs/api-reference/auth/login.mdx",
+        "hash": "6814132985541562997"
+      },
+      {
+        "file": "packages/sdk/src/index.ts",
+        "hash": "14334550906085466253"
+      },
+      {
+        "file": "apps/web/src/pages/admin/CardsPage.tsx",
+        "hash": "13931024955953249635"
+      },
+      {
+        "file": "apps/web/src/pages/admin/FeesPage.tsx",
+        "hash": "7682473700709216908"
+      },
+      {
+        "file": "scripts/seed.sql",
+        "hash": "18306056527637642224"
+      },
+      {
+        "file": "apps/web/src/components/ui/Toast.tsx",
+        "hash": "4235026985114067335"
+      },
+      {
+        "file": "api/settings/test-checkout.ts",
+        "hash": "18329889250433156119"
+      },
+      {
+        "file": "apps/web/.gitignore",
+        "hash": "2168824243432662777"
+      },
+      {
+        "file": "apps/web/src/pages/admin/CustomersPage.tsx",
+        "hash": "5952611675218512091"
+      },
+      {
+        "file": "packages/sdk/src/config.ts",
+        "hash": "15086550371068264871"
+      },
+      {
+        "file": "apps/web/src/pages/developer/DeveloperDashboard.tsx",
+        "hash": "16587935862458790676"
+      },
+      {
+        "file": "scripts/migrations/008_default_superadmin.sql",
+        "hash": "11223492292919112828"
+      },
+      {
+        "file": ".npmrc",
+        "hash": "18085261541358865259"
+      },
+      {
+        "file": ".env.example",
+        "hash": "12301329055614138383"
+      },
+      {
+        "file": "apps/web/src/services/wallet.service.ts",
+        "hash": "4648698806745928156"
+      },
+      {
+        "file": "PROJECT_CONTEXT.md",
+        "hash": "10914407810863262241"
+      },
+      {
+        "file": "docs/sdks/overview.mdx",
+        "hash": "8086721913295575132"
+      },
+      {
+        "file": "apps/web/src/pages/PotsPage.tsx",
+        "hash": "14981680967800146991"
+      },
+      {
+        "file": "apps/web/src/pages/TransactionsPage.tsx",
+        "hash": "223751117119920038"
+      },
+      {
+        "file": "scripts/migrations/019_rename_trial_transaction_fields.sql",
+        "hash": "893928233143480367"
+      },
+      {
         "file": "apps/web/src/components/layout/MerchantLayout.tsx",
         "hash": "11957451348226317521"
       },
       {
-        "file": "scripts/migrations/012_payment_settings.sql",
-        "hash": "11162769434250486354"
+        "file": "apps/web/src/pages/CheckoutPage.tsx",
+        "hash": "12863859273831153510"
       },
       {
-        "file": "scripts/migrations/009_transaction_pin.sql",
-        "hash": "12462149883290404758"
+        "file": "apps/web/src/types/index.ts",
+        "hash": "4083995510618323697"
+      },
+      {
+        "file": "apps/web/public/test-checkout.html",
+        "hash": "1460849670000046415"
+      },
+      {
+        "file": "apps/web/package-lock.json",
+        "hash": "621469898048537886"
+      },
+      {
+        "file": "api/settings.ts",
+        "hash": "9723956457529561418"
+      },
+      {
+        "file": "packages/sdk/src/resources/merchants.ts",
+        "hash": "4978487408213167052"
+      },
+      {
+        "file": "packages/sdk/src/resources/wallet.ts",
+        "hash": "16678720134228299170"
+      },
+      {
+        "file": "apps/web/src/components/layout/AgentLayout.tsx",
+        "hash": "6131513164770511367"
+      },
+      {
+        "file": "apps/web/src/components/agent/AgentPlusUpgradeModal.tsx",
+        "hash": "17568857897482927940"
+      },
+      {
+        "file": "docs/api-reference/cards/block.mdx",
+        "hash": "2420845849154114078"
+      },
+      {
+        "file": "apps/web/vercel.json",
+        "hash": "459790152265701597"
+      },
+      {
+        "file": "apps/web/src/pages/admin/MerchantsManagementPage.tsx",
+        "hash": "14134882974142742897"
+      },
+      {
+        "file": "apps/web/src/pages/admin/SimulatorPage.tsx",
+        "hash": "16315083430037439664"
+      },
+      {
+        "file": "apps/web/src/components/ui/Input.tsx",
+        "hash": "8228275474693993994"
+      },
+      {
+        "file": "apps/web/src/services/api.ts",
+        "hash": "11123790169824791392"
+      },
+      {
+        "file": "apps/web/src/pages/merchant/MerchantTransactionsPage.tsx",
+        "hash": "11027517575734589904"
+      },
+      {
+        "file": "apps/web/src/pages/merchant/MerchantPaymentLinksPage.tsx",
+        "hash": "14758789150179601191"
+      },
+      {
+        "file": "vercel.json",
+        "hash": "17803360977455181155"
+      },
+      {
+        "file": "apps/web/src/components/ui/TransactionPinModal.tsx",
+        "hash": "10686516027324020426"
+      },
+      {
+        "file": "packages/peeap-pay-sdk/package.json",
+        "hash": "15694995786794876375"
+      },
+      {
+        "file": "apps/web/src/pages/admin/AgentsManagementPage.tsx",
+        "hash": "10193278334371372298"
+      },
+      {
+        "file": "scripts/seed-argon2.ts",
+        "hash": "11687943880523341410"
+      },
+      {
+        "file": "Screenshot 2025-12-02 at 19.40.49.png",
+        "hash": "13169621060698767230"
+      },
+      {
+        "file": "docs/concepts/transactions.mdx",
+        "hash": "5472105780480421872"
+      },
+      {
+        "file": "apps/web/src/components/ui/SetupPinModal.tsx",
+        "hash": "14766747142359473965"
+      },
+      {
+        "file": "apps/web/src/pages/PayPage.tsx",
+        "hash": "11363377202397428"
+      },
+      {
+        "file": "apps/web/src/components/layout/StandaloneDeveloperLayout.tsx",
+        "hash": "15205957237455645019"
+      },
+      {
+        "file": "apps/web/src/components/ui/NotificationBell.tsx",
+        "hash": "12376235525313651342"
+      },
+      {
+        "file": "apps/web/src/pages/CardMarketplacePage.tsx",
+        "hash": "4073586570871898727"
+      },
+      {
+        "file": "apps/web/src/pages/admin/CardProgramsPage.tsx",
+        "hash": "3052737357681476289"
+      },
+      {
+        "file": "scripts/migrations/009_card_features_system.sql",
+        "hash": "16196747627718908789"
+      },
+      {
+        "file": "apps/web/src/pages/LandingPage.tsx",
+        "hash": "12074022510134553787"
+      },
+      {
+        "file": "apps/web/src/pages/admin/CompliancePage.tsx",
+        "hash": "4205319756654963577"
+      },
+      {
+        "file": "apps/web/src/components/ui/SlideToSend.tsx",
+        "hash": "4867804595120820312"
+      },
+      {
+        "file": "docs/authentication.mdx",
+        "hash": "4143068396221212753"
+      },
+      {
+        "file": "apps/web/src/hooks/useRBAC.tsx",
+        "hash": "12876989309040161905"
+      },
+      {
+        "file": "apps/web/src/components/ProtectedRoute.tsx",
+        "hash": "2470425749051462303"
+      },
+      {
+        "file": "docs/mint.json",
+        "hash": "2975692452058918696"
+      },
+      {
+        "file": "scripts/migrations/007_enhanced_card_management.sql",
+        "hash": "7781123305226203109"
+      },
+      {
+        "file": "apps/web/src/components/RoleBasedRoute.tsx",
+        "hash": "2921725132739123373"
+      },
+      {
+        "file": "docs/api-reference/auth/logout.mdx",
+        "hash": "17373317970129299777"
+      },
+      {
+        "file": "scripts/migrations/015_merchant_businesses.sql",
+        "hash": "10215558737431299329"
+      },
+      {
+        "file": "packages/sdk/package.json",
+        "hash": "14927580671530886852"
+      },
+      {
+        "file": "apps/web/src/pages/merchant/MerchantDashboard.tsx",
+        "hash": "5808193300953768529"
+      },
+      {
+        "file": "packages/sdk/src/resources/transfers.ts",
+        "hash": "748830904939867310"
+      },
+      {
+        "file": "packages/sdk/src/resources/qrcode.ts",
+        "hash": "7489902204528270749"
+      },
+      {
+        "file": "scripts/seed-demo.ts",
+        "hash": "4696911734198581726"
+      },
+      {
+        "file": "apps/web/public/embed/peeap-sdk.js",
+        "hash": "9604287348259732819"
       }
     ],
     "projectFileMap": {
