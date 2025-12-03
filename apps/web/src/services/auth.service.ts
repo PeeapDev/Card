@@ -1,9 +1,16 @@
 import { supabase } from '@/lib/supabase';
 import type { User, AuthTokens, LoginRequest, RegisterRequest, UserRole } from '@/types';
 import { normalizePhoneNumber } from '@/utils/phone';
+import { authenticator } from 'otplib';
+
+export interface MfaRequiredResponse {
+  mfaRequired: true;
+  userId: string;
+  email: string;
+}
 
 export const authService = {
-  async login(data: LoginRequest): Promise<{ user: User; tokens: AuthTokens }> {
+  async login(data: LoginRequest & { mfaCode?: string }): Promise<{ user: User; tokens: AuthTokens } | MfaRequiredResponse> {
     // Determine if login is via phone or email
     const loginIdentifier = data.email; // Can be email or phone
     const isEmail = loginIdentifier.includes('@');
@@ -64,6 +71,28 @@ export const authService = {
     // Note: In production, use proper password hashing (bcrypt, argon2)
     if (dbUser.password_hash !== data.password) {
       throw new Error('Invalid credentials');
+    }
+
+    // Check if 2FA is enabled
+    if (dbUser.two_factor_enabled && dbUser.two_factor_secret) {
+      // If no MFA code provided, return MFA required response
+      if (!data.mfaCode) {
+        return {
+          mfaRequired: true,
+          userId: dbUser.id,
+          email: dbUser.email,
+        };
+      }
+
+      // Verify MFA code
+      const isValidMfa = authenticator.verify({
+        token: data.mfaCode,
+        secret: dbUser.two_factor_secret,
+      });
+
+      if (!isValidMfa) {
+        throw new Error('Invalid verification code');
+      }
     }
 
     // Create user object

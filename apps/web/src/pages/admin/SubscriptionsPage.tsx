@@ -16,7 +16,7 @@ import {
   CheckCircle,
   AlertCircle,
 } from 'lucide-react';
-import { Card } from '@/components/ui/Card';
+import { Card, MotionCard } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { currencyService, Currency } from '@/services/currency.service';
 
@@ -95,12 +95,12 @@ export function SubscriptionsPage() {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Subscription Plans</h1>
-            <p className="text-gray-500">Manage merchant subscription plans and pricing</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Subscription Plans</h1>
+            <p className="text-gray-500 dark:text-gray-400">Manage merchant subscription plans and pricing</p>
           </div>
           <div className="flex items-center gap-3">
             {saved && (
-              <span className="flex items-center gap-2 text-green-600 text-sm">
+              <span className="flex items-center gap-2 text-green-600 dark:text-green-400 text-sm">
                 <CheckCircle className="w-4 h-4" />
                 Changes saved
               </span>
@@ -109,8 +109,8 @@ export function SubscriptionsPage() {
               onClick={() => setIsEditing(!isEditing)}
               className={`px-4 py-2 rounded-lg flex items-center gap-2 ${
                 isEditing
-                  ? 'bg-gray-200 text-gray-700'
-                  : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                  ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                  : 'bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
               }`}
             >
               <Edit className="w-4 h-4" />
@@ -130,59 +130,59 @@ export function SubscriptionsPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="p-4">
+          <MotionCard className="p-4" delay={0}>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Users className="w-5 h-5 text-blue-600" />
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Total Subscribers</p>
-                <p className="text-xl font-semibold">{stats.totalSubscribers}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Total Subscribers</p>
+                <p className="text-xl font-semibold text-gray-900 dark:text-white">{stats.totalSubscribers}</p>
               </div>
             </div>
-          </Card>
-          <Card className="p-4">
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.1}>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <DollarSign className="w-5 h-5 text-green-600" />
+              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                <DollarSign className="w-5 h-5 text-green-600 dark:text-green-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Monthly Revenue</p>
-                <p className="text-xl font-semibold">{formatCurrency(stats.monthlyRevenue)}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Monthly Revenue</p>
+                <p className="text-xl font-semibold text-gray-900 dark:text-white">{formatCurrency(stats.monthlyRevenue)}</p>
               </div>
             </div>
-          </Card>
-          <Card className="p-4">
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.2}>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <Zap className="w-5 h-5 text-purple-600" />
+              <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                <Zap className="w-5 h-5 text-purple-600 dark:text-purple-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Business Plan</p>
-                <p className="text-xl font-semibold">{stats.activeBusiness} active</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Business Plan</p>
+                <p className="text-xl font-semibold text-gray-900 dark:text-white">{stats.activeBusiness} active</p>
               </div>
             </div>
-          </Card>
-          <Card className="p-4">
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.3}>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-indigo-100 rounded-lg">
-                <Shield className="w-5 h-5 text-indigo-600" />
+              <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+                <Shield className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Enterprise Plan</p>
-                <p className="text-xl font-semibold">{stats.activeEnterprise} active</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Enterprise Plan</p>
+                <p className="text-xl font-semibold text-gray-900 dark:text-white">{stats.activeEnterprise} active</p>
               </div>
             </div>
-          </Card>
+          </MotionCard>
         </div>
 
         {/* Info Banner */}
-        <Card className="p-4 bg-amber-50 border-amber-200">
+        <Card className="p-4 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800">
           <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-medium text-amber-800">Subscription Management</p>
-              <p className="text-sm text-amber-700 mt-1">
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Subscription Management</p>
+              <p className="text-sm text-amber-700 dark:text-amber-400 mt-1">
                 Changes to subscription plans will only affect new subscribers. Existing subscribers will
                 keep their current plan until renewal. Consider grandfathering existing customers when making price changes.
               </p>
@@ -208,15 +208,15 @@ export function SubscriptionsPage() {
               <div className="p-6">
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <h3 className="text-xl font-bold text-gray-900">{plan.name}</h3>
-                    <p className="text-sm text-gray-500 mt-1">{plan.description}</p>
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-white">{plan.name}</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{plan.description}</p>
                   </div>
                   {isEditing && (
                     <div className="flex gap-2">
                       <button
                         onClick={() => togglePopular(plan.id)}
                         className={`p-2 rounded-lg ${
-                          plan.isPopular ? 'bg-yellow-100 text-yellow-600' : 'bg-gray-100 text-gray-400'
+                          plan.isPopular ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
                         }`}
                         title="Set as popular"
                       >
@@ -225,7 +225,7 @@ export function SubscriptionsPage() {
                       <button
                         onClick={() => togglePlanStatus(plan.id)}
                         className={`p-2 rounded-lg ${
-                          plan.isActive ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'
+                          plan.isActive ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
                         }`}
                         title={plan.isActive ? 'Disable' : 'Enable'}
                       >
@@ -239,33 +239,33 @@ export function SubscriptionsPage() {
                   {isEditing ? (
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-gray-500">{currencySymbol}</span>
+                        <span className="text-gray-500 dark:text-gray-400">{currencySymbol}</span>
                         <input
                           type="number"
                           value={plan.monthlyPrice}
                           onChange={(e) => updatePlan(plan.id, 'monthlyPrice', parseFloat(e.target.value))}
-                          className="w-20 px-2 py-1 border border-gray-300 rounded text-2xl font-bold"
+                          className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded text-2xl font-bold"
                         />
-                        <span className="text-gray-500">/month</span>
+                        <span className="text-gray-500 dark:text-gray-400">/month</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-gray-500 text-sm">{currencySymbol}</span>
+                        <span className="text-gray-500 dark:text-gray-400 text-sm">{currencySymbol}</span>
                         <input
                           type="number"
                           value={plan.yearlyPrice}
                           onChange={(e) => updatePlan(plan.id, 'yearlyPrice', parseFloat(e.target.value))}
-                          className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                          className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded text-sm"
                         />
-                        <span className="text-gray-500 text-sm">/year</span>
+                        <span className="text-gray-500 dark:text-gray-400 text-sm">/year</span>
                       </div>
                     </div>
                   ) : (
                     <>
                       <div className="flex items-baseline gap-1">
-                        <span className="text-3xl font-bold text-gray-900">{currencySymbol}{plan.monthlyPrice}</span>
-                        <span className="text-gray-500">/month</span>
+                        <span className="text-3xl font-bold text-gray-900 dark:text-white">{currencySymbol}{plan.monthlyPrice}</span>
+                        <span className="text-gray-500 dark:text-gray-400">/month</span>
                       </div>
-                      <p className="text-sm text-gray-500">or {currencySymbol}{plan.yearlyPrice}/year (save 17%)</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">or {currencySymbol}{plan.yearlyPrice}/year (save 17%)</p>
                     </>
                   )}
                 </div>
@@ -273,32 +273,32 @@ export function SubscriptionsPage() {
                 <div className="space-y-3 mb-6">
                   {plan.features.map((feature, index) => (
                     <div key={index} className="flex items-center gap-2">
-                      <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
-                      <span className="text-sm text-gray-600">{feature}</span>
+                      <Check className="w-4 h-4 text-green-500 dark:text-green-400 flex-shrink-0" />
+                      <span className="text-sm text-gray-600 dark:text-gray-300">{feature}</span>
                     </div>
                   ))}
                 </div>
 
-                <div className="pt-4 border-t border-gray-200">
-                  <h4 className="text-sm font-semibold text-gray-900 mb-2">Limits</h4>
+                <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Limits</h4>
                   <div className="grid grid-cols-3 gap-2 text-center">
                     <div>
-                      <p className="text-lg font-semibold text-gray-900">
+                      <p className="text-lg font-semibold text-gray-900 dark:text-white">
                         {plan.limits.transactions === -1 ? '∞' : plan.limits.transactions.toLocaleString()}
                       </p>
-                      <p className="text-xs text-gray-500">Transactions</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Transactions</p>
                     </div>
                     <div>
-                      <p className="text-lg font-semibold text-gray-900">
+                      <p className="text-lg font-semibold text-gray-900 dark:text-white">
                         {plan.limits.apiCalls === -1 ? '∞' : `${plan.limits.apiCalls / 1000}K`}
                       </p>
-                      <p className="text-xs text-gray-500">API Calls</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">API Calls</p>
                     </div>
                     <div>
-                      <p className="text-lg font-semibold text-gray-900">
+                      <p className="text-lg font-semibold text-gray-900 dark:text-white">
                         {plan.limits.teamMembers === -1 ? '∞' : plan.limits.teamMembers}
                       </p>
-                      <p className="text-xs text-gray-500">Team</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Team</p>
                     </div>
                   </div>
                 </div>
@@ -311,7 +311,7 @@ export function SubscriptionsPage() {
         {isEditing && (
           <button
             onClick={() => setShowAddPlan(true)}
-            className="w-full p-6 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-primary-500 hover:text-primary-600 transition-colors flex items-center justify-center gap-2"
+            className="w-full p-6 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-500 dark:text-gray-400 hover:border-primary-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors flex items-center justify-center gap-2"
           >
             <Plus className="w-5 h-5" />
             Add New Plan
@@ -320,51 +320,51 @@ export function SubscriptionsPage() {
 
         {/* Subscription Settings */}
         <Card className="p-6">
-          <h3 className="font-semibold text-gray-900 mb-4">Subscription Settings</h3>
+          <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Subscription Settings</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Trial Period</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Trial Period</label>
               <div className="flex items-center gap-2">
                 <input
                   type="number"
                   defaultValue={14}
-                  className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-20 px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 />
-                <span className="text-gray-500">days</span>
+                <span className="text-gray-500 dark:text-gray-400">days</span>
               </div>
-              <p className="text-xs text-gray-500 mt-1">Free trial period for new subscribers</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Free trial period for new subscribers</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Grace Period</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Grace Period</label>
               <div className="flex items-center gap-2">
                 <input
                   type="number"
                   defaultValue={3}
-                  className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-20 px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 />
-                <span className="text-gray-500">days</span>
+                <span className="text-gray-500 dark:text-gray-400">days</span>
               </div>
-              <p className="text-xs text-gray-500 mt-1">Days before account suspension after failed payment</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Days before account suspension after failed payment</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Yearly Discount</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Yearly Discount</label>
               <div className="flex items-center gap-2">
                 <input
                   type="number"
                   defaultValue={17}
-                  className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-20 px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 />
-                <span className="text-gray-500">%</span>
+                <span className="text-gray-500 dark:text-gray-400">%</span>
               </div>
-              <p className="text-xs text-gray-500 mt-1">Discount for yearly subscriptions</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Discount for yearly subscriptions</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Auto-Renewal</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Auto-Renewal</label>
               <label className="flex items-center gap-2 mt-2">
                 <input type="checkbox" defaultChecked className="rounded text-primary-600 focus:ring-primary-500" />
-                <span className="text-sm text-gray-600">Enable auto-renewal by default</span>
+                <span className="text-sm text-gray-600 dark:text-gray-300">Enable auto-renewal by default</span>
               </label>
-              <p className="text-xs text-gray-500 mt-1">Subscriptions will automatically renew</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Subscriptions will automatically renew</p>
             </div>
           </div>
         </Card>

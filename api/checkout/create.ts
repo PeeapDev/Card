@@ -11,6 +11,15 @@ const SETTINGS_ID = '00000000-0000-0000-0000-000000000001';
 /**
  * Checkout Session Creation API
  * For merchant/developer SDK checkout with Monime
+ *
+ * Security:
+ * - Accepts publicKey (pk_xxx) instead of businessId for secure frontend usage
+ * - Public keys are safe to expose in frontend code
+ * - Secret keys (sk_xxx) should NEVER be sent to this endpoint
+ *
+ * Idempotency:
+ * - Client can provide idempotencyKey to prevent duplicate payments
+ * - If not provided, server generates one
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -27,10 +36,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const {
-      businessId,
+      publicKey,
+      businessId, // Deprecated - for backwards compatibility
       amount,
       currency = 'SLE',
       reference,
+      idempotencyKey: clientIdempotencyKey, // Client-provided idempotency key
       description,
       customerEmail,
       customerPhone,
@@ -61,9 +72,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: 'Monime credentials not configured' });
     }
 
-    // Get business info if businessId provided
+    // Resolve business from publicKey or businessId
     let businessName = 'Peeap Payment';
-    if (businessId) {
+    let resolvedBusinessId = businessId;
+
+    // If publicKey is provided, look up business by public key
+    if (publicKey) {
+      // Determine if it's a live or test key
+      const isLiveKey = publicKey.startsWith('pk_live_');
+      const isTestKey = publicKey.startsWith('pk_test_');
+
+      if (!isLiveKey && !isTestKey) {
+        // It might be a businessId passed as publicKey (backwards compatibility)
+        resolvedBusinessId = publicKey;
+      } else {
+        // Look up business by public key
+        const keyColumn = isLiveKey ? 'live_public_key' : 'test_public_key';
+        const { data: business, error: businessError } = await supabase
+          .from('merchant_businesses')
+          .select('id, name, is_live_mode, approval_status, status')
+          .eq(keyColumn, publicKey)
+          .single();
+
+        if (businessError || !business) {
+          return res.status(401).json({ error: 'Invalid public key' });
+        }
+
+        // Check if business is active
+        if (business.status !== 'ACTIVE') {
+          return res.status(403).json({ error: 'Business is not active' });
+        }
+
+        // For live keys, business must be approved (or have trial transactions remaining)
+        if (isLiveKey && business.approval_status !== 'APPROVED') {
+          // Check trial transactions (basic check - full check would be more complex)
+          if (business.approval_status === 'REJECTED' || business.approval_status === 'SUSPENDED') {
+            return res.status(403).json({ error: 'Business is not approved for live payments' });
+          }
+        }
+
+        resolvedBusinessId = business.id;
+        businessName = business.name;
+      }
+    } else if (businessId) {
+      // Legacy: businessId provided directly
       const { data: business } = await supabase
         .from('merchant_businesses')
         .select('name')
@@ -77,18 +129,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Generate unique payment reference
     const paymentRef = reference || `pay_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const idempotencyKey = randomUUID();
+
+    // Use client-provided idempotency key or generate one
+    const idempotencyKey = clientIdempotencyKey || randomUUID();
+
+    // Check for duplicate idempotency key (prevent duplicate payments)
+    if (clientIdempotencyKey) {
+      const { data: existingPayment } = await supabase
+        .from('payments')
+        .select('id, reference, status')
+        .eq('idempotency_key', clientIdempotencyKey)
+        .single();
+
+      if (existingPayment) {
+        // Return the existing payment info instead of creating a new one
+        console.log('[Checkout] Duplicate idempotency key detected:', clientIdempotencyKey);
+        return res.status(200).json({
+          success: true,
+          duplicate: true,
+          paymentId: existingPayment.reference,
+          message: 'Payment already exists with this idempotency key',
+        });
+      }
+    }
 
     // Build URLs
     const baseUrl = settings.frontend_url || 'https://my.peeap.com';
-    const successUrl = `${baseUrl}/api/checkout/success?reference=${paymentRef}&businessId=${businessId || ''}&redirect=${encodeURIComponent(redirectUrl || '')}`;
-    const cancelUrl = `${baseUrl}/api/checkout/cancel?reference=${paymentRef}&businessId=${businessId || ''}&redirect=${encodeURIComponent(redirectUrl || '')}`;
+    const successUrl = `${baseUrl}/api/checkout/success?reference=${paymentRef}&businessId=${resolvedBusinessId || ''}&redirect=${encodeURIComponent(redirectUrl || '')}`;
+    const cancelUrl = `${baseUrl}/api/checkout/cancel?reference=${paymentRef}&businessId=${resolvedBusinessId || ''}&redirect=${encodeURIComponent(redirectUrl || '')}`;
 
     console.log('[Checkout] Creating Monime session:', {
-      businessId,
+      publicKey: publicKey ? publicKey.substring(0, 15) + '...' : undefined,
+      businessId: resolvedBusinessId,
+      businessName,
       amount,
       currency,
       paymentRef,
+      idempotencyKey,
       paymentMethod,
     });
 
@@ -111,7 +188,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             name: description || `Payment to ${businessName}`,
             price: {
               currency,
-              value: amount, // Minor units
+              value: amount, // Amount comes from frontend already in minor units
             },
             quantity: 1,
             description: `Payment ref: ${paymentRef}`,
@@ -120,8 +197,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ],
         metadata: {
           type: 'merchant_payment',
-          businessId: businessId || '',
+          businessId: resolvedBusinessId || '',
           reference: paymentRef,
+          idempotencyKey,
           customerEmail: customerEmail || '',
           customerPhone: customerPhone || '',
           paymentMethod: paymentMethod || 'mobile_money',
@@ -146,8 +224,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .insert({
         id: randomUUID(),
         reference: paymentRef,
+        idempotency_key: idempotencyKey,
         monime_session_id: monimeData.result?.id,
-        business_id: businessId || null,
+        business_id: resolvedBusinessId || null,
         amount,
         currency,
         status: 'pending',

@@ -18,6 +18,8 @@ import {
   Store,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { NotificationBell } from '@/components/ui/NotificationBell';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 interface StandaloneDeveloperLayoutProps {
   children: ReactNode;
@@ -154,20 +156,20 @@ export function StandaloneDeveloperLayout({
       {/* Main content */}
       <div className="lg:pl-64">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 h-16 bg-white border-b border-gray-200 shadow-sm">
+        <header className="sticky top-0 z-30 h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">
           <div className="flex items-center justify-between h-full px-4 lg:px-8">
             <div className="flex items-center gap-4">
               <button
-                className="lg:hidden p-2 rounded-lg hover:bg-gray-100"
+                className="lg:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
                 onClick={() => setSidebarOpen(true)}
               >
-                <Menu className="w-6 h-6" />
+                <Menu className="w-6 h-6 dark:text-gray-400" />
               </button>
             </div>
             <div className="flex items-center gap-4">
               <Link
                 to={homeRoute}
-                className="hidden sm:flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                className="hidden sm:flex items-center gap-2 px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
               >
                 <Home className="w-4 h-4" />
                 {homeLabel}
@@ -175,15 +177,14 @@ export function StandaloneDeveloperLayout({
               <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-medium">
                 Developer Portal
               </span>
-              <button className="relative p-2 hover:bg-gray-100 rounded-lg">
-                <Bell className="w-5 h-5 text-gray-600" />
-              </button>
+              <ThemeToggle />
+              <NotificationBell />
             </div>
           </div>
         </header>
 
         {/* Page content */}
-        <main className="p-4 lg:p-8 bg-gray-50 min-h-[calc(100vh-4rem)]">{children}</main>
+        <main className="p-4 lg:p-8 bg-gray-50 dark:bg-gray-900 min-h-[calc(100vh-4rem)]">{children}</main>
       </div>
     </div>
   );

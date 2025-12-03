@@ -18,7 +18,7 @@ import {
   User,
   Flag,
 } from 'lucide-react';
-import { Card } from '@/components/ui/Card';
+import { Card, MotionCard } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 
 interface Dispute {
@@ -59,17 +59,17 @@ export function DisputesPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'open':
-        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700"><Clock className="w-3 h-3" /> Open</span>;
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400"><Clock className="w-3 h-3" /> Open</span>;
       case 'under_review':
-        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700"><Eye className="w-3 h-3" /> Under Review</span>;
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"><Eye className="w-3 h-3" /> Under Review</span>;
       case 'evidence_required':
-        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700"><FileText className="w-3 h-3" /> Evidence Required</span>;
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400"><FileText className="w-3 h-3" /> Evidence Required</span>;
       case 'won':
-        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700"><CheckCircle className="w-3 h-3" /> Won</span>;
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"><CheckCircle className="w-3 h-3" /> Won</span>;
       case 'lost':
-        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700"><XCircle className="w-3 h-3" /> Lost</span>;
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"><XCircle className="w-3 h-3" /> Lost</span>;
       case 'closed':
-        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">Closed</span>;
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">Closed</span>;
       default:
         return null;
     }
@@ -78,11 +78,11 @@ export function DisputesPage() {
   const getPriorityBadge = (priority: string) => {
     switch (priority) {
       case 'high':
-        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">High</span>;
+        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">High</span>;
       case 'medium':
-        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-700">Medium</span>;
+        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">Medium</span>;
       case 'low':
-        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">Low</span>;
+        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">Low</span>;
       default:
         return null;
     }
@@ -116,11 +116,11 @@ export function DisputesPage() {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Disputes</h1>
-            <p className="text-gray-500">Manage chargebacks and dispute cases</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Disputes</h1>
+            <p className="text-gray-500 dark:text-gray-400">Manage chargebacks and dispute cases</p>
           </div>
           <div className="flex gap-3">
-            <button className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
+            <button className="px-4 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center gap-2">
               <Download className="w-4 h-4" />
               Export
             </button>
@@ -129,48 +129,48 @@ export function DisputesPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
-          <Card className="p-4">
-            <p className="text-sm text-gray-500">Total</p>
-            <p className="text-2xl font-bold">{stats.totalDisputes}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-sm text-gray-500">Open</p>
-            <p className="text-2xl font-bold text-yellow-600">{stats.openDisputes}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-sm text-gray-500">Under Review</p>
-            <p className="text-2xl font-bold text-blue-600">{stats.underReview}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-sm text-gray-500">Evidence Req.</p>
-            <p className="text-2xl font-bold text-orange-600">{stats.evidenceRequired}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-sm text-gray-500">Won</p>
-            <p className="text-2xl font-bold text-green-600">{stats.won}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-sm text-gray-500">Lost</p>
-            <p className="text-2xl font-bold text-red-600">{stats.lost}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-sm text-gray-500">Dispute Rate</p>
-            <p className="text-2xl font-bold">{stats.disputeRate}%</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-sm text-gray-500">Avg Resolution</p>
-            <p className="text-2xl font-bold">{stats.avgResolutionTime}d</p>
-          </Card>
+          <MotionCard className="p-4" delay={0}>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Total</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalDisputes}</p>
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.05}>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Open</p>
+            <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{stats.openDisputes}</p>
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.1}>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Under Review</p>
+            <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{stats.underReview}</p>
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.15}>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Evidence Req.</p>
+            <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{stats.evidenceRequired}</p>
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.2}>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Won</p>
+            <p className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.won}</p>
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.25}>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Lost</p>
+            <p className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.lost}</p>
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.3}>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Dispute Rate</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.disputeRate}%</p>
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.35}>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Avg Resolution</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.avgResolutionTime}d</p>
+          </MotionCard>
         </div>
 
         {/* Urgent Disputes Alert */}
         {stats.evidenceRequired > 0 && (
-          <Card className="p-4 bg-orange-50 border-orange-200">
+          <Card className="p-4 bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800">
             <div className="flex items-center gap-3">
-              <AlertTriangle className="w-5 h-5 text-orange-600" />
+              <AlertTriangle className="w-5 h-5 text-orange-600 dark:text-orange-400" />
               <div>
-                <p className="font-medium text-orange-800">Action Required</p>
-                <p className="text-sm text-orange-700">
+                <p className="font-medium text-orange-800 dark:text-orange-300">Action Required</p>
+                <p className="text-sm text-orange-700 dark:text-orange-400">
                   {stats.evidenceRequired} disputes require evidence submission before their deadline.
                 </p>
               </div>
@@ -189,7 +189,7 @@ export function DisputesPage() {
                   placeholder="Search by ID, customer, or transaction..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 />
               </div>
             </div>
@@ -199,7 +199,7 @@ export function DisputesPage() {
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-                  className="appearance-none border border-gray-300 rounded-lg px-3 py-2 pr-8 text-sm focus:ring-2 focus:ring-primary-500"
+                  className="appearance-none border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 pr-8 text-sm focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 >
                   <option value="all">All Status</option>
                   <option value="open">Open</option>
@@ -217,41 +217,41 @@ export function DisputesPage() {
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
                 <tr>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Dispute</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Customer</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Amount</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Reason</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Merchant</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Priority</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Due</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Actions</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Dispute</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Customer</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Amount</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Reason</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Merchant</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Priority</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Due</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {filteredDisputes.map((dispute) => {
                   const daysRemaining = getDaysRemaining(dispute.dueDate);
                   const isUrgent = daysRemaining <= 3 && dispute.status !== 'won' && dispute.status !== 'lost' && dispute.status !== 'closed';
 
                   return (
-                    <tr key={dispute.id} className={`hover:bg-gray-50 ${isUrgent ? 'bg-red-50' : ''}`}>
+                    <tr key={dispute.id} className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 ${isUrgent ? 'bg-red-50 dark:bg-red-900/20' : ''}`}>
                       <td className="px-6 py-4">
                         <div>
                           <div className="flex items-center gap-2">
-                            {isUrgent && <Flag className="w-4 h-4 text-red-500" />}
-                            <span className="font-mono text-sm">{dispute.id}</span>
+                            {isUrgent && <Flag className="w-4 h-4 text-red-500 dark:text-red-400" />}
+                            <span className="font-mono text-sm text-gray-900 dark:text-white">{dispute.id}</span>
                           </div>
-                          <span className="text-xs text-gray-500 font-mono">{dispute.transactionId}</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">{dispute.transactionId}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <User className="w-4 h-4 text-gray-400" />
                           <div>
-                            <p className="font-medium text-sm">{dispute.customerName}</p>
-                            <div className="flex items-center gap-1 text-xs text-gray-500">
+                            <p className="font-medium text-sm text-gray-900 dark:text-white">{dispute.customerName}</p>
+                            <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
                               <CreditCard className="w-3 h-3" />
                               ****{dispute.cardLast4}
                             </div>
@@ -261,17 +261,17 @@ export function DisputesPage() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-1">
                           <DollarSign className="w-4 h-4 text-gray-400" />
-                          <span className="font-medium">{formatCurrency(dispute.amount, dispute.currency)}</span>
+                          <span className="font-medium text-gray-900 dark:text-white">{formatCurrency(dispute.amount, dispute.currency)}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">
                         <div>
-                          <p className="text-sm font-medium">{dispute.reason}</p>
-                          <span className="text-xs text-gray-500">{dispute.reasonCode}</span>
+                          <p className="text-sm font-medium text-gray-900 dark:text-white">{dispute.reason}</p>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">{dispute.reasonCode}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="text-sm text-gray-600">{dispute.merchantName}</span>
+                        <span className="text-sm text-gray-600 dark:text-gray-300">{dispute.merchantName}</span>
                       </td>
                       <td className="px-6 py-4">
                         {getPriorityBadge(dispute.priority)}
@@ -283,8 +283,8 @@ export function DisputesPage() {
                         <div className="flex items-center gap-1">
                           <Calendar className="w-4 h-4 text-gray-400" />
                           <span className={`text-sm ${
-                            isUrgent ? 'text-red-600 font-medium' :
-                            daysRemaining < 0 ? 'text-gray-400' : 'text-gray-600'
+                            isUrgent ? 'text-red-600 dark:text-red-400 font-medium' :
+                            daysRemaining < 0 ? 'text-gray-400' : 'text-gray-600 dark:text-gray-300'
                           }`}>
                             {daysRemaining < 0 ? 'Expired' : `${daysRemaining}d left`}
                           </span>
@@ -292,23 +292,23 @@ export function DisputesPage() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
-                          <button className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Details">
+                          <button className="p-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="View Details">
                             <Eye className="w-4 h-4" />
                           </button>
-                          <button className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="Messages">
+                          <button className="p-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="Messages">
                             <MessageSquare className="w-4 h-4" />
                           </button>
                           {dispute.status === 'evidence_required' && (
-                            <button className="p-1 bg-orange-100 text-orange-600 rounded hover:bg-orange-200" title="Upload Evidence">
+                            <button className="p-1 bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 rounded hover:bg-orange-200 dark:hover:bg-orange-900/50" title="Upload Evidence">
                               <Upload className="w-4 h-4" />
                             </button>
                           )}
                           {(dispute.status === 'open' || dispute.status === 'under_review') && (
                             <>
-                              <button className="p-1 bg-green-100 text-green-600 rounded hover:bg-green-200" title="Accept">
+                              <button className="p-1 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded hover:bg-green-200 dark:hover:bg-green-900/50" title="Accept">
                                 <CheckCircle className="w-4 h-4" />
                               </button>
-                              <button className="p-1 bg-red-100 text-red-600 rounded hover:bg-red-200" title="Challenge">
+                              <button className="p-1 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded hover:bg-red-200 dark:hover:bg-red-900/50" title="Challenge">
                                 <XCircle className="w-4 h-4" />
                               </button>
                             </>
@@ -323,18 +323,18 @@ export function DisputesPage() {
           </div>
 
           {/* Pagination */}
-          <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-            <p className="text-sm text-gray-500">
+          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
               Showing 1 to {filteredDisputes.length} of {stats.totalDisputes} disputes
             </p>
             <div className="flex items-center gap-2">
-              <button className="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50" disabled>
+              <button className="px-3 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50" disabled>
                 Previous
               </button>
               <button className="px-3 py-1 text-sm bg-primary-600 text-white rounded">1</button>
-              <button className="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50">2</button>
-              <button className="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50">3</button>
-              <button className="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50">
+              <button className="px-3 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">2</button>
+              <button className="px-3 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">3</button>
+              <button className="px-3 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">
                 Next
               </button>
             </div>

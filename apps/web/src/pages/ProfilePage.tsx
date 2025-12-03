@@ -10,7 +10,8 @@
  * - Account limits display
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import {
   User,
   Mail,
@@ -35,15 +36,42 @@ import {
   ShieldCheck,
   FileText,
   Globe,
+  Scan,
 } from 'lucide-react';
-import { Card } from '@/components/ui/Card';
+import { MotionCard } from '@/components/ui/Card';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProfileAvatar } from '@/components/ui/ProfileAvatar';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { clsx } from 'clsx';
+import { authenticator } from 'otplib';
+import QRCode from 'qrcode';
+import { FaceLiveness } from '@/components/kyc/FaceLiveness';
+import { IdCardScanner } from '@/components/kyc/IdCardScanner';
+import { kycService, fileToBase64 } from '@/services/kyc.service';
+
+// Animation variants
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1
+    }
+  }
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.4, ease: 'easeOut' }
+  }
+};
 
 type ActiveModal = 'none' | 'password' | '2fa' | 'pin' | 'kyc' | 'edit-profile';
+type KycStep = 'info' | 'face-liveness' | 'id-scan' | 'review' | 'submitting' | 'success' | 'failed';
 
 interface UserSettings {
   hasPin: boolean;
@@ -79,6 +107,7 @@ export function ProfilePage() {
   const [twoFASecret, setTwoFASecret] = useState('');
   const [twoFACode, setTwoFACode] = useState('');
   const [twoFALoading, setTwoFALoading] = useState(false);
+  const [twoFAQRCode, setTwoFAQRCode] = useState('');
   const [copied, setCopied] = useState(false);
 
   // PIN states
@@ -87,12 +116,24 @@ export function ProfilePage() {
   const [confirmPin, setConfirmPin] = useState('');
   const [pinLoading, setPinLoading] = useState(false);
 
-  // KYC states
-  const [kycStep, setKycStep] = useState(1);
-  const [idDocument, setIdDocument] = useState<File | null>(null);
-  const [proofOfAddress, setProofOfAddress] = useState<File | null>(null);
-  const [selfie, setSelfie] = useState<File | null>(null);
+  // KYC states - New flow with face liveness and ID scan
+  const [kycStep, setKycStep] = useState<KycStep>('info');
   const [kycLoading, setKycLoading] = useState(false);
+  const [kycError, setKycError] = useState<string | null>(null);
+
+  // KYC form data
+  const [kycFirstName, setKycFirstName] = useState('');
+  const [kycLastName, setKycLastName] = useState('');
+  const [kycDateOfBirth, setKycDateOfBirth] = useState('');
+  const [kycNationality, setKycNationality] = useState('Sierra Leonean');
+  const [kycAddress, setKycAddress] = useState({ street: '', city: '', country: 'Sierra Leone' });
+
+  // Captured data
+  const [livenessFrames, setLivenessFrames] = useState<string[]>([]);
+  const [selfieImage, setSelfieImage] = useState<string>('');
+  const [idCardImage, setIdCardImage] = useState<string>('');
+  const [extractedIdData, setExtractedIdData] = useState<any>(null);
+  const [idVerificationIssues, setIdVerificationIssues] = useState<string[]>([]);
 
   // Load user settings on mount
   useEffect(() => {
@@ -247,17 +288,43 @@ export function ProfilePage() {
     }
   };
 
-  // Generate 2FA secret
-  const generate2FASecret = () => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-    let secret = '';
-    for (let i = 0; i < 16; i++) {
-      secret += chars.charAt(Math.floor(Math.random() * chars.length));
+  // Initialize 2FA setup - generate secret and QR code
+  const initializeTwoFA = async () => {
+    try {
+      // Generate a new secret
+      const secret = authenticator.generateSecret(20);
+      setTwoFASecret(secret);
+
+      // Generate OTPAuth URL
+      const otpAuthUrl = authenticator.keyuri(
+        user?.email || 'user',
+        'Peeap',
+        secret
+      );
+
+      // Generate QR code as data URL
+      const qrCodeDataUrl = await QRCode.toDataURL(otpAuthUrl, {
+        width: 200,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#ffffff',
+        },
+      });
+      setTwoFAQRCode(qrCodeDataUrl);
+    } catch (error) {
+      console.error('Failed to initialize 2FA:', error);
     }
-    setTwoFASecret(secret);
   };
 
-  // Enable 2FA
+  // Open 2FA modal and initialize
+  const openTwoFAModal = async () => {
+    setActiveModal('2fa');
+    if (!settings.has2FA) {
+      await initializeTwoFA();
+    }
+  };
+
   const handleEnable2FA = async (e: React.FormEvent) => {
     e.preventDefault();
     setTwoFALoading(true);
@@ -268,6 +335,17 @@ export function ProfilePage() {
         throw new Error('Please enter a valid 6-digit code');
       }
 
+      // Verify the code using otplib
+      const isValid = authenticator.verify({
+        token: twoFACode,
+        secret: twoFASecret,
+      });
+
+      if (!isValid) {
+        throw new Error('Invalid verification code. Please try again.');
+      }
+
+      // Save to database
       const { error } = await supabase
         .from('users')
         .update({
@@ -283,6 +361,8 @@ export function ProfilePage() {
       setMessage({ type: 'success', text: 'Two-factor authentication enabled!' });
       setActiveModal('none');
       setTwoFACode('');
+      setTwoFAQRCode('');
+      setTwoFASecret('');
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message || 'Failed to enable 2FA' });
     } finally {
@@ -357,37 +437,110 @@ export function ProfilePage() {
     }
   };
 
-  // Handle KYC document upload
+  // Initialize KYC form with user data
+  const initializeKycForm = () => {
+    setKycFirstName(user?.firstName || '');
+    setKycLastName(user?.lastName || '');
+    setKycStep('info');
+    setKycError(null);
+    setLivenessFrames([]);
+    setSelfieImage('');
+    setIdCardImage('');
+    setExtractedIdData(null);
+    setIdVerificationIssues([]);
+  };
+
+  // Handle face liveness completion
+  const handleLivenessComplete = (result: { isLive: boolean; frames: string[]; selfieFrame: string }) => {
+    if (result.isLive) {
+      setLivenessFrames(result.frames);
+      setSelfieImage(result.selfieFrame);
+      setKycStep('id-scan');
+    } else {
+      setKycError('Face liveness verification failed. Please try again.');
+      setKycStep('failed');
+    }
+  };
+
+  // Handle ID scan completion
+  const handleIdScanComplete = (result: {
+    isValid: boolean;
+    idImage: string;
+    extractedData: any;
+    issues: string[];
+  }) => {
+    setIdCardImage(result.idImage);
+    setExtractedIdData(result.extractedData);
+    setIdVerificationIssues(result.issues);
+
+    // Check for blocking issues (expired document)
+    const hasExpiredDoc = result.issues.some(i => i.toLowerCase().includes('expired'));
+    if (hasExpiredDoc) {
+      setKycError('Your ID card has expired. Please renew your ID before continuing.');
+      setKycStep('failed');
+    } else {
+      setKycStep('review');
+    }
+  };
+
+  // Submit final KYC application
   const handleKycSubmit = async () => {
+    if (!user?.id) return;
+
     setKycLoading(true);
-    setMessage(null);
+    setKycError(null);
+    setKycStep('submitting');
 
     try {
-      if (!idDocument || !proofOfAddress || !selfie) {
-        throw new Error('Please upload all required documents');
+      // Submit KYC with all collected data
+      const result = await kycService.submitKyc(user.id, {
+        firstName: kycFirstName,
+        lastName: kycLastName,
+        dateOfBirth: kycDateOfBirth,
+        nationality: kycNationality,
+        address: kycAddress,
+        documents: [
+          {
+            type: 'NATIONAL_ID',
+            data: idCardImage,
+            mimeType: 'image/jpeg',
+          },
+          {
+            type: 'SELFIE',
+            data: selfieImage,
+            mimeType: 'image/jpeg',
+          },
+        ],
+      });
+
+      // Check if verification passed
+      if (result.verificationResult && !result.verificationResult.isValid) {
+        const issues = result.verificationResult.issues || [];
+        if (issues.some((i: string) => i.includes('expired'))) {
+          setKycError('Your ID card has expired. Verification cancelled.');
+          setKycStep('failed');
+          return;
+        }
       }
 
-      // In production, upload to Supabase Storage
-      // For now, just update the status
-      const { error } = await supabase
-        .from('users')
-        .update({
-          kyc_status: 'SUBMITTED',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', user?.id);
-
-      if (error) throw error;
-
       setSettings(prev => ({ ...prev, kycStatus: 'SUBMITTED' }));
-      setMessage({ type: 'success', text: 'KYC documents submitted successfully!' });
-      setActiveModal('none');
+      setKycStep('success');
+      setMessage({ type: 'success', text: 'KYC verification submitted successfully!' });
       if (refreshUser) refreshUser();
     } catch (error: any) {
-      setMessage({ type: 'error', text: error.message || 'Failed to submit KYC documents' });
+      console.error('KYC submission error:', error);
+      setKycError(error.message || 'Failed to submit KYC verification');
+      setKycStep('failed');
     } finally {
       setKycLoading(false);
     }
+  };
+
+  // Reset KYC modal
+  const resetKycModal = () => {
+    setActiveModal('none');
+    setKycStep('info');
+    setKycError(null);
   };
 
   const copyToClipboard = (text: string) => {
@@ -408,19 +561,28 @@ export function ProfilePage() {
 
   return (
     <MainLayout>
-      <div className="max-w-4xl mx-auto space-y-6">
+      <motion.div
+        className="max-w-4xl mx-auto space-y-6"
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+      >
         {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Profile</h1>
-          <p className="text-gray-500">Manage your account settings and security</p>
-        </div>
+        <motion.div variants={itemVariants}>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Profile</h1>
+          <p className="text-gray-500 dark:text-gray-400">Manage your account settings and security</p>
+        </motion.div>
 
         {/* Message */}
         {message && (
-          <div
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
             className={clsx(
               'p-4 rounded-xl flex items-center gap-3',
-              message.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'
+              message.type === 'success'
+                ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800'
+                : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800'
             )}
           >
             {message.type === 'success' ? (
@@ -432,240 +594,265 @@ export function ProfilePage() {
             <button onClick={() => setMessage(null)} className="ml-auto">
               <X className="w-4 h-4" />
             </button>
-          </div>
+          </motion.div>
         )}
 
         {/* Profile Card */}
-        <Card className="p-6">
-          <div className="flex flex-col sm:flex-row items-start gap-6">
-            {/* Avatar */}
-            <div className="relative">
-              <ProfileAvatar
-                firstName={user?.firstName}
-                lastName={user?.lastName}
-                size="xl"
-                className="w-24 h-24"
-              />
-              {isVerified && (
-                <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center border-4 border-white">
-                  <Check className="w-4 h-4 text-white" />
-                </div>
-              )}
-            </div>
+        <motion.div variants={itemVariants}>
+          <MotionCard className="p-6" glowEffect>
+            <div className="flex flex-col sm:flex-row items-start gap-6">
+              {/* Avatar */}
+              <div className="relative">
+                <ProfileAvatar
+                  firstName={user?.firstName}
+                  lastName={user?.lastName}
+                  size="xl"
+                  className="w-24 h-24"
+                />
+                {isVerified && (
+                  <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center border-4 border-white dark:border-gray-800">
+                    <Check className="w-4 h-4 text-white" />
+                  </div>
+                )}
+              </div>
 
-            {/* Info */}
-            <div className="flex-1">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">
-                    {user?.firstName} {user?.lastName}
-                  </h2>
-                  <p className="text-gray-500">{user?.email}</p>
-                  {user?.phone && (
-                    <p className="text-gray-500 flex items-center gap-1 mt-1">
-                      <Phone className="w-4 h-4" />
-                      {user.phone}
-                    </p>
+              {/* Info */}
+              <div className="flex-1">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                      {user?.firstName} {user?.lastName}
+                    </h2>
+                    <p className="text-gray-500 dark:text-gray-400">{user?.email}</p>
+                    {user?.phone && (
+                      <p className="text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-1">
+                        <Phone className="w-4 h-4" />
+                        {user.phone}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setActiveModal('edit-profile')}
+                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  >
+                    <Edit3 className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                  </button>
+                </div>
+
+                {/* Quick Stats */}
+                <div className="flex flex-wrap gap-3 mt-4">
+                  <span className={clsx(
+                    'px-3 py-1 rounded-full text-sm font-medium',
+                    isVerified
+                      ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                      : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
+                  )}>
+                    {isVerified ? 'Verified' : 'Unverified'}
+                  </span>
+                  {settings.has2FA && (
+                    <span className="px-3 py-1 rounded-full text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
+                      2FA Enabled
+                    </span>
+                  )}
+                  {settings.hasPin && (
+                    <span className="px-3 py-1 rounded-full text-sm font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">
+                      PIN Set
+                    </span>
                   )}
                 </div>
-                <button
-                  onClick={() => setActiveModal('edit-profile')}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <Edit3 className="w-5 h-5 text-gray-500" />
-                </button>
-              </div>
-
-              {/* Quick Stats */}
-              <div className="flex flex-wrap gap-3 mt-4">
-                <span className={clsx(
-                  'px-3 py-1 rounded-full text-sm font-medium',
-                  isVerified ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                )}>
-                  {isVerified ? 'Verified' : 'Unverified'}
-                </span>
-                {settings.has2FA && (
-                  <span className="px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-700">
-                    2FA Enabled
-                  </span>
-                )}
-                {settings.hasPin && (
-                  <span className="px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-700">
-                    PIN Set
-                  </span>
-                )}
               </div>
             </div>
-          </div>
-        </Card>
+          </MotionCard>
+        </motion.div>
 
         {/* KYC Status Card */}
-        <Card className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-primary-100 rounded-lg">
-                <ShieldCheck className="w-5 h-5 text-primary-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900">Identity Verification</h3>
-                <p className="text-sm text-gray-500">Verify your identity to unlock all features</p>
+        <motion.div variants={itemVariants}>
+          <MotionCard className="p-6" delay={0.1} glowEffect>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary-100 dark:bg-primary-900/30 rounded-lg">
+                  <ShieldCheck className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-white">Identity Verification</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Verify your identity to unlock all features</p>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className={clsx('p-4 rounded-xl flex items-center gap-4', kycConfig.bg)}>
-            <div className={clsx('w-12 h-12 rounded-full flex items-center justify-center bg-white', kycConfig.color)}>
-              <KycIcon className="w-6 h-6" />
+            <div className={clsx('p-4 rounded-xl flex items-center gap-4', kycConfig.bg, 'dark:bg-opacity-20')}>
+              <div className={clsx('w-12 h-12 rounded-full flex items-center justify-center bg-white dark:bg-gray-800', kycConfig.color)}>
+                <KycIcon className="w-6 h-6" />
+              </div>
+              <div className="flex-1">
+                <p className={clsx('font-semibold', kycConfig.color)}>{kycConfig.label}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">{kycConfig.description}</p>
+              </div>
+              {(settings.kycStatus === 'NOT_STARTED' || settings.kycStatus === 'PENDING' || settings.kycStatus === 'REJECTED') && (
+                <button
+                  onClick={() => {
+                    initializeKycForm();
+                    setActiveModal('kyc');
+                  }}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 transition-colors"
+                >
+                  Start Verification
+                </button>
+              )}
             </div>
-            <div className="flex-1">
-              <p className={clsx('font-semibold', kycConfig.color)}>{kycConfig.label}</p>
-              <p className="text-sm text-gray-600">{kycConfig.description}</p>
-            </div>
-            {(settings.kycStatus === 'NOT_STARTED' || settings.kycStatus === 'PENDING' || settings.kycStatus === 'REJECTED') && (
-              <button
-                onClick={() => setActiveModal('kyc')}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 transition-colors"
-              >
-                Start Verification
-              </button>
-            )}
-          </div>
-        </Card>
+          </MotionCard>
+        </motion.div>
 
         {/* Security Settings */}
-        <Card className="p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-orange-100 rounded-lg">
-              <Shield className="w-5 h-5 text-orange-600" />
+        <motion.div variants={itemVariants}>
+          <MotionCard className="p-6" delay={0.2} glowEffect>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+                <Shield className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-white">Security</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Manage your security settings</p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">Security</h3>
-              <p className="text-sm text-gray-500">Manage your security settings</p>
+
+            <div className="space-y-3">
+              {/* Password */}
+              <motion.button
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+                onClick={() => setActiveModal('password')}
+                className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+                    <Key className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-medium text-gray-900 dark:text-white">Login Password</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Change your account password</p>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-gray-400" />
+              </motion.button>
+
+              {/* Transaction PIN */}
+              <motion.button
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+                onClick={() => setActiveModal('pin')}
+                className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center">
+                    <Lock className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-medium text-gray-900 dark:text-white">Transaction PIN</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {settings.hasPin ? '4-digit PIN is set' : 'Set a 4-digit PIN for transactions'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {settings.hasPin && (
+                    <span className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium rounded-full">
+                      Active
+                    </span>
+                  )}
+                  <ChevronRight className="w-5 h-5 text-gray-400" />
+                </div>
+              </motion.button>
+
+              {/* Two-Factor Authentication */}
+              <motion.button
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+                onClick={openTwoFAModal}
+                className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className={clsx(
+                    'w-10 h-10 rounded-full flex items-center justify-center',
+                    settings.has2FA ? 'bg-green-100 dark:bg-green-900/30' : 'bg-orange-100 dark:bg-orange-900/30'
+                  )}>
+                    <Smartphone className={clsx(
+                      'w-5 h-5',
+                      settings.has2FA ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'
+                    )} />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-medium text-gray-900 dark:text-white">Two-Factor Authentication</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {settings.has2FA ? 'Your account is protected with 2FA' : 'Add extra security to your account'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {settings.has2FA && (
+                    <span className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium rounded-full">
+                      Enabled
+                    </span>
+                  )}
+                  <ChevronRight className="w-5 h-5 text-gray-400" />
+                </div>
+              </motion.button>
             </div>
-          </div>
-
-          <div className="space-y-3">
-            {/* Password */}
-            <button
-              onClick={() => setActiveModal('password')}
-              className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 rounded-xl transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                  <Key className="w-5 h-5 text-blue-600" />
-                </div>
-                <div className="text-left">
-                  <p className="font-medium text-gray-900">Login Password</p>
-                  <p className="text-sm text-gray-500">Change your account password</p>
-                </div>
-              </div>
-              <ChevronRight className="w-5 h-5 text-gray-400" />
-            </button>
-
-            {/* Transaction PIN */}
-            <button
-              onClick={() => setActiveModal('pin')}
-              className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 rounded-xl transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                  <Lock className="w-5 h-5 text-purple-600" />
-                </div>
-                <div className="text-left">
-                  <p className="font-medium text-gray-900">Transaction PIN</p>
-                  <p className="text-sm text-gray-500">
-                    {settings.hasPin ? '4-digit PIN is set' : 'Set a 4-digit PIN for transactions'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {settings.hasPin && (
-                  <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
-                    Active
-                  </span>
-                )}
-                <ChevronRight className="w-5 h-5 text-gray-400" />
-              </div>
-            </button>
-
-            {/* Two-Factor Authentication */}
-            <button
-              onClick={() => {
-                if (!settings.has2FA) generate2FASecret();
-                setActiveModal('2fa');
-              }}
-              className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 rounded-xl transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <div className={clsx(
-                  'w-10 h-10 rounded-full flex items-center justify-center',
-                  settings.has2FA ? 'bg-green-100' : 'bg-orange-100'
-                )}>
-                  <Smartphone className={clsx(
-                    'w-5 h-5',
-                    settings.has2FA ? 'text-green-600' : 'text-orange-600'
-                  )} />
-                </div>
-                <div className="text-left">
-                  <p className="font-medium text-gray-900">Two-Factor Authentication</p>
-                  <p className="text-sm text-gray-500">
-                    {settings.has2FA ? 'Your account is protected with 2FA' : 'Add extra security to your account'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {settings.has2FA && (
-                  <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
-                    Enabled
-                  </span>
-                )}
-                <ChevronRight className="w-5 h-5 text-gray-400" />
-              </div>
-            </button>
-          </div>
-        </Card>
+          </MotionCard>
+        </motion.div>
 
         {/* Account Limits */}
-        <Card className="p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <Wallet className="w-5 h-5 text-green-600" />
+        <motion.div variants={itemVariants}>
+          <MotionCard className="p-6" delay={0.3} glowEffect>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                <Wallet className="w-5 h-5 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-white">Account Limits</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Your current transaction limits</p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">Account Limits</h3>
-              <p className="text-sm text-gray-500">Your current transaction limits</p>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl">
-              <p className="text-sm text-blue-600 font-medium">Daily Limit</p>
-              <p className="text-2xl font-bold text-blue-900 mt-1">
-                SLE {isVerified ? '10,000' : '1,000'}
-              </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <motion.div
+                whileHover={{ scale: 1.03 }}
+                className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30 rounded-xl"
+              >
+                <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">Daily Limit</p>
+                <p className="text-2xl font-bold text-blue-900 dark:text-blue-100 mt-1">
+                  SLE {isVerified ? '10,000' : '1,000'}
+                </p>
+              </motion.div>
+              <motion.div
+                whileHover={{ scale: 1.03 }}
+                className="p-4 bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/30 dark:to-purple-800/30 rounded-xl"
+              >
+                <p className="text-sm text-purple-600 dark:text-purple-400 font-medium">Monthly Limit</p>
+                <p className="text-2xl font-bold text-purple-900 dark:text-purple-100 mt-1">
+                  SLE {isVerified ? '100,000' : '10,000'}
+                </p>
+              </motion.div>
+              <motion.div
+                whileHover={{ scale: 1.03 }}
+                className="p-4 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-800/30 rounded-xl"
+              >
+                <p className="text-sm text-green-600 dark:text-green-400 font-medium">Per Transaction</p>
+                <p className="text-2xl font-bold text-green-900 dark:text-green-100 mt-1">
+                  SLE {isVerified ? '5,000' : '500'}
+                </p>
+              </motion.div>
             </div>
-            <div className="p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl">
-              <p className="text-sm text-purple-600 font-medium">Monthly Limit</p>
-              <p className="text-2xl font-bold text-purple-900 mt-1">
-                SLE {isVerified ? '100,000' : '10,000'}
-              </p>
-            </div>
-            <div className="p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-xl">
-              <p className="text-sm text-green-600 font-medium">Per Transaction</p>
-              <p className="text-2xl font-bold text-green-900 mt-1">
-                SLE {isVerified ? '5,000' : '500'}
-              </p>
-            </div>
-          </div>
 
-          {!isVerified && (
-            <p className="text-sm text-gray-500 mt-4 flex items-center gap-2">
-              <AlertCircle className="w-4 h-4" />
-              Complete KYC verification to increase your limits
-            </p>
-          )}
-        </Card>
-      </div>
+            {!isVerified && (
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-4 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
+                Complete KYC verification to increase your limits
+              </p>
+            )}
+          </MotionCard>
+        </motion.div>
+      </motion.div>
 
       {/* Edit Profile Modal */}
       {activeModal === 'edit-profile' && (
@@ -949,20 +1136,27 @@ export function ProfilePage() {
                 </p>
 
                 <div className="bg-gray-50 rounded-xl p-6 flex flex-col items-center">
-                  <div className="w-40 h-40 bg-white rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300 mb-4">
-                    <p className="text-xs text-gray-400 text-center px-4">
-                      QR Code<br />(Scan with app)
-                    </p>
+                  <div className="w-48 h-48 bg-white rounded-lg flex items-center justify-center border border-gray-200 mb-4 overflow-hidden">
+                    {twoFAQRCode ? (
+                      <img
+                        src={twoFAQRCode}
+                        alt="2FA QR Code"
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+                    )}
                   </div>
                   <p className="text-sm text-gray-500">Or enter code manually:</p>
                   <div className="flex items-center gap-2 mt-2">
-                    <code className="px-3 py-2 bg-white rounded-lg font-mono text-sm border">
-                      {twoFASecret}
+                    <code className="px-3 py-2 bg-white rounded-lg font-mono text-sm border break-all max-w-[200px]">
+                      {twoFASecret || 'Loading...'}
                     </code>
                     <button
                       type="button"
                       onClick={() => copyToClipboard(twoFASecret)}
-                      className="p-2 hover:bg-gray-200 rounded-lg"
+                      disabled={!twoFASecret}
+                      className="p-2 hover:bg-gray-200 rounded-lg disabled:opacity-50"
                     >
                       {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4 text-gray-500" />}
                     </button>
@@ -1005,183 +1199,332 @@ export function ProfilePage() {
         </div>
       )}
 
-      {/* KYC Modal */}
+      {/* KYC Modal - New Flow with Face Liveness and ID Scan */}
       {activeModal === 'kyc' && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto animate-slide-up">
+            {/* Header */}
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-primary-100 rounded-lg">
-                  <FileText className="w-5 h-5 text-primary-600" />
+                  <ShieldCheck className="w-5 h-5 text-primary-600" />
                 </div>
                 <h3 className="text-lg font-bold text-gray-900">Identity Verification</h3>
               </div>
-              <button onClick={() => setActiveModal('none')} className="p-2 hover:bg-gray-100 rounded-lg">
+              <button onClick={resetKycModal} className="p-2 hover:bg-gray-100 rounded-lg">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
 
             {/* Progress Steps */}
-            <div className="flex items-center justify-between mb-8">
-              {[
-                { step: 1, label: 'ID' },
-                { step: 2, label: 'Address' },
-                { step: 3, label: 'Selfie' },
-              ].map(({ step, label }) => (
-                <div key={step} className="flex items-center">
-                  <div className="flex flex-col items-center">
-                    <div
-                      className={clsx(
-                        'w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-colors',
-                        kycStep >= step
-                          ? 'bg-primary-600 text-white'
-                          : 'bg-gray-200 text-gray-500'
+            {!['success', 'failed', 'submitting'].includes(kycStep) && (
+              <div className="flex items-center justify-between mb-6">
+                {[
+                  { step: 'info', label: 'Info', num: 1 },
+                  { step: 'face-liveness', label: 'Face', num: 2 },
+                  { step: 'id-scan', label: 'ID Scan', num: 3 },
+                  { step: 'review', label: 'Review', num: 4 },
+                ].map(({ step, label, num }, index) => {
+                  const steps = ['info', 'face-liveness', 'id-scan', 'review'];
+                  const currentIndex = steps.indexOf(kycStep);
+                  const stepIndex = steps.indexOf(step);
+                  const isComplete = stepIndex < currentIndex;
+                  const isCurrent = step === kycStep;
+
+                  return (
+                    <div key={step} className="flex items-center">
+                      <div className="flex flex-col items-center">
+                        <div
+                          className={clsx(
+                            'w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors',
+                            isComplete ? 'bg-green-500 text-white' :
+                            isCurrent ? 'bg-primary-600 text-white' :
+                            'bg-gray-200 text-gray-500'
+                          )}
+                        >
+                          {isComplete ? <Check className="w-4 h-4" /> : num}
+                        </div>
+                        <span className="text-xs text-gray-500 mt-1">{label}</span>
+                      </div>
+                      {index < 3 && (
+                        <div
+                          className={clsx(
+                            'w-8 sm:w-12 h-1 mx-1',
+                            isComplete ? 'bg-green-500' : 'bg-gray-200'
+                          )}
+                        />
                       )}
-                    >
-                      {kycStep > step ? <Check className="w-5 h-5" /> : step}
                     </div>
-                    <span className="text-xs text-gray-500 mt-1">{label}</span>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Step: Personal Information */}
+            {kycStep === 'info' && (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600 mb-4">
+                  Please confirm your personal information before proceeding with verification.
+                </p>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                    <input
+                      type="text"
+                      value={kycFirstName}
+                      onChange={(e) => setKycFirstName(e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500"
+                      required
+                    />
                   </div>
-                  {step < 3 && (
-                    <div
-                      className={clsx(
-                        'w-16 h-1 mx-2',
-                        kycStep > step ? 'bg-primary-600' : 'bg-gray-200'
-                      )}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                    <input
+                      type="text"
+                      value={kycLastName}
+                      onChange={(e) => setKycLastName(e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500"
+                      required
                     />
-                  )}
+                  </div>
                 </div>
-              ))}
-            </div>
 
-            {/* Step Content */}
-            <div className="space-y-4">
-              {kycStep === 1 && (
-                <>
-                  <h4 className="font-semibold text-gray-900">Government-Issued ID</h4>
-                  <p className="text-sm text-gray-600">
-                    Upload a clear photo of your passport, driver's license, or national ID card.
-                  </p>
-                  <label className="block border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-primary-500 hover:bg-primary-50 transition-all">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => setIdDocument(e.target.files?.[0] || null)}
-                    />
-                    {idDocument ? (
-                      <div className="flex flex-col items-center gap-2 text-green-600">
-                        <CheckCircle className="w-10 h-10" />
-                        <span className="font-medium">{idDocument.name}</span>
-                        <span className="text-sm text-gray-500">Click to change</span>
-                      </div>
-                    ) : (
-                      <>
-                        <Upload className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-                        <p className="font-medium text-gray-700">Click to upload</p>
-                        <p className="text-xs text-gray-400 mt-1">PNG, JPG up to 10MB</p>
-                      </>
-                    )}
-                  </label>
-                </>
-              )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
+                  <input
+                    type="date"
+                    value={kycDateOfBirth}
+                    onChange={(e) => setKycDateOfBirth(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500"
+                    required
+                  />
+                </div>
 
-              {kycStep === 2 && (
-                <>
-                  <h4 className="font-semibold text-gray-900">Proof of Address</h4>
-                  <p className="text-sm text-gray-600">
-                    Upload a utility bill or bank statement from the last 3 months showing your address.
-                  </p>
-                  <label className="block border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-primary-500 hover:bg-primary-50 transition-all">
-                    <input
-                      type="file"
-                      accept="image/*,.pdf"
-                      className="hidden"
-                      onChange={(e) => setProofOfAddress(e.target.files?.[0] || null)}
-                    />
-                    {proofOfAddress ? (
-                      <div className="flex flex-col items-center gap-2 text-green-600">
-                        <CheckCircle className="w-10 h-10" />
-                        <span className="font-medium">{proofOfAddress.name}</span>
-                        <span className="text-sm text-gray-500">Click to change</span>
-                      </div>
-                    ) : (
-                      <>
-                        <Upload className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-                        <p className="font-medium text-gray-700">Click to upload</p>
-                        <p className="text-xs text-gray-400 mt-1">PNG, JPG, PDF up to 10MB</p>
-                      </>
-                    )}
-                  </label>
-                </>
-              )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nationality</label>
+                  <select
+                    value={kycNationality}
+                    onChange={(e) => setKycNationality(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="Sierra Leonean">Sierra Leonean</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
 
-              {kycStep === 3 && (
-                <>
-                  <h4 className="font-semibold text-gray-900">Selfie with ID</h4>
-                  <p className="text-sm text-gray-600">
-                    Take a photo of yourself holding your ID document next to your face.
-                  </p>
-                  <label className="block border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-primary-500 hover:bg-primary-50 transition-all">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => setSelfie(e.target.files?.[0] || null)}
-                    />
-                    {selfie ? (
-                      <div className="flex flex-col items-center gap-2 text-green-600">
-                        <CheckCircle className="w-10 h-10" />
-                        <span className="font-medium">{selfie.name}</span>
-                        <span className="text-sm text-gray-500">Click to change</span>
-                      </div>
-                    ) : (
-                      <>
-                        <Camera className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-                        <p className="font-medium text-gray-700">Click to upload selfie</p>
-                        <p className="text-xs text-gray-400 mt-1">Make sure your face and ID are clearly visible</p>
-                      </>
-                    )}
-                  </label>
-                </>
-              )}
-            </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                  <input
+                    type="text"
+                    placeholder="Street address"
+                    value={kycAddress.street}
+                    onChange={(e) => setKycAddress(prev => ({ ...prev, street: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 mb-2"
+                  />
+                  <input
+                    type="text"
+                    placeholder="City"
+                    value={kycAddress.city}
+                    onChange={(e) => setKycAddress(prev => ({ ...prev, city: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
 
-            {/* Navigation */}
-            <div className="flex gap-3 mt-8">
-              {kycStep > 1 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-700">
+                  <p className="font-medium mb-1">What's next:</p>
+                  <ul className="space-y-1">
+                    <li>1. Face liveness verification (read text & turn head)</li>
+                    <li>2. Scan your Sierra Leone National ID card</li>
+                    <li>3. Review and submit</li>
+                  </ul>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={resetKycModal}
+                    className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => setKycStep('face-liveness')}
+                    disabled={!kycFirstName || !kycLastName || !kycDateOfBirth}
+                    className="flex-1 py-3 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    <Camera className="w-5 h-5" />
+                    Start Face Scan
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step: Face Liveness */}
+            {kycStep === 'face-liveness' && (
+              <FaceLiveness
+                onComplete={handleLivenessComplete}
+                onCancel={() => setKycStep('info')}
+              />
+            )}
+
+            {/* Step: ID Card Scan */}
+            {kycStep === 'id-scan' && (
+              <IdCardScanner
+                onComplete={handleIdScanComplete}
+                onCancel={() => setKycStep('face-liveness')}
+                expectedName={{ firstName: kycFirstName, lastName: kycLastName }}
+              />
+            )}
+
+            {/* Step: Review */}
+            {kycStep === 'review' && (
+              <div className="space-y-6">
+                <div className="text-center mb-4">
+                  <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-2" />
+                  <h4 className="text-lg font-bold text-gray-900">Verification Complete</h4>
+                  <p className="text-sm text-gray-600">Please review your information before submitting</p>
+                </div>
+
+                {/* Summary */}
+                <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                  <h5 className="font-semibold text-gray-900">Personal Information</h5>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <span className="text-gray-500">Name:</span>
+                    <span className="font-medium">{kycFirstName} {kycLastName}</span>
+                    <span className="text-gray-500">Date of Birth:</span>
+                    <span className="font-medium">{kycDateOfBirth}</span>
+                    <span className="text-gray-500">Nationality:</span>
+                    <span className="font-medium">{kycNationality}</span>
+                  </div>
+                </div>
+
+                {/* Captured Images */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-2">Selfie</p>
+                    <div className="aspect-square bg-gray-100 rounded-xl overflow-hidden">
+                      {selfieImage && (
+                        <img
+                          src={`data:image/jpeg;base64,${selfieImage}`}
+                          alt="Selfie"
+                          className="w-full h-full object-cover"
+                        />
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-2">ID Card</p>
+                    <div className="aspect-square bg-gray-100 rounded-xl overflow-hidden">
+                      {idCardImage && (
+                        <img
+                          src={`data:image/jpeg;base64,${idCardImage}`}
+                          alt="ID Card"
+                          className="w-full h-full object-cover"
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Extracted Data */}
+                {extractedIdData && (
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                    <h5 className="font-semibold text-green-900 mb-2">ID Card Data</h5>
+                    <div className="text-sm space-y-1">
+                      {extractedIdData.documentNumber && (
+                        <p><span className="text-green-700">ID Number:</span> {extractedIdData.documentNumber}</p>
+                      )}
+                      {extractedIdData.expiryDate && (
+                        <p><span className="text-green-700">Expiry:</span> {extractedIdData.expiryDate}</p>
+                      )}
+                      <p><span className="text-green-700">Confidence:</span> {extractedIdData.confidence}%</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Warnings */}
+                {idVerificationIssues.length > 0 && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                    <p className="font-medium text-yellow-700 mb-1">Warnings:</p>
+                    <ul className="text-sm text-yellow-600 space-y-1">
+                      {idVerificationIssues.map((issue, i) => (
+                        <li key={i}>• {issue}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setKycStep('id-scan')}
+                    className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={handleKycSubmit}
+                    className="flex-1 py-3 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700 flex items-center justify-center gap-2"
+                  >
+                    Submit Verification
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step: Submitting */}
+            {kycStep === 'submitting' && (
+              <div className="text-center py-12">
+                <Loader2 className="w-16 h-16 animate-spin text-primary-600 mx-auto mb-4" />
+                <h4 className="text-lg font-bold text-gray-900 mb-2">Submitting Verification</h4>
+                <p className="text-gray-600">Please wait while we process your documents...</p>
+              </div>
+            )}
+
+            {/* Step: Success */}
+            {kycStep === 'success' && (
+              <div className="text-center py-8">
+                <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle className="w-12 h-12 text-green-600" />
+                </div>
+                <h4 className="text-xl font-bold text-green-900 mb-2">Verification Submitted!</h4>
+                <p className="text-gray-600 mb-6">
+                  Your identity verification has been submitted successfully. We'll review your documents and notify you within 1-2 business days.
+                </p>
                 <button
-                  onClick={() => setKycStep(kycStep - 1)}
-                  className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200"
+                  onClick={resetKycModal}
+                  className="w-full py-3 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700"
                 >
-                  Back
+                  Done
                 </button>
-              )}
-              {kycStep < 3 ? (
-                <button
-                  disabled={(kycStep === 1 && !idDocument) || (kycStep === 2 && !proofOfAddress)}
-                  onClick={() => setKycStep(kycStep + 1)}
-                  className="flex-1 py-3 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700 disabled:opacity-50"
-                >
-                  Next
-                </button>
-              ) : (
-                <button
-                  disabled={!selfie || kycLoading}
-                  onClick={handleKycSubmit}
-                  className="flex-1 py-3 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700 disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {kycLoading ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      Submitting...
-                    </>
-                  ) : (
-                    'Submit for Verification'
-                  )}
-                </button>
-              )}
-            </div>
+              </div>
+            )}
+
+            {/* Step: Failed */}
+            {kycStep === 'failed' && (
+              <div className="text-center py-8">
+                <div className="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <AlertCircle className="w-12 h-12 text-red-600" />
+                </div>
+                <h4 className="text-xl font-bold text-red-900 mb-2">Verification Failed</h4>
+                <p className="text-gray-600 mb-4">
+                  {kycError || 'We were unable to verify your identity. Please try again.'}
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={resetKycModal}
+                    className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => setKycStep('info')}
+                    className="flex-1 py-3 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

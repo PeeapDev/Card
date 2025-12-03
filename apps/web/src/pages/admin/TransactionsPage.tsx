@@ -16,7 +16,7 @@ import {
   CreditCard,
   DollarSign,
 } from 'lucide-react';
-import { Card } from '@/components/ui/Card';
+import { Card, MotionCard } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
 import { currencyService, Currency } from '@/services/currency.service';
@@ -82,33 +82,61 @@ export function TransactionsPage() {
         return;
       }
 
-      // Get user info for transactions
-      const userIds = [...new Set(txnData?.map(t => t.user_id) || [])];
+      // Get wallet IDs from transactions
+      const walletIds = [...new Set(txnData?.map(t => t.wallet_id).filter(Boolean) || [])];
+
+      // Fetch wallets with user info
+      const { data: wallets } = await supabase
+        .from('wallets')
+        .select('id, user_id')
+        .in('id', walletIds);
+
+      const walletMap = new Map(wallets?.map(w => [w.id, w.user_id]) || []);
+
+      // Get user IDs from wallets
+      const userIds = [...new Set(wallets?.map(w => w.user_id).filter(Boolean) || [])];
+
+      // Fetch users
       const { data: users } = await supabase
         .from('users')
-        .select('id, first_name, last_name')
+        .select('id, first_name, last_name, email, phone')
         .in('id', userIds);
 
       const userMap = new Map(users?.map(u => [u.id, u]) || []);
 
       // Transform transactions to display format
       const formattedTxns: Transaction[] = (txnData || []).map(txn => {
-        const user = userMap.get(txn.user_id);
+        // Get user from wallet
+        const userId = walletMap.get(txn.wallet_id);
+        const user = userId ? userMap.get(userId) : null;
+
+        // Try to get name from metadata if user lookup fails
+        const metadata = txn.metadata || {};
+        let customerName = 'Unknown';
+
+        if (user) {
+          customerName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email || 'Unknown';
+        } else if (metadata.sender_name) {
+          customerName = metadata.sender_name;
+        } else if (metadata.recipient_name) {
+          customerName = metadata.recipient_name;
+        }
+
         return {
           id: txn.id,
-          type: txn.type || 'transfer',
+          type: (txn.type || 'transfer').toLowerCase(),
           cardId: txn.card_id || '',
           cardLast4: '****',
-          customerId: txn.user_id,
-          customerName: user ? `${user.first_name} ${user.last_name}` : 'Unknown',
-          amount: txn.amount,
-          currency: txn.currency || 'USD',
+          customerId: userId || txn.wallet_id || '',
+          customerName,
+          amount: Math.abs(txn.amount),
+          currency: txn.currency || 'SLE',
           merchantName: txn.description || txn.type,
           merchantCategory: txn.type,
-          status: txn.status || 'completed',
-          direction: ['deposit', 'refund', 'receive'].includes(txn.type) ? 'credit' : 'debit',
+          status: (txn.status || 'completed').toLowerCase(),
+          direction: txn.amount >= 0 ? 'credit' : 'debit',
           createdAt: txn.created_at,
-          settledAt: txn.status === 'completed' ? txn.created_at : null,
+          settledAt: txn.status?.toLowerCase() === 'completed' ? txn.created_at : null,
         };
       });
 
@@ -138,15 +166,15 @@ export function TransactionsPage() {
   const getTypeBadge = (type: string) => {
     switch (type) {
       case 'authorization':
-        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">Auth</span>;
+        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">Auth</span>;
       case 'clearing':
-        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">Clearing</span>;
+        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">Clearing</span>;
       case 'refund':
-        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">Refund</span>;
+        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">Refund</span>;
       case 'reversal':
-        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700">Reversal</span>;
+        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400">Reversal</span>;
       case 'transfer':
-        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-cyan-100 text-cyan-700">Transfer</span>;
+        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400">Transfer</span>;
       default:
         return null;
     }
@@ -155,13 +183,13 @@ export function TransactionsPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'completed':
-        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700"><CheckCircle className="w-3 h-3" /> Completed</span>;
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"><CheckCircle className="w-3 h-3" /> Completed</span>;
       case 'pending':
-        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700"><Clock className="w-3 h-3" /> Pending</span>;
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400"><Clock className="w-3 h-3" /> Pending</span>;
       case 'failed':
-        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700"><XCircle className="w-3 h-3" /> Failed</span>;
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"><XCircle className="w-3 h-3" /> Failed</span>;
       case 'reversed':
-        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700"><RefreshCw className="w-3 h-3" /> Reversed</span>;
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400"><RefreshCw className="w-3 h-3" /> Reversed</span>;
       default:
         return null;
     }
@@ -189,15 +217,15 @@ export function TransactionsPage() {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Transactions</h1>
-            <p className="text-gray-500">View and manage all transactions</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Transactions</h1>
+            <p className="text-gray-500 dark:text-gray-400">View and manage all transactions</p>
           </div>
           <div className="flex gap-3">
-            <button className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
+            <button className="px-4 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center gap-2">
               <RefreshCw className="w-4 h-4" />
               Refresh
             </button>
-            <button className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
+            <button className="px-4 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center gap-2">
               <Download className="w-4 h-4" />
               Export
             </button>
@@ -206,30 +234,30 @@ export function TransactionsPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-          <Card className="p-4">
-            <p className="text-sm text-gray-500">Total Transactions</p>
-            <p className="text-2xl font-bold">{stats.totalTransactions.toLocaleString()}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-sm text-gray-500">Total Volume</p>
-            <p className="text-2xl font-bold">{currencySymbol}{(stats.volume / 1000000).toFixed(2)}M</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-sm text-gray-500">Pending</p>
-            <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-sm text-gray-500">Failed</p>
-            <p className="text-2xl font-bold text-red-600">{stats.failed}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-sm text-gray-500">Avg Transaction</p>
-            <p className="text-2xl font-bold">{currencySymbol}{stats.avgValue.toFixed(2)}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-sm text-gray-500">Success Rate</p>
-            <p className="text-2xl font-bold text-green-600">{stats.successRate}%</p>
-          </Card>
+          <MotionCard className="p-4" delay={0}>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Total Transactions</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalTransactions.toLocaleString()}</p>
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.1}>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Total Volume</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{currencySymbol}{(stats.volume / 1000000).toFixed(2)}M</p>
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.2}>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Pending</p>
+            <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{stats.pending}</p>
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.3}>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Failed</p>
+            <p className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.failed}</p>
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.4}>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Avg Transaction</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{currencySymbol}{stats.avgValue.toFixed(2)}</p>
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.5}>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Success Rate</p>
+            <p className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.successRate}%</p>
+          </MotionCard>
         </div>
 
         {/* Filters */}
@@ -243,7 +271,7 @@ export function TransactionsPage() {
                   placeholder="Search by ID, customer, or merchant..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
                 />
               </div>
             </div>
@@ -253,7 +281,7 @@ export function TransactionsPage() {
                 <select
                   value={filter}
                   onChange={(e) => setFilter(e.target.value as typeof filter)}
-                  className="appearance-none border border-gray-300 rounded-lg px-3 py-2 pr-8 text-sm focus:ring-2 focus:ring-primary-500"
+                  className="appearance-none border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 pr-8 text-sm focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 >
                   <option value="all">All Types</option>
                   <option value="authorization">Authorization</option>
@@ -267,7 +295,7 @@ export function TransactionsPage() {
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-                  className="appearance-none border border-gray-300 rounded-lg px-3 py-2 pr-8 text-sm focus:ring-2 focus:ring-primary-500"
+                  className="appearance-none border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 pr-8 text-sm focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 >
                   <option value="all">All Status</option>
                   <option value="completed">Completed</option>
@@ -284,52 +312,52 @@ export function TransactionsPage() {
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
                 <tr>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Transaction</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Customer</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Card</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Amount</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Merchant</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Type</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Time</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Actions</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Transaction</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Customer</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Card</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Amount</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Merchant</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Type</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Time</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {filteredTransactions.map((txn) => (
-                  <tr key={txn.id} className="hover:bg-gray-50">
+                  <tr key={txn.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <div className={`p-1 rounded ${
-                          txn.direction === 'debit' ? 'bg-red-100' : 'bg-green-100'
+                          txn.direction === 'debit' ? 'bg-red-100 dark:bg-red-900/30' : 'bg-green-100 dark:bg-green-900/30'
                         }`}>
                           {txn.direction === 'debit' ? (
-                            <ArrowUpRight className={`w-4 h-4 text-red-600`} />
+                            <ArrowUpRight className={`w-4 h-4 text-red-600 dark:text-red-400`} />
                           ) : (
-                            <ArrowDownLeft className={`w-4 h-4 text-green-600`} />
+                            <ArrowDownLeft className={`w-4 h-4 text-green-600 dark:text-green-400`} />
                           )}
                         </div>
-                        <span className="font-mono text-sm">{txn.id}</span>
+                        <span className="font-mono text-sm text-gray-900 dark:text-white">{txn.id}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <div>
-                        <p className="font-medium text-sm">{txn.customerName}</p>
-                        <span className="text-xs text-gray-500 font-mono">{txn.customerId}</span>
+                        <p className="font-medium text-sm text-gray-900 dark:text-white">{txn.customerName}</p>
+                        <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">{txn.customerId}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-1">
                         <CreditCard className="w-4 h-4 text-gray-400" />
-                        <span className="font-mono text-sm">****{txn.cardLast4}</span>
+                        <span className="font-mono text-sm text-gray-700 dark:text-gray-300">****{txn.cardLast4}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-1">
                         <span className={`font-medium ${
-                          txn.direction === 'credit' ? 'text-green-600' : ''
+                          txn.direction === 'credit' ? 'text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-white'
                         }`}>
                           {txn.direction === 'credit' ? '+' : '-'}{formatCurrency(txn.amount, txn.currency)}
                         </span>
@@ -337,8 +365,8 @@ export function TransactionsPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div>
-                        <p className="text-sm font-medium">{txn.merchantName}</p>
-                        <p className="text-xs text-gray-500">{txn.merchantCategory}</p>
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">{txn.merchantName}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{txn.merchantCategory}</p>
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -348,22 +376,22 @@ export function TransactionsPage() {
                       {getStatusBadge(txn.status)}
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-sm text-gray-500">
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
                         {new Date(txn.createdAt).toLocaleTimeString()}
                       </span>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        <button className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View Details">
+                        <button className="p-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="View Details">
                           <Eye className="w-4 h-4" />
                         </button>
                         {txn.status === 'completed' && txn.type !== 'refund' && (
-                          <button className="p-1 bg-orange-100 text-orange-600 rounded hover:bg-orange-200" title="Refund">
+                          <button className="p-1 bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 rounded hover:bg-orange-200 dark:hover:bg-orange-900/50" title="Refund">
                             <RefreshCw className="w-4 h-4" />
                           </button>
                         )}
                         {txn.status === 'failed' && (
-                          <button className="p-1 bg-yellow-100 text-yellow-600 rounded hover:bg-yellow-200" title="Review">
+                          <button className="p-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400 rounded hover:bg-yellow-200 dark:hover:bg-yellow-900/50" title="Review">
                             <AlertTriangle className="w-4 h-4" />
                           </button>
                         )}
@@ -376,18 +404,18 @@ export function TransactionsPage() {
           </div>
 
           {/* Pagination */}
-          <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-            <p className="text-sm text-gray-500">
+          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
               Showing 1 to {filteredTransactions.length} of {stats.totalTransactions} transactions
             </p>
             <div className="flex items-center gap-2">
-              <button className="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50" disabled>
+              <button className="px-3 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50" disabled>
                 Previous
               </button>
               <button className="px-3 py-1 text-sm bg-primary-600 text-white rounded">1</button>
-              <button className="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50">2</button>
-              <button className="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50">3</button>
-              <button className="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50">
+              <button className="px-3 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">2</button>
+              <button className="px-3 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">3</button>
+              <button className="px-3 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">
                 Next
               </button>
             </div>

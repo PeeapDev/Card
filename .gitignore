@@ -35,3 +35,6 @@ coverage/
 .turbo
 .vercel
 .env*.local
+
+# NX
+.nx/cache

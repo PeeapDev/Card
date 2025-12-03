@@ -11,6 +11,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    allowedHosts: true,  // Allow ngrok and other external hosts
     proxy: {
       '/monime-api': {
         target: 'https://api.monime.io',

@@ -17,7 +17,7 @@ import {
   AlertTriangle,
   AtSign,
 } from 'lucide-react';
-import { Card } from '@/components/ui/Card';
+import { Card, MotionCard } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
 import { normalizePhoneNumber, getPhoneValidationError } from '@/utils/phone';
@@ -382,13 +382,13 @@ export function UsersManagementPage() {
     switch (status) {
       case 'APPROVED':
       case 'VERIFIED':
-        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700"><CheckCircle className="w-3 h-3" /> Verified</span>;
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"><CheckCircle className="w-3 h-3" /> Verified</span>;
       case 'PENDING':
-        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700"><Clock className="w-3 h-3" /> Pending</span>;
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400"><Clock className="w-3 h-3" /> Pending</span>;
       case 'REJECTED':
-        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700"><XCircle className="w-3 h-3" /> Rejected</span>;
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"><XCircle className="w-3 h-3" /> Rejected</span>;
       default:
-        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">Not Started</span>;
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">Not Started</span>;
     }
   };
 
@@ -398,8 +398,8 @@ export function UsersManagementPage() {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
-            <p className="text-gray-500">Manage regular user accounts and settings</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">User Management</h1>
+            <p className="text-gray-500 dark:text-gray-400">Manage regular user accounts and settings</p>
           </div>
           <button
             onClick={() => setShowCreateModal(true)}
@@ -412,50 +412,50 @@ export function UsersManagementPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="p-4">
+          <MotionCard className="p-4" delay={0}>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Users className="w-5 h-5 text-blue-600" />
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Total Users</p>
-                <p className="text-xl font-semibold">{users.length}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Total Users</p>
+                <p className="text-xl font-semibold text-gray-900 dark:text-white">{users.length}</p>
               </div>
             </div>
-          </Card>
-          <Card className="p-4">
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.1}>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <CheckCircle className="w-5 h-5 text-green-600" />
+              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Verified</p>
-                <p className="text-xl font-semibold">{users.filter(u => u.kyc_status === 'APPROVED' || u.kyc_status === 'VERIFIED').length}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Verified</p>
+                <p className="text-xl font-semibold text-gray-900 dark:text-white">{users.filter(u => u.kyc_status === 'APPROVED' || u.kyc_status === 'VERIFIED').length}</p>
               </div>
             </div>
-          </Card>
-          <Card className="p-4">
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.2}>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-yellow-100 rounded-lg">
-                <Clock className="w-5 h-5 text-yellow-600" />
+              <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
+                <Clock className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Pending KYC</p>
-                <p className="text-xl font-semibold">{users.filter(u => u.kyc_status === 'PENDING').length}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Pending KYC</p>
+                <p className="text-xl font-semibold text-gray-900 dark:text-white">{users.filter(u => u.kyc_status === 'PENDING').length}</p>
               </div>
             </div>
-          </Card>
-          <Card className="p-4">
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.3}>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-red-100 rounded-lg">
-                <Ban className="w-5 h-5 text-red-600" />
+              <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
+                <Ban className="w-5 h-5 text-red-600 dark:text-red-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Suspended</p>
-                <p className="text-xl font-semibold">{users.filter(u => u.status === 'SUSPENDED').length}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Suspended</p>
+                <p className="text-xl font-semibold text-gray-900 dark:text-white">{users.filter(u => u.status === 'SUSPENDED').length}</p>
               </div>
             </div>
-          </Card>
+          </MotionCard>
         </div>
 
         {/* Filters */}
@@ -468,13 +468,13 @@ export function UsersManagementPage() {
                 placeholder="Search users by name, email, or phone..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
               />
             </div>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
             >
               <option value="all">All Status</option>
               <option value="active">Active</option>
@@ -482,7 +482,7 @@ export function UsersManagementPage() {
               <option value="verified">KYC Verified</option>
               <option value="pending">KYC Pending</option>
             </select>
-            <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
+            <button className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-700 dark:text-gray-300">
               <Download className="w-4 h-4" />
               Export
             </button>
@@ -494,49 +494,49 @@ export function UsersManagementPage() {
           {loading ? (
             <div className="p-8 text-center">
               <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-              <p className="mt-2 text-gray-500">Loading users...</p>
+              <p className="mt-2 text-gray-500 dark:text-gray-400">Loading users...</p>
             </div>
           ) : (
             <table className="w-full">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50 dark:bg-gray-700/50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">KYC Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Joined</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">User</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Contact</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">KYC Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Joined</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {filteredUsers.map((user) => (
                   <tr
                     key={user.id}
                     onClick={() => navigate(`/admin/users/${user.id}`)}
-                    className="hover:bg-blue-50 cursor-pointer transition-colors"
+                    className="hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer transition-colors"
                   >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
-                          <span className="text-primary-700 font-medium">
+                        <div className="w-10 h-10 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center">
+                          <span className="text-primary-700 dark:text-primary-400 font-medium">
                             {user.first_name?.charAt(0)}{user.last_name?.charAt(0)}
                           </span>
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900">{user.first_name} {user.last_name}</p>
-                          <p className="text-sm text-gray-500">ID: {user.id.slice(0, 8)}...</p>
+                          <p className="font-medium text-gray-900 dark:text-white">{user.first_name} {user.last_name}</p>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">ID: {user.id.slice(0, 8)}...</p>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="space-y-1">
                         {user.email && (
-                          <p className="text-sm flex items-center gap-1">
+                          <p className="text-sm flex items-center gap-1 text-gray-700 dark:text-gray-300">
                             <Mail className="w-3 h-3 text-gray-400" />
                             {user.email}
                           </p>
                         )}
                         {user.phone && (
-                          <p className="text-sm flex items-center gap-1">
+                          <p className="text-sm flex items-center gap-1 text-gray-700 dark:text-gray-300">
                             <Phone className="w-3 h-3 text-gray-400" />
                             {user.phone}
                           </p>
@@ -548,13 +548,13 @@ export function UsersManagementPage() {
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                        user.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        user.status === 'ACTIVE' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
                       }`}>
                         {user.status === 'ACTIVE' ? 'Active' : user.status || 'Inactive'}
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
                         {new Date(user.created_at).toLocaleDateString()}
                       </p>
                     </td>
@@ -565,8 +565,8 @@ export function UsersManagementPage() {
           )}
           {!loading && filteredUsers.length === 0 && (
             <div className="p-8 text-center">
-              <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500">No users found</p>
+              <Users className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+              <p className="text-gray-500 dark:text-gray-400">No users found</p>
             </div>
           )}
         </Card>
@@ -574,16 +574,16 @@ export function UsersManagementPage() {
         {/* Create User Modal */}
         {showCreateModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
-              <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-900">Create New User</h2>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Create New User</h2>
                 <button
                   onClick={() => {
                     setShowCreateModal(false);
                     setCreateError(null);
                     setCreateSuccess(null);
                   }}
-                  className="p-2 hover:bg-gray-100 rounded-lg"
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-600 dark:text-gray-400"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -591,14 +591,14 @@ export function UsersManagementPage() {
 
               <div className="p-6 space-y-4">
                 {createError && (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-center gap-2">
+                  <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4" />
                     {createError}
                   </div>
                 )}
 
                 {createSuccess && (
-                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm flex items-center gap-2">
+                  <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-700 dark:text-green-400 text-sm flex items-center gap-2">
                     <CheckCircle className="w-4 h-4" />
                     {createSuccess}
                   </div>
@@ -606,22 +606,22 @@ export function UsersManagementPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">First Name *</label>
                     <input
                       type="text"
                       value={formData.firstName}
                       onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                       placeholder="John"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Last Name *</label>
                     <input
                       type="text"
                       value={formData.lastName}
                       onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                       placeholder="Doe"
                     />
                   </div>
@@ -629,18 +629,18 @@ export function UsersManagementPage() {
 
                 {/* Username Field with @ prefix and availability check */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     <AtSign className="w-4 h-4 inline mr-1" />
                     Username
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">@</span>
+                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 dark:text-gray-400">@</span>
                     <input
                       type="text"
                       value={formData.username}
                       onChange={(e) => handleUsernameChange(e.target.value)}
-                      className={`w-full pl-8 pr-10 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                        usernameError ? 'border-red-300' : usernameAvailable === true ? 'border-green-300' : 'border-gray-300'
+                      className={`w-full pl-8 pr-10 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white ${
+                        usernameError ? 'border-red-300 dark:border-red-600' : usernameAvailable === true ? 'border-green-300 dark:border-green-600' : 'border-gray-300 dark:border-gray-600'
                       }`}
                       placeholder="johndoe"
                     />
@@ -655,62 +655,62 @@ export function UsersManagementPage() {
                     )}
                   </div>
                   {usernameError && (
-                    <p className="text-xs text-red-600 mt-1">{usernameError}</p>
+                    <p className="text-xs text-red-600 dark:text-red-400 mt-1">{usernameError}</p>
                   )}
                   {usernameAvailable === true && formData.username && (
-                    <p className="text-xs text-green-600 mt-1">Username @{formData.username} is available!</p>
+                    <p className="text-xs text-green-600 dark:text-green-400 mt-1">Username @{formData.username} is available!</p>
                   )}
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     Letters, numbers, and underscores only. The @ will be added automatically.
                   </p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone Number *</label>
                   <input
                     type="tel"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                     placeholder="077123456 or +232771234567"
                   />
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     9 digits starting with 0. Country code (+232) will be auto-removed.
                   </p>
                   {formData.phone && (
-                    <p className="text-xs text-primary-600 mt-1">
+                    <p className="text-xs text-primary-600 dark:text-primary-400 mt-1">
                       Will be saved as: {normalizePhoneNumber(formData.phone) || formData.phone}
                     </p>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email (Optional)</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email (Optional)</label>
                   <input
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                     placeholder="john@example.com"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
                   <input
                     type="text"
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Role</label>
                   <select
                     value={formData.role}
                     onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   >
                     <option value="user">User</option>
                     <option value="merchant">Merchant</option>
@@ -720,7 +720,7 @@ export function UsersManagementPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     <Wallet className="w-4 h-4 inline mr-1" />
                     Initial Balance ($)
                   </label>
@@ -730,19 +730,19 @@ export function UsersManagementPage() {
                     step="0.01"
                     value={formData.initialBalance}
                     onChange={(e) => setFormData({ ...formData, initialBalance: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   />
                 </div>
               </div>
 
-              <div className="p-6 border-t border-gray-200 flex gap-3">
+              <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3">
                 <button
                   onClick={() => {
                     setShowCreateModal(false);
                     setCreateError(null);
                     setCreateSuccess(null);
                   }}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
                   Cancel
                 </button>

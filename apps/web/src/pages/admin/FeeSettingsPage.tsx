@@ -24,7 +24,7 @@ import {
   AlertCircle,
   RefreshCw,
 } from 'lucide-react';
-import { Card } from '@/components/ui/Card';
+import { Card, MotionCard } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
 
@@ -404,7 +404,7 @@ export function FeeSettingsPage() {
     return (
       <AdminLayout>
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
+          <Loader2 className="w-8 h-8 text-primary-600 dark:text-primary-400 animate-spin" />
         </div>
       </AdminLayout>
     );
@@ -416,12 +416,12 @@ export function FeeSettingsPage() {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Fee Settings</h1>
-            <p className="text-gray-500">Manage transaction fees and currencies</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Fee Settings</h1>
+            <p className="text-gray-500 dark:text-gray-400">Manage transaction fees and currencies</p>
           </div>
           <button
             onClick={fetchSettings}
-            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center gap-2"
+            className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center gap-2"
           >
             <RefreshCw className="w-4 h-4" />
             Refresh
@@ -430,14 +430,14 @@ export function FeeSettingsPage() {
 
         {/* Success/Error Messages */}
         {success && (
-          <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700">
+          <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-center gap-2 text-green-700 dark:text-green-400">
             <CheckCircle className="w-5 h-5" />
             {success}
           </div>
         )}
 
         {error && (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+          <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2 text-red-700 dark:text-red-400">
             <XCircle className="w-5 h-5" />
             {error}
           </div>
@@ -447,12 +447,12 @@ export function FeeSettingsPage() {
         <Card className="p-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Globe className="w-5 h-5 text-blue-600" />
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                <Globe className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">Supported Currencies</h2>
-                <p className="text-sm text-gray-500">Enable currencies for transactions</p>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Supported Currencies</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Enable currencies for transactions</p>
               </div>
             </div>
             <button
@@ -472,30 +472,30 @@ export function FeeSettingsPage() {
               <div
                 key={currency.code}
                 className={`p-4 rounded-lg border-2 ${
-                  currency.isActive ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'
+                  currency.isActive ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50'
                 }`}
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <span className="text-2xl">{currency.symbol}</span>
                     <div>
-                      <p className="font-medium text-gray-900">{currency.code}</p>
-                      <p className="text-sm text-gray-500">{currency.name}</p>
+                      <p className="font-medium text-gray-900 dark:text-white">{currency.code}</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">{currency.name}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     {currency.isDefault && (
-                      <span className="px-2 py-1 bg-primary-100 text-primary-700 text-xs font-medium rounded-full">
+                      <span className="px-2 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 text-xs font-medium rounded-full">
                         Default
                       </span>
                     )}
                     {!currency.isDefault && (
                       <button
                         onClick={() => deleteCurrency(currency.code)}
-                        className="p-1 hover:bg-red-100 rounded"
+                        className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
                         title="Delete currency"
                       >
-                        <Trash2 className="w-4 h-4 text-red-500" />
+                        <Trash2 className="w-4 h-4 text-red-500 dark:text-red-400" />
                       </button>
                     )}
                   </div>
@@ -506,8 +506,8 @@ export function FeeSettingsPage() {
                     onClick={() => toggleCurrency(currency.code)}
                     className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium ${
                       currency.isActive
-                        ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                        : 'bg-green-100 text-green-700 hover:bg-green-200'
+                        ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50'
+                        : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50'
                     }`}
                   >
                     {currency.isActive ? 'Disable' : 'Enable'}
@@ -515,7 +515,7 @@ export function FeeSettingsPage() {
                   {currency.isActive && !currency.isDefault && (
                     <button
                       onClick={() => setDefaultCurrency(currency.code)}
-                      className="flex-1 px-3 py-2 bg-primary-100 text-primary-700 rounded-lg text-sm font-medium hover:bg-primary-200"
+                      className="flex-1 px-3 py-2 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 rounded-lg text-sm font-medium hover:bg-primary-200 dark:hover:bg-primary-900/50"
                     >
                       Set Default
                     </button>
@@ -530,12 +530,12 @@ export function FeeSettingsPage() {
         <Card className="p-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <Percent className="w-5 h-5 text-green-600" />
+              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                <Percent className="w-5 h-5 text-green-600 dark:text-green-400" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">Transaction Fees</h2>
-                <p className="text-sm text-gray-500">Configure fees for different transaction types</p>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Transaction Fees</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Configure fees for different transaction types</p>
               </div>
             </div>
             <button
@@ -553,44 +553,44 @@ export function FeeSettingsPage() {
 
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50 dark:bg-gray-700/50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Transaction Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Percentage</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Flat Fee</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Min/Max</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Currency</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Transaction Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Percentage</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Flat Fee</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Min/Max</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Currency</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {feeConfigs.map((fee) => (
-                  <tr key={fee.id} className="hover:bg-gray-50">
+                  <tr key={fee.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                     <td className="px-4 py-4">
-                      <span className="font-medium text-gray-900">
+                      <span className="font-medium text-gray-900 dark:text-white">
                         {getTransactionTypeLabel(fee.transactionType)}
                       </span>
                     </td>
                     <td className="px-4 py-4">
-                      <span className="text-gray-700">{fee.percentage}%</span>
+                      <span className="text-gray-700 dark:text-gray-300">{fee.percentage}%</span>
                     </td>
                     <td className="px-4 py-4">
-                      <span className="text-gray-700">
+                      <span className="text-gray-700 dark:text-gray-300">
                         {fee.flatFee > 0 ? formatCurrency(fee.flatFee, fee.currency) : '-'}
                       </span>
                     </td>
                     <td className="px-4 py-4">
-                      <span className="text-gray-700">
+                      <span className="text-gray-700 dark:text-gray-300">
                         {formatCurrency(fee.minimumFee, fee.currency)} - {fee.maximumFee ? formatCurrency(fee.maximumFee, fee.currency) : 'No max'}
                       </span>
                     </td>
                     <td className="px-4 py-4">
-                      <span className="text-gray-700">{fee.currency}</span>
+                      <span className="text-gray-700 dark:text-gray-300">{fee.currency}</span>
                     </td>
                     <td className="px-4 py-4">
                       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                        fee.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                        fee.isActive ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
                       }`}>
                         {fee.isActive ? 'Active' : 'Inactive'}
                       </span>
@@ -599,17 +599,17 @@ export function FeeSettingsPage() {
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => openEditFee(fee)}
-                          className="p-2 hover:bg-gray-100 rounded-lg"
+                          className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
                           title="Edit"
                         >
-                          <Edit className="w-4 h-4 text-gray-500" />
+                          <Edit className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                         </button>
                         <button
                           onClick={() => deleteFeeConfig(fee.id)}
-                          className="p-2 hover:bg-red-100 rounded-lg"
+                          className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg"
                           title="Delete"
                         >
-                          <Trash2 className="w-4 h-4 text-red-500" />
+                          <Trash2 className="w-4 h-4 text-red-500 dark:text-red-400" />
                         </button>
                       </div>
                     </td>
@@ -621,8 +621,8 @@ export function FeeSettingsPage() {
 
           {feeConfigs.length === 0 && (
             <div className="text-center py-8">
-              <Settings className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500">No fee configurations found</p>
+              <Settings className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+              <p className="text-gray-500 dark:text-gray-400">No fee configurations found</p>
               <button
                 onClick={() => setShowFeeModal(true)}
                 className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
@@ -634,13 +634,13 @@ export function FeeSettingsPage() {
         </Card>
 
         {/* Fee Formula Info */}
-        <Card className="p-6 bg-blue-50 border-blue-200">
+        <Card className="p-6 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
           <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
+            <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
             <div>
-              <h3 className="font-medium text-blue-900">Fee Calculation Formula</h3>
-              <p className="text-sm text-blue-700 mt-1">
-                <code className="bg-blue-100 px-2 py-1 rounded">
+              <h3 className="font-medium text-blue-900 dark:text-blue-300">Fee Calculation Formula</h3>
+              <p className="text-sm text-blue-700 dark:text-blue-400 mt-1">
+                <code className="bg-blue-100 dark:bg-blue-800/50 px-2 py-1 rounded">
                   fee = max(min(amount × percentage/100, maximumFee), minimumFee) + flatFee
                 </code>
               </p>
@@ -648,7 +648,7 @@ export function FeeSettingsPage() {
                 const defaultCurrency = currencies.find(c => c.isDefault);
                 const symbol = defaultCurrency?.symbol || 'Le';
                 return (
-                  <p className="text-sm text-blue-600 mt-2">
+                  <p className="text-sm text-blue-600 dark:text-blue-400 mt-2">
                     Example: For a {symbol}100 transfer with 1% fee, {symbol}0.10 minimum, and {symbol}50 maximum:
                     <br />
                     fee = max(min({symbol}100 × 0.01, {symbol}50), {symbol}0.10) = max(min({symbol}1.00, {symbol}50), {symbol}0.10) = {symbol}1.00
@@ -662,22 +662,22 @@ export function FeeSettingsPage() {
         {/* Fee Modal */}
         {showFeeModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
-              <div className="p-6 border-b border-gray-200">
-                <h2 className="text-xl font-semibold text-gray-900">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md mx-4">
+              <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
                   {editingFee ? 'Edit Fee Configuration' : 'Add Fee Configuration'}
                 </h2>
               </div>
 
               <div className="p-6 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Transaction Type
                   </label>
                   <select
                     value={feeForm.transactionType}
                     onChange={(e) => setFeeForm({ ...feeForm, transactionType: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500"
                   >
                     {TRANSACTION_TYPES.map((type) => (
                       <option key={type.value} value={type.value}>
@@ -689,7 +689,7 @@ export function FeeSettingsPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Percentage (%)
                     </label>
                     <input
@@ -698,11 +698,11 @@ export function FeeSettingsPage() {
                       min="0"
                       value={feeForm.percentage}
                       onChange={(e) => setFeeForm({ ...feeForm, percentage: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Flat Fee ({getCurrencySymbol(feeForm.currency || 'SLE')})
                     </label>
                     <input
@@ -711,14 +711,14 @@ export function FeeSettingsPage() {
                       min="0"
                       value={feeForm.flatFee}
                       onChange={(e) => setFeeForm({ ...feeForm, flatFee: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Minimum Fee ({getCurrencySymbol(feeForm.currency || 'SLE')})
                     </label>
                     <input
@@ -727,11 +727,11 @@ export function FeeSettingsPage() {
                       min="0"
                       value={feeForm.minimumFee}
                       onChange={(e) => setFeeForm({ ...feeForm, minimumFee: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Maximum Fee ({getCurrencySymbol(feeForm.currency || 'SLE')})
                     </label>
                     <input
@@ -741,19 +741,19 @@ export function FeeSettingsPage() {
                       value={feeForm.maximumFee || ''}
                       onChange={(e) => setFeeForm({ ...feeForm, maximumFee: e.target.value ? parseFloat(e.target.value) : null })}
                       placeholder="No limit"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 rounded-lg focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Currency
                   </label>
                   <select
                     value={feeForm.currency}
                     onChange={(e) => setFeeForm({ ...feeForm, currency: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500"
                   >
                     {currencies.filter(c => c.isActive).map((c) => (
                       <option key={c.code} value={c.code}>
@@ -769,22 +769,22 @@ export function FeeSettingsPage() {
                     id="isActive"
                     checked={feeForm.isActive}
                     onChange={(e) => setFeeForm({ ...feeForm, isActive: e.target.checked })}
-                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    className="w-4 h-4 text-primary-600 border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500"
                   />
-                  <label htmlFor="isActive" className="text-sm text-gray-700">
+                  <label htmlFor="isActive" className="text-sm text-gray-700 dark:text-gray-300">
                     Active
                   </label>
                 </div>
               </div>
 
-              <div className="p-6 border-t border-gray-200 flex gap-3">
+              <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3">
                 <button
                   onClick={() => {
                     setShowFeeModal(false);
                     setEditingFee(null);
                     resetFeeForm();
                   }}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
                   Cancel
                 </button>
@@ -813,14 +813,14 @@ export function FeeSettingsPage() {
         {/* Currency Modal */}
         {showCurrencyModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
-              <div className="p-6 border-b border-gray-200">
-                <h2 className="text-xl font-semibold text-gray-900">Add New Currency</h2>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md mx-4">
+              <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Add New Currency</h2>
               </div>
 
               <div className="p-6 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Currency Code (e.g., SLE, USD)
                   </label>
                   <input
@@ -829,12 +829,12 @@ export function FeeSettingsPage() {
                     value={currencyForm.code}
                     onChange={(e) => setCurrencyForm({ ...currencyForm, code: e.target.value.toUpperCase() })}
                     placeholder="SLE"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 uppercase"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 rounded-lg focus:ring-2 focus:ring-primary-500 uppercase"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Currency Name
                   </label>
                   <input
@@ -842,12 +842,12 @@ export function FeeSettingsPage() {
                     value={currencyForm.name}
                     onChange={(e) => setCurrencyForm({ ...currencyForm, name: e.target.value })}
                     placeholder="Sierra Leone Leone"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 rounded-lg focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Symbol
                   </label>
                   <input
@@ -856,7 +856,7 @@ export function FeeSettingsPage() {
                     value={currencyForm.symbol}
                     onChange={(e) => setCurrencyForm({ ...currencyForm, symbol: e.target.value })}
                     placeholder="Le"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 rounded-lg focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
 
@@ -867,9 +867,9 @@ export function FeeSettingsPage() {
                       id="currencyActive"
                       checked={currencyForm.isActive}
                       onChange={(e) => setCurrencyForm({ ...currencyForm, isActive: e.target.checked })}
-                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                      className="w-4 h-4 text-primary-600 border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500"
                     />
-                    <label htmlFor="currencyActive" className="text-sm text-gray-700">
+                    <label htmlFor="currencyActive" className="text-sm text-gray-700 dark:text-gray-300">
                       Active
                     </label>
                   </div>
@@ -879,22 +879,22 @@ export function FeeSettingsPage() {
                       id="currencyDefault"
                       checked={currencyForm.isDefault}
                       onChange={(e) => setCurrencyForm({ ...currencyForm, isDefault: e.target.checked })}
-                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                      className="w-4 h-4 text-primary-600 border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500"
                     />
-                    <label htmlFor="currencyDefault" className="text-sm text-gray-700">
+                    <label htmlFor="currencyDefault" className="text-sm text-gray-700 dark:text-gray-300">
                       Set as Default
                     </label>
                   </div>
                 </div>
               </div>
 
-              <div className="p-6 border-t border-gray-200 flex gap-3">
+              <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3">
                 <button
                   onClick={() => {
                     setShowCurrencyModal(false);
                     resetCurrencyForm();
                   }}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
                   Cancel
                 </button>

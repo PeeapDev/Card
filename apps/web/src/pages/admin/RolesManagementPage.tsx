@@ -18,7 +18,7 @@ import {
   X,
   Lock,
 } from 'lucide-react';
-import { Card } from '@/components/ui/Card';
+import { Card, MotionCard } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
 import type { UserRole } from '@/types';
@@ -181,12 +181,12 @@ export function RolesManagementPage() {
 
   const getRoleBadgeColor = (name: UserRole) => {
     switch (name) {
-      case 'superadmin': return 'bg-red-100 text-red-700';
-      case 'admin': return 'bg-purple-100 text-purple-700';
-      case 'merchant': return 'bg-green-100 text-green-700';
-      case 'agent': return 'bg-orange-100 text-orange-700';
-      case 'user': return 'bg-blue-100 text-blue-700';
-      default: return 'bg-gray-100 text-gray-700';
+      case 'superadmin': return 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
+      case 'admin': return 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400';
+      case 'merchant': return 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
+      case 'agent': return 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400';
+      case 'user': return 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400';
+      default: return 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300';
     }
   };
 
@@ -196,8 +196,8 @@ export function RolesManagementPage() {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Role Management</h1>
-            <p className="text-gray-500">Configure user roles and permissions</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Role Management</h1>
+            <p className="text-gray-500 dark:text-gray-400">Configure user roles and permissions</p>
           </div>
           <button
             onClick={() => setShowAddModal(true)}
@@ -210,18 +210,18 @@ export function RolesManagementPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          {roles.map(role => (
-            <Card key={role.id} className="p-4">
+          {roles.map((role, index) => (
+            <MotionCard key={role.id} className="p-4" delay={index * 0.05}>
               <div className="flex items-center gap-3">
                 <div className={`p-2 rounded-lg ${getRoleBadgeColor(role.name).replace('text-', 'bg-').split(' ')[0]}`}>
-                  <Shield className={`w-5 h-5 ${getRoleBadgeColor(role.name).split(' ')[1]}`} />
+                  <Shield className={`w-5 h-5 ${getRoleBadgeColor(role.name).split(' ')[1]} ${getRoleBadgeColor(role.name).split(' ')[3] || ''}`} />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">{role.displayName}</p>
-                  <p className="text-xl font-semibold">{role.userCount}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{role.displayName}</p>
+                  <p className="text-xl font-semibold text-gray-900 dark:text-white">{role.userCount}</p>
                 </div>
               </div>
-            </Card>
+            </MotionCard>
           ))}
         </div>
 
@@ -231,32 +231,32 @@ export function RolesManagementPage() {
             <Card key={role.id} className="overflow-hidden">
               {/* Role Header */}
               <div
-                className="p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50"
+                className="p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50"
                 onClick={() => toggleRoleExpand(role.id)}
               >
                 <div className="flex items-center gap-4">
                   <div className={`p-2 rounded-lg ${getRoleBadgeColor(role.name).replace('text-', 'bg-').split(' ')[0]}`}>
-                    <Shield className={`w-5 h-5 ${getRoleBadgeColor(role.name).split(' ')[1]}`} />
+                    <Shield className={`w-5 h-5 ${getRoleBadgeColor(role.name).split(' ')[1]} ${getRoleBadgeColor(role.name).split(' ')[3] || ''}`} />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-gray-900">{role.displayName}</h3>
+                      <h3 className="font-semibold text-gray-900 dark:text-white">{role.displayName}</h3>
                       <span className={`px-2 py-0.5 rounded text-xs font-medium ${getRoleBadgeColor(role.name)}`}>
                         {role.name}
                       </span>
                       {role.isSystem && (
-                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 flex items-center gap-1">
+                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 flex items-center gap-1">
                           <Lock className="w-3 h-3" /> System
                         </span>
                       )}
                     </div>
-                    <p className="text-sm text-gray-500">{role.description}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{role.description}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="text-right">
-                    <p className="text-sm font-medium text-gray-900">{role.userCount} users</p>
-                    <p className="text-xs text-gray-500">{role.permissions.filter(p => Object.values(p.actions).some(v => v)).length} resources</p>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">{role.userCount} users</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{role.permissions.filter(p => Object.values(p.actions).some(v => v)).length} resources</p>
                   </div>
                   {expandedRole === role.id ? (
                     <ChevronUp className="w-5 h-5 text-gray-400" />
@@ -268,12 +268,12 @@ export function RolesManagementPage() {
 
               {/* Expanded Permissions */}
               {expandedRole === role.id && (
-                <div className="border-t border-gray-200 p-4">
-                  <h4 className="font-medium text-gray-900 mb-4">Permissions</h4>
+                <div className="border-t border-gray-200 dark:border-gray-700 p-4">
+                  <h4 className="font-medium text-gray-900 dark:text-white mb-4">Permissions</h4>
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead>
-                        <tr className="text-left text-xs text-gray-500 uppercase">
+                        <tr className="text-left text-xs text-gray-500 dark:text-gray-400 uppercase">
                           <th className="pb-3 font-medium">Resource</th>
                           <th className="pb-3 font-medium text-center">Create</th>
                           <th className="pb-3 font-medium text-center">Read</th>
@@ -281,7 +281,7 @@ export function RolesManagementPage() {
                           <th className="pb-3 font-medium text-center">Delete</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-100">
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                         {role.permissions.map(permission => {
                           const Icon = permission.icon;
                           return (
@@ -289,7 +289,7 @@ export function RolesManagementPage() {
                               <td className="py-3">
                                 <div className="flex items-center gap-2">
                                   <Icon className="w-4 h-4 text-gray-400" />
-                                  <span className="font-medium">{permission.label}</span>
+                                  <span className="font-medium text-gray-900 dark:text-white">{permission.label}</span>
                                 </div>
                               </td>
                               {(['create', 'read', 'update', 'delete'] as const).map(action => (
@@ -302,8 +302,8 @@ export function RolesManagementPage() {
                                     disabled={role.isSystem}
                                     className={`p-1 rounded ${
                                       permission.actions[action]
-                                        ? 'bg-green-100 text-green-600'
-                                        : 'bg-gray-100 text-gray-400'
+                                        ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
                                     } ${role.isSystem ? 'opacity-60 cursor-not-allowed' : 'hover:opacity-80'}`}
                                   >
                                     {permission.actions[action] ? (
@@ -322,8 +322,8 @@ export function RolesManagementPage() {
                   </div>
 
                   {!role.isSystem && (
-                    <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-200">
-                      <button className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center gap-2">
+                    <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                      <button className="px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center gap-2">
                         <Trash2 className="w-4 h-4" />
                         Delete Role
                       </button>
@@ -335,12 +335,12 @@ export function RolesManagementPage() {
                   )}
 
                   {role.isSystem && (
-                    <div className="mt-4 pt-4 border-t border-gray-200">
-                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-start gap-2">
-                        <Lock className="w-4 h-4 text-yellow-600 mt-0.5" />
-                        <div className="text-sm text-yellow-700">
+                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                      <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 flex items-start gap-2">
+                        <Lock className="w-4 h-4 text-yellow-600 dark:text-yellow-400 mt-0.5" />
+                        <div className="text-sm text-yellow-700 dark:text-yellow-400">
                           <p className="font-medium">System Role</p>
-                          <p className="text-yellow-600">This is a system-defined role and cannot be modified. To customize permissions, create a new custom role.</p>
+                          <p className="text-yellow-600 dark:text-yellow-500">This is a system-defined role and cannot be modified. To customize permissions, create a new custom role.</p>
                         </div>
                       </div>
                     </div>
@@ -353,8 +353,8 @@ export function RolesManagementPage() {
 
         {/* User Assignment Section */}
         <Card className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick User Role Assignment</h3>
-          <p className="text-sm text-gray-500 mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Quick User Role Assignment</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
             To change a user's role, go to the User Management section and edit the individual user.
           </p>
           <div className="flex gap-4">
@@ -367,14 +367,14 @@ export function RolesManagementPage() {
             </a>
             <a
               href="/admin/merchants"
-              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center gap-2"
+              className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
             >
               <Wallet className="w-4 h-4" />
               Manage Merchants
             </a>
             <a
               href="/admin/agents"
-              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center gap-2"
+              className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
             >
               <UserCog className="w-4 h-4" />
               Manage Agents

@@ -15,7 +15,7 @@ import {
   Zap,
   User,
 } from 'lucide-react';
-import { Card } from '@/components/ui/Card';
+import { Card, MotionCard } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
 import { currencyService, Currency } from '@/services/currency.service';
@@ -168,12 +168,12 @@ export function FeesPage() {
 
   const getUserTypeColor = (userType: string) => {
     switch (userType) {
-      case 'standard': return 'bg-blue-100 text-blue-700';
-      case 'agent': return 'bg-purple-100 text-purple-700';
-      case 'agent_plus': return 'bg-orange-100 text-orange-700';
-      case 'merchant': return 'bg-green-100 text-green-700';
-      case 'all_users': return 'bg-gray-100 text-gray-700';
-      default: return 'bg-gray-100 text-gray-700';
+      case 'standard': return 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400';
+      case 'agent': return 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400';
+      case 'agent_plus': return 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400';
+      case 'merchant': return 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
+      case 'all_users': return 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300';
+      default: return 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300';
     }
   };
 
@@ -183,19 +183,19 @@ export function FeesPage() {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Fees & Pricing</h1>
-            <p className="text-gray-500">Configure transaction fees, limits, and pricing for all user types</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Fees & Pricing</h1>
+            <p className="text-gray-500 dark:text-gray-400">Configure transaction fees, limits, and pricing for all user types</p>
           </div>
           <div className="flex items-center gap-3">
             {saved && (
-              <span className="flex items-center gap-2 text-green-600 text-sm">
+              <span className="flex items-center gap-2 text-green-600 dark:text-green-400 text-sm">
                 <CheckCircle className="w-4 h-4" />
                 Changes saved
               </span>
             )}
             <button
               onClick={fetchFees}
-              className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
+              className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-700 dark:text-gray-300"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               Refresh
@@ -204,8 +204,8 @@ export function FeesPage() {
               onClick={() => setIsEditing(!isEditing)}
               className={`px-4 py-2 rounded-lg flex items-center gap-2 ${
                 isEditing
-                  ? 'bg-gray-200 text-gray-700'
-                  : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                  ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                  : 'bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
               }`}
             >
               <Edit className="w-4 h-4" />
@@ -224,12 +224,12 @@ export function FeesPage() {
         </div>
 
         {/* Info Banner */}
-        <Card className="p-4 bg-blue-50 border-blue-200">
+        <Card className="p-4 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
           <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+            <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-medium text-blue-800">Fee Configuration</p>
-              <p className="text-sm text-blue-700 mt-1">
+              <p className="text-sm font-medium text-blue-800 dark:text-blue-300">Fee Configuration</p>
+              <p className="text-sm text-blue-700 dark:text-blue-400 mt-1">
                 Fees are applied based on user type. Agent+ users get the lowest fees with unlimited transaction limits.
                 Changes affect all new transactions immediately.
               </p>
@@ -253,7 +253,7 @@ export function FeesPage() {
                 className={`flex-1 px-4 py-3 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 ${
                   activeTab === tab.id
                     ? 'bg-primary-600 text-white'
-                    : 'text-gray-600 hover:bg-gray-100'
+                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
                 }`}
               >
                 <tab.icon className="w-4 h-4" />
@@ -266,7 +266,7 @@ export function FeesPage() {
         {/* Limits Tab */}
         {activeTab === 'limits' ? (
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-gray-900">Transfer Limits by User Type</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Transfer Limits by User Type</h3>
             {limits.map((limit) => (
               <Card key={limit.id} className="p-6">
                 <div className="flex items-center gap-3 mb-4">
@@ -274,69 +274,69 @@ export function FeesPage() {
                     {getUserTypeIcon(limit.userType)}
                   </div>
                   <div>
-                    <h4 className="font-semibold text-gray-900">{getUserTypeLabel(limit.userType)}</h4>
-                    <p className="text-sm text-gray-500">Transaction limits for {limit.userType} users</p>
+                    <h4 className="font-semibold text-gray-900 dark:text-white">{getUserTypeLabel(limit.userType)}</h4>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Transaction limits for {limit.userType} users</p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
-                    <label className="block text-sm text-gray-500 mb-1">Daily Limit</label>
+                    <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">Daily Limit</label>
                     {isEditing ? (
                       <input
                         type="number"
                         value={limit.dailyLimit}
                         onChange={(e) => updateLimit(limit.id, 'dailyLimit', parseFloat(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                       />
                     ) : (
-                      <p className="text-xl font-bold text-gray-900">
+                      <p className="text-xl font-bold text-gray-900 dark:text-white">
                         {currencySymbol}{limit.dailyLimit.toLocaleString()}
                       </p>
                     )}
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-500 mb-1">Monthly Limit</label>
+                    <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">Monthly Limit</label>
                     {isEditing ? (
                       <input
                         type="number"
                         value={limit.monthlyLimit}
                         onChange={(e) => updateLimit(limit.id, 'monthlyLimit', parseFloat(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                       />
                     ) : (
-                      <p className="text-xl font-bold text-gray-900">
+                      <p className="text-xl font-bold text-gray-900 dark:text-white">
                         {currencySymbol}{limit.monthlyLimit.toLocaleString()}
                       </p>
                     )}
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-500 mb-1">Per Transaction</label>
+                    <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">Per Transaction</label>
                     {isEditing ? (
                       <input
                         type="number"
                         value={limit.perTransactionLimit}
                         onChange={(e) => updateLimit(limit.id, 'perTransactionLimit', parseFloat(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                       />
                     ) : (
-                      <p className="text-xl font-bold text-gray-900">
+                      <p className="text-xl font-bold text-gray-900 dark:text-white">
                         {currencySymbol}{limit.perTransactionLimit.toLocaleString()}
                       </p>
                     )}
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-500 mb-1">Minimum Amount</label>
+                    <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">Minimum Amount</label>
                     {isEditing ? (
                       <input
                         type="number"
                         step="0.01"
                         value={limit.minAmount}
                         onChange={(e) => updateLimit(limit.id, 'minAmount', parseFloat(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                       />
                     ) : (
-                      <p className="text-xl font-bold text-gray-900">
+                      <p className="text-xl font-bold text-gray-900 dark:text-white">
                         {formatCurrency(limit.minAmount)}
                       </p>
                     )}
@@ -352,24 +352,24 @@ export function FeesPage() {
               <Card key={fee.id} className={`p-6 ${!fee.isActive ? 'opacity-60' : ''}`}>
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-4">
-                    <div className={`p-3 rounded-lg ${fee.isActive ? 'bg-primary-100' : 'bg-gray-100'}`}>
+                    <div className={`p-3 rounded-lg ${fee.isActive ? 'bg-primary-100 dark:bg-primary-900/30' : 'bg-gray-100 dark:bg-gray-700'}`}>
                       {fee.type === 'percentage' ? (
-                        <Percent className={`w-5 h-5 ${fee.isActive ? 'text-primary-600' : 'text-gray-400'}`} />
+                        <Percent className={`w-5 h-5 ${fee.isActive ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400'}`} />
                       ) : (
-                        <DollarSign className={`w-5 h-5 ${fee.isActive ? 'text-primary-600' : 'text-gray-400'}`} />
+                        <DollarSign className={`w-5 h-5 ${fee.isActive ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400'}`} />
                       )}
                     </div>
                     <div>
                       <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-semibold text-gray-900">{fee.name}</h3>
+                        <h3 className="font-semibold text-gray-900 dark:text-white">{fee.name}</h3>
                         <span className={`px-2 py-0.5 text-xs rounded-full flex items-center gap-1 ${getUserTypeColor(fee.userType)}`}>
                           {getUserTypeIcon(fee.userType)}
                           {getUserTypeLabel(fee.userType)}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-500">{fee.description}</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">{fee.description}</p>
                       {(fee.minFee !== undefined || fee.maxFee !== undefined) && (
-                        <p className="text-xs text-gray-400 mt-2">
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
                           {fee.minFee !== undefined && `Min Fee: ${formatCurrency(fee.minFee)}`}
                           {fee.minFee !== undefined && fee.maxFee !== undefined && ' | '}
                           {fee.maxFee !== undefined && `Max Fee: ${formatCurrency(fee.maxFee)}`}
@@ -386,18 +386,18 @@ export function FeesPage() {
                           step="0.01"
                           value={fee.value}
                           onChange={(e) => updateFee(fee.id, 'value', parseFloat(e.target.value))}
-                          className="w-24 px-3 py-2 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          className="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-right focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                         />
-                        <span className="text-gray-500 text-sm">
+                        <span className="text-gray-500 dark:text-gray-400 text-sm">
                           {fee.type === 'percentage' ? '%' : 'USD'}
                         </span>
                       </div>
                     ) : (
                       <div className="text-right">
-                        <p className="text-2xl font-bold text-gray-900">
+                        <p className="text-2xl font-bold text-gray-900 dark:text-white">
                           {fee.type === 'percentage' ? `${fee.value}%` : formatCurrency(fee.value)}
                         </p>
-                        <p className="text-xs text-gray-500 capitalize">{fee.type}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{fee.type}</p>
                       </div>
                     )}
 
@@ -405,8 +405,8 @@ export function FeesPage() {
                       onClick={() => toggleFeeStatus(fee.id)}
                       className={`p-2 rounded-lg transition-colors ${
                         fee.isActive
-                          ? 'bg-green-100 text-green-600 hover:bg-green-200'
-                          : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                          ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
                       }`}
                       title={fee.isActive ? 'Disable' : 'Enable'}
                     >
@@ -425,47 +425,47 @@ export function FeesPage() {
 
         {/* Add New Fee */}
         {isEditing && activeTab !== 'limits' && (
-          <button className="w-full p-4 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-primary-500 hover:text-primary-600 transition-colors flex items-center justify-center gap-2">
+          <button className="w-full p-4 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-500 dark:text-gray-400 hover:border-primary-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors flex items-center justify-center gap-2">
             <Plus className="w-5 h-5" />
             Add New Fee
           </button>
         )}
 
         {/* Summary Card */}
-        <Card className="p-6 bg-gray-50">
-          <h3 className="font-semibold text-gray-900 mb-4">Fee Summary by User Type</h3>
+        <Card className="p-6 bg-gray-50 dark:bg-gray-700/50">
+          <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Fee Summary by User Type</h3>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="p-4 bg-white rounded-lg">
+            <div className="p-4 bg-white dark:bg-gray-800 rounded-lg">
               <div className="flex items-center gap-2 mb-2">
-                <User className="w-4 h-4 text-blue-600" />
-                <span className="font-medium text-gray-900">Standard</span>
+                <User className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <span className="font-medium text-gray-900 dark:text-white">Standard</span>
               </div>
-              <p className="text-2xl font-bold text-gray-900">1.0%</p>
-              <p className="text-xs text-gray-500">P2P Transfer Fee</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">1.0%</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">P2P Transfer Fee</p>
             </div>
-            <div className="p-4 bg-white rounded-lg">
+            <div className="p-4 bg-white dark:bg-gray-800 rounded-lg">
               <div className="flex items-center gap-2 mb-2">
-                <Users className="w-4 h-4 text-purple-600" />
-                <span className="font-medium text-gray-900">Agent</span>
+                <Users className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                <span className="font-medium text-gray-900 dark:text-white">Agent</span>
               </div>
-              <p className="text-2xl font-bold text-gray-900">0.5%</p>
-              <p className="text-xs text-gray-500">P2P Transfer Fee</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">0.5%</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">P2P Transfer Fee</p>
             </div>
-            <div className="p-4 bg-white rounded-lg border-2 border-orange-200">
+            <div className="p-4 bg-white dark:bg-gray-800 rounded-lg border-2 border-orange-200 dark:border-orange-800">
               <div className="flex items-center gap-2 mb-2">
-                <Zap className="w-4 h-4 text-orange-600" />
-                <span className="font-medium text-gray-900">Agent+</span>
+                <Zap className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+                <span className="font-medium text-gray-900 dark:text-white">Agent+</span>
               </div>
-              <p className="text-2xl font-bold text-orange-600">0.2%</p>
-              <p className="text-xs text-gray-500">P2P Transfer Fee</p>
+              <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">0.2%</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">P2P Transfer Fee</p>
             </div>
-            <div className="p-4 bg-white rounded-lg">
+            <div className="p-4 bg-white dark:bg-gray-800 rounded-lg">
               <div className="flex items-center gap-2 mb-2">
-                <Building2 className="w-4 h-4 text-green-600" />
-                <span className="font-medium text-gray-900">Merchant</span>
+                <Building2 className="w-4 h-4 text-green-600 dark:text-green-400" />
+                <span className="font-medium text-gray-900 dark:text-white">Merchant</span>
               </div>
-              <p className="text-2xl font-bold text-gray-900">0.5%</p>
-              <p className="text-xs text-gray-500">P2P Transfer Fee</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">0.5%</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">P2P Transfer Fee</p>
             </div>
           </div>
         </Card>

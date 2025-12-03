@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import {
   Users,
   CreditCard,
@@ -14,7 +15,7 @@ import {
   ArrowUpRight,
   Eye,
 } from 'lucide-react';
-import { Card } from '@/components/ui/Card';
+import { MotionCard } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
 import { currencyService, Currency } from '@/services/currency.service';
@@ -207,11 +208,11 @@ export function AdminDashboard() {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-            <p className="text-gray-500">Overview of your card issuing platform</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
+            <p className="text-gray-500 dark:text-gray-400">Overview of your card issuing platform</p>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-500">Last updated: Just now</span>
+            <span className="text-sm text-gray-500 dark:text-gray-400">Last updated: Just now</span>
             <button className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2">
               <Activity className="w-4 h-4" />
               View Analytics
@@ -220,113 +221,118 @@ export function AdminDashboard() {
         </div>
 
         {/* Main Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <Card className="p-6">
+        <motion.div
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ staggerChildren: 0.1 }}
+        >
+          <MotionCard className="p-6" delay={0}>
             <div className="flex items-center justify-between mb-4">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Wallet className="w-5 h-5 text-blue-600" />
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                <Wallet className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               </div>
             </div>
-            <p className="text-sm font-medium text-gray-500">Total Accounts</p>
-            <p className="text-2xl font-bold text-gray-900">{stats.totalAccounts.toLocaleString()}</p>
-            <p className="text-xs text-gray-400 mt-1">{stats.activeAccounts.toLocaleString()} active</p>
-          </Card>
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Accounts</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalAccounts.toLocaleString()}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{stats.activeAccounts.toLocaleString()} active</p>
+          </MotionCard>
 
-          <Card className="p-6">
+          <MotionCard className="p-6" delay={0.1}>
             <div className="flex items-center justify-between mb-4">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <Users className="w-5 h-5 text-green-600" />
+              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                <Users className="w-5 h-5 text-green-600 dark:text-green-400" />
               </div>
             </div>
-            <p className="text-sm font-medium text-gray-500">Customers</p>
-            <p className="text-2xl font-bold text-gray-900">{stats.totalCustomers.toLocaleString()}</p>
-            <p className="text-xs text-gray-400 mt-1">{stats.verifiedCustomers.toLocaleString()} verified</p>
-          </Card>
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Customers</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalCustomers.toLocaleString()}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{stats.verifiedCustomers.toLocaleString()} verified</p>
+          </MotionCard>
 
-          <Card className="p-6">
+          <MotionCard className="p-6" delay={0.2}>
             <div className="flex items-center justify-between mb-4">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <CreditCard className="w-5 h-5 text-purple-600" />
+              <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                <CreditCard className="w-5 h-5 text-purple-600 dark:text-purple-400" />
               </div>
             </div>
-            <p className="text-sm font-medium text-gray-500">Cards Issued</p>
-            <p className="text-2xl font-bold text-gray-900">{stats.totalCards.toLocaleString()}</p>
-            <p className="text-xs text-gray-400 mt-1">{stats.activeCards.toLocaleString()} active</p>
-          </Card>
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Cards Issued</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalCards.toLocaleString()}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{stats.activeCards.toLocaleString()} active</p>
+          </MotionCard>
 
-          <Card className="p-6">
+          <MotionCard className="p-6" delay={0.3}>
             <div className="flex items-center justify-between mb-4">
-              <div className="p-2 bg-emerald-100 rounded-lg">
-                <DollarSign className="w-5 h-5 text-emerald-600" />
+              <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
+                <DollarSign className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
               </div>
             </div>
-            <p className="text-sm font-medium text-gray-500">Total Volume</p>
-            <p className="text-2xl font-bold text-gray-900">{currencySymbol}{(stats.totalVolume / 1000000).toFixed(2)}M</p>
-            <p className="text-xs text-gray-400 mt-1">This month</p>
-          </Card>
-        </div>
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Volume</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{currencySymbol}{(stats.totalVolume / 1000000).toFixed(2)}M</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">This month</p>
+          </MotionCard>
+        </motion.div>
 
         {/* Action Required Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="p-6 border-l-4 border-l-yellow-500">
+          <MotionCard className="p-6 border-l-4 border-l-yellow-500" delay={0.4}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-yellow-100 rounded-lg">
-                  <ShieldCheck className="w-5 h-5 text-yellow-600" />
+                <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
+                  <ShieldCheck className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
                 </div>
                 <div>
-                  <p className="font-semibold text-gray-900">Pending Authorizations</p>
-                  <p className="text-sm text-gray-500">{stats.pendingAuthorizations} requests waiting</p>
+                  <p className="font-semibold text-gray-900 dark:text-white">Pending Authorizations</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{stats.pendingAuthorizations} requests waiting</p>
                 </div>
               </div>
-              <Link to="/admin/authorization" className="text-primary-600 hover:text-primary-700">
+              <Link to="/admin/authorization" className="text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300">
                 <ArrowUpRight className="w-5 h-5" />
               </Link>
             </div>
-          </Card>
+          </MotionCard>
 
-          <Card className="p-6 border-l-4 border-l-red-500">
+          <MotionCard className="p-6 border-l-4 border-l-red-500" delay={0.5}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-red-100 rounded-lg">
-                  <AlertTriangle className="w-5 h-5 text-red-600" />
+                <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
+                  <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
                 </div>
                 <div>
-                  <p className="font-semibold text-gray-900">Open Disputes</p>
-                  <p className="text-sm text-gray-500">{stats.disputesOpen} disputes need attention</p>
+                  <p className="font-semibold text-gray-900 dark:text-white">Open Disputes</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{stats.disputesOpen} disputes need attention</p>
                 </div>
               </div>
-              <Link to="/admin/disputes" className="text-primary-600 hover:text-primary-700">
+              <Link to="/admin/disputes" className="text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300">
                 <ArrowUpRight className="w-5 h-5" />
               </Link>
             </div>
-          </Card>
+          </MotionCard>
 
-          <Card className="p-6 border-l-4 border-l-blue-500">
+          <MotionCard className="p-6 border-l-4 border-l-blue-500" delay={0.6}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <Layers className="w-5 h-5 text-blue-600" />
+                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                  <Layers className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
-                  <p className="font-semibold text-gray-900">Card Programs</p>
-                  <p className="text-sm text-gray-500">{stats.cardPrograms} active programs</p>
+                  <p className="font-semibold text-gray-900 dark:text-white">Card Programs</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{stats.cardPrograms} active programs</p>
                 </div>
               </div>
-              <Link to="/admin/card-programs" className="text-primary-600 hover:text-primary-700">
+              <Link to="/admin/card-programs" className="text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300">
                 <ArrowUpRight className="w-5 h-5" />
               </Link>
             </div>
-          </Card>
+          </MotionCard>
         </div>
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Recent Transactions */}
-          <Card className="lg:col-span-2 p-6">
+          <MotionCard className="lg:col-span-2 p-6" delay={0.7}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Recent Transactions</h2>
-              <Link to="/admin/transactions" className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Transactions</h2>
+              <Link to="/admin/transactions" className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 flex items-center gap-1">
                 View all
                 <ArrowUpRight className="w-4 h-4" />
               </Link>
@@ -334,7 +340,7 @@ export function AdminDashboard() {
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="text-left text-xs text-gray-500 border-b border-gray-200">
+                  <tr className="text-left text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
                     <th className="pb-3 font-medium">Transaction ID</th>
                     <th className="pb-3 font-medium">Customer</th>
                     <th className="pb-3 font-medium">Amount</th>
@@ -343,17 +349,17 @@ export function AdminDashboard() {
                     <th className="pb-3 font-medium"></th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                   {recentTransactions.map((txn) => (
                     <tr key={txn.id} className="text-sm">
-                      <td className="py-3 font-mono text-gray-600">{txn.id}</td>
-                      <td className="py-3 text-gray-900">{txn.customer}</td>
-                      <td className="py-3 font-medium">{formatCurrency(txn.amount)}</td>
+                      <td className="py-3 font-mono text-gray-600 dark:text-gray-400">{txn.id}</td>
+                      <td className="py-3 text-gray-900 dark:text-white">{txn.customer}</td>
+                      <td className="py-3 font-medium text-gray-900 dark:text-white">{formatCurrency(txn.amount)}</td>
                       <td className="py-3">
                         <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                          txn.status === 'completed' ? 'bg-green-100 text-green-700' :
-                          txn.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-red-100 text-red-700'
+                          txn.status === 'completed' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
+                          txn.status === 'pending' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400' :
+                          'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
                         }`}>
                           {txn.status === 'completed' && <CheckCircle className="w-3 h-3" />}
                           {txn.status === 'pending' && <Clock className="w-3 h-3" />}
@@ -361,10 +367,10 @@ export function AdminDashboard() {
                           {txn.status}
                         </span>
                       </td>
-                      <td className="py-3 text-gray-500">{txn.time}</td>
+                      <td className="py-3 text-gray-500 dark:text-gray-400">{txn.time}</td>
                       <td className="py-3">
-                        <button className="p-1 hover:bg-gray-100 rounded">
-                          <Eye className="w-4 h-4 text-gray-400" />
+                        <button className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
+                          <Eye className="w-4 h-4 text-gray-400 dark:text-gray-500" />
                         </button>
                       </td>
                     </tr>
@@ -372,59 +378,59 @@ export function AdminDashboard() {
                 </tbody>
               </table>
             </div>
-          </Card>
+          </MotionCard>
 
           {/* Pending Items */}
-          <Card className="p-6">
-            <h2 className="text-lg font-semibold mb-4">Action Required</h2>
+          <MotionCard className="p-6" delay={0.8}>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Action Required</h2>
             <div className="space-y-3">
               {pendingItems.map((item, index) => (
                 <div
                   key={index}
                   className={`p-3 rounded-lg border-l-4 ${
-                    item.priority === 'high' ? 'bg-red-50 border-l-red-500' :
-                    item.priority === 'medium' ? 'bg-yellow-50 border-l-yellow-500' :
-                    'bg-blue-50 border-l-blue-500'
+                    item.priority === 'high' ? 'bg-red-50 dark:bg-red-900/20 border-l-red-500' :
+                    item.priority === 'medium' ? 'bg-yellow-50 dark:bg-yellow-900/20 border-l-yellow-500' :
+                    'bg-blue-50 dark:bg-blue-900/20 border-l-blue-500'
                   }`}
                 >
-                  <p className="text-sm font-medium text-gray-900">{item.description}</p>
-                  <p className="text-xs text-gray-500 mt-1 capitalize">{item.priority} priority</p>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">{item.description}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 capitalize">{item.priority} priority</p>
                 </div>
               ))}
             </div>
-          </Card>
+          </MotionCard>
         </div>
 
         {/* Quick Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card className="p-4 text-center">
-            <p className="text-sm text-gray-500">Virtual Cards</p>
-            <p className="text-xl font-bold text-gray-900">{stats.virtualCards.toLocaleString()}</p>
-            <p className="text-xs text-gray-500 mt-1">
+          <MotionCard className="p-4 text-center" delay={0.9}>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Virtual Cards</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.virtualCards.toLocaleString()}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               {stats.totalCards > 0 ? Math.round((stats.virtualCards / stats.totalCards) * 100) : 0}% of total
             </p>
-          </Card>
-          <Card className="p-4 text-center">
-            <p className="text-sm text-gray-500">Physical Cards</p>
-            <p className="text-xl font-bold text-gray-900">{stats.physicalCards.toLocaleString()}</p>
-            <p className="text-xs text-gray-500 mt-1">
+          </MotionCard>
+          <MotionCard className="p-4 text-center" delay={1.0}>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Physical Cards</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.physicalCards.toLocaleString()}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               {stats.totalCards > 0 ? Math.round((stats.physicalCards / stats.totalCards) * 100) : 0}% of total
             </p>
-          </Card>
-          <Card className="p-4 text-center">
-            <p className="text-sm text-gray-500">Merchants</p>
-            <p className="text-xl font-bold text-gray-900">{stats.totalAccounts - stats.totalCustomers}</p>
-            <p className="text-xs text-gray-500 mt-1">
+          </MotionCard>
+          <MotionCard className="p-4 text-center" delay={1.1}>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Merchants</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.totalAccounts - stats.totalCustomers}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               Business accounts
             </p>
-          </Card>
-          <Card className="p-4 text-center">
-            <p className="text-sm text-gray-500">Active Developers</p>
-            <p className="text-xl font-bold text-gray-900">{stats.activeDevelopers}</p>
-            <p className="text-xs text-gray-500 mt-1">
+          </MotionCard>
+          <MotionCard className="p-4 text-center" delay={1.2}>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Active Developers</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.activeDevelopers}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               With API keys
             </p>
-          </Card>
+          </MotionCard>
         </div>
       </div>
     </AdminLayout>

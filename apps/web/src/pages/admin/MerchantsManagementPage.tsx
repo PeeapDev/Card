@@ -17,7 +17,7 @@ import {
   Calendar,
   Settings,
 } from 'lucide-react';
-import { Card } from '@/components/ui/Card';
+import { Card, MotionCard } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
 import { useNavigate } from 'react-router-dom';
@@ -91,15 +91,15 @@ export function MerchantsManagementPage() {
 
   const getSubscriptionBadge = (status?: string, plan?: string) => {
     if (!status || status === 'inactive') {
-      return <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">No Subscription</span>;
+      return <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">No Subscription</span>;
     }
     const planColors: Record<string, string> = {
-      starter: 'bg-blue-100 text-blue-700',
-      business: 'bg-purple-100 text-purple-700',
-      enterprise: 'bg-indigo-100 text-indigo-700',
+      starter: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
+      business: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400',
+      enterprise: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400',
     };
     return (
-      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${planColors[plan || 'starter'] || 'bg-green-100 text-green-700'}`}>
+      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${planColors[plan || 'starter'] || 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'}`}>
         {plan?.charAt(0).toUpperCase()}{plan?.slice(1) || 'Active'}
       </span>
     );
@@ -131,8 +131,8 @@ export function MerchantsManagementPage() {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Merchant Management</h1>
-            <p className="text-gray-500">Manage merchant accounts, subscriptions and settings</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Merchant Management</h1>
+            <p className="text-gray-500 dark:text-gray-400">Manage merchant accounts, subscriptions and settings</p>
           </div>
           <button
             onClick={() => navigate('/admin/merchants/create')}
@@ -145,50 +145,50 @@ export function MerchantsManagementPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="p-4">
+          <MotionCard className="p-4" delay={0}>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <Store className="w-5 h-5 text-green-600" />
+              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                <Store className="w-5 h-5 text-green-600 dark:text-green-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Total Merchants</p>
-                <p className="text-xl font-semibold">{merchants.length}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Total Merchants</p>
+                <p className="text-xl font-semibold text-gray-900 dark:text-white">{merchants.length}</p>
               </div>
             </div>
-          </Card>
-          <Card className="p-4">
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.1}>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <CheckCircle className="w-5 h-5 text-blue-600" />
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                <CheckCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Active</p>
-                <p className="text-xl font-semibold">{merchants.filter(m => m.status === 'ACTIVE').length}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Active</p>
+                <p className="text-xl font-semibold text-gray-900 dark:text-white">{merchants.filter(m => m.status === 'ACTIVE').length}</p>
               </div>
             </div>
-          </Card>
-          <Card className="p-4">
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.2}>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <CreditCard className="w-5 h-5 text-purple-600" />
+              <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                <CreditCard className="w-5 h-5 text-purple-600 dark:text-purple-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Subscribed</p>
-                <p className="text-xl font-semibold">{merchants.filter(m => m.subscription_status === 'active').length}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Subscribed</p>
+                <p className="text-xl font-semibold text-gray-900 dark:text-white">{merchants.filter(m => m.subscription_status === 'active').length}</p>
               </div>
             </div>
-          </Card>
-          <Card className="p-4">
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.3}>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-yellow-100 rounded-lg">
-                <DollarSign className="w-5 h-5 text-yellow-600" />
+              <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
+                <DollarSign className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Monthly Revenue</p>
-                <p className="text-xl font-semibold">$0</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Monthly Revenue</p>
+                <p className="text-xl font-semibold text-gray-900 dark:text-white">$0</p>
               </div>
             </div>
-          </Card>
+          </MotionCard>
         </div>
 
         {/* Filters */}
@@ -201,20 +201,20 @@ export function MerchantsManagementPage() {
                 placeholder="Search by name, business, email or phone..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               />
             </div>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             >
               <option value="all">All Status</option>
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
               <option value="subscribed">Subscribed</option>
             </select>
-            <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
+            <button className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2">
               <Download className="w-4 h-4" />
               Export
             </button>
@@ -225,46 +225,46 @@ export function MerchantsManagementPage() {
         <Card className="overflow-hidden">
           {loading ? (
             <div className="p-8 text-center">
-              <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-              <p className="mt-2 text-gray-500">Loading merchants...</p>
+              <div className="w-8 h-8 border-4 border-primary-600 dark:border-primary-400 border-t-transparent rounded-full animate-spin mx-auto"></div>
+              <p className="mt-2 text-gray-500 dark:text-gray-400">Loading merchants...</p>
             </div>
           ) : (
             <table className="w-full">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50 dark:bg-gray-700/50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Merchant</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subscription</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Joined</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Merchant</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Contact</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Subscription</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Joined</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {filteredMerchants.map((merchant) => (
-                  <tr key={merchant.id} className="hover:bg-gray-50">
+                  <tr key={merchant.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                          <Store className="w-5 h-5 text-green-600" />
+                        <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+                          <Store className="w-5 h-5 text-green-600 dark:text-green-400" />
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900">{merchant.first_name} {merchant.last_name}</p>
+                          <p className="font-medium text-gray-900 dark:text-white">{merchant.first_name} {merchant.last_name}</p>
                           {merchant.business_name && (
-                            <p className="text-sm text-primary-600 font-medium">{merchant.business_name}</p>
+                            <p className="text-sm text-primary-600 dark:text-primary-400 font-medium">{merchant.business_name}</p>
                           )}
-                          <p className="text-sm text-gray-500">{merchant.email}</p>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">{merchant.email}</p>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="space-y-1">
-                        <p className="text-sm flex items-center gap-1">
+                        <p className="text-sm text-gray-700 dark:text-gray-300 flex items-center gap-1">
                           <Mail className="w-3 h-3 text-gray-400" />
                           {merchant.email}
                         </p>
                         {merchant.phone && (
-                          <p className="text-sm flex items-center gap-1">
+                          <p className="text-sm text-gray-700 dark:text-gray-300 flex items-center gap-1">
                             <Phone className="w-3 h-3 text-gray-400" />
                             {merchant.phone}
                           </p>
@@ -276,30 +276,30 @@ export function MerchantsManagementPage() {
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                        merchant.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        merchant.status === 'ACTIVE' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
                       }`}>
                         {merchant.status === 'ACTIVE' ? 'Active' : 'Inactive'}
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
                         {new Date(merchant.created_at).toLocaleDateString()}
                       </p>
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <button className="p-2 hover:bg-gray-100 rounded-lg" title="View">
-                          <Eye className="w-4 h-4 text-gray-500" />
+                        <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg" title="View">
+                          <Eye className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                         </button>
-                        <button className="p-2 hover:bg-gray-100 rounded-lg" title="Edit">
-                          <Edit className="w-4 h-4 text-gray-500" />
+                        <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg" title="Edit">
+                          <Edit className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                         </button>
-                        <button className="p-2 hover:bg-gray-100 rounded-lg" title="Settings">
-                          <Settings className="w-4 h-4 text-gray-500" />
+                        <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg" title="Settings">
+                          <Settings className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                         </button>
                         <button
                           onClick={() => toggleMerchantStatus(merchant.id, merchant.status === 'ACTIVE')}
-                          className={`p-2 hover:bg-gray-100 rounded-lg ${merchant.status === 'ACTIVE' ? 'text-red-500' : 'text-green-500'}`}
+                          className={`p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg ${merchant.status === 'ACTIVE' ? 'text-red-500 dark:text-red-400' : 'text-green-500 dark:text-green-400'}`}
                           title={merchant.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
                         >
                           {merchant.status === 'ACTIVE' ? <Ban className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
@@ -313,8 +313,8 @@ export function MerchantsManagementPage() {
           )}
           {!loading && filteredMerchants.length === 0 && (
             <div className="p-8 text-center">
-              <Store className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500">No merchants found</p>
+              <Store className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+              <p className="text-gray-500 dark:text-gray-400">No merchants found</p>
             </div>
           )}
         </Card>

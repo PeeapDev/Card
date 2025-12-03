@@ -10,6 +10,8 @@ import { User, UserStatus } from '@payment-system/database';
 import { hashPassword, verifyPassword } from '@payment-system/common';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import * as speakeasy from 'speakeasy';
+import * as QRCode from 'qrcode';
 
 @Injectable()
 export class UsersService {
@@ -173,22 +175,32 @@ export class UsersService {
     this.logger.log(`Phone verified for user: ${userId}`);
   }
 
-  async enableMfa(userId: string): Promise<{ secret: string; qrCodeUrl: string }> {
+  async enableMfa(userId: string): Promise<{ secret: string; qrCodeUrl: string; qrCodeDataUrl: string }> {
     const user = await this.getProfile(userId);
 
     if (user.mfaEnabled) {
       throw new BadRequestException('MFA is already enabled');
     }
 
-    // Generate TOTP secret
-    // TODO: Implement proper TOTP secret generation
-    const secret = 'PLACEHOLDER_SECRET';
-    const qrCodeUrl = `otpauth://totp/PaymentSystem:${user.email}?secret=${secret}&issuer=PaymentSystem`;
+    // Generate TOTP secret using speakeasy
+    const secretObj = speakeasy.generateSecret({
+      name: `Peeap (${user.email})`,
+      issuer: 'Peeap',
+      length: 32,
+    });
+
+    const secret = secretObj.base32;
+    const qrCodeUrl = secretObj.otpauth_url || `otpauth://totp/Peeap:${user.email}?secret=${secret}&issuer=Peeap`;
+
+    // Generate QR code data URL for frontend display
+    const qrCodeDataUrl = await QRCode.toDataURL(qrCodeUrl);
 
     user.mfaSecret = secret;
     await this.userRepository.save(user);
 
-    return { secret, qrCodeUrl };
+    this.logger.log(`MFA setup initiated for user: ${userId}`);
+
+    return { secret, qrCodeUrl, qrCodeDataUrl };
   }
 
   async confirmMfa(userId: string, code: string): Promise<void> {
@@ -202,8 +214,13 @@ export class UsersService {
       throw new BadRequestException('MFA setup not initiated');
     }
 
-    // TODO: Verify TOTP code
-    const isValid = true; // Placeholder
+    // Verify TOTP code using speakeasy
+    const isValid = speakeasy.totp.verify({
+      secret: user.mfaSecret,
+      encoding: 'base32',
+      token: code,
+      window: 2, // Allow 2 time steps tolerance (60 seconds)
+    });
 
     if (!isValid) {
       throw new BadRequestException('Invalid MFA code');
@@ -213,6 +230,21 @@ export class UsersService {
     await this.userRepository.save(user);
 
     this.logger.log(`MFA enabled for user: ${userId}`);
+  }
+
+  async verifyMfaCode(userId: string, code: string): Promise<boolean> {
+    const user = await this.getProfile(userId);
+
+    if (!user.mfaEnabled || !user.mfaSecret) {
+      return false;
+    }
+
+    return speakeasy.totp.verify({
+      secret: user.mfaSecret,
+      encoding: 'base32',
+      token: code,
+      window: 2,
+    });
   }
 
   async disableMfa(userId: string, password: string): Promise<void> {

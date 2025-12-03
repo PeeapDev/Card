@@ -18,7 +18,7 @@ import {
   Wallet,
   FileCheck,
 } from 'lucide-react';
-import { Card, CardHeader, CardTitle, Button, Input } from '@/components/ui';
+import { Card, CardHeader, CardTitle, Button, Input, MotionCard } from '@/components/ui';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import {
   useAllCardOrders,
@@ -72,32 +72,32 @@ export function CardOrdersPage() {
     const badges: Record<string, { icon: React.ReactNode; className: string; label: string }> = {
       PENDING: {
         icon: <Clock className="w-3 h-3" />,
-        className: 'bg-yellow-100 text-yellow-700',
+        className: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400',
         label: 'Pending Review',
       },
       APPROVED: {
         icon: <CheckCircle className="w-3 h-3" />,
-        className: 'bg-blue-100 text-blue-700',
+        className: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
         label: 'Approved',
       },
       REJECTED: {
         icon: <XCircle className="w-3 h-3" />,
-        className: 'bg-red-100 text-red-700',
+        className: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',
         label: 'Rejected',
       },
       GENERATED: {
         icon: <CreditCard className="w-3 h-3" />,
-        className: 'bg-purple-100 text-purple-700',
+        className: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400',
         label: 'Card Generated',
       },
       ACTIVATED: {
         icon: <CheckCircle className="w-3 h-3" />,
-        className: 'bg-green-100 text-green-700',
+        className: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
         label: 'Activated',
       },
       CANCELLED: {
         icon: <XCircle className="w-3 h-3" />,
-        className: 'bg-gray-100 text-gray-700',
+        className: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300',
         label: 'Cancelled',
       },
     };
@@ -183,8 +183,8 @@ export function CardOrdersPage() {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Card Orders</h1>
-            <p className="text-gray-500">Review and manage card purchase orders</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Card Orders</h1>
+            <p className="text-gray-500 dark:text-gray-400">Review and manage card purchase orders</p>
           </div>
           <Button variant="outline">
             <Download className="w-4 h-4 mr-2" />
@@ -194,57 +194,57 @@ export function CardOrdersPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card className="p-4">
+          <MotionCard className="p-4" delay={0}>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-yellow-100 rounded-lg">
-                <Clock className="w-5 h-5 text-yellow-600" />
+              <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
+                <Clock className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Pending</p>
-                <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Pending</p>
+                <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{stats.pending}</p>
               </div>
             </div>
-          </Card>
-          <Card className="p-4">
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.1}>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <CreditCard className="w-5 h-5 text-purple-600" />
+              <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                <CreditCard className="w-5 h-5 text-purple-600 dark:text-purple-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Generated</p>
-                <p className="text-2xl font-bold text-purple-600">{stats.generated}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Generated</p>
+                <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{stats.generated}</p>
               </div>
             </div>
-          </Card>
-          <Card className="p-4">
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.2}>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <CheckCircle className="w-5 h-5 text-green-600" />
+              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Activated</p>
-                <p className="text-2xl font-bold text-green-600">{stats.activated}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Activated</p>
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.activated}</p>
               </div>
             </div>
-          </Card>
-          <Card className="p-4">
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.3}>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-red-100 rounded-lg">
-                <XCircle className="w-5 h-5 text-red-600" />
+              <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
+                <XCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Rejected</p>
-                <p className="text-2xl font-bold text-red-600">{stats.rejected}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Rejected</p>
+                <p className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.rejected}</p>
               </div>
             </div>
-          </Card>
+          </MotionCard>
         </div>
 
         {/* Filters */}
-        <Card className="p-4">
+        <MotionCard className="p-4" delay={0.4}>
           <div className="flex flex-wrap items-center gap-4">
             {/* Status Tabs */}
-            <div className="flex gap-1 p-1 bg-gray-100 rounded-lg">
+            <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-700 rounded-lg">
               {STATUS_TABS.map((tab) => (
                 <button
                   key={tab.value || 'all'}
@@ -252,8 +252,8 @@ export function CardOrdersPage() {
                   className={clsx(
                     'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
                     statusFilter === tab.value
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
+                      ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                   )}
                 >
                   {tab.label}
@@ -270,44 +270,44 @@ export function CardOrdersPage() {
                   placeholder="Search by customer, card type, or card number..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 />
               </div>
             </div>
           </div>
-        </Card>
+        </MotionCard>
 
         {/* Orders Table */}
-        <Card className="overflow-hidden">
+        <MotionCard className="overflow-hidden" delay={0.5}>
           {isLoading ? (
-            <div className="text-center py-12">Loading orders...</div>
+            <div className="text-center py-12 text-gray-500 dark:text-gray-400">Loading orders...</div>
           ) : filteredOrders && filteredOrders.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
+                <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
                   <tr>
-                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Customer</th>
-                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Card Type</th>
-                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Amount</th>
-                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Card Number</th>
-                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Date</th>
-                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Customer</th>
+                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Card Type</th>
+                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Amount</th>
+                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Card Number</th>
+                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
+                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Date</th>
+                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                   {filteredOrders.map((order) => (
-                    <tr key={order.id} className="hover:bg-gray-50">
+                    <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
-                            <User className="w-5 h-5 text-gray-500" />
+                          <div className="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center">
+                            <User className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                           </div>
                           <div>
-                            <p className="font-medium text-sm">
+                            <p className="font-medium text-sm text-gray-900 dark:text-white">
                               {order.user?.firstName} {order.user?.lastName}
                             </p>
-                            <p className="text-xs text-gray-500">{order.user?.email}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">{order.user?.email}</p>
                           </div>
                         </div>
                       </td>
@@ -320,24 +320,24 @@ export function CardOrdersPage() {
                             )}
                           />
                           <div>
-                            <p className="text-sm font-medium">{order.cardType?.name}</p>
-                            <p className="text-xs text-gray-500">{order.cardType?.cardType}</p>
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">{order.cardType?.name}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">{order.cardType?.cardType}</p>
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="font-medium">{formatCurrency(order.amountPaid)}</span>
+                        <span className="font-medium text-gray-900 dark:text-white">{formatCurrency(order.amountPaid)}</span>
                       </td>
                       <td className="px-6 py-4">
                         {order.cardNumber ? (
-                          <span className="font-mono text-sm">{order.cardNumber}</span>
+                          <span className="font-mono text-sm text-gray-900 dark:text-white">{order.cardNumber}</span>
                         ) : (
-                          <span className="text-gray-400 text-sm">Not generated</span>
+                          <span className="text-gray-400 dark:text-gray-500 text-sm">Not generated</span>
                         )}
                       </td>
                       <td className="px-6 py-4">{getStatusBadge(order.status)}</td>
                       <td className="px-6 py-4">
-                        <span className="text-sm text-gray-600">
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
                           {new Date(order.createdAt).toLocaleDateString()}
                         </span>
                       </td>
@@ -371,21 +371,21 @@ export function CardOrdersPage() {
             </div>
           ) : (
             <div className="text-center py-12">
-              <CreditCard className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No orders found</h3>
-              <p className="text-gray-500">Card orders will appear here when users purchase cards</p>
+              <CreditCard className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No orders found</h3>
+              <p className="text-gray-500 dark:text-gray-400">Card orders will appear here when users purchase cards</p>
             </div>
           )}
-        </Card>
+        </MotionCard>
       </div>
 
       {/* Order Detail Modal */}
       {showDetailModal && selectedOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <Card className="w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-            <CardHeader className="border-b">
+          <Card className="w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800">
+            <CardHeader className="border-b border-gray-200 dark:border-gray-700">
               <div className="flex items-center justify-between">
-                <CardTitle>Order Details</CardTitle>
+                <CardTitle className="text-gray-900 dark:text-white">Order Details</CardTitle>
                 {getStatusBadge(selectedOrder.status)}
               </div>
             </CardHeader>
@@ -393,28 +393,28 @@ export function CardOrdersPage() {
               {/* Customer Info */}
               <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <h3 className="text-sm font-medium text-gray-900 mb-3 flex items-center gap-2">
+                  <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-3 flex items-center gap-2">
                     <User className="w-4 h-4" />
                     Customer Information
                   </h3>
                   <div className="space-y-2 text-sm">
-                    <p>
-                      <span className="text-gray-500">Name:</span>{' '}
-                      <span className="font-medium">
+                    <p className="text-gray-700 dark:text-gray-300">
+                      <span className="text-gray-500 dark:text-gray-400">Name:</span>{' '}
+                      <span className="font-medium text-gray-900 dark:text-white">
                         {selectedOrder.user?.firstName} {selectedOrder.user?.lastName}
                       </span>
                     </p>
-                    <p className="flex items-center gap-1">
+                    <p className="flex items-center gap-1 text-gray-700 dark:text-gray-300">
                       <Mail className="w-3 h-3 text-gray-400" />
                       {selectedOrder.user?.email}
                     </p>
                     {selectedOrder.user?.phone && (
-                      <p className="flex items-center gap-1">
+                      <p className="flex items-center gap-1 text-gray-700 dark:text-gray-300">
                         <Phone className="w-3 h-3 text-gray-400" />
                         {selectedOrder.user.phone}
                       </p>
                     )}
-                    <p className="flex items-center gap-1">
+                    <p className="flex items-center gap-1 text-gray-700 dark:text-gray-300">
                       <Shield className="w-3 h-3 text-gray-400" />
                       KYC: {selectedOrder.user?.kycStatus || 'Pending'}
                       {selectedOrder.user?.kycTier && ` (Tier ${selectedOrder.user.kycTier})`}
@@ -423,27 +423,27 @@ export function CardOrdersPage() {
                 </div>
 
                 <div>
-                  <h3 className="text-sm font-medium text-gray-900 mb-3 flex items-center gap-2">
+                  <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-3 flex items-center gap-2">
                     <CreditCard className="w-4 h-4" />
                     Card Information
                   </h3>
                   <div className="space-y-2 text-sm">
-                    <p>
-                      <span className="text-gray-500">Card Type:</span>{' '}
-                      <span className="font-medium">{selectedOrder.cardType?.name}</span>
+                    <p className="text-gray-700 dark:text-gray-300">
+                      <span className="text-gray-500 dark:text-gray-400">Card Type:</span>{' '}
+                      <span className="font-medium text-gray-900 dark:text-white">{selectedOrder.cardType?.name}</span>
                     </p>
-                    <p>
-                      <span className="text-gray-500">Type:</span>{' '}
+                    <p className="text-gray-700 dark:text-gray-300">
+                      <span className="text-gray-500 dark:text-gray-400">Type:</span>{' '}
                       {selectedOrder.cardType?.cardType}
                     </p>
-                    <p>
-                      <span className="text-gray-500">Price:</span>{' '}
-                      <span className="font-medium">{formatCurrency(selectedOrder.amountPaid)}</span>
+                    <p className="text-gray-700 dark:text-gray-300">
+                      <span className="text-gray-500 dark:text-gray-400">Price:</span>{' '}
+                      <span className="font-medium text-gray-900 dark:text-white">{formatCurrency(selectedOrder.amountPaid)}</span>
                     </p>
                     {selectedOrder.cardNumber && (
-                      <p>
-                        <span className="text-gray-500">Card Number:</span>{' '}
-                        <span className="font-mono">{selectedOrder.cardNumber}</span>
+                      <p className="text-gray-700 dark:text-gray-300">
+                        <span className="text-gray-500 dark:text-gray-400">Card Number:</span>{' '}
+                        <span className="font-mono text-gray-900 dark:text-white">{selectedOrder.cardNumber}</span>
                       </p>
                     )}
                   </div>
@@ -482,11 +482,11 @@ export function CardOrdersPage() {
               )}
 
               {/* Transaction & Wallet Info */}
-              <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
-                <Wallet className="w-5 h-5 text-gray-500" />
+              <div className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                <Wallet className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                 <div>
-                  <p className="text-sm text-gray-500">Payment from wallet</p>
-                  <p className="font-medium">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Payment from wallet</p>
+                  <p className="font-medium text-gray-900 dark:text-white">
                     {selectedOrder.wallet?.currency} Wallet - Balance: {formatCurrency(selectedOrder.wallet?.balance || 0)}
                   </p>
                 </div>
@@ -494,20 +494,20 @@ export function CardOrdersPage() {
 
               {/* Shipping Info (for physical cards) */}
               {selectedOrder.cardType?.cardType === 'PHYSICAL' && selectedOrder.shippingAddress && (
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <h3 className="text-sm font-medium text-gray-900 mb-2 flex items-center gap-2">
+                <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                  <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-2 flex items-center gap-2">
                     <Truck className="w-4 h-4" />
                     Shipping Address
                   </h3>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-gray-600 dark:text-gray-300">
                     {selectedOrder.shippingAddress.street}, {selectedOrder.shippingAddress.city},{' '}
                     {selectedOrder.shippingAddress.state} {selectedOrder.shippingAddress.postalCode},{' '}
                     {selectedOrder.shippingAddress.country}
                   </p>
                   {selectedOrder.trackingNumber && (
-                    <p className="text-sm mt-2">
-                      <span className="text-gray-500">Tracking:</span>{' '}
-                      <span className="font-mono">{selectedOrder.trackingNumber}</span>
+                    <p className="text-sm mt-2 text-gray-700 dark:text-gray-300">
+                      <span className="text-gray-500 dark:text-gray-400">Tracking:</span>{' '}
+                      <span className="font-mono text-gray-900 dark:text-white">{selectedOrder.trackingNumber}</span>
                     </p>
                   )}
                 </div>
@@ -515,11 +515,11 @@ export function CardOrdersPage() {
 
               {/* QR Code Preview (if generated) */}
               {selectedOrder.qrCodeData && (
-                <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
-                  <QrCode className="w-8 h-8 text-gray-500" />
+                <div className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                  <QrCode className="w-8 h-8 text-gray-500 dark:text-gray-400" />
                   <div>
-                    <p className="text-sm text-gray-500">QR Code for activation</p>
-                    <p className="font-mono text-xs text-gray-400 truncate max-w-md">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">QR Code for activation</p>
+                    <p className="font-mono text-xs text-gray-400 dark:text-gray-500 truncate max-w-md">
                       {selectedOrder.qrCodeData}
                     </p>
                   </div>
@@ -528,11 +528,11 @@ export function CardOrdersPage() {
 
               {/* Review Notes */}
               {selectedOrder.reviewNotes && (
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <h3 className="text-sm font-medium text-gray-900 mb-2">Review Notes</h3>
-                  <p className="text-sm text-gray-600">{selectedOrder.reviewNotes}</p>
+                <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                  <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Review Notes</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">{selectedOrder.reviewNotes}</p>
                   {selectedOrder.reviewedAt && (
-                    <p className="text-xs text-gray-400 mt-2">
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
                       Reviewed on {new Date(selectedOrder.reviewedAt).toLocaleString()}
                     </p>
                   )}
@@ -541,16 +541,16 @@ export function CardOrdersPage() {
 
               {/* Actions for pending orders */}
               {selectedOrder.status === 'PENDING' && (
-                <div className="space-y-4 pt-4 border-t">
+                <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Notes (optional)
                     </label>
                     <textarea
                       value={generateNotes}
                       onChange={(e) => setGenerateNotes(e.target.value)}
                       placeholder="Add any notes about this order..."
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                       rows={2}
                     />
                   </div>
@@ -584,7 +584,7 @@ export function CardOrdersPage() {
 
               {/* Close button for non-pending orders */}
               {selectedOrder.status !== 'PENDING' && (
-                <div className="flex justify-end pt-4 border-t">
+                <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
                   <Button variant="outline" onClick={() => setShowDetailModal(false)}>
                     Close
                   </Button>
@@ -598,16 +598,16 @@ export function CardOrdersPage() {
       {/* Reject Modal */}
       {showRejectModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <Card className="w-full max-w-md p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">Reject Order</h3>
-            <p className="text-gray-600 mb-4">
+          <Card className="w-full max-w-md p-6 bg-white dark:bg-gray-800">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Reject Order</h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
               This will refund the customer and reject their card order. Please provide a reason.
             </p>
             <textarea
               value={rejectNotes}
               onChange={(e) => setRejectNotes(e.target.value)}
               placeholder="Reason for rejection..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 mb-4"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 mb-4 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
               rows={3}
             />
             <div className="flex gap-3">
@@ -630,9 +630,9 @@ export function CardOrdersPage() {
       {/* Shipping Modal */}
       {showShippingModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
-          <Card className="w-full max-w-md p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">Add Shipping Info</h3>
-            <p className="text-gray-600 mb-4">
+          <Card className="w-full max-w-md p-6 bg-white dark:bg-gray-800">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Add Shipping Info</h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
               Enter the tracking number for the physical card shipment.
             </p>
             <Input

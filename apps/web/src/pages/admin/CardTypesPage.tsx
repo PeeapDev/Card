@@ -12,7 +12,7 @@ import {
   ToggleLeft,
   ToggleRight,
 } from 'lucide-react';
-import { Card, CardHeader, CardTitle, Button, Input } from '@/components/ui';
+import { Card, CardHeader, CardTitle, Button, Input, MotionCard } from '@/components/ui';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import {
   useCardTypes,
@@ -161,8 +161,8 @@ export function CardTypesPage() {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Card Types</h1>
-            <p className="text-gray-500">Configure available card products for users</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Card Types</h1>
+            <p className="text-gray-500 dark:text-gray-400">Configure available card products for users</p>
           </div>
           <Button onClick={handleOpenCreate}>
             <Plus className="w-4 h-4 mr-2" />
@@ -172,7 +172,7 @@ export function CardTypesPage() {
 
         {/* Card Types Grid */}
         {isLoading ? (
-          <div className="text-center py-12">Loading card types...</div>
+          <div className="text-center py-12 text-gray-500 dark:text-gray-400">Loading card types...</div>
         ) : cardTypes && cardTypes.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {cardTypes.map((cardType) => (
@@ -219,18 +219,18 @@ export function CardTypesPage() {
 
                 {/* Card Details */}
                 <div className="p-4 space-y-4">
-                  <p className="text-sm text-gray-600 line-clamp-2">{cardType.description}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">{cardType.description}</p>
 
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
-                      <p className="text-gray-500">Transaction Fee</p>
-                      <p className="font-medium">
+                      <p className="text-gray-500 dark:text-gray-400">Transaction Fee</p>
+                      <p className="font-medium text-gray-900 dark:text-white">
                         {cardType.transactionFeePercentage}% + {formatCurrency(cardType.transactionFeeFixed)}
                       </p>
                     </div>
                     <div>
-                      <p className="text-gray-500">Daily Limit</p>
-                      <p className="font-medium">{currencySymbol}{cardType.dailyLimit.toLocaleString()}</p>
+                      <p className="text-gray-500 dark:text-gray-400">Daily Limit</p>
+                      <p className="font-medium text-gray-900 dark:text-white">{currencySymbol}{cardType.dailyLimit.toLocaleString()}</p>
                     </div>
                   </div>
 
@@ -240,13 +240,13 @@ export function CardTypesPage() {
                       {cardType.features.slice(0, 3).map((feature, i) => (
                         <span
                           key={i}
-                          className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full"
+                          className="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs rounded-full"
                         >
                           {feature}
                         </span>
                       ))}
                       {cardType.features.length > 3 && (
-                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
+                        <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs rounded-full">
                           +{cardType.features.length - 3} more
                         </span>
                       )}
@@ -254,12 +254,12 @@ export function CardTypesPage() {
                   )}
 
                   {/* Actions */}
-                  <div className="flex items-center justify-between pt-2 border-t">
+                  <div className="flex items-center justify-between pt-2 border-t border-gray-200 dark:border-gray-700">
                     <button
                       onClick={() => handleToggleActive(cardType)}
                       className={clsx(
                         'flex items-center gap-1 text-sm',
-                        cardType.isActive ? 'text-green-600' : 'text-gray-400'
+                        cardType.isActive ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'
                       )}
                     >
                       {cardType.isActive ? (
@@ -298,9 +298,9 @@ export function CardTypesPage() {
           </div>
         ) : (
           <Card className="text-center py-12">
-            <CreditCard className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No card types configured</h3>
-            <p className="text-gray-500 mb-4">Create your first card type to get started</p>
+            <CreditCard className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No card types configured</h3>
+            <p className="text-gray-500 dark:text-gray-400 mb-4">Create your first card type to get started</p>
             <Button onClick={handleOpenCreate}>
               <Plus className="w-4 h-4 mr-2" />
               Add Card Type
@@ -312,9 +312,9 @@ export function CardTypesPage() {
       {/* Create/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <CardHeader>
-              <CardTitle>{editingId ? 'Edit Card Type' : 'Add Card Type'}</CardTitle>
+          <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800">
+            <CardHeader className="border-b border-gray-200 dark:border-gray-700">
+              <CardTitle className="text-gray-900 dark:text-white">{editingId ? 'Edit Card Type' : 'Add Card Type'}</CardTitle>
             </CardHeader>
             <div className="space-y-4 p-4">
               {/* Basic Info */}
@@ -326,11 +326,11 @@ export function CardTypesPage() {
                   placeholder="e.g., Premium Virtual Card"
                 />
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Card Type</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Card Type</label>
                   <select
                     value={form.cardType}
                     onChange={(e) => setForm({ ...form, cardType: e.target.value as 'VIRTUAL' | 'PHYSICAL' })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   >
                     <option value="VIRTUAL">Virtual Card</option>
                     <option value="PHYSICAL">Physical Card</option>
@@ -339,12 +339,12 @@ export function CardTypesPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
                 <textarea
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   placeholder="Describe the card benefits and features..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   rows={3}
                 />
               </div>
@@ -352,7 +352,7 @@ export function CardTypesPage() {
               {/* Pricing */}
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     <DollarSign className="w-4 h-4 inline mr-1" />
                     Card Price
                   </label>
@@ -362,11 +362,11 @@ export function CardTypesPage() {
                     min="0"
                     value={form.price}
                     onChange={(e) => setForm({ ...form, price: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     <Percent className="w-4 h-4 inline mr-1" />
                     Fee %
                   </label>
@@ -376,11 +376,11 @@ export function CardTypesPage() {
                     min="0"
                     value={form.transactionFeePercentage}
                     onChange={(e) => setForm({ ...form, transactionFeePercentage: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     <DollarSign className="w-4 h-4 inline mr-1" />
                     Fixed Fee
                   </label>
@@ -390,7 +390,7 @@ export function CardTypesPage() {
                     min="0"
                     value={form.transactionFeeFixed}
                     onChange={(e) => setForm({ ...form, transactionFeeFixed: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   />
                 </div>
               </div>
@@ -398,23 +398,23 @@ export function CardTypesPage() {
               {/* Limits */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Daily Limit ($)</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Daily Limit ($)</label>
                   <input
                     type="number"
                     min="0"
                     value={form.dailyLimit}
                     onChange={(e) => setForm({ ...form, dailyLimit: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Monthly Limit ($)</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Monthly Limit ($)</label>
                   <input
                     type="number"
                     min="0"
                     value={form.monthlyLimit}
                     onChange={(e) => setForm({ ...form, monthlyLimit: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   />
                 </div>
               </div>
@@ -422,14 +422,14 @@ export function CardTypesPage() {
               {/* KYC & Color */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     <Shield className="w-4 h-4 inline mr-1" />
                     Required KYC Level
                   </label>
                   <select
                     value={form.requiredKycLevel}
                     onChange={(e) => setForm({ ...form, requiredKycLevel: parseInt(e.target.value) })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   >
                     {KYC_LEVELS.map((level) => (
                       <option key={level.value} value={level.value}>
@@ -439,7 +439,7 @@ export function CardTypesPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Card Color</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Card Color</label>
                   <div className="flex flex-wrap gap-2">
                     {COLOR_GRADIENTS.map((color) => (
                       <button
@@ -462,7 +462,7 @@ export function CardTypesPage() {
 
               {/* Features */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Features</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Features</label>
                 <div className="flex gap-2 mb-2">
                   <input
                     type="text"
@@ -470,7 +470,7 @@ export function CardTypesPage() {
                     onChange={(e) => setFeatureInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddFeature())}
                     placeholder="Add a feature..."
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   />
                   <Button type="button" variant="outline" onClick={handleAddFeature}>
                     Add
@@ -480,7 +480,7 @@ export function CardTypesPage() {
                   {form.features?.map((feature, index) => (
                     <span
                       key={index}
-                      className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-full text-sm"
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full text-sm"
                     >
                       {feature}
                       <button
@@ -502,7 +502,7 @@ export function CardTypesPage() {
                   onClick={() => setForm({ ...form, isActive: !form.isActive })}
                   className={clsx(
                     'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                    form.isActive ? 'bg-primary-600' : 'bg-gray-300'
+                    form.isActive ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
                   )}
                 >
                   <span
@@ -512,13 +512,13 @@ export function CardTypesPage() {
                     )}
                   />
                 </button>
-                <label className="text-sm text-gray-700">
+                <label className="text-sm text-gray-700 dark:text-gray-300">
                   {form.isActive ? 'Active - visible to users' : 'Inactive - hidden from users'}
                 </label>
               </div>
 
               {/* Actions */}
-              <div className="flex gap-3 pt-4 border-t">
+              <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
                 <Button
                   variant="outline"
                   className="flex-1"
@@ -547,9 +547,9 @@ export function CardTypesPage() {
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <Card className="w-full max-w-md p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Card Type</h3>
-            <p className="text-gray-600 mb-4">
+          <Card className="w-full max-w-md p-6 bg-white dark:bg-gray-800">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Delete Card Type</h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
               Are you sure you want to delete this card type? This action cannot be undone.
             </p>
             <div className="flex gap-3">

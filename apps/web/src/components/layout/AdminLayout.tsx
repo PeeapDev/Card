@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { NotificationBell } from '@/components/ui/NotificationBell';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -144,7 +145,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div
@@ -319,21 +320,21 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       {/* Main content */}
       <div className="lg:pl-64">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 h-16 bg-white border-b border-gray-200 shadow-sm">
+        <header className="sticky top-0 z-30 h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">
           <div className="flex items-center justify-between h-full px-4 lg:px-8">
             <div className="flex items-center gap-4">
               <button
-                className="lg:hidden p-2 rounded-lg hover:bg-gray-100"
+                className="lg:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
                 onClick={() => setSidebarOpen(true)}
               >
-                <Menu className="w-6 h-6" />
+                <Menu className="w-6 h-6 dark:text-gray-400" />
               </button>
-              <div className="hidden md:flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-2">
+              <div className="hidden md:flex items-center gap-2 bg-gray-100 dark:bg-gray-700 rounded-lg px-3 py-2">
                 <Search className="w-4 h-4 text-gray-400" />
                 <input
                   type="text"
                   placeholder="Search customers, cards, transactions..."
-                  className="bg-transparent border-none outline-none text-sm w-80"
+                  className="bg-transparent border-none outline-none text-sm w-80 dark:text-white dark:placeholder-gray-400"
                 />
               </div>
             </div>
@@ -341,6 +342,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
               <span className="px-3 py-1 rounded-full text-xs font-medium bg-primary-100 text-primary-700">
                 Admin Portal
               </span>
+              <ThemeToggle />
               <NotificationBell />
             </div>
           </div>

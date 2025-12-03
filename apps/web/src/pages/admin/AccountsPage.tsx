@@ -19,7 +19,7 @@ import {
   Pause,
   Play,
 } from 'lucide-react';
-import { Card } from '@/components/ui/Card';
+import { Card, MotionCard } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
 import { currencyService, Currency } from '@/services/currency.service';
@@ -154,13 +154,13 @@ export function AccountsPage() {
   const getTypeBadge = (type: string) => {
     switch (type) {
       case 'wallet':
-        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">Wallet</span>;
+        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">Wallet</span>;
       case 'card_funding':
-        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">Card Funding</span>;
+        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">Card Funding</span>;
       case 'merchant':
-        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">Merchant</span>;
+        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">Merchant</span>;
       case 'agent':
-        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700">Agent</span>;
+        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400">Agent</span>;
       default:
         return null;
     }
@@ -169,11 +169,11 @@ export function AccountsPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'active':
-        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700"><CheckCircle className="w-3 h-3" /> Active</span>;
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"><CheckCircle className="w-3 h-3" /> Active</span>;
       case 'frozen':
-        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700"><Clock className="w-3 h-3" /> Frozen</span>;
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400"><Clock className="w-3 h-3" /> Frozen</span>;
       case 'closed':
-        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700"><XCircle className="w-3 h-3" /> Closed</span>;
+        return <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"><XCircle className="w-3 h-3" /> Closed</span>;
       default:
         return null;
     }
@@ -200,11 +200,11 @@ export function AccountsPage() {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Accounts</h1>
-            <p className="text-gray-500">Manage customer accounts and balances</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Accounts</h1>
+            <p className="text-gray-500 dark:text-gray-400">Manage customer accounts and balances</p>
           </div>
           <div className="flex gap-3">
-            <button className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
+            <button className="px-4 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center gap-2">
               <Download className="w-4 h-4" />
               Export
             </button>
@@ -217,30 +217,30 @@ export function AccountsPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-          <Card className="p-4">
-            <p className="text-sm text-gray-500">Total Accounts</p>
-            <p className="text-2xl font-bold">{stats.totalAccounts.toLocaleString()}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-sm text-gray-500">Active</p>
-            <p className="text-2xl font-bold text-green-600">{stats.activeAccounts.toLocaleString()}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-sm text-gray-500">Total Balance</p>
-            <p className="text-2xl font-bold">{currencySymbol}{(stats.totalBalance / 1000000).toFixed(2)}M</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-sm text-gray-500">Frozen</p>
-            <p className="text-2xl font-bold text-yellow-600">{stats.frozenAccounts}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-sm text-gray-500">Closed</p>
-            <p className="text-2xl font-bold text-red-600">{stats.closedAccounts}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-sm text-gray-500">New This Month</p>
-            <p className="text-2xl font-bold text-blue-600">+{stats.newThisMonth}</p>
-          </Card>
+          <MotionCard className="p-4" delay={0}>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Total Accounts</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalAccounts.toLocaleString()}</p>
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.1}>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Active</p>
+            <p className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.activeAccounts.toLocaleString()}</p>
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.2}>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Total Balance</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{currencySymbol}{(stats.totalBalance / 1000000).toFixed(2)}M</p>
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.3}>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Frozen</p>
+            <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{stats.frozenAccounts}</p>
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.4}>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Closed</p>
+            <p className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.closedAccounts}</p>
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.5}>
+            <p className="text-sm text-gray-500 dark:text-gray-400">New This Month</p>
+            <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">+{stats.newThisMonth}</p>
+          </MotionCard>
         </div>
 
         {/* Filters */}
@@ -254,7 +254,7 @@ export function AccountsPage() {
                   placeholder="Search by customer name or account ID..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
                 />
               </div>
             </div>
@@ -264,7 +264,7 @@ export function AccountsPage() {
                 <select
                   value={filter}
                   onChange={(e) => setFilter(e.target.value as typeof filter)}
-                  className="appearance-none border border-gray-300 rounded-lg px-3 py-2 pr-8 text-sm focus:ring-2 focus:ring-primary-500"
+                  className="appearance-none border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 pr-8 text-sm focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 >
                   <option value="all">All Types</option>
                   <option value="wallet">Wallet</option>
@@ -278,7 +278,7 @@ export function AccountsPage() {
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-                  className="appearance-none border border-gray-300 rounded-lg px-3 py-2 pr-8 text-sm focus:ring-2 focus:ring-primary-500"
+                  className="appearance-none border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 pr-8 text-sm focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 >
                   <option value="all">All Status</option>
                   <option value="active">Active</option>
@@ -295,34 +295,34 @@ export function AccountsPage() {
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
                 <tr>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Account</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Customer</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Type</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Balance</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Available</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Last Transaction</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Actions</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Account</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Customer</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Type</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Balance</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Available</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Last Transaction</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {filteredAccounts.map((account) => (
-                  <tr key={account.id} className="hover:bg-gray-50">
+                  <tr key={account.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <Wallet className="w-5 h-5 text-gray-400" />
                         <div>
-                          <span className="font-mono text-sm">{account.id}</span>
-                          <p className="text-xs text-gray-500">{account.currency}</p>
+                          <span className="font-mono text-sm text-gray-900 dark:text-white">{account.id}</span>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{account.currency}</p>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <div>
-                        <p className="font-medium text-sm">{account.customerName}</p>
-                        <span className="text-xs text-gray-500 font-mono">{account.customerId}</span>
+                        <p className="font-medium text-sm text-gray-900 dark:text-white">{account.customerName}</p>
+                        <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">{account.customerId}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -331,11 +331,11 @@ export function AccountsPage() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-1">
                         <DollarSign className="w-4 h-4 text-gray-400" />
-                        <span className="font-medium">{formatCurrency(account.balance, account.currency)}</span>
+                        <span className="font-medium text-gray-900 dark:text-white">{formatCurrency(account.balance, account.currency)}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`font-medium ${account.availableBalance < account.balance ? 'text-yellow-600' : 'text-gray-900'}`}>
+                      <span className={`font-medium ${account.availableBalance < account.balance ? 'text-yellow-600 dark:text-yellow-400' : 'text-gray-900 dark:text-white'}`}>
                         {formatCurrency(account.availableBalance, account.currency)}
                       </span>
                     </td>
@@ -343,7 +343,7 @@ export function AccountsPage() {
                       {getStatusBadge(account.status)}
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-sm text-gray-500">
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
                         {account.lastTransaction
                           ? new Date(account.lastTransaction).toLocaleDateString()
                           : 'Never'}
@@ -351,25 +351,25 @@ export function AccountsPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        <button className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200" title="View">
+                        <button className="p-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="View">
                           <Eye className="w-4 h-4" />
                         </button>
-                        <button className="p-1 bg-green-100 text-green-600 rounded hover:bg-green-200" title="Credit">
+                        <button className="p-1 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded hover:bg-green-200 dark:hover:bg-green-900/50" title="Credit">
                           <ArrowDownLeft className="w-4 h-4" />
                         </button>
-                        <button className="p-1 bg-red-100 text-red-600 rounded hover:bg-red-200" title="Debit">
+                        <button className="p-1 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded hover:bg-red-200 dark:hover:bg-red-900/50" title="Debit">
                           <ArrowUpRight className="w-4 h-4" />
                         </button>
                         {account.status === 'active' ? (
-                          <button className="p-1 bg-yellow-100 text-yellow-600 rounded hover:bg-yellow-200" title="Freeze">
+                          <button className="p-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400 rounded hover:bg-yellow-200 dark:hover:bg-yellow-900/50" title="Freeze">
                             <Pause className="w-4 h-4" />
                           </button>
                         ) : account.status === 'frozen' ? (
-                          <button className="p-1 bg-green-100 text-green-600 rounded hover:bg-green-200" title="Unfreeze">
+                          <button className="p-1 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded hover:bg-green-200 dark:hover:bg-green-900/50" title="Unfreeze">
                             <Play className="w-4 h-4" />
                           </button>
                         ) : null}
-                        <button className="p-1 hover:bg-gray-100 rounded">
+                        <button className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
                           <MoreVertical className="w-4 h-4 text-gray-400" />
                         </button>
                       </div>
@@ -381,18 +381,18 @@ export function AccountsPage() {
           </div>
 
           {/* Pagination */}
-          <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-            <p className="text-sm text-gray-500">
+          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
               Showing 1 to {filteredAccounts.length} of {stats.totalAccounts} accounts
             </p>
             <div className="flex items-center gap-2">
-              <button className="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50" disabled>
+              <button className="px-3 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50" disabled>
                 Previous
               </button>
               <button className="px-3 py-1 text-sm bg-primary-600 text-white rounded">1</button>
-              <button className="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50">2</button>
-              <button className="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50">3</button>
-              <button className="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50">
+              <button className="px-3 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">2</button>
+              <button className="px-3 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">3</button>
+              <button className="px-3 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">
                 Next
               </button>
             </div>

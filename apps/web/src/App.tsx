@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '@/context/AuthContext';
 import { DeveloperModeProvider } from '@/context/DeveloperModeContext';
 import { NotificationProvider } from '@/context/NotificationContext';
+import { ThemeProvider } from '@/context/ThemeContext';
 import { NotificationWrapper } from '@/components/ui/NotificationWrapper';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { RoleBasedRoute } from '@/components/RoleBasedRoute';
@@ -20,10 +21,16 @@ import { ReceiveMoneyPage } from '@/pages/ReceiveMoneyPage';
 import { PotsPage } from '@/pages/PotsPage';
 import { PotDetailPage } from '@/pages/PotDetailPage';
 import { SupportPage } from '@/pages/SupportPage';
-
 // New Card Management Pages
 import { CardMarketplacePage } from '@/pages/CardMarketplacePage';
 import { MyCardsPage } from '@/pages/MyCardsPage';
+// Services Pages
+import { BillPaymentsPage } from '@/pages/BillPaymentsPage';
+import { AirtimeTopupPage } from '@/pages/AirtimeTopupPage';
+import { CashbackRewardsPage } from '@/pages/CashbackRewardsPage';
+import { BnplPage } from '@/pages/BnplPage';
+import { CashOutPage } from '@/pages/CashOutPage';
+import { SpendingAnalyticsPage } from '@/pages/SpendingAnalyticsPage';
 
 // Admin Pages
 import { AdminDashboard } from '@/pages/admin/AdminDashboard';
@@ -83,11 +90,13 @@ import { ShopTransactionsPage } from '@/pages/merchant/ShopTransactionsPage';
 import { ShopDisputesPage } from '@/pages/merchant/ShopDisputesPage';
 import { ShopSettingsPage } from '@/pages/merchant/ShopSettingsPage';
 import { MerchantSupportPage } from '@/pages/merchant/MerchantSupportPage';
-
 // Agent Pages
 import { AgentDashboard } from '@/pages/agent/AgentDashboard';
 import { AgentSettingsPage } from '@/pages/agent/AgentSettingsPage';
 import { AgentDeveloperPage } from '@/pages/agent/AgentDeveloperPage';
+import { AgentTransactionsPage } from '@/pages/agent/AgentTransactionsPage';
+import { AgentCashOutPage } from '@/pages/agent/AgentCashOutPage';
+import { AgentFloatPage } from '@/pages/agent/AgentFloatPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -101,11 +110,12 @@ const queryClient = new QueryClient({
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AuthProvider>
-          <NotificationProvider>
-            <DeveloperModeProvider>
-              <NotificationWrapper />
+      <ThemeProvider>
+        <BrowserRouter>
+          <AuthProvider>
+            <NotificationProvider>
+              <DeveloperModeProvider>
+                <NotificationWrapper />
               <Routes>
               {/* Public routes */}
               <Route path="/" element={<LandingPage />} />
@@ -128,9 +138,8 @@ function App() {
               <Route path="/deposit/success" element={<DepositSuccessPage />} />
               <Route path="/deposit/cancel" element={<DepositCancelPage />} />
 
-              {/* Payment Checkout Route - handles both business checkout and payment checkout */}
-              {/* If amount query param exists, it's a payment checkout, otherwise business checkout */}
-              <Route path="/checkout/:id" element={<CheckoutPage />} />
+              {/* Business Checkout Route - SDK uses /checkout/:businessId */}
+              <Route path="/checkout/:businessId" element={<BusinessCheckoutPage />} />
 
               {/* App Payment Redirect - Smart deep link handler for QR scans */}
               {/* Redirects to app if installed, or app store if not */}
@@ -225,15 +234,55 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+              {/* Services Routes */}
               <Route
-                path="/support"
+                path="/bills"
                 element={
                   <ProtectedRoute>
-                    <SupportPage />
+                    <BillPaymentsPage />
                   </ProtectedRoute>
                 }
               />
-
+              <Route
+                path="/airtime"
+                element={
+                  <ProtectedRoute>
+                    <AirtimeTopupPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/cashback"
+                element={
+                  <ProtectedRoute>
+                    <CashbackRewardsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/bnpl"
+                element={
+                  <ProtectedRoute>
+                    <BnplPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/cashout"
+                element={
+                  <ProtectedRoute>
+                    <CashOutPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/analytics"
+                element={
+                  <ProtectedRoute>
+                    <SpendingAnalyticsPage />
+                  </ProtectedRoute>
+                }
+              />
               {/* Admin Routes */}
               <Route
                 path="/admin"
@@ -632,6 +681,30 @@ function App() {
                 }
               />
               <Route
+                path="/agent/transactions"
+                element={
+                  <RoleBasedRoute allowedRoles={['agent']}>
+                    <AgentTransactionsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/agent/cashout"
+                element={
+                  <RoleBasedRoute allowedRoles={['agent']}>
+                    <AgentCashOutPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/agent/float"
+                element={
+                  <RoleBasedRoute allowedRoles={['agent']}>
+                    <AgentFloatPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
                 path="/agent/developer/*"
                 element={
                   <RoleBasedRoute allowedRoles={['agent']}>
@@ -649,12 +722,13 @@ function App() {
               />
 
               {/* Catch-all redirect */}
-              <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </DeveloperModeProvider>
-          </NotificationProvider>
-        </AuthProvider>
-      </BrowserRouter>
+                <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </DeveloperModeProvider>
+            </NotificationProvider>
+          </AuthProvider>
+        </BrowserRouter>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

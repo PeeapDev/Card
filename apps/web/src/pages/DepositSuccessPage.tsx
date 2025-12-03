@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { CheckCircle, Wallet, Loader2 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 export function DepositSuccessPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [countdown, setCountdown] = useState(5);
 
   const sessionId = searchParams.get('sessionId');
@@ -15,15 +17,30 @@ export function DepositSuccessPage() {
   const newBalance = searchParams.get('newBalance');
   const error = searchParams.get('error');
 
+  // Determine redirect URL based on user role
+  const getRedirectUrl = () => {
+    const roles = user?.roles || [];
+    if (roles.includes('superadmin') || roles.includes('admin')) {
+      return '/admin/dashboard';
+    } else if (roles.includes('merchant') || roles.includes('developer')) {
+      return '/merchant/dashboard';
+    } else if (roles.includes('agent')) {
+      return '/agent/dashboard';
+    }
+    return '/wallets';
+  };
+
+  const redirectUrl = getRedirectUrl();
+
   // Auto-redirect after countdown
   useEffect(() => {
     if (countdown > 0) {
       const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
       return () => clearTimeout(timer);
     } else {
-      navigate('/wallets');
+      navigate(redirectUrl);
     }
-  }, [countdown, navigate]);
+  }, [countdown, navigate, redirectUrl]);
 
   // Format amount from minor units (cents) to major units
   const formatAmount = (value: string | null) => {
@@ -117,16 +134,16 @@ export function DepositSuccessPage() {
         <div className="flex items-center justify-center gap-2 text-gray-500 mb-4">
           <Loader2 className="w-4 h-4 animate-spin" />
           <span className="text-sm">
-            Redirecting to Wallets in {countdown}s...
+            Redirecting in {countdown}s...
           </span>
         </div>
 
         <button
-          onClick={() => navigate('/wallets')}
+          onClick={() => navigate(redirectUrl)}
           className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors"
         >
           <Wallet className="w-4 h-4" />
-          Go to Wallets Now
+          Continue
         </button>
       </div>
     </div>

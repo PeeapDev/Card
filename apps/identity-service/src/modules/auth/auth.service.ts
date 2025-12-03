@@ -15,6 +15,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto, RefreshTokenDto } from './dto/login.dto';
 import { AuthResponseDto, AuthTokensDto, UserResponseDto } from './dto/auth-response.dto';
 import { SessionsService } from '../sessions/sessions.service';
+import * as speakeasy from 'speakeasy';
 
 interface JwtPayload {
   sub: string;
@@ -262,9 +263,16 @@ export class AuthService {
   }
 
   private async verifyMfaCode(user: User, code: string): Promise<boolean> {
-    // TODO: Implement TOTP verification using user's MFA secret
-    // For now, return false as placeholder
-    return false;
+    if (!user.mfaSecret) {
+      return false;
+    }
+
+    return speakeasy.totp.verify({
+      secret: user.mfaSecret,
+      encoding: 'base32',
+      token: code,
+      window: 2, // Allow 2 time steps tolerance (60 seconds)
+    });
   }
 
   private mapUserToResponse(user: User): UserResponseDto {

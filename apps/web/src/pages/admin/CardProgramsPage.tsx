@@ -17,7 +17,7 @@ import {
   Banknote,
   ShieldCheck,
 } from 'lucide-react';
-import { Card } from '@/components/ui/Card';
+import { Card, MotionCard } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { useCardTypes, useCreateCardType, useUpdateCardType, useDeleteCardType } from '@/hooks/useCards';
 import type { CardType, CreateCardTypeRequest } from '@/services/card.service';
@@ -272,8 +272,8 @@ export function CardProgramsPage() {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Card Programs</h1>
-            <p className="text-gray-500">Configure card products for the marketplace</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Card Programs</h1>
+            <p className="text-gray-500 dark:text-gray-400">Configure card products for the marketplace</p>
           </div>
           <button
             onClick={openCreateModal}
@@ -286,54 +286,54 @@ export function CardProgramsPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card className="p-4">
+          <MotionCard className="p-4" delay={0}>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Layers className="w-5 h-5 text-blue-600" />
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                <Layers className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Total Programs</p>
-                <p className="text-2xl font-bold">{stats.totalPrograms}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Total Programs</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalPrograms}</p>
               </div>
             </div>
-          </Card>
-          <Card className="p-4">
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.1}>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <CheckCircle className="w-5 h-5 text-green-600" />
+              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Active</p>
-                <p className="text-2xl font-bold text-green-600">{stats.activePrograms}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Active</p>
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.activePrograms}</p>
               </div>
             </div>
-          </Card>
-          <Card className="p-4">
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.2}>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <CreditCard className="w-5 h-5 text-purple-600" />
+              <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                <CreditCard className="w-5 h-5 text-purple-600 dark:text-purple-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Virtual Cards</p>
-                <p className="text-2xl font-bold">{stats.virtualCards}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Virtual Cards</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.virtualCards}</p>
               </div>
             </div>
-          </Card>
-          <Card className="p-4">
+          </MotionCard>
+          <MotionCard className="p-4" delay={0.3}>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-orange-100 rounded-lg">
-                <CreditCard className="w-5 h-5 text-orange-600" />
+              <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+                <CreditCard className="w-5 h-5 text-orange-600 dark:text-orange-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Physical Cards</p>
-                <p className="text-2xl font-bold">{stats.physicalCards}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Physical Cards</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.physicalCards}</p>
               </div>
             </div>
-          </Card>
+          </MotionCard>
         </div>
 
         {/* Search */}
-        <Card className="p-4">
+        <MotionCard className="p-4" delay={0.4}>
           <div className="relative max-w-md">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
@@ -341,22 +341,22 @@ export function CardProgramsPage() {
               placeholder="Search card programs..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
             />
           </div>
-        </Card>
+        </MotionCard>
 
         {/* Loading State */}
         {isLoading ? (
           <div className="text-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-primary-600 mx-auto mb-4" />
-            <p className="text-gray-500">Loading card programs...</p>
+            <p className="text-gray-500 dark:text-gray-400">Loading card programs...</p>
           </div>
         ) : filteredCardTypes.length === 0 ? (
           <Card className="text-center py-12">
-            <CreditCard className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No card programs</h3>
-            <p className="text-gray-500 mb-4">Create your first card program to get started</p>
+            <CreditCard className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No card programs</h3>
+            <p className="text-gray-500 dark:text-gray-400 mb-4">Create your first card program to get started</p>
             <button
               onClick={openCreateModal}
               className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
@@ -409,19 +409,19 @@ export function CardProgramsPage() {
                 {/* Card Details */}
                 <div className="p-4 space-y-4">
                   <div>
-                    <h3 className="font-semibold text-lg">{cardType.name}</h3>
-                    <p className="text-sm text-gray-600">{cardType.description}</p>
+                    <h3 className="font-semibold text-lg text-gray-900 dark:text-white">{cardType.name}</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{cardType.description}</p>
                   </div>
 
                   {/* Active Features */}
                   {getActiveFeatures(cardType).length > 0 && (
                     <div className="space-y-1">
-                      <p className="text-xs font-medium text-gray-500 uppercase">Active Features</p>
+                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Active Features</p>
                       <div className="flex flex-wrap gap-1">
                         {getActiveFeatures(cardType).map((feature, i) => (
                           <span
                             key={i}
-                            className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium"
+                            className="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded text-xs font-medium"
                           >
                             {feature}
                           </span>
@@ -433,12 +433,12 @@ export function CardProgramsPage() {
                   {/* Display Features */}
                   {cardType.features && cardType.features.length > 0 && (
                     <div className="space-y-1">
-                      <p className="text-xs font-medium text-gray-500 uppercase">Description Features</p>
+                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Description Features</p>
                       <div className="flex flex-wrap gap-1">
                         {cardType.features.map((feature, i) => (
                           <span
                             key={i}
-                            className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs"
+                            className="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded text-xs"
                           >
                             {feature}
                           </span>
@@ -450,30 +450,30 @@ export function CardProgramsPage() {
                   {/* Pricing Info */}
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
-                      <p className="text-gray-500">Transaction Fee</p>
-                      <p className="font-medium">
+                      <p className="text-gray-500 dark:text-gray-400">Transaction Fee</p>
+                      <p className="font-medium text-gray-900 dark:text-white">
                         {cardType.noTransactionFees ? (
-                          <span className="text-green-600">No Fees</span>
+                          <span className="text-green-600 dark:text-green-400">No Fees</span>
                         ) : (
                           `${cardType.transactionFeePercentage}% + ${formatCurrency(cardType.transactionFeeFixed)}`
                         )}
                       </p>
                     </div>
                     <div>
-                      <p className="text-gray-500">Daily Limit</p>
-                      <p className="font-medium">{formatCurrency(cardType.dailyLimit)}</p>
+                      <p className="text-gray-500 dark:text-gray-400">Daily Limit</p>
+                      <p className="font-medium text-gray-900 dark:text-white">{formatCurrency(cardType.dailyLimit)}</p>
                     </div>
                     <div>
-                      <p className="text-gray-500">Monthly Limit</p>
-                      <p className="font-medium">{formatCurrency(cardType.monthlyLimit)}</p>
+                      <p className="text-gray-500 dark:text-gray-400">Monthly Limit</p>
+                      <p className="font-medium text-gray-900 dark:text-white">{formatCurrency(cardType.monthlyLimit)}</p>
                     </div>
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center gap-2 pt-4 border-t">
+                  <div className="flex items-center gap-2 pt-4 border-t border-gray-200 dark:border-gray-700">
                     <button
                       onClick={() => openEditModal(cardType)}
-                      className="flex-1 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-lg flex items-center justify-center gap-2"
+                      className="flex-1 py-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg flex items-center justify-center gap-2"
                     >
                       <Edit2 className="w-4 h-4" />
                       Edit
@@ -482,8 +482,8 @@ export function CardProgramsPage() {
                       onClick={() => toggleActive(cardType)}
                       className={`flex-1 py-2 text-sm rounded-lg flex items-center justify-center gap-2 ${
                         cardType.isActive
-                          ? 'text-yellow-600 hover:bg-yellow-50'
-                          : 'text-green-600 hover:bg-green-50'
+                          ? 'text-yellow-600 dark:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-900/20'
+                          : 'text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20'
                       }`}
                     >
                       {cardType.isActive ? (
@@ -500,7 +500,7 @@ export function CardProgramsPage() {
                     </button>
                     <button
                       onClick={() => setDeleteConfirm(cardType.id)}
-                      className="flex-1 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg flex items-center justify-center gap-2"
+                      className="flex-1 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex items-center justify-center gap-2"
                     >
                       <Trash2 className="w-4 h-4" />
                       Delete
@@ -515,19 +515,19 @@ export function CardProgramsPage() {
         {/* Create/Edit Modal */}
         {showModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
               <form onSubmit={handleSubmit}>
                 {/* Modal Header */}
-                <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white z-10">
-                  <h2 className="text-lg font-semibold">
+                <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 z-10">
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
                     {editingCard ? 'Edit Card Program' : 'Create Card Program'}
                   </h2>
                   <button
                     type="button"
                     onClick={() => setShowModal(false)}
-                    className="p-2 hover:bg-gray-100 rounded-lg"
+                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
                   >
-                    <X className="w-5 h-5" />
+                    <X className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                   </button>
                 </div>
 
@@ -554,8 +554,8 @@ export function CardProgramsPage() {
                   {/* Basic Info */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Program Name * <span className="text-gray-400 font-normal">(for admin reference)</span>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Program Name * <span className="text-gray-400 dark:text-gray-500 font-normal">(for admin reference)</span>
                       </label>
                       <input
                         type="text"
@@ -563,13 +563,13 @@ export function CardProgramsPage() {
                         value={formData.name}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                         placeholder="e.g., Premium Virtual Card"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                       />
                     </div>
 
                     <div className="col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Description * <span className="text-gray-400 font-normal">(shown to users)</span>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Description * <span className="text-gray-400 dark:text-gray-500 font-normal">(shown to users)</span>
                       </label>
                       <textarea
                         required
@@ -577,18 +577,18 @@ export function CardProgramsPage() {
                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                         placeholder="Describe what this card offers..."
                         rows={2}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Card Type *</label>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Card Type *</label>
                       <select
                         value={formData.cardType}
                         onChange={(e) =>
                           setFormData({ ...formData, cardType: e.target.value as 'VIRTUAL' | 'PHYSICAL' })
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                       >
                         <option value="VIRTUAL">Virtual</option>
                         <option value="PHYSICAL">Physical</option>
@@ -596,11 +596,11 @@ export function CardProgramsPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Card Color</label>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Card Color</label>
                       <select
                         value={formData.colorGradient}
                         onChange={(e) => setFormData({ ...formData, colorGradient: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                       >
                         {GRADIENT_OPTIONS.map((opt) => (
                           <option key={opt.value} value={opt.value}>
@@ -613,21 +613,21 @@ export function CardProgramsPage() {
 
                   {/* Pricing */}
                   <div>
-                    <h3 className="text-sm font-medium text-gray-700 mb-3">Pricing & Fees</h3>
+                    <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Pricing & Fees</h3>
                     <div className="grid grid-cols-3 gap-4">
                       <div>
-                        <label className="block text-xs text-gray-500 mb-1">Card Price (SLE)</label>
+                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Card Price (SLE)</label>
                         <input
                           type="number"
                           min="0"
                           step="0.01"
                           value={formData.price}
                           onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-500 mb-1">Transaction Fee (%)</label>
+                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Transaction Fee (%)</label>
                         <input
                           type="number"
                           min="0"
@@ -637,11 +637,11 @@ export function CardProgramsPage() {
                             setFormData({ ...formData, transactionFeePercentage: parseFloat(e.target.value) || 0 })
                           }
                           disabled={formData.noTransactionFees}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100"
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100 dark:disabled:bg-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-500 mb-1">Fixed Fee (SLE)</label>
+                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Fixed Fee (SLE)</label>
                         <input
                           type="number"
                           min="0"
@@ -651,7 +651,7 @@ export function CardProgramsPage() {
                             setFormData({ ...formData, transactionFeeFixed: parseFloat(e.target.value) || 0 })
                           }
                           disabled={formData.noTransactionFees}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100"
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100 dark:disabled:bg-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                         />
                       </div>
                     </div>
@@ -659,26 +659,26 @@ export function CardProgramsPage() {
 
                   {/* Limits */}
                   <div>
-                    <h3 className="text-sm font-medium text-gray-700 mb-3">Transaction Limits</h3>
+                    <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Transaction Limits</h3>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs text-gray-500 mb-1">Daily Limit (SLE)</label>
+                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Daily Limit (SLE)</label>
                         <input
                           type="number"
                           min="0"
                           value={formData.dailyLimit}
                           onChange={(e) => setFormData({ ...formData, dailyLimit: parseInt(e.target.value) || 0 })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-500 mb-1">Monthly Limit (SLE)</label>
+                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Monthly Limit (SLE)</label>
                         <input
                           type="number"
                           min="0"
                           value={formData.monthlyLimit}
                           onChange={(e) => setFormData({ ...formData, monthlyLimit: parseInt(e.target.value) || 0 })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                         />
                       </div>
                     </div>
@@ -687,13 +687,13 @@ export function CardProgramsPage() {
                   {/* Requirements */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Required KYC Level</label>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Required KYC Level</label>
                       <select
                         value={formData.requiredKycLevel}
                         onChange={(e) =>
                           setFormData({ ...formData, requiredKycLevel: parseInt(e.target.value) })
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                       >
                         <option value={1}>Level 1 - Basic</option>
                         <option value={2}>Level 2 - Advanced</option>
@@ -706,20 +706,20 @@ export function CardProgramsPage() {
                           type="checkbox"
                           checked={formData.isActive}
                           onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                          className="w-4 h-4 text-primary-600 border-gray-300 rounded"
+                          className="w-4 h-4 text-primary-600 border-gray-300 dark:border-gray-600 rounded"
                         />
-                        <span className="text-sm text-gray-700">Active in marketplace</span>
+                        <span className="text-sm text-gray-700 dark:text-gray-300">Active in marketplace</span>
                       </label>
                     </div>
                   </div>
 
                   {/* FUNCTIONAL FEATURES - These actually affect card behavior */}
-                  <div className="border-t pt-6">
-                    <h3 className="text-sm font-medium text-gray-900 mb-1 flex items-center gap-2">
+                  <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                    <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-1 flex items-center gap-2">
                       <ShieldCheck className="w-4 h-4 text-primary-600" />
                       Functional Features
                     </h3>
-                    <p className="text-xs text-gray-500 mb-4">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
                       These features will be applied to all cards issued under this program
                     </p>
 
@@ -729,10 +729,10 @@ export function CardProgramsPage() {
                         const Icon = feature.icon;
 
                         return (
-                          <div key={feature.key} className="border rounded-lg p-4">
+                          <div key={feature.key} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                             <div className="flex items-start gap-3">
-                              <div className={`p-2 rounded-lg ${isEnabled ? 'bg-primary-100' : 'bg-gray-100'}`}>
-                                <Icon className={`w-5 h-5 ${isEnabled ? 'text-primary-600' : 'text-gray-400'}`} />
+                              <div className={`p-2 rounded-lg ${isEnabled ? 'bg-primary-100 dark:bg-primary-900/30' : 'bg-gray-100 dark:bg-gray-700'}`}>
+                                <Icon className={`w-5 h-5 ${isEnabled ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400'}`} />
                               </div>
                               <div className="flex-1">
                                 <label className="flex items-center gap-2 cursor-pointer">
@@ -742,18 +742,18 @@ export function CardProgramsPage() {
                                     onChange={(e) =>
                                       setFormData({ ...formData, [feature.key]: e.target.checked })
                                     }
-                                    className="w-4 h-4 text-primary-600 border-gray-300 rounded"
+                                    className="w-4 h-4 text-primary-600 border-gray-300 dark:border-gray-600 rounded"
                                   />
-                                  <span className="font-medium text-gray-900">{feature.label}</span>
+                                  <span className="font-medium text-gray-900 dark:text-white">{feature.label}</span>
                                 </label>
-                                <p className="text-xs text-gray-500 mt-1">{feature.description}</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{feature.description}</p>
 
                                 {/* Additional inputs when enabled */}
                                 {isEnabled && (feature.hasAmount || feature.hasRate) && (
                                   <div className="mt-3 flex gap-4">
                                     {feature.hasAmount && feature.amountKey && (
                                       <div>
-                                        <label className="block text-xs text-gray-500 mb-1">
+                                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
                                           {feature.amountLabel}
                                         </label>
                                         <input
@@ -766,13 +766,13 @@ export function CardProgramsPage() {
                                               [feature.amountKey!]: parseFloat(e.target.value) || 0,
                                             })
                                           }
-                                          className="w-32 px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                          className="w-32 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                                         />
                                       </div>
                                     )}
                                     {feature.hasRate && feature.rateKey && (
                                       <div>
-                                        <label className="block text-xs text-gray-500 mb-1">
+                                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
                                           {feature.rateLabel}
                                         </label>
                                         <input
@@ -787,7 +787,7 @@ export function CardProgramsPage() {
                                               [feature.rateKey!]: parseFloat(e.target.value) || 0,
                                             })
                                           }
-                                          className="w-24 px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                          className="w-24 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                                         />
                                       </div>
                                     )}
@@ -802,9 +802,9 @@ export function CardProgramsPage() {
                   </div>
 
                   {/* Display Features - Text descriptions for marketing */}
-                  <div className="border-t pt-6">
-                    <h3 className="text-sm font-medium text-gray-700 mb-1">Display Features</h3>
-                    <p className="text-xs text-gray-500 mb-3">
+                  <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                    <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Display Features</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
                       Marketing text shown to users (does not affect card behavior)
                     </p>
                     <div className="space-y-3">
@@ -820,12 +820,12 @@ export function CardProgramsPage() {
                             }
                           }}
                           placeholder="Add a display feature..."
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg"
+                          className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                         />
                         <button
                           type="button"
                           onClick={addFeatureText}
-                          className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                          className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
                         >
                           <Plus className="w-4 h-4" />
                         </button>
@@ -836,13 +836,13 @@ export function CardProgramsPage() {
                           {formData.features.map((feature, index) => (
                             <span
                               key={index}
-                              className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm"
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full text-sm"
                             >
                               {feature}
                               <button
                                 type="button"
                                 onClick={() => removeFeatureText(index)}
-                                className="p-0.5 hover:bg-gray-200 rounded-full"
+                                className="p-0.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full"
                               >
                                 <X className="w-3 h-3" />
                               </button>
@@ -855,11 +855,11 @@ export function CardProgramsPage() {
                 </div>
 
                 {/* Modal Footer */}
-                <div className="flex items-center justify-end gap-3 p-4 border-t sticky bottom-0 bg-white">
+                <div className="flex items-center justify-end gap-3 p-4 border-t border-gray-200 dark:border-gray-700 sticky bottom-0 bg-white dark:bg-gray-800">
                   <button
                     type="button"
                     onClick={() => setShowModal(false)}
-                    className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                    className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
                   >
                     Cancel
                   </button>
@@ -882,19 +882,19 @@ export function CardProgramsPage() {
         {/* Delete Confirmation Modal */}
         {deleteConfirm && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <Card className="w-full max-w-md p-6">
+            <Card className="w-full max-w-md p-6 bg-white dark:bg-gray-800">
               <div className="text-center">
-                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Trash2 className="w-6 h-6 text-red-600" />
+                <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Trash2 className="w-6 h-6 text-red-600 dark:text-red-400" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Card Program?</h3>
-                <p className="text-gray-500 mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Delete Card Program?</h3>
+                <p className="text-gray-500 dark:text-gray-400 mb-6">
                   This action cannot be undone. Cards already issued will not be affected.
                 </p>
                 <div className="flex gap-3">
                   <button
                     onClick={() => setDeleteConfirm(null)}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
                   >
                     Cancel
                   </button>

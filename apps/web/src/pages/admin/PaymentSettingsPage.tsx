@@ -390,7 +390,7 @@ export function PaymentSettingsPage() {
     return (
       <AdminLayout>
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
+          <Loader2 className="w-8 h-8 text-primary-600 dark:text-primary-400 animate-spin" />
         </div>
       </AdminLayout>
     );
@@ -402,13 +402,13 @@ export function PaymentSettingsPage() {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Payment Settings</h1>
-            <p className="text-gray-500">Configure payment gateway, withdrawals, and deposits</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Payment Settings</h1>
+            <p className="text-gray-500 dark:text-gray-400">Configure payment gateway, withdrawals, and deposits</p>
           </div>
           <div className="flex gap-3">
             <button
               onClick={fetchSettings}
-              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center gap-2"
+              className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center gap-2"
             >
               <RefreshCw className="w-4 h-4" />
               Refresh
@@ -426,21 +426,21 @@ export function PaymentSettingsPage() {
 
         {/* Success/Error Messages */}
         {success && (
-          <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700">
+          <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-center gap-2 text-green-700 dark:text-green-400">
             <CheckCircle className="w-5 h-5" />
             {success}
           </div>
         )}
 
         {error && (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+          <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2 text-red-700 dark:text-red-400">
             <XCircle className="w-5 h-5" />
             {error}
           </div>
         )}
 
         {/* Tabs */}
-        <div className="border-b border-gray-200">
+        <div className="border-b border-gray-200 dark:border-gray-700">
           <nav className="-mb-px flex gap-6">
             {[
               { id: 'monime', label: 'Monime Gateway', icon: CreditCard },
@@ -452,8 +452,8 @@ export function PaymentSettingsPage() {
                 onClick={() => setActiveTab(tab.id as any)}
                 className={`flex items-center gap-2 py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
                   activeTab === tab.id
-                    ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
                 }`}
               >
                 <tab.icon className="w-4 h-4" />
@@ -470,18 +470,18 @@ export function PaymentSettingsPage() {
             <Card className="p-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${monimeConfig.isEnabled ? 'bg-green-100' : 'bg-gray-100'}`}>
-                    <Globe className={`w-5 h-5 ${monimeConfig.isEnabled ? 'text-green-600' : 'text-gray-500'}`} />
+                  <div className={`p-2 rounded-lg ${monimeConfig.isEnabled ? 'bg-green-100 dark:bg-green-900/30' : 'bg-gray-100 dark:bg-gray-700'}`}>
+                    <Globe className={`w-5 h-5 ${monimeConfig.isEnabled ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`} />
                   </div>
                   <div>
-                    <h2 className="text-lg font-semibold text-gray-900">Monime Payment Gateway</h2>
-                    <p className="text-sm text-gray-500">Enable Monime for deposits and withdrawals</p>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Monime Payment Gateway</h2>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Enable Monime for deposits and withdrawals</p>
                   </div>
                   {monimeConfig.accessToken && (
                     <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                       monimeConfig.accessToken.startsWith('mon_test_')
-                        ? 'bg-yellow-100 text-yellow-700'
-                        : 'bg-green-100 text-green-700'
+                        ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
+                        : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
                     }`}>
                       {monimeConfig.accessToken.startsWith('mon_test_') ? 'Test Mode' : 'Live Mode'}
                     </span>
@@ -490,7 +490,7 @@ export function PaymentSettingsPage() {
                 <button
                   onClick={() => setMonimeConfig(prev => ({ ...prev, isEnabled: !prev.isEnabled }))}
                   className={`p-2 rounded-lg transition-colors ${
-                    monimeConfig.isEnabled ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'
+                    monimeConfig.isEnabled ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
                   }`}
                 >
                   {monimeConfig.isEnabled ? (
@@ -505,67 +505,67 @@ export function PaymentSettingsPage() {
             {/* API Credentials */}
             <Card className="p-6">
               <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <Key className="w-5 h-5 text-blue-600" />
+                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                  <Key className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">API Credentials</h2>
-                  <p className="text-sm text-gray-500">Your Monime API keys from the dashboard</p>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">API Credentials</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Your Monime API keys from the dashboard</p>
                 </div>
                 <button
                   onClick={() => setShowSecrets(!showSecrets)}
-                  className="ml-auto p-2 hover:bg-gray-100 rounded-lg"
+                  className="ml-auto p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
                   title={showSecrets ? 'Hide secrets' : 'Show secrets'}
                 >
-                  {showSecrets ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showSecrets ? <EyeOff className="w-4 h-4 text-gray-500 dark:text-gray-400" /> : <Eye className="w-4 h-4 text-gray-500 dark:text-gray-400" />}
                 </button>
               </div>
 
               <div className="grid gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Access Token</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Access Token</label>
                   <input
                     type={showSecrets ? 'text' : 'password'}
                     value={monimeConfig.accessToken}
                     onChange={(e) => setMonimeConfig(prev => ({ ...prev, accessToken: e.target.value }))}
                     placeholder="mon_test_xxxxx (test) or mon_xxxxx (live)"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500"
                   />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Token prefix determines environment: <code className="bg-gray-100 px-1 rounded">mon_test_</code> for testing, <code className="bg-gray-100 px-1 rounded">mon_</code> for live
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Token prefix determines environment: <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">mon_test_</code> for testing, <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">mon_</code> for live
                   </p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Space ID</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Space ID</label>
                   <input
                     type="text"
                     value={monimeConfig.spaceId}
                     onChange={(e) => setMonimeConfig(prev => ({ ...prev, spaceId: e.target.value }))}
                     placeholder="spc_xxxxx"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Your Monime workspace identifier</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Your Monime workspace identifier</p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Webhook Secret</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Webhook Secret</label>
                   <input
                     type={showSecrets ? 'text' : 'password'}
                     value={monimeConfig.webhookSecret}
                     onChange={(e) => setMonimeConfig(prev => ({ ...prev, webhookSecret: e.target.value }))}
                     placeholder="whsec_xxxxx"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Used to verify webhook signatures</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Used to verify webhook signatures</p>
                 </div>
 
                 {/* Webhook URL */}
-                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Webhook URL</label>
-                  <p className="text-xs text-gray-500 mb-2">Use this URL when configuring webhooks in your Monime dashboard</p>
+                <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-700">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Webhook URL</label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Use this URL when configuring webhooks in your Monime dashboard</p>
                   <div className="flex items-center gap-2">
-                    <code className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-mono text-gray-800 overflow-x-auto">
+                    <code className="flex-1 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-mono text-gray-800 dark:text-gray-200 overflow-x-auto">
                       {window.location.origin}/api/webhooks/monime
                     </code>
                     <button
@@ -575,13 +575,13 @@ export function PaymentSettingsPage() {
                         setSuccess('Webhook URL copied to clipboard!');
                         setTimeout(() => setSuccess(null), 2000);
                       }}
-                      className="px-3 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm font-medium text-gray-700 transition-colors"
+                      className="px-3 py-2 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 transition-colors"
                     >
                       Copy
                     </button>
                   </div>
-                  <p className="text-xs text-gray-500 mt-2">
-                    For production, replace with your actual domain: <code className="bg-gray-100 px-1 rounded">https://yourdomain.com/api/webhooks/monime</code>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                    For production, replace with your actual domain: <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">https://yourdomain.com/api/webhooks/monime</code>
                   </p>
                 </div>
               </div>
@@ -590,97 +590,97 @@ export function PaymentSettingsPage() {
             {/* Account IDs */}
             <Card className="p-6">
               <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <Wallet className="w-5 h-5 text-purple-600" />
+                <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                  <Wallet className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Financial Accounts</h2>
-                  <p className="text-sm text-gray-500">Monime financial account IDs for payouts</p>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Financial Accounts</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Monime financial account IDs for payouts</p>
                 </div>
               </div>
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Source Account ID</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Source Account ID</label>
                   <input
                     type="text"
                     value={monimeConfig.sourceAccountId}
                     onChange={(e) => setMonimeConfig(prev => ({ ...prev, sourceAccountId: e.target.value }))}
                     placeholder="fa_xxxxx"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Account to debit for payouts</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Account to debit for payouts</p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Payout Account ID</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Payout Account ID</label>
                   <input
                     type="text"
                     value={monimeConfig.payoutAccountId}
                     onChange={(e) => setMonimeConfig(prev => ({ ...prev, payoutAccountId: e.target.value }))}
                     placeholder="fa_xxxxx"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Account for receiving payouts</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Account for receiving payouts</p>
                 </div>
               </div>
             </Card>
 
             {/* URL Configuration */}
-            <Card className="p-6 border-orange-200 bg-orange-50">
+            <Card className="p-6 border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20">
               <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 bg-orange-100 rounded-lg">
-                  <LinkIcon className="w-5 h-5 text-orange-600" />
+                <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+                  <LinkIcon className="w-5 h-5 text-orange-600 dark:text-orange-400" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">URL Configuration</h2>
-                  <p className="text-sm text-gray-500">Required for Monime checkout redirects</p>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">URL Configuration</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Required for Monime checkout redirects</p>
                 </div>
-                <span className="ml-auto px-2 py-1 text-xs font-medium rounded-full bg-orange-200 text-orange-700">
+                <span className="ml-auto px-2 py-1 text-xs font-medium rounded-full bg-orange-200 dark:bg-orange-900/50 text-orange-700 dark:text-orange-400">
                   Required
                 </span>
               </div>
 
               <div className="space-y-4">
-                <div className="p-3 bg-white rounded-lg border border-orange-200">
-                  <p className="text-sm text-orange-800">
+                <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-orange-200 dark:border-orange-800">
+                  <p className="text-sm text-orange-800 dark:text-orange-300">
                     <strong>Important:</strong> These URLs are required for Monime to redirect users after payment.
                     They must be publicly accessible URLs (not localhost).
                   </p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Backend API URL</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Backend API URL</label>
                   <input
                     type="text"
                     value={monimeConfig.backendUrl}
                     onChange={(e) => setMonimeConfig(prev => ({ ...prev, backendUrl: e.target.value }))}
                     placeholder="https://api.yourdomain.com"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500"
                   />
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     The URL where your backend API is hosted (e.g., https://api.yourdomain.com)
                   </p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Frontend App URL</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Frontend App URL</label>
                   <input
                     type="text"
                     value={monimeConfig.frontendUrl}
                     onChange={(e) => setMonimeConfig(prev => ({ ...prev, frontendUrl: e.target.value }))}
                     placeholder="https://app.yourdomain.com"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500"
                   />
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     The URL where your frontend app is hosted (e.g., https://app.yourdomain.com)
                   </p>
                 </div>
 
                 {(!monimeConfig.backendUrl || !monimeConfig.frontendUrl) && (
-                  <div className="p-3 bg-red-50 rounded-lg border border-red-200 flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
-                    <p className="text-sm text-red-700">
+                  <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-red-700 dark:text-red-400">
                       Both URLs must be configured for Monime payments to work. Without these, checkout sessions will fail with "successUrl must be a URL address" error.
                     </p>
                   </div>
@@ -689,29 +689,29 @@ export function PaymentSettingsPage() {
             </Card>
 
             {/* Test Payment */}
-            <Card className="p-6 bg-blue-50 border-blue-200">
+            <Card className="p-6 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
               <div className="flex items-center gap-3 mb-4">
-                <TestTube className="w-5 h-5 text-blue-600" />
+                <TestTube className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                 <div>
-                  <h3 className="font-medium text-blue-900">Test Payment</h3>
-                  <p className="text-sm text-blue-700">Create a test checkout session to verify your Monime integration</p>
+                  <h3 className="font-medium text-blue-900 dark:text-blue-300">Test Payment</h3>
+                  <p className="text-sm text-blue-700 dark:text-blue-400">Create a test checkout session to verify your Monime integration</p>
                 </div>
               </div>
 
               <div className="flex items-end gap-4">
                 <div className="flex-1">
-                  <label className="block text-sm font-medium text-blue-900 mb-1">Test Amount (SLE)</label>
+                  <label className="block text-sm font-medium text-blue-900 dark:text-blue-300 mb-1">Test Amount (SLE)</label>
                   <div className="relative">
-                    <span className="absolute left-3 top-2 text-gray-500">Le</span>
+                    <span className="absolute left-3 top-2 text-gray-500 dark:text-gray-400">Le</span>
                     <input
                       type="text"
                       value={formatAmount(testAmount)}
                       onChange={(e) => setTestAmount(parseAmount(e.target.value))}
                       placeholder="10.00"
-                      className="w-full pl-10 pr-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                      className="w-full pl-10 pr-3 py-2 border border-blue-300 dark:border-blue-700 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                     />
                   </div>
-                  <p className="text-xs text-blue-600 mt-1">Enter any amount for testing</p>
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">Enter any amount for testing</p>
                 </div>
 
                 <button
@@ -725,7 +725,7 @@ export function PaymentSettingsPage() {
               </div>
 
               {(!monimeConfig.accessToken || !monimeConfig.spaceId) && (
-                <p className="text-xs text-red-600 mt-3 flex items-center gap-1">
+                <p className="text-xs text-red-600 dark:text-red-400 mt-3 flex items-center gap-1">
                   <AlertCircle className="w-3 h-3" />
                   Please enter your Access Token and Space ID above to test payments
                 </p>
@@ -740,58 +740,58 @@ export function PaymentSettingsPage() {
             {/* Withdrawal Methods */}
             <Card className="p-6">
               <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 bg-orange-100 rounded-lg">
-                  <ArrowDownToLine className="w-5 h-5 text-orange-600" />
+                <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+                  <ArrowDownToLine className="w-5 h-5 text-orange-600 dark:text-orange-400" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Withdrawal Methods</h2>
-                  <p className="text-sm text-gray-500">Enable or disable withdrawal options</p>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Withdrawal Methods</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Enable or disable withdrawal options</p>
                 </div>
               </div>
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div className={`p-4 rounded-lg border-2 ${
-                  withdrawalSettings.mobileMoneyEnabled ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'
+                  withdrawalSettings.mobileMoneyEnabled ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50'
                 }`}>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <Smartphone className="w-5 h-5 text-orange-600" />
-                      <span className="font-medium">Mobile Money</span>
+                      <Smartphone className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                      <span className="font-medium text-gray-900 dark:text-white">Mobile Money</span>
                     </div>
                     <button
                       onClick={() => setWithdrawalSettings(prev => ({ ...prev, mobileMoneyEnabled: !prev.mobileMoneyEnabled }))}
-                      className={`p-1 rounded ${withdrawalSettings.mobileMoneyEnabled ? 'bg-green-200' : 'bg-gray-200'}`}
+                      className={`p-1 rounded ${withdrawalSettings.mobileMoneyEnabled ? 'bg-green-200 dark:bg-green-900/50' : 'bg-gray-200 dark:bg-gray-600'}`}
                     >
                       {withdrawalSettings.mobileMoneyEnabled ? (
-                        <ToggleRight className="w-6 h-6 text-green-600" />
+                        <ToggleRight className="w-6 h-6 text-green-600 dark:text-green-400" />
                       ) : (
-                        <ToggleLeft className="w-6 h-6 text-gray-400" />
+                        <ToggleLeft className="w-6 h-6 text-gray-400 dark:text-gray-500" />
                       )}
                     </button>
                   </div>
-                  <p className="text-sm text-gray-600">Allow withdrawals to mobile money wallets</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Allow withdrawals to mobile money wallets</p>
                 </div>
 
                 <div className={`p-4 rounded-lg border-2 ${
-                  withdrawalSettings.bankTransferEnabled ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'
+                  withdrawalSettings.bankTransferEnabled ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50'
                 }`}>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <Building2 className="w-5 h-5 text-blue-600" />
-                      <span className="font-medium">Bank Transfer</span>
+                      <Building2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                      <span className="font-medium text-gray-900 dark:text-white">Bank Transfer</span>
                     </div>
                     <button
                       onClick={() => setWithdrawalSettings(prev => ({ ...prev, bankTransferEnabled: !prev.bankTransferEnabled }))}
-                      className={`p-1 rounded ${withdrawalSettings.bankTransferEnabled ? 'bg-green-200' : 'bg-gray-200'}`}
+                      className={`p-1 rounded ${withdrawalSettings.bankTransferEnabled ? 'bg-green-200 dark:bg-green-900/50' : 'bg-gray-200 dark:bg-gray-600'}`}
                     >
                       {withdrawalSettings.bankTransferEnabled ? (
-                        <ToggleRight className="w-6 h-6 text-green-600" />
+                        <ToggleRight className="w-6 h-6 text-green-600 dark:text-green-400" />
                       ) : (
-                        <ToggleLeft className="w-6 h-6 text-gray-400" />
+                        <ToggleLeft className="w-6 h-6 text-gray-400 dark:text-gray-500" />
                       )}
                     </button>
                   </div>
-                  <p className="text-sm text-gray-600">Allow withdrawals to bank accounts</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Allow withdrawals to bank accounts</p>
                 </div>
               </div>
             </Card>
@@ -799,20 +799,20 @@ export function PaymentSettingsPage() {
             {/* Withdrawal Limits */}
             <Card className="p-6">
               <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 bg-red-100 rounded-lg">
-                  <AlertCircle className="w-5 h-5 text-red-600" />
+                <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
+                  <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Withdrawal Limits</h2>
-                  <p className="text-sm text-gray-500">Set minimum, maximum, and daily limits (in SLE)</p>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Withdrawal Limits</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Set minimum, maximum, and daily limits (in SLE)</p>
                 </div>
               </div>
 
               <div className="grid md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Minimum Amount</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Minimum Amount</label>
                   <div className="relative">
-                    <span className="absolute left-3 top-2 text-gray-500">Le</span>
+                    <span className="absolute left-3 top-2 text-gray-500 dark:text-gray-400">Le</span>
                     <input
                       type="text"
                       value={formatAmount(withdrawalSettings.minWithdrawalAmount)}
@@ -820,15 +820,15 @@ export function PaymentSettingsPage() {
                         ...prev,
                         minWithdrawalAmount: parseAmount(e.target.value)
                       }))}
-                      className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Maximum Amount</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Maximum Amount</label>
                   <div className="relative">
-                    <span className="absolute left-3 top-2 text-gray-500">Le</span>
+                    <span className="absolute left-3 top-2 text-gray-500 dark:text-gray-400">Le</span>
                     <input
                       type="text"
                       value={formatAmount(withdrawalSettings.maxWithdrawalAmount)}
@@ -836,15 +836,15 @@ export function PaymentSettingsPage() {
                         ...prev,
                         maxWithdrawalAmount: parseAmount(e.target.value)
                       }))}
-                      className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Daily Limit</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Daily Limit</label>
                   <div className="relative">
-                    <span className="absolute left-3 top-2 text-gray-500">Le</span>
+                    <span className="absolute left-3 top-2 text-gray-500 dark:text-gray-400">Le</span>
                     <input
                       type="text"
                       value={formatAmount(withdrawalSettings.dailyWithdrawalLimit)}
@@ -852,7 +852,7 @@ export function PaymentSettingsPage() {
                         ...prev,
                         dailyWithdrawalLimit: parseAmount(e.target.value)
                       }))}
-                      className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
                 </div>
@@ -862,18 +862,18 @@ export function PaymentSettingsPage() {
             {/* Withdrawal Fees */}
             <Card className="p-6">
               <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <CreditCard className="w-5 h-5 text-green-600" />
+                <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                  <CreditCard className="w-5 h-5 text-green-600 dark:text-green-400" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Withdrawal Fees</h2>
-                  <p className="text-sm text-gray-500">Configure fees for withdrawals</p>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Withdrawal Fees</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Configure fees for withdrawals</p>
                 </div>
               </div>
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Fee Percentage (%)</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Fee Percentage (%)</label>
                   <input
                     type="number"
                     step="0.1"
@@ -883,14 +883,14 @@ export function PaymentSettingsPage() {
                       ...prev,
                       withdrawalFeePercent: parseFloat(e.target.value) || 0
                     }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Flat Fee (Le)</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Flat Fee (Le)</label>
                   <div className="relative">
-                    <span className="absolute left-3 top-2 text-gray-500">Le</span>
+                    <span className="absolute left-3 top-2 text-gray-500 dark:text-gray-400">Le</span>
                     <input
                       type="text"
                       value={formatAmount(withdrawalSettings.withdrawalFeeFlat)}
@@ -898,17 +898,17 @@ export function PaymentSettingsPage() {
                         ...prev,
                         withdrawalFeeFlat: parseAmount(e.target.value)
                       }))}
-                      className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
                 </div>
               </div>
 
-              <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                <p className="text-sm text-gray-600">
+              <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                <p className="text-sm text-gray-600 dark:text-gray-300">
                   <strong>Fee Formula:</strong> {withdrawalSettings.withdrawalFeePercent}% + Le {formatAmount(withdrawalSettings.withdrawalFeeFlat)}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   Example: For Le 10,000 withdrawal = Le {formatAmount(10000 * withdrawalSettings.withdrawalFeePercent / 100 * 100 + withdrawalSettings.withdrawalFeeFlat)} fee
                 </p>
               </div>
@@ -917,37 +917,37 @@ export function PaymentSettingsPage() {
             {/* Security Settings */}
             <Card className="p-6">
               <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <Settings className="w-5 h-5 text-purple-600" />
+                <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                  <Settings className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Security & Approval</h2>
-                  <p className="text-sm text-gray-500">Configure withdrawal security settings</p>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Security & Approval</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Configure withdrawal security settings</p>
                 </div>
               </div>
 
               <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                   <div>
-                    <p className="font-medium text-gray-900">Require PIN for withdrawals</p>
-                    <p className="text-sm text-gray-500">Users must enter their PIN to confirm withdrawals</p>
+                    <p className="font-medium text-gray-900 dark:text-white">Require PIN for withdrawals</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Users must enter their PIN to confirm withdrawals</p>
                   </div>
                   <button
                     onClick={() => setWithdrawalSettings(prev => ({ ...prev, requirePin: !prev.requirePin }))}
-                    className={`p-1 rounded ${withdrawalSettings.requirePin ? 'bg-green-200' : 'bg-gray-200'}`}
+                    className={`p-1 rounded ${withdrawalSettings.requirePin ? 'bg-green-200 dark:bg-green-900/50' : 'bg-gray-200 dark:bg-gray-600'}`}
                   >
                     {withdrawalSettings.requirePin ? (
-                      <ToggleRight className="w-6 h-6 text-green-600" />
+                      <ToggleRight className="w-6 h-6 text-green-600 dark:text-green-400" />
                     ) : (
-                      <ToggleLeft className="w-6 h-6 text-gray-400" />
+                      <ToggleLeft className="w-6 h-6 text-gray-400 dark:text-gray-500" />
                     )}
                   </button>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Auto-Approve Under (Le)</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Auto-Approve Under (Le)</label>
                   <div className="relative">
-                    <span className="absolute left-3 top-2 text-gray-500">Le</span>
+                    <span className="absolute left-3 top-2 text-gray-500 dark:text-gray-400">Le</span>
                     <input
                       type="text"
                       value={formatAmount(withdrawalSettings.autoApproveUnder)}
@@ -955,10 +955,10 @@ export function PaymentSettingsPage() {
                         ...prev,
                         autoApproveUnder: parseAmount(e.target.value)
                       }))}
-                      className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">Withdrawals under this amount are automatically approved</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Withdrawals under this amount are automatically approved</p>
                 </div>
               </div>
             </Card>
@@ -971,80 +971,80 @@ export function PaymentSettingsPage() {
             {/* Deposit Methods */}
             <Card className="p-6">
               <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <ArrowUpFromLine className="w-5 h-5 text-green-600" />
+                <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                  <ArrowUpFromLine className="w-5 h-5 text-green-600 dark:text-green-400" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Deposit Methods</h2>
-                  <p className="text-sm text-gray-500">Enable or disable deposit options</p>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Deposit Methods</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Enable or disable deposit options</p>
                 </div>
               </div>
 
               <div className="grid md:grid-cols-3 gap-4">
                 <div className={`p-4 rounded-lg border-2 ${
-                  depositSettings.checkoutSessionEnabled ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'
+                  depositSettings.checkoutSessionEnabled ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50'
                 }`}>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <CreditCard className="w-5 h-5 text-blue-600" />
-                      <span className="font-medium">Checkout</span>
+                      <CreditCard className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                      <span className="font-medium text-gray-900 dark:text-white">Checkout</span>
                     </div>
                     <button
                       onClick={() => setDepositSettings(prev => ({ ...prev, checkoutSessionEnabled: !prev.checkoutSessionEnabled }))}
-                      className={`p-1 rounded ${depositSettings.checkoutSessionEnabled ? 'bg-green-200' : 'bg-gray-200'}`}
+                      className={`p-1 rounded ${depositSettings.checkoutSessionEnabled ? 'bg-green-200 dark:bg-green-900/50' : 'bg-gray-200 dark:bg-gray-600'}`}
                     >
                       {depositSettings.checkoutSessionEnabled ? (
-                        <ToggleRight className="w-6 h-6 text-green-600" />
+                        <ToggleRight className="w-6 h-6 text-green-600 dark:text-green-400" />
                       ) : (
-                        <ToggleLeft className="w-6 h-6 text-gray-400" />
+                        <ToggleLeft className="w-6 h-6 text-gray-400 dark:text-gray-500" />
                       )}
                     </button>
                   </div>
-                  <p className="text-sm text-gray-600">Monime checkout page</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Monime checkout page</p>
                 </div>
 
                 <div className={`p-4 rounded-lg border-2 ${
-                  depositSettings.paymentCodeEnabled ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'
+                  depositSettings.paymentCodeEnabled ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50'
                 }`}>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <Settings className="w-5 h-5 text-purple-600" />
-                      <span className="font-medium">USSD Code</span>
+                      <Settings className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                      <span className="font-medium text-gray-900 dark:text-white">USSD Code</span>
                     </div>
                     <button
                       onClick={() => setDepositSettings(prev => ({ ...prev, paymentCodeEnabled: !prev.paymentCodeEnabled }))}
-                      className={`p-1 rounded ${depositSettings.paymentCodeEnabled ? 'bg-green-200' : 'bg-gray-200'}`}
+                      className={`p-1 rounded ${depositSettings.paymentCodeEnabled ? 'bg-green-200 dark:bg-green-900/50' : 'bg-gray-200 dark:bg-gray-600'}`}
                     >
                       {depositSettings.paymentCodeEnabled ? (
-                        <ToggleRight className="w-6 h-6 text-green-600" />
+                        <ToggleRight className="w-6 h-6 text-green-600 dark:text-green-400" />
                       ) : (
-                        <ToggleLeft className="w-6 h-6 text-gray-400" />
+                        <ToggleLeft className="w-6 h-6 text-gray-400 dark:text-gray-500" />
                       )}
                     </button>
                   </div>
-                  <p className="text-sm text-gray-600">Payment via USSD code</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Payment via USSD code</p>
                 </div>
 
                 <div className={`p-4 rounded-lg border-2 ${
-                  depositSettings.mobileMoneyEnabled ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'
+                  depositSettings.mobileMoneyEnabled ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50'
                 }`}>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <Smartphone className="w-5 h-5 text-orange-600" />
-                      <span className="font-medium">Mobile Money</span>
+                      <Smartphone className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                      <span className="font-medium text-gray-900 dark:text-white">Mobile Money</span>
                     </div>
                     <button
                       onClick={() => setDepositSettings(prev => ({ ...prev, mobileMoneyEnabled: !prev.mobileMoneyEnabled }))}
-                      className={`p-1 rounded ${depositSettings.mobileMoneyEnabled ? 'bg-green-200' : 'bg-gray-200'}`}
+                      className={`p-1 rounded ${depositSettings.mobileMoneyEnabled ? 'bg-green-200 dark:bg-green-900/50' : 'bg-gray-200 dark:bg-gray-600'}`}
                     >
                       {depositSettings.mobileMoneyEnabled ? (
-                        <ToggleRight className="w-6 h-6 text-green-600" />
+                        <ToggleRight className="w-6 h-6 text-green-600 dark:text-green-400" />
                       ) : (
-                        <ToggleLeft className="w-6 h-6 text-gray-400" />
+                        <ToggleLeft className="w-6 h-6 text-gray-400 dark:text-gray-500" />
                       )}
                     </button>
                   </div>
-                  <p className="text-sm text-gray-600">Direct mobile money</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Direct mobile money</p>
                 </div>
               </div>
             </Card>
@@ -1052,20 +1052,20 @@ export function PaymentSettingsPage() {
             {/* Deposit Limits */}
             <Card className="p-6">
               <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <AlertCircle className="w-5 h-5 text-blue-600" />
+                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                  <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Deposit Limits</h2>
-                  <p className="text-sm text-gray-500">Set minimum and maximum deposit amounts (in SLE)</p>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Deposit Limits</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Set minimum and maximum deposit amounts (in SLE)</p>
                 </div>
               </div>
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Minimum Deposit</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Minimum Deposit</label>
                   <div className="relative">
-                    <span className="absolute left-3 top-2 text-gray-500">Le</span>
+                    <span className="absolute left-3 top-2 text-gray-500 dark:text-gray-400">Le</span>
                     <input
                       type="text"
                       value={formatAmount(depositSettings.minDepositAmount)}
@@ -1073,15 +1073,15 @@ export function PaymentSettingsPage() {
                         ...prev,
                         minDepositAmount: parseAmount(e.target.value)
                       }))}
-                      className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Maximum Deposit</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Maximum Deposit</label>
                   <div className="relative">
-                    <span className="absolute left-3 top-2 text-gray-500">Le</span>
+                    <span className="absolute left-3 top-2 text-gray-500 dark:text-gray-400">Le</span>
                     <input
                       type="text"
                       value={formatAmount(depositSettings.maxDepositAmount)}
@@ -1089,7 +1089,7 @@ export function PaymentSettingsPage() {
                         ...prev,
                         maxDepositAmount: parseAmount(e.target.value)
                       }))}
-                      className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
                 </div>

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { NotificationBell } from '@/components/ui/NotificationBell';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -46,7 +47,7 @@ export function MainLayout({ children }: MainLayoutProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div
@@ -58,21 +59,21 @@ export function MainLayout({ children }: MainLayoutProps) {
       {/* Sidebar */}
       <aside
         className={clsx(
-          'fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-300 ease-in-out lg:translate-x-0',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
-            <Link to="/dashboard" className="text-xl font-bold text-primary-600">
+          <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 dark:border-gray-700">
+            <Link to="/dashboard" className="text-xl font-bold text-primary-600 dark:text-primary-400">
               PaymentSystem
             </Link>
             <button
-              className="lg:hidden p-2 rounded-lg hover:bg-gray-100"
+              className="lg:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
               onClick={() => setSidebarOpen(false)}
             >
-              <X className="w-5 h-5" />
+              <X className="w-5 h-5 dark:text-gray-400" />
             </button>
           </div>
 
@@ -89,8 +90,8 @@ export function MainLayout({ children }: MainLayoutProps) {
                   className={clsx(
                     'flex items-center px-4 py-3 rounded-lg transition-colors',
                     isActive
-                      ? 'bg-primary-50 text-primary-700'
-                      : 'text-gray-600 hover:bg-gray-100'
+                      ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
+                      : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
                   )}
                 >
                   <Icon className="w-5 h-5 mr-3" />
@@ -101,23 +102,23 @@ export function MainLayout({ children }: MainLayoutProps) {
           </nav>
 
           {/* User section */}
-          <div className="p-4 border-t border-gray-200">
+          <div className="p-4 border-t border-gray-200 dark:border-gray-700">
             <div className="flex items-center mb-4">
-              <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
-                <span className="text-primary-700 font-medium">
+              <div className="w-10 h-10 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center">
+                <span className="text-primary-700 dark:text-primary-400 font-medium">
                   {user?.firstName?.charAt(0)}{user?.lastName?.charAt(0)}
                 </span>
               </div>
               <div className="ml-3">
-                <p className="text-sm font-medium text-gray-900">
+                <p className="text-sm font-medium text-gray-900 dark:text-white">
                   {user?.firstName} {user?.lastName}
                 </p>
-                <p className="text-xs text-gray-500">{user?.email}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{user?.email}</p>
               </div>
             </div>
             <button
               onClick={handleLogout}
-              className="flex items-center w-full px-4 py-2 text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+              className="flex items-center w-full px-4 py-2 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             >
               <LogOut className="w-5 h-5 mr-3" />
               Sign out
@@ -129,16 +130,16 @@ export function MainLayout({ children }: MainLayoutProps) {
       {/* Main content */}
       <div className="lg:pl-64">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 h-16 bg-white border-b border-gray-200">
+        <header className="sticky top-0 z-30 h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between h-full px-4 lg:px-8">
             <button
-              className="lg:hidden p-2 rounded-lg hover:bg-gray-100"
+              className="lg:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
               onClick={() => setSidebarOpen(true)}
             >
-              <Menu className="w-6 h-6" />
+              <Menu className="w-6 h-6 dark:text-gray-400" />
             </button>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-500 hidden sm:inline">
+              <span className="text-sm text-gray-500 dark:text-gray-400 hidden sm:inline">
                 KYC Status:{' '}
                 <span
                   className={clsx(
@@ -151,6 +152,7 @@ export function MainLayout({ children }: MainLayoutProps) {
                   {user?.kycStatus}
                 </span>
               </span>
+              <ThemeToggle />
               <NotificationBell />
             </div>
           </div>

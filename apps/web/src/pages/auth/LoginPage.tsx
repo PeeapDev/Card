@@ -7,7 +7,8 @@ import { AuthLayout } from '@/components/layout/AuthLayout';
 import { Button, Input } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
 import { getUserDashboard } from '@/components/RoleBasedRoute';
-import { AlertCircle, Shield, User, Store, Code, Headphones, Phone, Mail } from 'lucide-react';
+import { AlertCircle, Shield, User, Store, Code, Headphones, Phone, Mail, Smartphone, ArrowLeft } from 'lucide-react';
+import type { UserRole } from '@/types';
 
 const loginSchema = z.object({
   email: z.string().min(1, 'Phone number or email is required'),
@@ -29,6 +30,9 @@ const QUICK_LOGIN_USERS = [
 export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [quickLoginLoading, setQuickLoginLoading] = useState<string | null>(null);
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [mfaCode, setMfaCode] = useState('');
+  const [pendingCredentials, setPendingCredentials] = useState<{ email: string; password: string } | null>(null);
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -46,8 +50,17 @@ export function LoginPage() {
   const onSubmit = async (data: LoginFormData) => {
     try {
       setError(null);
-      const user = await login(data);
-      // If there's a specific redirect, use it; otherwise redirect based on role
+      const result = await login(data);
+
+      // Check if MFA is required
+      if ('mfaRequired' in result && result.mfaRequired) {
+        setMfaRequired(true);
+        setPendingCredentials({ email: data.email, password: data.password });
+        return;
+      }
+
+      // Login successful - cast to User since we know MFA isn't required at this point
+      const user = result as { roles: UserRole[] };
       const redirectPath = fromState || getUserDashboard(user.roles);
       navigate(redirectPath, { replace: true });
     } catch (err: unknown) {
@@ -56,12 +69,53 @@ export function LoginPage() {
     }
   };
 
+  // Handle MFA code submission
+  const handleMfaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pendingCredentials || mfaCode.length !== 6) return;
+
+    try {
+      setError(null);
+      const result = await login({
+        email: pendingCredentials.email,
+        password: pendingCredentials.password,
+        mfaCode,
+      });
+
+      // Login successful
+      const user = result as { roles: UserRole[] };
+      const redirectPath = fromState || getUserDashboard(user.roles);
+      navigate(redirectPath, { replace: true });
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Invalid verification code';
+      setError(errorMessage);
+    }
+  };
+
+  // Go back from MFA screen
+  const handleBackFromMfa = () => {
+    setMfaRequired(false);
+    setMfaCode('');
+    setPendingCredentials(null);
+    setError(null);
+  };
+
   // Quick login with real database credentials
   const handleQuickLogin = async (email: string, password: string) => {
     try {
       setError(null);
       setQuickLoginLoading(email);
-      const user = await login({ email, password });
+      const result = await login({ email, password });
+
+      // Check if MFA is required
+      if ('mfaRequired' in result && result.mfaRequired) {
+        setMfaRequired(true);
+        setPendingCredentials({ email, password });
+        setQuickLoginLoading(null);
+        return;
+      }
+
+      const user = result as { roles: UserRole[] };
       const redirectPath = fromState || getUserDashboard(user.roles);
       navigate(redirectPath, { replace: true });
     } catch (err: unknown) {
@@ -71,6 +125,68 @@ export function LoginPage() {
       setQuickLoginLoading(null);
     }
   };
+
+  // MFA verification screen
+  if (mfaRequired) {
+    return (
+      <AuthLayout
+        title="Two-Factor Authentication"
+        subtitle="Enter the code from your authenticator app"
+      >
+        <form onSubmit={handleMfaSubmit} className="space-y-6">
+          {error && (
+            <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              {error}
+            </div>
+          )}
+
+          <div className="flex justify-center">
+            <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center">
+              <Smartphone className="w-8 h-8 text-primary-600" />
+            </div>
+          </div>
+
+          <p className="text-center text-sm text-gray-600">
+            Open your authenticator app and enter the 6-digit code for your Peeap account.
+          </p>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1 text-center">
+              Verification Code
+            </label>
+            <input
+              type="text"
+              value={mfaCode}
+              onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              maxLength={6}
+              inputMode="numeric"
+              autoFocus
+              className="w-full px-4 py-4 border border-gray-300 rounded-xl text-center text-2xl tracking-[0.5em] focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              placeholder="000000"
+            />
+          </div>
+
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={mfaCode.length !== 6}
+          >
+            Verify
+          </Button>
+
+          <button
+            type="button"
+            onClick={handleBackFromMfa}
+            className="w-full flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-gray-900"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to login
+          </button>
+        </form>
+      </AuthLayout>
+    );
+  }
 
   return (
     <AuthLayout title="Sign in to your account" subtitle="Welcome back! Please enter your details.">

@@ -113,4 +113,26 @@ export class KycController {
   ) {
     return this.kycService.reviewApplication(applicationId, dto, user.userId);
   }
+
+  @Get('admin/:applicationId/verification')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'compliance')
+  @ApiOperation({ summary: 'Get OCR verification result for application (admin)' })
+  @ApiResponse({ status: 200, description: 'OCR verification result' })
+  async getVerificationResult(@Param('applicationId') applicationId: string) {
+    const result = await this.kycService.getVerificationResult(applicationId);
+    if (!result) {
+      return { message: 'No OCR verification result available yet' };
+    }
+    return result;
+  }
+
+  @Post('admin/:applicationId/reprocess-ocr')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'compliance')
+  @ApiOperation({ summary: 'Manually trigger OCR reprocessing (admin)' })
+  @ApiResponse({ status: 200, description: 'OCR reprocessing result' })
+  async reprocessOcr(@Param('applicationId') applicationId: string) {
+    return this.kycService.reprocessOcr(applicationId);
+  }
 }

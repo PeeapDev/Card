@@ -1,12 +1,12 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { authService } from '@/services/auth.service';
+import { authService, MfaRequiredResponse } from '@/services/auth.service';
 import type { User, LoginRequest, RegisterRequest, UserRole } from '@/types';
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (data: LoginRequest) => Promise<User>;
+  login: (data: LoginRequest & { mfaCode?: string }) => Promise<User | MfaRequiredResponse>;
   register: (data: RegisterRequest) => Promise<User>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -42,11 +42,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initAuth();
   }, [refreshUser]);
 
-  const login = async (data: LoginRequest): Promise<User> => {
+  const login = async (data: LoginRequest & { mfaCode?: string }): Promise<User | MfaRequiredResponse> => {
     const result = await authService.login(data);
-    authService.setTokens(result.tokens);
-    setUser(result.user);
-    return result.user;
+
+    // Check if MFA is required
+    if ('mfaRequired' in result) {
+      return result as MfaRequiredResponse;
+    }
+
+    // Normal login success - cast to ensure TypeScript knows this is the non-MFA case
+    const loginResult = result as { user: User; tokens: { accessToken: string; refreshToken: string; expiresIn: number } };
+    authService.setTokens(loginResult.tokens);
+    setUser(loginResult.user);
+    return loginResult.user;
   };
 
   const register = async (data: RegisterRequest): Promise<User> => {

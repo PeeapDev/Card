@@ -7,9 +7,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User, KycApplication, KycStatus, KycApplicationStatus } from '@payment-system/database';
-import { encrypt } from '@payment-system/common';
+import { encrypt, decrypt, EncryptedData } from '@payment-system/common';
 import { ConfigService } from '@nestjs/config';
 import { SubmitKycDto, ReviewKycDto, DocumentType } from './dto/kyc.dto';
+import { OcrService, DocumentVerificationResult } from './ocr.service';
 
 @Injectable()
 export class KycService {
@@ -22,6 +23,7 @@ export class KycService {
     @InjectRepository(KycApplication)
     private readonly kycRepository: Repository<KycApplication>,
     private readonly configService: ConfigService,
+    private readonly ocrService: OcrService,
   ) {
     this.encryptionKey = this.configService.get('ENCRYPTION_KEY', 'default-key-change-me');
   }
@@ -117,7 +119,11 @@ export class KycService {
 
     this.logger.log(`KYC submitted for user: ${userId}, application: ${application.id}`);
 
-    // TODO: Trigger OCR processing for documents
+    // Trigger OCR processing for identity document (non-blocking)
+    this.processDocumentWithOcr(application, dto).catch(err => {
+      this.logger.error(`OCR processing failed for application ${application.id}: ${err.message}`);
+    });
+
     // TODO: Send confirmation notification
 
     return application;
@@ -233,5 +239,138 @@ export class KycService {
     await this.userRepository.save(user);
 
     this.logger.log(`KYC application cancelled for user: ${userId}`);
+  }
+
+  /**
+   * Process identity document with DeepSeek OCR and store verification results
+   */
+  private async processDocumentWithOcr(
+    application: KycApplication,
+    dto: SubmitKycDto,
+  ): Promise<void> {
+    // Find the identity document (passport, driver's license, or national ID)
+    const identityDoc = dto.documents.find(doc =>
+      [DocumentType.PASSPORT, DocumentType.DRIVERS_LICENSE, DocumentType.NATIONAL_ID].includes(doc.type),
+    );
+
+    if (!identityDoc) {
+      this.logger.warn(`No identity document found for application ${application.id}`);
+      return;
+    }
+
+    this.logger.log(`Starting OCR processing for application ${application.id}`);
+
+    // Verify the document against provided data
+    const verificationResult = await this.ocrService.verifyIdDocument(
+      identityDoc.data, // Base64 document image
+      identityDoc.mimeType || 'image/jpeg',
+      {
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        dateOfBirth: dto.dateOfBirth,
+      },
+    );
+
+    this.logger.log(`OCR verification complete for application ${application.id}: isValid=${verificationResult.isValid}, matchScore=${verificationResult.matchScore}%`);
+
+    // Store verification result in the application
+    application.verificationResult = {
+      documentCheck: verificationResult.isValid,
+      documentType: verificationResult.documentType,
+      extractedData: verificationResult.extractedData,
+      matchScore: verificationResult.matchScore,
+      issues: verificationResult.issues,
+      ocrProcessedAt: new Date().toISOString(),
+      faceMatch: false, // TODO: Add face matching with selfie
+      addressVerified: false, // TODO: Add address verification
+      watchlistClear: true, // TODO: Add watchlist check
+    };
+
+    await this.kycRepository.save(application);
+
+    // Auto-approve high-confidence submissions (optional, can be disabled)
+    if (verificationResult.isValid && verificationResult.matchScore >= 90) {
+      this.logger.log(`High confidence verification for application ${application.id}, auto-flagging for quick review`);
+      // Note: Not auto-approving, just logging for admin visibility
+      // Admins can still review and approve/reject
+    }
+
+    // Log issues for admin review
+    if (verificationResult.issues.length > 0) {
+      this.logger.warn(`OCR issues found for application ${application.id}: ${verificationResult.issues.join(', ')}`);
+    }
+  }
+
+  /**
+   * Get OCR verification result for an application
+   */
+  async getVerificationResult(applicationId: string): Promise<DocumentVerificationResult | null> {
+    const application = await this.getApplication(applicationId);
+
+    if (!application.verificationResult) {
+      return null;
+    }
+
+    return {
+      isValid: application.verificationResult.documentCheck,
+      documentType: application.verificationResult.documentType || 'UNKNOWN',
+      extractedData: application.verificationResult.extractedData || { confidence: 0 },
+      matchScore: application.verificationResult.matchScore || 0,
+      issues: application.verificationResult.issues || [],
+      ocrText: '', // Not stored for privacy
+    };
+  }
+
+  /**
+   * Manually trigger OCR re-processing for an application
+   */
+  async reprocessOcr(applicationId: string): Promise<DocumentVerificationResult> {
+    const application = await this.getApplication(applicationId);
+
+    // Find original documents (need to decrypt)
+    if (!application.documents || application.documents.length === 0) {
+      throw new BadRequestException('No documents found for this application');
+    }
+
+    // Find identity document
+    const identityDoc = application.documents.find((doc: any) =>
+      [DocumentType.PASSPORT, DocumentType.DRIVERS_LICENSE, DocumentType.NATIONAL_ID].includes(doc.type),
+    );
+
+    if (!identityDoc) {
+      throw new BadRequestException('No identity document found');
+    }
+
+    // Decrypt document data
+    const encryptedData = identityDoc.encryptedData as EncryptedData;
+    const decryptedData = decrypt(encryptedData, this.encryptionKey);
+
+    // Re-run OCR verification
+    const verificationResult = await this.ocrService.verifyIdDocument(
+      decryptedData,
+      identityDoc.mimeType || 'image/jpeg',
+      {
+        firstName: application.firstName,
+        lastName: application.lastName,
+        dateOfBirth: application.dateOfBirth?.toISOString().split('T')[0],
+      },
+    );
+
+    // Update stored result
+    application.verificationResult = {
+      ...application.verificationResult,
+      documentCheck: verificationResult.isValid,
+      documentType: verificationResult.documentType,
+      extractedData: verificationResult.extractedData,
+      matchScore: verificationResult.matchScore,
+      issues: verificationResult.issues,
+      ocrProcessedAt: new Date().toISOString(),
+    };
+
+    await this.kycRepository.save(application);
+
+    this.logger.log(`OCR reprocessing complete for application ${applicationId}`);
+
+    return verificationResult;
   }
 }

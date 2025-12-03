@@ -86,15 +86,35 @@ export class KycApplication {
   @Column({ type: 'jsonb', nullable: true })
   documents: any[];
 
-  // Verification results
+  // Verification results including OCR data
   @Column({ name: 'verification_result', type: 'jsonb', nullable: true })
   verificationResult: {
     documentCheck: boolean;
     faceMatch: boolean;
     addressVerified: boolean;
     watchlistClear: boolean;
-    riskScore: number;
-    notes: string;
+    riskScore?: number;
+    notes?: string;
+    // OCR verification fields
+    documentType?: string;
+    extractedData?: {
+      documentType?: string;
+      documentNumber?: string;
+      firstName?: string;
+      lastName?: string;
+      fullName?: string;
+      dateOfBirth?: string;
+      expiryDate?: string;
+      nationality?: string;
+      gender?: string;
+      address?: string;
+      issuingCountry?: string;
+      mrz?: string;
+      confidence: number;
+    };
+    matchScore?: number;
+    issues?: string[];
+    ocrProcessedAt?: string;
   };
 
   @Column({ name: 'rejection_reason', type: 'text', nullable: true })
