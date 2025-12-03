@@ -34,9 +34,14 @@ import {
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { createClient } from '@supabase/supabase-js';
 
-// API endpoint for payment settings
-const SETTINGS_API = '/api/settings';
+// Direct Supabase connection for settings
+const supabaseUrl = 'https://akiecgwcxadcpqlvntmf.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFraWVjZ3djeGFkY3BxbHZudG1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyODMzMzIsImV4cCI6MjA3OTg1OTMzMn0.L2ePGMJRjBqHS-M1d9mxys7I9bZv93YYr9dzQzCQINE';
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+const SETTINGS_ID = '00000000-0000-0000-0000-000000000001';
 
 interface MonimeConfig {
   accessToken: string;
@@ -120,40 +125,93 @@ export function PaymentSettingsPage() {
   const fetchSettings = async () => {
     setLoading(true);
     try {
-      const response = await fetch(SETTINGS_API);
+      // Fetch directly from Supabase
+      const { data: settings, error: fetchError } = await supabase
+        .from('payment_settings')
+        .select('*')
+        .eq('id', SETTINGS_ID)
+        .single();
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch settings from server');
+      if (fetchError) {
+        // If no settings exist, try to create default
+        if (fetchError.code === 'PGRST116') {
+          const { data: newSettings, error: insertError } = await supabase
+            .from('payment_settings')
+            .insert({
+              id: SETTINGS_ID,
+              monime_enabled: false,
+              withdrawal_mobile_money_enabled: true,
+              withdrawal_bank_transfer_enabled: true,
+              min_withdrawal_amount: 1000,
+              max_withdrawal_amount: 50000000,
+              daily_withdrawal_limit: 100000000,
+              withdrawal_fee_percent: 1.5,
+              withdrawal_fee_flat: 100,
+              withdrawal_require_pin: true,
+              withdrawal_auto_approve_under: 1000000,
+              deposit_checkout_enabled: true,
+              deposit_payment_code_enabled: true,
+              deposit_mobile_money_enabled: true,
+              min_deposit_amount: 100,
+              max_deposit_amount: 100000000,
+            })
+            .select()
+            .single();
+
+          if (insertError) {
+            throw new Error('Failed to initialize settings: ' + insertError.message);
+          }
+
+          if (newSettings) {
+            applySettingsToState(newSettings);
+          }
+          return;
+        }
+        throw new Error(fetchError.message);
       }
 
-      const data = await response.json();
-
-      if (data.monimeConfig) {
-        setMonimeConfig({
-          ...DEFAULT_MONIME_CONFIG,
-          ...data.monimeConfig,
-        });
+      if (settings) {
+        applySettingsToState(settings);
       }
-
-      if (data.withdrawalSettings) {
-        setWithdrawalSettings({
-          ...DEFAULT_WITHDRAWAL_SETTINGS,
-          ...data.withdrawalSettings,
-        });
-      }
-
-      if (data.depositSettings) {
-        setDepositSettings({
-          ...DEFAULT_DEPOSIT_SETTINGS,
-          ...data.depositSettings,
-        });
-      }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to fetch settings:', err);
-      setError('Failed to load settings from server. Make sure account-service is running.');
+      setError(err.message || 'Failed to load settings from database.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const applySettingsToState = (settings: any) => {
+    setMonimeConfig({
+      accessToken: settings.monime_access_token || '',
+      spaceId: settings.monime_space_id || '',
+      webhookSecret: settings.monime_webhook_secret || '',
+      sourceAccountId: settings.monime_source_account_id || '',
+      payoutAccountId: settings.monime_payout_account_id || '',
+      isEnabled: settings.monime_enabled || false,
+      backendUrl: settings.backend_url || '',
+      frontendUrl: settings.frontend_url || '',
+    });
+
+    setWithdrawalSettings({
+      mobileMoneyEnabled: settings.withdrawal_mobile_money_enabled ?? true,
+      bankTransferEnabled: settings.withdrawal_bank_transfer_enabled ?? true,
+      minWithdrawalAmount: Number(settings.min_withdrawal_amount) || 1000,
+      maxWithdrawalAmount: Number(settings.max_withdrawal_amount) || 50000000,
+      dailyWithdrawalLimit: Number(settings.daily_withdrawal_limit) || 100000000,
+      withdrawalFeePercent: Number(settings.withdrawal_fee_percent) || 1.5,
+      withdrawalFeeFlat: Number(settings.withdrawal_fee_flat) || 100,
+      requirePin: settings.withdrawal_require_pin ?? true,
+      autoApproveUnder: Number(settings.withdrawal_auto_approve_under) || 1000000,
+    });
+
+    setDepositSettings({
+      checkoutSessionEnabled: settings.deposit_checkout_enabled ?? true,
+      paymentCodeEnabled: settings.deposit_payment_code_enabled ?? true,
+      mobileMoneyEnabled: settings.deposit_mobile_money_enabled ?? true,
+      minDepositAmount: Number(settings.min_deposit_amount) || 100,
+      maxDepositAmount: Number(settings.max_deposit_amount) || 100000000,
+    });
   };
 
   const saveSettings = async () => {
@@ -161,47 +219,57 @@ export function PaymentSettingsPage() {
     setError(null);
 
     try {
-      // Transform to database format
+      // Transform to database format (snake_case)
       const settingsData = {
         // Monime Config
-        monimeAccessToken: monimeConfig.accessToken,
-        monimeSpaceId: monimeConfig.spaceId,
-        monimeWebhookSecret: monimeConfig.webhookSecret,
-        monimeSourceAccountId: monimeConfig.sourceAccountId,
-        monimePayoutAccountId: monimeConfig.payoutAccountId,
-        monimeEnabled: monimeConfig.isEnabled,
+        monime_access_token: monimeConfig.accessToken,
+        monime_space_id: monimeConfig.spaceId,
+        monime_webhook_secret: monimeConfig.webhookSecret,
+        monime_source_account_id: monimeConfig.sourceAccountId,
+        monime_payout_account_id: monimeConfig.payoutAccountId,
+        monime_enabled: monimeConfig.isEnabled,
         // URL Configuration (required for Monime checkout redirects)
-        backendUrl: monimeConfig.backendUrl,
-        frontendUrl: monimeConfig.frontendUrl,
+        backend_url: monimeConfig.backendUrl,
+        frontend_url: monimeConfig.frontendUrl,
         // Withdrawal Settings
-        withdrawalMobileMoneyEnabled: withdrawalSettings.mobileMoneyEnabled,
-        withdrawalBankTransferEnabled: withdrawalSettings.bankTransferEnabled,
-        minWithdrawalAmount: withdrawalSettings.minWithdrawalAmount,
-        maxWithdrawalAmount: withdrawalSettings.maxWithdrawalAmount,
-        dailyWithdrawalLimit: withdrawalSettings.dailyWithdrawalLimit,
-        withdrawalFeePercent: withdrawalSettings.withdrawalFeePercent,
-        withdrawalFeeFlat: withdrawalSettings.withdrawalFeeFlat,
-        withdrawalRequirePin: withdrawalSettings.requirePin,
-        withdrawalAutoApproveUnder: withdrawalSettings.autoApproveUnder,
+        withdrawal_mobile_money_enabled: withdrawalSettings.mobileMoneyEnabled,
+        withdrawal_bank_transfer_enabled: withdrawalSettings.bankTransferEnabled,
+        min_withdrawal_amount: withdrawalSettings.minWithdrawalAmount,
+        max_withdrawal_amount: withdrawalSettings.maxWithdrawalAmount,
+        daily_withdrawal_limit: withdrawalSettings.dailyWithdrawalLimit,
+        withdrawal_fee_percent: withdrawalSettings.withdrawalFeePercent,
+        withdrawal_fee_flat: withdrawalSettings.withdrawalFeeFlat,
+        withdrawal_require_pin: withdrawalSettings.requirePin,
+        withdrawal_auto_approve_under: withdrawalSettings.autoApproveUnder,
         // Deposit Settings
-        depositCheckoutEnabled: depositSettings.checkoutSessionEnabled,
-        depositPaymentCodeEnabled: depositSettings.paymentCodeEnabled,
-        depositMobileMoneyEnabled: depositSettings.mobileMoneyEnabled,
-        minDepositAmount: depositSettings.minDepositAmount,
-        maxDepositAmount: depositSettings.maxDepositAmount,
+        deposit_checkout_enabled: depositSettings.checkoutSessionEnabled,
+        deposit_payment_code_enabled: depositSettings.paymentCodeEnabled,
+        deposit_mobile_money_enabled: depositSettings.mobileMoneyEnabled,
+        min_deposit_amount: depositSettings.minDepositAmount,
+        max_deposit_amount: depositSettings.maxDepositAmount,
+        // Update timestamp
+        updated_at: new Date().toISOString(),
       };
 
-      const response = await fetch(SETTINGS_API, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(settingsData),
-      });
+      // Save directly to Supabase
+      const { error: updateError } = await supabase
+        .from('payment_settings')
+        .update(settingsData)
+        .eq('id', SETTINGS_ID);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to save settings');
+      if (updateError) {
+        // If row doesn't exist, try insert
+        if (updateError.code === 'PGRST116') {
+          const { error: insertError } = await supabase
+            .from('payment_settings')
+            .insert({ id: SETTINGS_ID, ...settingsData });
+
+          if (insertError) {
+            throw new Error(insertError.message);
+          }
+        } else {
+          throw new Error(updateError.message);
+        }
       }
 
       setSuccess('Payment settings saved successfully');
@@ -218,31 +286,56 @@ export function PaymentSettingsPage() {
     setError(null);
 
     try {
-      // Call backend endpoint to create checkout session
-      // Note: successUrl and cancelUrl are handled by the backend to ensure proper payment verification
-      const response = await fetch(`${SETTINGS_API}/test-checkout`, {
+      // Generate idempotency key
+      const idempotencyKey = `test_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+
+      // Use configured URLs or fallback to current origin
+      const baseUrl = monimeConfig.frontendUrl || window.location.origin;
+      const successUrl = `${baseUrl}/deposit/success?sessionId={CHECKOUT_SESSION_ID}`;
+      const cancelUrl = `${baseUrl}/deposit/cancel?sessionId={CHECKOUT_SESSION_ID}`;
+
+      // Call Monime API directly via proxy
+      const response = await fetch('/monime-api/v1/checkout-sessions', {
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${monimeConfig.accessToken}`,
           'Content-Type': 'application/json',
+          'Monime-Space-Id': monimeConfig.spaceId,
+          'Idempotency-Key': idempotencyKey,
         },
         body: JSON.stringify({
-          accessToken: monimeConfig.accessToken,
-          spaceId: monimeConfig.spaceId,
-          amount: testAmount,
-          currency: 'SLE',
-          // Don't pass successUrl/cancelUrl - let backend handle them for proper verification flow
+          name: 'Test Payment - Admin Dashboard',
+          lineItems: [
+            {
+              type: 'custom',
+              name: 'Test Payment',
+              price: {
+                currency: 'SLE',
+                value: testAmount,
+              },
+              quantity: 1,
+              description: 'Test payment from admin dashboard',
+            },
+          ],
+          successUrl,
+          cancelUrl,
+          metadata: {
+            type: 'test_payment',
+            initiated_by: 'admin_dashboard',
+            idempotencyKey,
+          },
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json() as any;
 
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to create checkout session');
+      if (!response.ok || !data.success) {
+        throw new Error(data?.error?.message || data?.message || 'Failed to create checkout session');
       }
 
       // Open Monime checkout page in new tab
-      if (data.url) {
-        window.open(data.url, '_blank');
+      if (data?.result?.redirectUrl) {
+        window.open(data.result.redirectUrl, '_blank');
         setSuccess('Checkout session created! Opening Monime payment page...');
         setTimeout(() => setSuccess(null), 5000);
       } else {
