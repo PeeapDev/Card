@@ -6,6 +6,8 @@
  * - Withdrawal/Payout settings
  * - Deposit methods
  * - Payment gateway settings
+ *
+ * Updated: Direct Supabase connection (no backend required)
  */
 
 import { useState, useEffect } from 'react';
