@@ -31,6 +31,7 @@ import {
   ChevronRight,
   Briefcase,
   Store,
+  Headphones,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { NotificationBell } from '@/components/ui/NotificationBell';
@@ -111,6 +112,12 @@ const navSections: NavSection[] = [
       { path: '/admin/roles', label: 'Role Management', icon: UserCog },
       { path: '/admin/payment-settings', label: 'Payment Settings', icon: Settings },
       { path: '/admin/compliance', label: 'Compliance', icon: FileCheck, badge: 'Pending', badgeColor: 'yellow' },
+    ],
+  },
+  {
+    title: 'Support',
+    items: [
+      { path: '/admin/support', label: 'Support Tickets', icon: Headphones },
     ],
   },
 ];

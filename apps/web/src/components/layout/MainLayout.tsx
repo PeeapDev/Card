@@ -13,6 +13,7 @@ import {
   Send,
   QrCode,
   PiggyBank,
+  HelpCircle,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { NotificationBell } from '@/components/ui/NotificationBell';
@@ -30,6 +31,7 @@ const navItems = [
   { path: '/cards', label: 'Cards', icon: CreditCard },
   { path: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
   { path: '/profile', label: 'Profile', icon: User },
+  { path: '/support', label: 'Help & Support', icon: HelpCircle },
 ];
 
 export function MainLayout({ children }: MainLayoutProps) {

@@ -19,6 +19,7 @@ import { SendMoneyPage } from '@/pages/SendMoneyPage';
 import { ReceiveMoneyPage } from '@/pages/ReceiveMoneyPage';
 import { PotsPage } from '@/pages/PotsPage';
 import { PotDetailPage } from '@/pages/PotDetailPage';
+import { SupportPage } from '@/pages/SupportPage';
 
 // New Card Management Pages
 import { CardMarketplacePage } from '@/pages/CardMarketplacePage';
@@ -52,6 +53,7 @@ import { RolesManagementPage } from '@/pages/admin/RolesManagementPage';
 import { PotsManagementPage } from '@/pages/admin/PotsManagementPage';
 import { BusinessCategoriesPage } from '@/pages/admin/BusinessCategoriesPage';
 import { BusinessesPage } from '@/pages/admin/BusinessesPage';
+import { SupportTicketsPage } from '@/pages/admin/SupportTicketsPage';
 import { PaymentCheckoutPage } from '@/pages/PaymentCheckoutPage';
 import { PayPage } from '@/pages/PayPage';
 import { PaymentSuccessPage } from '@/pages/PaymentSuccessPage';
@@ -80,6 +82,7 @@ import { ShopDetailPage } from '@/pages/merchant/ShopDetailPage';
 import { ShopTransactionsPage } from '@/pages/merchant/ShopTransactionsPage';
 import { ShopDisputesPage } from '@/pages/merchant/ShopDisputesPage';
 import { ShopSettingsPage } from '@/pages/merchant/ShopSettingsPage';
+import { MerchantSupportPage } from '@/pages/merchant/MerchantSupportPage';
 
 // Agent Pages
 import { AgentDashboard } from '@/pages/agent/AgentDashboard';
@@ -219,6 +222,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <PotDetailPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/support"
+                element={
+                  <ProtectedRoute>
+                    <SupportPage />
                   </ProtectedRoute>
                 }
               />
@@ -440,6 +451,14 @@ function App() {
                   </RoleBasedRoute>
                 }
               />
+              <Route
+                path="/admin/support"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <SupportTicketsPage />
+                  </RoleBasedRoute>
+                }
+              />
 
               {/* Merchant Routes */}
               <Route
@@ -511,6 +530,14 @@ function App() {
                 element={
                   <RoleBasedRoute allowedRoles={['merchant']}>
                     <MerchantSettingsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/support"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <MerchantSupportPage />
                   </RoleBasedRoute>
                 }
               />
