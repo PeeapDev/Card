@@ -108,7 +108,7 @@ const navSections: NavSection[] = [
     title: 'Settings',
     items: [
       { path: '/admin/roles', label: 'Role Management', icon: UserCog },
-      { path: '/admin/settings', label: 'Settings', icon: Settings },
+      { path: '/admin/payment-settings', label: 'Payment Settings', icon: Settings },
       { path: '/admin/compliance', label: 'Compliance', icon: FileCheck, badge: 'Pending', badgeColor: 'yellow' },
     ],
   },
