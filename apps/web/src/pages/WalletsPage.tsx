@@ -183,18 +183,30 @@ export function WalletsPage() {
       // Convert to minor units (cents) for Monime
       const amountInMinorUnits = toMinorUnits(amount);
 
-      // Initiate deposit via Monime checkout
-      const response = await monimeService.initiateDeposit({
-        walletId: selectedWallet.id,
-        amount: amountInMinorUnits,
-        currency: 'SLE',
-        method: 'CHECKOUT_SESSION',
-        description: `Deposit to ${selectedWallet.currency} wallet`,
+      // Call our API endpoint to create Monime checkout session
+      const response = await fetch('/api/monime/deposit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          walletId: selectedWallet.id,
+          amount: amountInMinorUnits,
+          currency: 'SLE',
+          userId: user?.id,
+          description: `Deposit to ${selectedWallet.currency} wallet`,
+        }),
       });
 
-      if (response.paymentUrl) {
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create checkout session');
+      }
+
+      if (data.paymentUrl) {
         // Redirect to Monime checkout page
-        window.location.href = response.paymentUrl;
+        window.location.href = data.paymentUrl;
       } else {
         setDepositError('Failed to get payment URL. Please try again.');
       }

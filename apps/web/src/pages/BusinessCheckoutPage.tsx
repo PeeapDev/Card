@@ -193,15 +193,53 @@ export function BusinessCheckoutPage() {
     setError(null);
 
     try {
-      // Generate payment ID
+      // For Mobile Money, Card, or Bank Transfer - use Monime
+      if (['mobile_money', 'card', 'bank_transfer'].includes(selectedMethod)) {
+        // Convert amount to minor units (cents)
+        const amountInMinorUnits = Math.round(parseFloat(amount) * 100);
+
+        // Create checkout session via our API
+        const response = await fetch('/api/checkout/create', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            businessId: business.id,
+            amount: amountInMinorUnits,
+            currency,
+            reference: urlReference,
+            description: urlDescription || `Payment to ${business.name}`,
+            customerEmail: email,
+            customerPhone: phone,
+            paymentMethod: selectedMethod,
+            redirectUrl: urlRedirect,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to create checkout session');
+        }
+
+        if (data.paymentUrl) {
+          // Redirect to Monime checkout
+          window.location.href = data.paymentUrl;
+          return;
+        } else {
+          throw new Error('No payment URL returned');
+        }
+      }
+
+      // For Peeap Wallet - handle internally (mock for now)
       const newPaymentId = `pay_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       setPaymentId(newPaymentId);
 
-      // Simulate payment processing
-      // In production, this would call the actual payment API
+      // Simulate wallet payment processing
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // For demo: simulate success
+      // Success
       setStep('success');
 
       // Post message to parent (for iframe/popup usage)
