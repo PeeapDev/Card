@@ -76,6 +76,7 @@ import { AppPaymentRedirectPage } from '@/pages/AppPaymentRedirectPage';
 import { MerchantDashboard } from '@/pages/merchant/MerchantDashboard';
 import { MerchantSettingsPage } from '@/pages/merchant/MerchantSettingsPage';
 import { MerchantDeveloperPage } from '@/pages/merchant/MerchantDeveloperPage';
+import { BusinessIntegrationPage } from '@/pages/merchant/BusinessIntegrationPage';
 import { MerchantTransactionsPage } from '@/pages/merchant/MerchantTransactionsPage';
 import { MerchantPayoutsPage } from '@/pages/merchant/MerchantPayoutsPage';
 import { MerchantRefundsPage } from '@/pages/merchant/MerchantRefundsPage';
@@ -647,6 +648,14 @@ function App() {
                 element={
                   <RoleBasedRoute allowedRoles={['merchant']}>
                     <CreateDeveloperBusinessPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/developer/:businessId"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <BusinessIntegrationPage />
                   </RoleBasedRoute>
                 }
               />
