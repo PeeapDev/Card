@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CREATE CHECKOUT - Click Button</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .container {
+      background: white;
+      padding: 3rem;
+      border-radius: 1rem;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      text-align: center;
+      max-width: 500px;
+    }
+    h1 { color: #1f2937; margin-bottom: 1rem; }
+    .big-button {
+      background: #4f46e5;
+      color: white;
+      border: none;
+      padding: 1.5rem 3rem;
+      font-size: 1.5rem;
+      font-weight: bold;
+      border-radius: 0.75rem;
+      cursor: pointer;
+      margin: 2rem 0;
+      width: 100%;
+    }
+    .big-button:hover {
+      background: #4338ca;
+      transform: scale(1.05);
+    }
+    #result {
+      margin-top: 1rem;
+      padding: 1rem;
+      background: #f3f4f6;
+      border-radius: 0.5rem;
+      font-size: 0.9rem;
+      text-align: left;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .error { color: #dc2626; background: #fef2f2; }
+    .success { color: #059669; background: #ecfdf5; }
+    .loading { color: #f59e0b; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚀 Create Checkout Session</h1>
+    <p>Click the button below to create a checkout session and see the hosted page</p>
+
+    <button class="big-button" onclick="createCheckout()">
+      CREATE CHECKOUT NOW
+    </button>
+
+    <div id="result"></div>
+  </div>
+
+  <script>
+    async function createCheckout() {
+      const resultDiv = document.getElementById('result');
+      resultDiv.className = 'loading';
+      resultDiv.innerHTML = '⏳ Creating checkout session...';
+
+      try {
+        const apiUrl = 'https://my.peeap.com/api'; // Production URL
+        const response = await fetch(`${apiUrl}/checkout/sessions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            merchantId: 'f0c164b7-b608-4ca3-88d9-bc576d765160',
+            amount: 50000,
+            currency: 'SLE',
+            description: 'Real Production Test Payment',
+            merchantName: 'School District',
+            successUrl: window.location.origin + '/success.html',
+            cancelUrl: window.location.origin + '/cancel.html'
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        resultDiv.className = 'success';
+        resultDiv.innerHTML = `
+          ✅ <strong>Session Created!</strong><br><br>
+          <strong>Session ID:</strong> ${data.sessionId}<br><br>
+          <strong>Redirecting to checkout page in 2 seconds...</strong><br><br>
+          <em>Checkout URL:</em><br>
+          <small>${data.url}</small>
+        `;
+
+        // Redirect to checkout page
+        setTimeout(() => {
+          window.location.href = data.url;
+        }, 2000);
+
+      } catch (error) {
+        resultDiv.className = 'error';
+        resultDiv.innerHTML = `
+          ❌ <strong>Error:</strong> ${error.message}<br><br>
+          <strong>Make sure:</strong><br>
+          1. API is deployed at my.peeap.com<br><br>
+          2. Merchant ID is valid<br><br>
+          3. CORS is enabled for this domain
+        `;
+      }
+    }
+  </script>
+</body>
+</html>

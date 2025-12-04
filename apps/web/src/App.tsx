@@ -45,6 +45,8 @@ import { CardTypesPage } from '@/pages/admin/CardTypesPage';
 import { CardOrdersPage } from '@/pages/admin/CardOrdersPage';
 import { TransactionsPage as AdminTransactionsPage } from '@/pages/admin/TransactionsPage';
 import { DisputesPage } from '@/pages/admin/DisputesPage';
+import Modules from '@/pages/admin/Modules';
+import CardProducts from '@/pages/admin/CardProducts';
 import { DevelopersPage } from '@/pages/admin/DevelopersPage';
 import { UsersManagementPage } from '@/pages/admin/UsersManagementPage';
 import { UserDetailPage } from '@/pages/admin/UserDetailPage';
@@ -70,6 +72,7 @@ import { DepositCancelPage } from '@/pages/DepositCancelPage';
 import { BusinessCheckoutPage } from '@/pages/BusinessCheckoutPage';
 import { CheckoutPage } from '@/pages/CheckoutPage';
 import { HostedCheckoutPage } from '@/pages/HostedCheckoutPage';
+import { TestCheckoutPage } from '@/pages/TestCheckoutPage';
 import { AppPaymentRedirectPage } from '@/pages/AppPaymentRedirectPage';
 
 // Merchant Pages
@@ -342,6 +345,22 @@ function App() {
                 element={
                   <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
                     <CardOrdersPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/admin/card-products"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <CardProducts />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/admin/modules"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <Modules />
                   </RoleBasedRoute>
                 }
               />

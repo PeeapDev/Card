@@ -28,28 +28,7 @@ export function QuickIntegrationGuide({
   const [description, setDescription] = useState('Payment');
 
   const baseUrl = window.location.origin;
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
-  // Build checkout URL
-  const buildCheckoutUrl = (customAmount?: string) => {
-    const params = new URLSearchParams({
-      merchant_id: merchantId,
-      amount: customAmount || amount,
-      currency,
-      description,
-      merchant_name: merchantName,
-      success_url: `${baseUrl}/success.html`,
-      cancel_url: `${baseUrl}/cancel.html`,
-    });
-
-    if (merchantLogo) {
-      params.append('merchant_logo', merchantLogo);
-    }
-
-    params.append('brand_color', brandColor.replace('#', ''));
-
-    return `${apiUrl}/checkout/quick?${params.toString()}`;
-  };
+  const apiUrl = import.meta.env.VITE_API_URL || 'https://my.peeap.com/api';
 
   // Copy to clipboard
   const copyToClipboard = (text: string, id: string) => {
@@ -59,16 +38,39 @@ export function QuickIntegrationGuide({
     });
   };
 
-  // Code snippets
-  const simpleLink = buildCheckoutUrl();
-
+  // Code snippets for new Sessions API
   const buttonHtml = `<!-- Peeap Payment Button -->
-<a href="${buildCheckoutUrl()}"
-   style="display:inline-block;background:${brandColor};color:white;padding:15px 30px;text-decoration:none;border-radius:8px;font-weight:600;font-family:system-ui,-apple-system,sans-serif;transition:all 0.2s;"
-   onmouseover="this.style.background='${adjustColor(brandColor, -20)}';this.style.transform='translateY(-2px)';this.style.boxShadow='0 10px 20px rgba(79,70,229,0.3)'"
-   onmouseout="this.style.background='${brandColor}';this.style.transform='translateY(0)';this.style.boxShadow='none'">
+<button id="peeap-pay-btn"
+        style="display:inline-block;background:${brandColor};color:white;padding:15px 30px;border:none;border-radius:8px;font-weight:600;font-family:system-ui,-apple-system,sans-serif;cursor:pointer;transition:all 0.2s;"
+        onmouseover="this.style.background='${adjustColor(brandColor, -20)}';this.style.transform='translateY(-2px)';this.style.boxShadow='0 10px 20px rgba(79,70,229,0.3)'"
+        onmouseout="this.style.background='${brandColor}';this.style.transform='translateY(0)';this.style.boxShadow='none'">
   💳 Pay ${formatAmount(amount, currency)}
-</a>`;
+</button>
+
+<script>
+document.getElementById('peeap-pay-btn').addEventListener('click', async function() {
+  try {
+    const response = await fetch('${apiUrl}/checkout/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        merchantId: '${merchantId}',
+        amount: ${amount},
+        currency: '${currency}',
+        description: '${description}',
+        merchantName: '${merchantName}',${merchantLogo ? `\n        merchantLogoUrl: '${merchantLogo}',` : ''}
+        brandColor: '${brandColor}',
+        successUrl: window.location.origin + '/success.html',
+        cancelUrl: window.location.origin + '/cancel.html'
+      })
+    });
+    const data = await response.json();
+    window.location.href = data.url;
+  } catch (error) {
+    alert('Payment error. Please try again.');
+  }
+});
+</script>`;
 
   const jsCode = `<!-- Add this button to your page -->
 <button id="pay-button"
@@ -77,42 +79,93 @@ export function QuickIntegrationGuide({
 </button>
 
 <script>
-document.getElementById('pay-button').addEventListener('click', function() {
+document.getElementById('pay-button').addEventListener('click', async function() {
   // Get your dynamic amount (e.g., from cart total)
   var amount = ${amount}; // ${formatAmount(amount, currency)}
   var description = '${description}';
 
-  // Build checkout URL
-  var checkoutUrl = '${apiUrl}/checkout/quick?' +
-    'merchant_id=${merchantId}' +
-    '&amount=' + amount +
-    '&currency=${currency}' +
-    '&description=' + encodeURIComponent(description) +
-    '&merchant_name=${encodeURIComponent(merchantName)}' +
-    '&success_url=' + encodeURIComponent(window.location.origin + '/success.html') +
-    '&cancel_url=' + encodeURIComponent(window.location.origin + '/cancel.html');
+  try {
+    // Create checkout session
+    const response = await fetch('${apiUrl}/checkout/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        merchantId: '${merchantId}',
+        amount: amount,
+        currency: '${currency}',
+        description: description,
+        merchantName: '${merchantName}',${merchantLogo ? `\n        merchantLogoUrl: '${merchantLogo}',` : ''}
+        brandColor: '${brandColor}',
+        successUrl: window.location.origin + '/success.html',
+        cancelUrl: window.location.origin + '/cancel.html'
+      })
+    });
 
-  // Redirect to checkout
-  window.location.href = checkoutUrl;
+    const data = await response.json();
+
+    // Redirect to hosted checkout page
+    window.location.href = data.url;
+  } catch (error) {
+    alert('Payment error: ' + error.message);
+  }
 });
 </script>`;
 
-  const formHtml = `<form action="${apiUrl}/checkout/quick" method="GET">
-  <input type="hidden" name="merchant_id" value="${merchantId}">
-  <input type="hidden" name="merchant_name" value="${merchantName}">
-  <input type="hidden" name="currency" value="${currency}">
-
+  const formHtml = `<!-- Payment Form with Session API -->
+<form id="payment-form">
   <label>Amount (${currency}):</label>
-  <input type="number" name="amount" value="${amount}" required>
+  <input type="number" id="amount-input" value="${amount}" required>
 
   <label>Description:</label>
-  <input type="text" name="description" value="${description}" required>
+  <input type="text" id="description-input" value="${description}" required>
 
   <button type="submit"
           style="background:${brandColor};color:white;padding:15px 30px;border:none;border-radius:8px;font-weight:600;cursor:pointer;margin-top:10px;">
     Proceed to Payment
   </button>
-</form>`;
+</form>
+
+<script>
+document.getElementById('payment-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const amount = parseInt(document.getElementById('amount-input').value);
+  const description = document.getElementById('description-input').value;
+
+  try {
+    const response = await fetch('${apiUrl}/checkout/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        merchantId: '${merchantId}',
+        amount: amount,
+        currency: '${currency}',
+        description: description,
+        merchantName: '${merchantName}',${merchantLogo ? `\n        merchantLogoUrl: '${merchantLogo}',` : ''}
+        brandColor: '${brandColor}',
+        successUrl: window.location.origin + '/success.html',
+        cancelUrl: window.location.origin + '/cancel.html'
+      })
+    });
+    const data = await response.json();
+    window.location.href = data.url;
+  } catch (error) {
+    alert('Payment error. Please try again.');
+  }
+});
+</script>`;
+
+  const curlCommand = `curl -X POST ${apiUrl}/checkout/sessions \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "merchantId": "${merchantId}",
+    "amount": ${amount},
+    "currency": "${currency}",
+    "description": "${description}",
+    "merchantName": "${merchantName}",${merchantLogo ? `\n    "merchantLogoUrl": "${merchantLogo}",` : ''}
+    "brandColor": "${brandColor}",
+    "successUrl": "https://yoursite.com/success",
+    "cancelUrl": "https://yoursite.com/cancel"
+  }'`;
 
   return (
     <div className="space-y-6">
@@ -167,59 +220,13 @@ document.getElementById('pay-button').addEventListener('click', function() {
         </div>
       </Card>
 
-      {/* Method 1: Simple Link */}
+      {/* Method 1: HTML Button */}
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">✨ Method 1: Simple Payment Link</h3>
-          <a
-            href={buildCheckoutUrl()}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-indigo-600 hover:text-indigo-700 flex items-center gap-1 text-sm"
-          >
-            <Play className="w-4 h-4" />
-            Test Now
-          </a>
+          <h3 className="text-lg font-semibold">🔘 Method 1: HTML Button (Copy & Paste)</h3>
         </div>
         <p className="text-gray-600 text-sm mb-4">
-          Copy this link and use it anywhere - email, SMS, social media, or your website.
-        </p>
-
-        <div className="relative">
-          <div className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto">
-            <code className="text-sm break-all">{simpleLink}</code>
-          </div>
-          <button
-            onClick={() => copyToClipboard(simpleLink, 'link')}
-            className="absolute top-2 right-2 p-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
-          >
-            {copiedCode === 'link' ? (
-              <Check className="w-4 h-4" />
-            ) : (
-              <Copy className="w-4 h-4" />
-            )}
-          </button>
-        </div>
-      </Card>
-
-      {/* Method 2: HTML Button */}
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">🔘 Method 2: HTML Button</h3>
-          <div className="flex gap-2">
-            <a
-              href={buildCheckoutUrl()}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ backgroundColor: brandColor }}
-              className="text-white px-4 py-2 rounded-lg text-sm font-semibold hover:opacity-90"
-            >
-              💳 Pay {formatAmount(amount, currency)}
-            </a>
-          </div>
-        </div>
-        <p className="text-gray-600 text-sm mb-4">
-          Add a beautiful styled button to any HTML page. Works on WordPress, Wix, Squarespace, etc.
+          Add a beautiful styled button to any HTML page. Works on WordPress, Wix, Squarespace, etc. Just copy and paste!
         </p>
 
         <div className="relative">
@@ -239,9 +246,9 @@ document.getElementById('pay-button').addEventListener('click', function() {
         </div>
       </Card>
 
-      {/* Method 3: JavaScript */}
+      {/* Method 2: JavaScript */}
       <Card className="p-6">
-        <h3 className="text-lg font-semibold mb-4">⚡ Method 3: JavaScript (Dynamic)</h3>
+        <h3 className="text-lg font-semibold mb-4">⚡ Method 2: JavaScript (Dynamic Amounts)</h3>
         <p className="text-gray-600 text-sm mb-4">
           Perfect for shopping carts where the amount changes dynamically.
         </p>
@@ -263,11 +270,11 @@ document.getElementById('pay-button').addEventListener('click', function() {
         </div>
       </Card>
 
-      {/* Method 4: Form */}
+      {/* Method 3: Form */}
       <Card className="p-6">
-        <h3 className="text-lg font-semibold mb-4">📝 Method 4: HTML Form</h3>
+        <h3 className="text-lg font-semibold mb-4">📝 Method 3: HTML Form (User Inputs)</h3>
         <p className="text-gray-600 text-sm mb-4">
-          Works without JavaScript. Let customers enter the amount.
+          Let customers enter the amount and description before checkout.
         </p>
 
         <div className="relative">
@@ -287,6 +294,34 @@ document.getElementById('pay-button').addEventListener('click', function() {
         </div>
       </Card>
 
+      {/* Method 4: API / cURL */}
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold mb-4">🔧 Method 4: Direct API Call</h3>
+        <p className="text-gray-600 text-sm mb-4">
+          For backend integrations. Create sessions from your server and redirect users.
+        </p>
+
+        <div className="relative">
+          <div className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto">
+            <pre className="text-sm">{curlCommand}</pre>
+          </div>
+          <button
+            onClick={() => copyToClipboard(curlCommand, 'curl')}
+            className="absolute top-2 right-2 p-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+          >
+            {copiedCode === 'curl' ? (
+              <Check className="w-4 h-4" />
+            ) : (
+              <Copy className="w-4 h-4" />
+            )}
+          </button>
+        </div>
+
+        <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
+          <strong>Response:</strong> You'll receive a JSON with <code className="bg-blue-100 px-1 rounded">sessionId</code> and <code className="bg-blue-100 px-1 rounded">url</code>. Redirect users to the <code className="bg-blue-100 px-1 rounded">url</code> to complete payment.
+        </div>
+      </Card>
+
       {/* Platform Guides */}
       <Card className="p-6">
         <h3 className="text-lg font-semibold mb-4">🛠️ Platform-Specific Guides</h3>
@@ -298,7 +333,7 @@ document.getElementById('pay-button').addEventListener('click', function() {
               <ol className="list-decimal ml-5 space-y-2">
                 <li>Go to your page/post editor</li>
                 <li>Add a "Custom HTML" block</li>
-                <li>Paste Method 2 (HTML Button) code</li>
+                <li>Paste Method 1 (HTML Button) code</li>
                 <li>Publish your page</li>
               </ol>
             </div>
@@ -309,7 +344,7 @@ document.getElementById('pay-button').addEventListener('click', function() {
             <div className="mt-3 text-sm text-gray-600">
               <ol className="list-decimal ml-5 space-y-2">
                 <li>Add an "Embed" or "Custom Code" element</li>
-                <li>Paste Method 2 (HTML Button) code</li>
+                <li>Paste Method 1 (HTML Button) code</li>
                 <li>Save and publish</li>
               </ol>
             </div>
@@ -320,22 +355,24 @@ document.getElementById('pay-button').addEventListener('click', function() {
             <div className="mt-3 text-sm text-gray-600">
               <ol className="list-decimal ml-5 space-y-2">
                 <li>Go to your product page template</li>
-                <li>Add Method 3 (JavaScript) code</li>
-                <li>Use Shopify variables for dynamic pricing</li>
+                <li>Add Method 2 (JavaScript) code</li>
+                <li>Use Shopify's cart object to get dynamic total</li>
               </ol>
             </div>
           </details>
 
           <details className="border border-gray-200 rounded-lg p-4">
-            <summary className="font-semibold cursor-pointer">Email / WhatsApp / SMS</summary>
+            <summary className="font-semibold cursor-pointer">React / Vue / Angular</summary>
             <div className="mt-3 text-sm text-gray-600">
-              <p>Simply copy Method 1 (Simple Link) and send it directly!</p>
-              <p className="mt-2">Example message:</p>
-              <div className="bg-gray-50 p-3 rounded mt-2">
-                Hi! To complete your payment of {formatAmount(amount, currency)}, please click: <br />
-                <a href={buildCheckoutUrl()} className="text-indigo-600">
-                  {buildCheckoutUrl().substring(0, 50)}...
-                </a>
+              <p>Use Method 4 (Direct API) to create sessions from your frontend:</p>
+              <div className="bg-gray-50 p-3 rounded mt-2 font-mono text-xs">
+                const response = await fetch('{apiUrl}/checkout/sessions', {'{'}<br />
+                &nbsp;&nbsp;method: 'POST',<br />
+                &nbsp;&nbsp;headers: {'{'} 'Content-Type': 'application/json' {'}'},<br />
+                &nbsp;&nbsp;body: JSON.stringify({'{'} merchantId, amount, ... {'}'})<br />
+                {'}'});<br />
+                const {'{'} url {'}'} = await response.json();<br />
+                window.location.href = url;
               </div>
             </div>
           </details>

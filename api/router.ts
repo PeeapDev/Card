@@ -59,6 +59,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handlePaymentsId(req, res);
     } else if (path.startsWith('monime/deposit')) {
       return await handleMonimeDeposit(req, res);
+    } else if (path === 'checkout/sessions' || path === 'checkout/sessions/') {
+      return await handleCheckoutSessions(req, res);
+    } else if (path.match(/^checkout\/sessions\/[^/]+$/)) {
+      const sessionId = path.split('/')[2];
+      return await handleCheckoutSessionById(req, res, sessionId);
+    } else if (path.match(/^checkout\/sessions\/[^/]+\/complete$/)) {
+      const sessionId = path.split('/')[2];
+      return await handleCheckoutSessionComplete(req, res, sessionId);
     } else if (path.startsWith('checkout/create')) {
       return await handleCheckoutCreate(req, res);
     } else if (path.startsWith('checkout/card-pay')) {
@@ -1098,4 +1106,152 @@ async function handleUserCards(req: VercelRequest, res: VercelResponse, userId: 
 
   if (error) return res.status(500).json({ error: error.message });
   return res.status(200).json({ cards: cards || [], total: cards?.length || 0 });
+}
+
+// ============================================================================
+// HOSTED CHECKOUT SESSION HANDLERS
+// ============================================================================
+
+async function handleCheckoutSessions(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const {
+      merchantId,
+      amount,
+      currency,
+      description,
+      merchantName,
+      merchantLogoUrl,
+      brandColor,
+      successUrl,
+      cancelUrl,
+      paymentMethods,
+      metadata
+    } = req.body;
+
+    if (!merchantId || !amount || !currency) {
+      return res.status(400).json({ error: 'merchantId, amount, and currency are required' });
+    }
+
+    const sessionId = `cs_${randomUUID().replace(/-/g, '')}`;
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+
+    const { data: session, error } = await supabase
+      .from('checkout_sessions')
+      .insert({
+        external_id: sessionId,
+        merchant_id: merchantId,
+        status: 'OPEN',
+        amount,
+        currency_code: currency,
+        description,
+        merchant_name: merchantName,
+        merchant_logo_url: merchantLogoUrl,
+        brand_color: brandColor || '#4F46E5',
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        payment_methods: paymentMethods || { qr: true, card: true, mobile: true },
+        metadata,
+        expires_at: expiresAt.toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[Checkout] Create session error:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL || 'https://my.peeap.com';
+    return res.status(200).json({
+      sessionId: session.external_id,
+      url: `${frontendUrl}/checkout/pay/${session.external_id}`,
+      expiresAt: session.expires_at,
+    });
+  } catch (error: any) {
+    console.error('[Checkout] Error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+async function handleCheckoutSessionById(req: VercelRequest, res: VercelResponse, sessionId: string) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const { data: session, error } = await supabase
+      .from('checkout_sessions')
+      .select('*')
+      .or(`id.eq.${sessionId},external_id.eq.${sessionId}`)
+      .single();
+
+    if (error || !session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    return res.status(200).json(session);
+  } catch (error: any) {
+    console.error('[Checkout] Get session error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+async function handleCheckoutSessionComplete(req: VercelRequest, res: VercelResponse, sessionId: string) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const { cardToken } = req.body;
+
+    const { data: session, error: fetchError } = await supabase
+      .from('checkout_sessions')
+      .select('*')
+      .or(`id.eq.${sessionId},external_id.eq.${sessionId}`)
+      .single();
+
+    if (fetchError || !session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    if (session.status !== 'OPEN') {
+      return res.status(400).json({ error: 'Session is not open' });
+    }
+
+    if (new Date(session.expires_at) < new Date()) {
+      await supabase
+        .from('checkout_sessions')
+        .update({ status: 'EXPIRED' })
+        .eq('id', session.id);
+      return res.status(400).json({ error: 'Session expired' });
+    }
+
+    // TODO: Process actual card payment here
+    // For now, just mark as complete
+    const { data: updatedSession, error: updateError } = await supabase
+      .from('checkout_sessions')
+      .update({
+        status: 'COMPLETE',
+        completed_at: new Date().toISOString(),
+      })
+      .eq('id', session.id)
+      .select()
+      .single();
+
+    if (updateError) {
+      return res.status(500).json({ error: updateError.message });
+    }
+
+    return res.status(200).json({
+      status: 'COMPLETE',
+      session: updatedSession,
+    });
+  } catch (error: any) {
+    console.error('[Checkout] Complete session error:', error);
+    return res.status(500).json({ error: error.message });
+  }
 }

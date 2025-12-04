@@ -140,8 +140,9 @@ export function HostedCheckoutPage() {
     }
 
     try {
-      // Call merchant service to get session
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3005'}/checkout/sessions/${sessionId}`);
+      // Call API to get session
+      const apiUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_MERCHANT_SERVICE_URL || 'https://my.peeap.com/api';
+      const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}`);
 
       if (!response.ok) {
         throw new Error('Session not found');
@@ -218,9 +219,10 @@ export function HostedCheckoutPage() {
       // For now, create a mock card token
       const cardToken = `tok_${Math.random().toString(36).substring(7)}`;
 
-      // Call checkout service to complete payment
+      // Call API to complete payment
+      const apiUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_MERCHANT_SERVICE_URL || 'https://my.peeap.com/api';
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL || 'http://localhost:3005'}/checkout/sessions/${sessionId}/complete`,
+        `${apiUrl}/checkout/sessions/${sessionId}/complete`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
