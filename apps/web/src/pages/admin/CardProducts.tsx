@@ -10,7 +10,6 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  Grid,
   Table,
   TableBody,
   TableCell,
@@ -28,6 +27,7 @@ import {
   Tab,
   Divider,
 } from '@mui/material';
+import Grid from '@mui/material/Grid2';
 import {
   Add as AddIcon,
   Edit as EditIcon,
@@ -35,6 +35,7 @@ import {
   Visibility as VisibilityIcon,
   VisibilityOff as VisibilityOffIcon,
 } from '@mui/icons-material';
+import { AdminLayout } from '@/components/layout/AdminLayout';
 
 interface CardProduct {
   id: string;
@@ -279,14 +280,17 @@ export default function CardProductsPage() {
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <CircularProgress />
-      </Box>
+      <AdminLayout>
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+          <CircularProgress />
+        </Box>
+      </AdminLayout>
     );
   }
 
   return (
-    <Box p={3}>
+    <AdminLayout>
+      <Box p={3}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h4">Card Products</Typography>
         <Button variant="contained" startIcon={<AddIcon />} onClick={openCreateDialog}>
@@ -760,6 +764,7 @@ export default function CardProductsPage() {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+      </Box>
+    </AdminLayout>
   );
 }

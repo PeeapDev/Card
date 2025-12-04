@@ -5,7 +5,6 @@ import {
   CardContent,
   Typography,
   Switch,
-  Grid,
   Button,
   Dialog,
   DialogTitle,
@@ -19,12 +18,14 @@ import {
   IconButton,
   Tooltip,
 } from '@mui/material';
+import Grid from '@mui/material/Grid2';
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
   Settings as SettingsIcon,
 } from '@mui/icons-material';
+import { AdminLayout } from '@/components/layout/AdminLayout';
 
 interface Module {
   id: string;
@@ -71,15 +72,19 @@ export default function ModulesPage() {
     try {
       setLoading(true);
       const response = await fetch(`${API_BASE}/modules`);
-      const data = await response.json();
 
-      if (response.ok) {
-        setModules(data.modules || []);
-      } else {
-        setError(data.error || 'Failed to load modules');
+      if (!response.ok) {
+        const data = await response.json();
+        setError(data.error || `API Error: ${response.status} ${response.statusText}`);
+        setLoading(false);
+        return;
       }
+
+      const data = await response.json();
+      setModules(data.modules || []);
     } catch (err: any) {
-      setError(err.message || 'Failed to load modules');
+      console.error('Failed to load modules:', err);
+      setError(err.message || 'Failed to load modules. Check console for details.');
     } finally {
       setLoading(false);
     }
@@ -215,16 +220,9 @@ export default function ModulesPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <CircularProgress />
-      </Box>
-    );
-  }
-
   return (
-    <Box p={3}>
+    <AdminLayout>
+      <Box p={3}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h4">Platform Modules</Typography>
         <Button
@@ -242,13 +240,20 @@ export default function ModulesPage() {
         </Alert>
       )}
 
+      {loading && !error ? (
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+          <CircularProgress />
+        </Box>
+      ) : null}
+
       {success && (
         <Alert severity="success" onClose={() => setSuccess('')} sx={{ mb: 2 }}>
           {success}
         </Alert>
       )}
 
-      <Grid container spacing={3}>
+      {!loading && !error && modules.length > 0 && (
+        <Grid container spacing={3}>
         {modules.map((module) => (
           <Grid item xs={12} md={6} lg={4} key={module.id}>
             <Card elevation={3}>
@@ -321,7 +326,8 @@ export default function ModulesPage() {
             </Card>
           </Grid>
         ))}
-      </Grid>
+        </Grid>
+      )}
 
       {/* Create Module Dialog */}
       <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="sm" fullWidth>
@@ -423,6 +429,7 @@ export default function ModulesPage() {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+      </Box>
+    </AdminLayout>
   );
 }

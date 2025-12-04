@@ -1,9 +1,9 @@
-import { Controller, Get, Query, Res, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Query, Res, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { Response } from 'express';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, timeout } from 'rxjs';
 
 /**
  * Quick Checkout Controller
@@ -14,10 +14,20 @@ import { firstValueFrom } from 'rxjs';
 @ApiTags('Quick Checkout')
 @Controller('checkout/quick')
 export class QuickCheckoutController {
+  private readonly logger = new Logger(QuickCheckoutController.name);
+
   constructor(
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
-  ) {}
+  ) {
+    this.logger.log('QuickCheckoutController initialized');
+  }
+
+  @Get('test')
+  @ApiOperation({ summary: 'Test endpoint' })
+  testEndpoint() {
+    return { message: 'Quick checkout controller is working!' };
+  }
 
   @Get()
   @ApiOperation({ summary: 'Quick checkout - creates session and redirects to hosted page' })
@@ -32,8 +42,9 @@ export class QuickCheckoutController {
   @ApiQuery({ name: 'brand_color', required: false, description: 'Brand color (hex)' })
   @ApiQuery({ name: 'reference', required: false, description: 'Your order reference' })
   async quickCheckout(
-    @Query('merchant_id') merchantId: string,
-    @Query('amount') amount: string,
+    @Res() res: Response,
+    @Query('merchant_id') merchantId?: string,
+    @Query('amount') amount?: string,
     @Query('currency') currency: string = 'SLE',
     @Query('description') description?: string,
     @Query('success_url') successUrl?: string,
@@ -42,11 +53,14 @@ export class QuickCheckoutController {
     @Query('merchant_logo') merchantLogo?: string,
     @Query('brand_color') brandColor?: string,
     @Query('reference') reference?: string,
-    @Res() res: Response,
   ) {
+    this.logger.log('Quick checkout endpoint called');
+    this.logger.log(`Params: merchantId=${merchantId}, amount=${amount}, currency=${currency}`);
+
     try {
       // Validate inputs
       if (!merchantId) {
+        this.logger.error('merchant_id is missing');
         throw new HttpException('merchant_id is required', HttpStatus.BAD_REQUEST);
       }
 
@@ -74,16 +88,23 @@ export class QuickCheckoutController {
         metadata: reference ? { reference } : undefined,
       };
 
+      this.logger.log(`Calling merchant service at: ${merchantServiceUrl}/checkout/sessions`);
+
       const response = await firstValueFrom(
-        this.httpService.post(`${merchantServiceUrl}/checkout/sessions`, sessionData),
+        this.httpService.post(`${merchantServiceUrl}/checkout/sessions`, sessionData).pipe(
+          timeout(10000) // 10 second timeout
+        ),
       );
 
+      this.logger.log('Merchant service response received');
       const { url } = response.data;
+      this.logger.log(`Redirecting to: ${url}`);
 
       // Redirect to hosted checkout page
       return res.redirect(url);
     } catch (error: any) {
-      console.error('Quick checkout error:', error);
+      this.logger.error('Quick checkout error:', error.message);
+      this.logger.error('Error details:', error.response?.data || error.toString());
 
       // Return error page instead of JSON
       const errorMessage = error.response?.data?.message || error.message || 'Failed to create checkout session';

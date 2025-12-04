@@ -1,0 +1,52 @@
+{
+  "version": 2,
+  "name": "checkout-peeap",
+  "buildCommand": "cd apps/web && npm install && npm run build",
+  "outputDirectory": "apps/web/dist",
+  "installCommand": "npm install",
+  "framework": "vite",
+  "devCommand": "cd apps/web && npm run dev",
+  "routes": [
+    {
+      "src": "/checkout/pay/(.*)",
+      "dest": "/index.html"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ],
+  "env": {
+    "VITE_API_URL": "https://api.peeap.com",
+    "VITE_FRONTEND_URL": "https://checkout.peeap.com",
+    "FRONTEND_URL": "https://checkout.peeap.com",
+    "VITE_MERCHANT_SERVICE_URL": "https://api.peeap.com"
+  },
+  "build": {
+    "env": {
+      "VITE_API_URL": "https://api.peeap.com",
+      "VITE_FRONTEND_URL": "https://checkout.peeap.com",
+      "FRONTEND_URL": "https://checkout.peeap.com",
+      "VITE_MERCHANT_SERVICE_URL": "https://api.peeap.com"
+    }
+  },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        }
+      ]
+    }
+  ]
+}

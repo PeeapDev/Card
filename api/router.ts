@@ -15,8 +15,22 @@ const SETTINGS_ID = '00000000-0000-0000-0000-000000000001';
  * Consolidates all API endpoints into a single serverless function to stay within Vercel's 12 function limit
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
+  // CORS Configuration - Allow multiple origins
+  const allowedOrigins = [
+    'https://checkout.peeap.com',
+    'https://my.peeap.com',
+    'https://api.peeap.com',
+    'http://localhost:5173', // Local dev - checkout
+    'http://localhost:3000', // Local dev - merchant app
+  ];
+
+  const origin = req.headers.origin || '';
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Business-Id, X-Mode');
 
   if (req.method === 'OPTIONS') {

@@ -1,10 +1,10 @@
 import { Controller, Get, Post, Body, Param } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiSecurity } from '@nestjs/swagger';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { CheckoutService } from './checkout.service';
 
 @ApiTags('Checkout')
 @Controller('checkout')
-@ApiSecurity('api-key')
+// @ApiSecurity('api-key') // Temporarily disabled for testing
 export class CheckoutController {
   constructor(private readonly checkoutService: CheckoutService) {}
 
@@ -14,7 +14,7 @@ export class CheckoutController {
     const session = await this.checkoutService.createSession(dto);
     return {
       sessionId: session.externalId,
-      url: `${process.env.CHECKOUT_BASE_URL || 'http://localhost:5173'}/checkout/pay/${session.externalId}`,
+      url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/checkout/pay/${session.externalId}`,
       expiresAt: session.expiresAt,
     };
   }

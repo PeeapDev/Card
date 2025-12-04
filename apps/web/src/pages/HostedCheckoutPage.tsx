@@ -563,7 +563,7 @@ export function HostedCheckoutPage() {
                     onChange={(e) => setPhoneOrEmail(e.target.value)}
                     placeholder="+232 76 123456 or email@example.com"
                     className="w-full py-3 px-4 border-2 border-gray-200 rounded-xl focus:outline-none"
-                    style={{ borderColor: `${brandColor}40`, ':focus': { borderColor: brandColor } }}
+                    style={{ borderColor: `${brandColor}40` }}
                     required
                   />
                 </div>

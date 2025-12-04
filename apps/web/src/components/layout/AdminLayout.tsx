@@ -32,6 +32,8 @@ import {
   Briefcase,
   Store,
   Headphones,
+  PackagePlus,
+  Puzzle,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { NotificationBell } from '@/components/ui/NotificationBell';
@@ -76,6 +78,7 @@ const navSections: NavSection[] = [
       { path: '/admin/customers', label: 'Customers', icon: Users },
       { path: '/admin/pots', label: 'Savings Pots', icon: PiggyBank },
       { path: '/admin/cards', label: 'Cards', icon: CreditCard },
+      { path: '/admin/card-products', label: 'Card Products', icon: PackagePlus, badge: 'New', badgeColor: 'primary' },
       { path: '/admin/card-programs', label: 'Card Programs', icon: Layers },
       { path: '/admin/card-types', label: 'Card Types', icon: ShoppingBag },
       { path: '/admin/card-orders', label: 'Card Orders', icon: ClipboardList, badge: 'New', badgeColor: 'primary' },
@@ -94,7 +97,6 @@ const navSections: NavSection[] = [
     title: 'Configuration',
     items: [
       { path: '/admin/business-categories', label: 'Business Categories', icon: Briefcase, badge: 'New', badgeColor: 'primary' },
-      { path: '/admin/payment-settings', label: 'Payment Gateway', icon: Banknote },
       { path: '/admin/fees', label: 'Fees & Pricing', icon: CreditCard },
       { path: '/admin/fee-settings', label: 'Fee Settings', icon: DollarSign },
       { path: '/admin/subscriptions', label: 'Subscriptions', icon: Wallet },
@@ -110,6 +112,7 @@ const navSections: NavSection[] = [
   {
     title: 'Settings',
     items: [
+      { path: '/admin/modules', label: 'Modules', icon: Puzzle, badge: 'New', badgeColor: 'primary' },
       { path: '/admin/roles', label: 'Role Management', icon: UserCog },
       { path: '/admin/payment-settings', label: 'Payment Settings', icon: Settings },
       { path: '/admin/compliance', label: 'Compliance', icon: FileCheck, badge: 'Pending', badgeColor: 'yellow' },
