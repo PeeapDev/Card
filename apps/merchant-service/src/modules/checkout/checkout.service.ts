@@ -15,6 +15,16 @@ interface CreateCheckoutDto {
   successUrl: string;
   cancelUrl: string;
   metadata?: Record<string, any>;
+  // Merchant branding
+  merchantName?: string;
+  merchantLogoUrl?: string;
+  brandColor?: string;
+  // Payment methods
+  paymentMethods?: {
+    qr?: boolean;
+    card?: boolean;
+    mobile?: boolean;
+  };
 }
 
 @Injectable()
@@ -29,30 +39,42 @@ export class CheckoutService {
   ) {}
 
   async createSession(dto: CreateCheckoutDto): Promise<CheckoutSession> {
-    const sessionId = `cs_${crypto.randomBytes(16).toString('hex')}`;
+    const externalId = `cs_${crypto.randomBytes(16).toString('hex')}`;
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
 
     const session = this.sessionRepository.create({
-      id: sessionId,
+      externalId,
       merchantId: dto.merchantId,
       amount: dto.amount,
-      currency: dto.currency,
+      currencyCode: dto.currency,
       description: dto.description,
       successUrl: dto.successUrl,
       cancelUrl: dto.cancelUrl,
-      status: 'PENDING',
+      status: 'OPEN',
       expiresAt,
       metadata: dto.metadata,
+      // Branding
+      merchantName: dto.merchantName,
+      merchantLogoUrl: dto.merchantLogoUrl,
+      brandColor: dto.brandColor || '#4F46E5', // Default indigo
+      // Payment methods (default to all enabled)
+      paymentMethods: dto.paymentMethods || { qr: true, card: true, mobile: true },
     });
 
     await this.sessionRepository.save(session);
-    this.logger.log(`Checkout session created: ${sessionId}`);
+    this.logger.log(`Checkout session created: ${externalId}`);
 
     return session;
   }
 
   async getSession(sessionId: string): Promise<CheckoutSession> {
-    const session = await this.sessionRepository.findOne({ where: { id: sessionId } });
+    // Support both UUID (id) and external ID (externalId) lookups
+    const session = await this.sessionRepository.findOne({
+      where: [
+        { id: sessionId },
+        { externalId: sessionId }
+      ]
+    });
     if (!session) throw new NotFoundException('Checkout session not found');
     return session;
   }
@@ -60,8 +82,8 @@ export class CheckoutService {
   async completeSession(sessionId: string, cardToken: string): Promise<CheckoutSession> {
     const session = await this.getSession(sessionId);
 
-    if (session.status !== 'PENDING') {
-      throw new BadRequestException('Session is not pending');
+    if (session.status !== 'OPEN') {
+      throw new BadRequestException('Session is not open');
     }
 
     if (session.expiresAt < new Date()) {
@@ -81,7 +103,7 @@ export class CheckoutService {
         this.httpService.post(`${transactionServiceUrl}/transactions/authorize`, {
           cardToken,
           amount: session.amount,
-          currency: session.currency,
+          currency: session.currencyCode,
           merchantId: session.merchantId,
           entryMode: 'ECOMMERCE',
           description: session.description,
@@ -89,7 +111,7 @@ export class CheckoutService {
       );
 
       if (response.data.status === 'AUTHORIZED') {
-        session.status = 'COMPLETED';
+        session.status = 'COMPLETE';
         session.transactionId = response.data.transactionId;
         session.completedAt = new Date();
 
@@ -101,12 +123,10 @@ export class CheckoutService {
           ).pipe(timeout(10000)),
         );
       } else {
-        session.status = 'FAILED';
-        session.failureReason = response.data.message;
+        session.status = 'CANCELLED';
       }
     } catch (error: any) {
-      session.status = 'FAILED';
-      session.failureReason = error.message;
+      session.status = 'CANCELLED';
     }
 
     await this.sessionRepository.save(session);

@@ -55,6 +55,24 @@ export class CheckoutSession {
   @Column({ name: 'customer_id', type: 'uuid', nullable: true })
   customerId: string;
 
+  // Merchant branding
+  @Column({ name: 'merchant_name', length: 255, nullable: true })
+  merchantName: string;
+
+  @Column({ name: 'merchant_logo_url', length: 500, nullable: true })
+  merchantLogoUrl: string;
+
+  @Column({ name: 'brand_color', length: 7, nullable: true })
+  brandColor: string; // Hex color code (e.g., #FF5722)
+
+  // Payment methods enabled for this session
+  @Column({ name: 'payment_methods', type: 'jsonb', nullable: true })
+  paymentMethods: {
+    qr?: boolean;
+    card?: boolean;
+    mobile?: boolean;
+  };
+
   // URLs
   @Column({ name: 'success_url', length: 500, nullable: true })
   successUrl: string;

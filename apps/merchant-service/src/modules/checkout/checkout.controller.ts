@@ -13,8 +13,8 @@ export class CheckoutController {
   async createSession(@Body() dto: any) {
     const session = await this.checkoutService.createSession(dto);
     return {
-      sessionId: session.id,
-      url: `${process.env.CHECKOUT_BASE_URL || 'https://checkout.example.com'}/pay/${session.id}`,
+      sessionId: session.externalId,
+      url: `${process.env.CHECKOUT_BASE_URL || 'http://localhost:5173'}/checkout/pay/${session.externalId}`,
       expiresAt: session.expiresAt,
     };
   }

@@ -69,6 +69,7 @@ import { DepositSuccessPage } from '@/pages/DepositSuccessPage';
 import { DepositCancelPage } from '@/pages/DepositCancelPage';
 import { BusinessCheckoutPage } from '@/pages/BusinessCheckoutPage';
 import { CheckoutPage } from '@/pages/CheckoutPage';
+import { HostedCheckoutPage } from '@/pages/HostedCheckoutPage';
 import { AppPaymentRedirectPage } from '@/pages/AppPaymentRedirectPage';
 
 // Merchant Pages
@@ -140,6 +141,9 @@ function App() {
 
               {/* Business Checkout Route - SDK uses /checkout/:businessId */}
               <Route path="/checkout/:businessId" element={<BusinessCheckoutPage />} />
+
+              {/* Hosted Checkout Page - Universal developer checkout like Stripe/PayPal */}
+              <Route path="/checkout/pay/:sessionId" element={<HostedCheckoutPage />} />
 
               {/* App Payment Redirect - Smart deep link handler for QR scans */}
               {/* Redirects to app if installed, or app store if not */}

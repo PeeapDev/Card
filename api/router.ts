@@ -38,6 +38,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleSettingsTestCheckout(req, res);
     } else if (path.startsWith('settings/checkout-callback')) {
       return await handleSettingsCheckoutCallback(req, res);
+    } else if (path === 'modules' || path === 'modules/') {
+      return await handleModules(req, res);
+    } else if (path.match(/^modules\/[^/]+$/)) {
+      const moduleId = path.split('/')[1];
+      return await handleModuleById(req, res, moduleId);
+    } else if (path === 'card-products' || path === 'card-products/') {
+      return await handleCardProducts(req, res);
+    } else if (path.match(/^card-products\/[^/]+$/)) {
+      const productId = path.split('/')[1];
+      return await handleCardProductById(req, res, productId);
+    } else if (path === 'cards/purchase') {
+      return await handleCardPurchase(req, res);
+    } else if (path.match(/^cards\/user\/[^/]+$/)) {
+      const userId = path.split('/')[2];
+      return await handleUserCards(req, res, userId);
     } else if (path.startsWith('payments/initialize')) {
       return await handlePaymentsInitialize(req, res);
     } else if (path.match(/^payments\/[^/]+$/)) {
@@ -705,4 +720,382 @@ async function handlePaymentsId(req: VercelRequest, res: VercelResponse) {
 
 async function handleMonimeDeposit(req: VercelRequest, res: VercelResponse) {
   return res.status(501).json({ error: 'Temporarily unavailable - see full implementation' });
+}
+
+// ============================================================================
+// MODULE MANAGEMENT HANDLERS
+// ============================================================================
+
+async function handleModules(req: VercelRequest, res: VercelResponse) {
+  if (req.method === 'GET') {
+    const { data: modules, error } = await supabase
+      .from('modules')
+      .select('*')
+      .order('category', { ascending: true })
+      .order('name', { ascending: true});
+
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ modules: modules || [], total: modules?.length || 0 });
+  }
+
+  if (req.method === 'POST') {
+    const { code, name, description, category, version, icon, config, dependencies } = req.body;
+    if (!code || !name) return res.status(400).json({ error: 'Code and name are required' });
+
+    const { data: module, error } = await supabase
+      .from('modules')
+      .insert({
+        code, name, description, category,
+        version: version || '1.0.0', icon,
+        config: config || {}, dependencies: dependencies || [],
+        is_enabled: false, is_system: false,
+      })
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(201).json({ module });
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+async function handleModuleById(req: VercelRequest, res: VercelResponse, moduleId: string) {
+  if (req.method === 'PUT') {
+    const { is_enabled, config, name, description, icon } = req.body;
+    const updateData: any = { updated_at: new Date().toISOString() };
+
+    if (is_enabled !== undefined) {
+      updateData.is_enabled = is_enabled;
+      if (is_enabled) updateData.enabled_at = new Date().toISOString();
+    }
+    if (config !== undefined) updateData.config = config;
+    if (name) updateData.name = name;
+    if (description !== undefined) updateData.description = description;
+    if (icon) updateData.icon = icon;
+
+    const { data: module, error } = await supabase
+      .from('modules')
+      .update(updateData)
+      .eq('id', moduleId)
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ module });
+  }
+
+  if (req.method === 'DELETE') {
+    const { data: module } = await supabase
+      .from('modules')
+      .select('is_system')
+      .eq('id', moduleId)
+      .single();
+
+    if (module?.is_system) {
+      return res.status(403).json({ error: 'Cannot delete system modules' });
+    }
+
+    const { error } = await supabase.from('modules').delete().eq('id', moduleId);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ success: true });
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+// ============================================================================
+// CARD PRODUCT HANDLERS
+// ============================================================================
+
+async function handleCardProducts(req: VercelRequest, res: VercelResponse) {
+  if (req.method === 'GET') {
+    const { admin } = req.query;
+    let query = supabase
+      .from('card_products')
+      .select('*')
+      .order('sort_order', { ascending: true })
+      .order('tier', { ascending: true });
+
+    if (admin !== 'true') {
+      query = query.eq('is_active', true).eq('is_visible', true);
+    }
+
+    const { data: products, error } = await query;
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ products: products || [], total: products?.length || 0 });
+  }
+
+  if (req.method === 'POST') {
+    const {
+      code, name, description, tier, purchase_price, annual_fee, currency,
+      daily_transaction_limit, monthly_transaction_limit, max_balance,
+      transaction_fee_percent, transaction_fee_flat, bin_prefix, card_length,
+      is_online_enabled, is_atm_enabled, is_contactless_enabled, is_international_enabled,
+      cashback_percent, features, card_design_url, card_color, card_text_color, stock_limit,
+    } = req.body;
+
+    if (!code || !name || !tier || purchase_price === undefined || !bin_prefix) {
+      return res.status(400).json({ error: 'Required: code, name, tier, purchase_price, bin_prefix' });
+    }
+
+    const { data: product, error } = await supabase
+      .from('card_products')
+      .insert({
+        code, name, description, tier, purchase_price, annual_fee: annual_fee || 0,
+        currency: currency || 'SLE', daily_transaction_limit, monthly_transaction_limit,
+        max_balance, transaction_fee_percent: transaction_fee_percent || 0,
+        transaction_fee_flat: transaction_fee_flat || 0, bin_prefix, card_length: card_length || 16,
+        is_online_enabled: is_online_enabled !== false, is_atm_enabled: is_atm_enabled || false,
+        is_contactless_enabled: is_contactless_enabled || false,
+        is_international_enabled: is_international_enabled || false,
+        cashback_percent: cashback_percent || 0, features: features || [],
+        card_design_url, card_color: card_color || '#1A1A1A',
+        card_text_color: card_text_color || '#FFFFFF', stock_limit,
+        is_active: true, is_visible: true, cards_issued: 0,
+      })
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(201).json({ product });
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+async function handleCardProductById(req: VercelRequest, res: VercelResponse, productId: string) {
+  if (req.method === 'GET') {
+    const { data: product, error } = await supabase
+      .from('card_products')
+      .select('*')
+      .eq('id', productId)
+      .single();
+
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ product });
+  }
+
+  if (req.method === 'PUT') {
+    const updateData: any = { ...req.body };
+    delete updateData.id;
+    delete updateData.created_at;
+    delete updateData.cards_issued;
+    updateData.updated_at = new Date().toISOString();
+
+    const { data: product, error } = await supabase
+      .from('card_products')
+      .update(updateData)
+      .eq('id', productId)
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ product });
+  }
+
+  if (req.method === 'DELETE') {
+    const { data: product } = await supabase
+      .from('card_products')
+      .select('cards_issued')
+      .eq('id', productId)
+      .single();
+
+    if (product && product.cards_issued > 0) {
+      return res.status(403).json({
+        error: `Cannot delete product with ${product.cards_issued} issued cards.`,
+      });
+    }
+
+    const { error } = await supabase.from('card_products').delete().eq('id', productId);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ success: true });
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+// ============================================================================
+// CARD PURCHASE & USER CARDS HANDLERS
+// ============================================================================
+
+async function handleCardPurchase(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const { userId, cardProductId, paymentMethod } = req.body;
+    if (!userId || !cardProductId) {
+      return res.status(400).json({ error: 'userId and cardProductId are required' });
+    }
+
+    const { data: product, error: productError } = await supabase
+      .from('card_products')
+      .select('*')
+      .eq('id', cardProductId)
+      .single();
+
+    if (productError || !product) return res.status(404).json({ error: 'Product not found' });
+    if (!product.is_active || !product.is_visible) {
+      return res.status(400).json({ error: 'Product not available' });
+    }
+    if (product.stock_limit && product.cards_issued >= product.stock_limit) {
+      return res.status(400).json({ error: 'Out of stock' });
+    }
+
+    const { data: existingCard } = await supabase
+      .from('cards')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('card_product_id', cardProductId)
+      .single();
+
+    if (existingCard) {
+      return res.status(400).json({ error: 'You already own this card type' });
+    }
+
+    const { data: wallet, error: walletError } = await supabase
+      .from('wallets')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('wallet_type', 'primary')
+      .single();
+
+    if (walletError || !wallet) return res.status(404).json({ error: 'Wallet not found' });
+    if (wallet.available_balance < product.purchase_price) {
+      return res.status(400).json({
+        error: 'Insufficient balance',
+        required: product.purchase_price,
+        available: wallet.available_balance,
+      });
+    }
+
+    const purchaseId = randomUUID();
+    await supabase.from('card_purchases').insert({
+      id: purchaseId,
+      user_id: userId,
+      card_product_id: cardProductId,
+      amount: product.purchase_price,
+      currency: product.currency,
+      payment_method: paymentMethod || 'wallet',
+      status: 'pending',
+    });
+
+    const { error: debitError } = await supabase.rpc('update_wallet_balance', {
+      p_wallet_id: wallet.id,
+      p_amount: product.purchase_price,
+      p_operation: 'debit',
+    });
+
+    if (debitError) {
+      await supabase.from('card_purchases').delete().eq('id', purchaseId);
+      throw new Error('Payment failed: ' + debitError.message);
+    }
+
+    const { data: cardNumberData } = await supabase.rpc('generate_card_number', {
+      bin_prefix: product.bin_prefix,
+      card_length: product.card_length,
+    });
+
+    const cardNumber = cardNumberData;
+    const now = new Date();
+    const expiryMonth = now.getMonth() + 1;
+    const expiryYear = now.getFullYear() + 5;
+
+    const cardId = randomUUID();
+    const { data: card, error: cardError } = await supabase
+      .from('cards')
+      .insert({
+        id: cardId,
+        user_id: userId,
+        card_product_id: cardProductId,
+        card_number: cardNumber,
+        last_four: cardNumber.slice(-4),
+        expiry_month: expiryMonth,
+        expiry_year: expiryYear,
+        cvv: String(Math.floor(Math.random() * 900) + 100),
+        status: 'ACTIVE',
+        daily_limit: product.daily_transaction_limit,
+        monthly_limit: product.monthly_transaction_limit,
+        is_online_enabled: product.is_online_enabled,
+        purchased_at: new Date().toISOString(),
+        purchase_amount: product.purchase_price,
+        annual_fee_due_date: new Date(now.getFullYear() + 1, now.getMonth(), now.getDate())
+          .toISOString()
+          .split('T')[0],
+      })
+      .select()
+      .single();
+
+    if (cardError) {
+      await supabase.rpc('update_wallet_balance', {
+        p_wallet_id: wallet.id,
+        p_amount: product.purchase_price,
+        p_operation: 'credit',
+      });
+      await supabase.from('card_purchases').delete().eq('id', purchaseId);
+      throw cardError;
+    }
+
+    await supabase
+      .from('card_purchases')
+      .update({
+        card_id: cardId,
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+      })
+      .eq('id', purchaseId);
+
+    await supabase
+      .from('card_products')
+      .update({ cards_issued: product.cards_issued + 1 })
+      .eq('id', cardProductId);
+
+    await supabase.from('transactions').insert({
+      wallet_id: wallet.id,
+      type: 'CARD_PURCHASE',
+      amount: -product.purchase_price,
+      currency: product.currency,
+      status: 'COMPLETED',
+      description: `Purchase ${product.name}`,
+      reference: purchaseId,
+      metadata: {
+        card_id: cardId,
+        card_product_id: cardProductId,
+        card_product_name: product.name,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      card: {
+        id: card.id,
+        card_number: cardNumber,
+        last_four: card.last_four,
+        expiry_month: card.expiry_month,
+        expiry_year: card.expiry_year,
+        product_name: product.name,
+        status: card.status,
+      },
+    });
+  } catch (error: any) {
+    console.error('[Card Purchase] Error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+async function handleUserCards(req: VercelRequest, res: VercelResponse, userId: string) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const { data: cards, error } = await supabase
+    .from('cards')
+    .select(`*, card_product:card_products(*)`)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+  return res.status(200).json({ cards: cards || [], total: cards?.length || 0 });
 }
