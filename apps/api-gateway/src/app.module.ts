@@ -13,6 +13,7 @@ import { NFCEngineModule } from './modules/nfc-engine/nfc-engine.module';
 import { QREngineModule } from './modules/qr-engine/qr-engine.module';
 import { PaymentSessionModule } from './modules/payment-session/payment-session.module';
 import { P2PTransferModule } from './modules/p2p-transfer/p2p-transfer.module';
+import { CheckoutModule } from './modules/checkout/checkout.module';
 import { LoggingInterceptor } from './interceptors/logging.interceptor';
 import { HttpExceptionFilter } from './filters/http-exception.filter';
 import { RequestIdMiddleware } from './middleware/request-id.middleware';
@@ -63,6 +64,7 @@ import { CorrelationIdMiddleware } from './middleware/correlation-id.middleware'
     QREngineModule,
     PaymentSessionModule,
     P2PTransferModule,
+    CheckoutModule,
   ],
   providers: [
     {

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment Successful</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      padding: 1rem;
+    }
+
+    .container {
+      background: white;
+      padding: 3rem 2rem;
+      border-radius: 1rem;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 500px;
+      text-align: center;
+    }
+
+    .icon {
+      width: 80px;
+      height: 80px;
+      background: #d1fae5;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1.5rem;
+      font-size: 3rem;
+    }
+
+    h1 {
+      color: #10b981;
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+    }
+
+    p {
+      color: #6b7280;
+      font-size: 1.1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .session-id {
+      background: #f3f4f6;
+      padding: 1rem;
+      border-radius: 0.5rem;
+      font-family: monospace;
+      font-size: 0.9rem;
+      color: #374151;
+      word-break: break-all;
+      margin-bottom: 2rem;
+    }
+
+    .button {
+      display: inline-block;
+      background: #10b981;
+      color: white;
+      padding: 1rem 2rem;
+      text-decoration: none;
+      border-radius: 0.5rem;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    .button:hover {
+      background: #059669;
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(16, 185, 129, 0.3);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">✅</div>
+    <h1>Payment Successful!</h1>
+    <p>Thank you for your payment. Your transaction has been completed successfully.</p>
+
+    <div class="session-id" id="session-info">
+      <strong>Session ID:</strong><br>
+      <span id="session-id">Loading...</span>
+    </div>
+
+    <a href="/" class="button">Back to Home</a>
+  </div>
+
+  <script>
+    // Get session ID from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionId = urlParams.get('session_id');
+
+    if (sessionId) {
+      document.getElementById('session-id').textContent = sessionId;
+    } else {
+      document.getElementById('session-info').style.display = 'none';
+    }
+  </script>
+</body>
+</html>

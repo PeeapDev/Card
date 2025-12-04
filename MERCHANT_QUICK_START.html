@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Peeap Payment Integration - Copy & Paste</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      line-height: 1.6;
+      color: #1f2937;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 1rem;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      overflow: hidden;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+      color: white;
+      padding: 2rem;
+      text-align: center;
+    }
+
+    .header h1 {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .header p {
+      opacity: 0.9;
+      font-size: 1.1rem;
+    }
+
+    .content {
+      padding: 2rem;
+    }
+
+    .section {
+      margin-bottom: 3rem;
+    }
+
+    .section h2 {
+      color: #4f46e5;
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    .section h3 {
+      color: #6366f1;
+      font-size: 1.2rem;
+      margin: 1.5rem 0 0.75rem 0;
+    }
+
+    .config-box {
+      background: #f9fafb;
+      border: 2px solid #e5e7eb;
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      margin: 1rem 0;
+    }
+
+    .config-item {
+      display: flex;
+      align-items: center;
+      margin: 0.75rem 0;
+      gap: 1rem;
+    }
+
+    .config-item label {
+      font-weight: 600;
+      min-width: 120px;
+      color: #6b7280;
+    }
+
+    .config-item input {
+      flex: 1;
+      padding: 0.5rem;
+      border: 1px solid #d1d5db;
+      border-radius: 0.375rem;
+      font-family: monospace;
+    }
+
+    .code-block {
+      background: #1f2937;
+      color: #f3f4f6;
+      padding: 1.5rem;
+      border-radius: 0.5rem;
+      overflow-x: auto;
+      margin: 1rem 0;
+      position: relative;
+    }
+
+    .code-block pre {
+      margin: 0;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
+    .copy-btn {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      background: #4f46e5;
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 0.375rem;
+      cursor: pointer;
+      font-size: 0.875rem;
+      transition: background 0.2s;
+    }
+
+    .copy-btn:hover {
+      background: #4338ca;
+    }
+
+    .copy-btn.copied {
+      background: #10b981;
+    }
+
+    .demo-buttons {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin: 1rem 0;
+    }
+
+    .demo-btn {
+      padding: 1rem 2rem;
+      border: none;
+      border-radius: 0.5rem;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+      display: inline-block;
+    }
+
+    .demo-btn.primary {
+      background: #4f46e5;
+      color: white;
+    }
+
+    .demo-btn.primary:hover {
+      background: #4338ca;
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(79, 70, 229, 0.3);
+    }
+
+    .demo-btn.secondary {
+      background: #f3f4f6;
+      color: #1f2937;
+      border: 2px solid #d1d5db;
+    }
+
+    .demo-btn.secondary:hover {
+      background: #e5e7eb;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+      margin: 1.5rem 0;
+    }
+
+    .feature-card {
+      background: #f9fafb;
+      padding: 1.5rem;
+      border-radius: 0.5rem;
+      border: 2px solid #e5e7eb;
+    }
+
+    .feature-card h4 {
+      color: #4f46e5;
+      margin-bottom: 0.5rem;
+      font-size: 1.1rem;
+    }
+
+    .feature-card p {
+      color: #6b7280;
+      font-size: 0.9rem;
+    }
+
+    .alert {
+      background: #fef3c7;
+      border: 2px solid #fbbf24;
+      color: #92400e;
+      padding: 1rem;
+      border-radius: 0.5rem;
+      margin: 1rem 0;
+    }
+
+    .alert strong {
+      display: block;
+      margin-bottom: 0.25rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+    }
+
+    th, td {
+      padding: 0.75rem;
+      text-align: left;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    th {
+      background: #f9fafb;
+      font-weight: 600;
+      color: #4b5563;
+    }
+
+    code {
+      background: #f3f4f6;
+      padding: 0.2rem 0.4rem;
+      border-radius: 0.25rem;
+      font-family: monospace;
+      color: #dc2626;
+      font-size: 0.9em;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🚀 Peeap Payment Integration</h1>
+      <p>Copy. Paste. Start Accepting Payments. It's That Simple.</p>
+    </div>
+
+    <div class="content">
+      <!-- CONFIGURATION -->
+      <div class="section">
+        <h2>⚙️ Your Configuration</h2>
+
+        <div class="config-box">
+          <div class="config-item">
+            <label>Merchant ID:</label>
+            <input type="text" id="merchantId" value="f0c164b7-b608-4ca3-88d9-bc576d765160" readonly>
+          </div>
+          <div class="config-item">
+            <label>Business Name:</label>
+            <input type="text" id="merchantName" value="School District" placeholder="Your Business Name">
+          </div>
+          <div class="config-item">
+            <label>Logo URL:</label>
+            <input type="text" id="merchantLogo" placeholder="https://yoursite.com/logo.png">
+          </div>
+          <div class="config-item">
+            <label>Brand Color:</label>
+            <input type="color" id="brandColor" value="#4F46E5">
+          </div>
+        </div>
+      </div>
+
+      <!-- METHOD 1: SIMPLE LINK -->
+      <div class="section">
+        <h2>✨ Method 1: Simple Payment Link (Easiest)</h2>
+        <p>Just copy this link and use it anywhere - email, SMS, social media, or your website.</p>
+
+        <h3>📋 Copy This Link:</h3>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyCode('link-code')">Copy</button>
+          <pre id="link-code">https://my.peeap.com/checkout/quick?merchant_id=f0c164b7-b608-4ca3-88d9-bc576d765160&amount=50000&currency=SLE&description=Payment&merchant_name=School%20District</pre>
+        </div>
+
+        <div class="alert">
+          <strong>💡 Customize Your Link:</strong>
+          Change <code>amount=50000</code> to your desired amount (in cents/minor units).<br>
+          Example: Le 100 = <code>amount=10000</code> | $50 = <code>amount=5000</code>
+        </div>
+
+        <h3>🔗 Test It Now:</h3>
+        <div class="demo-buttons">
+          <a href="#" class="demo-btn primary" id="test-link-btn">Pay Le 500</a>
+        </div>
+      </div>
+
+      <!-- METHOD 2: HTML BUTTON -->
+      <div class="section">
+        <h2>🔘 Method 2: HTML Button</h2>
+        <p>Add a beautiful payment button to your website. Works on any HTML page.</p>
+
+        <h3>📋 Copy This Code:</h3>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyCode('button-code')">Copy</button>
+          <pre id="button-code">&lt;!-- Peeap Payment Button --&gt;
+&lt;a href="https://my.peeap.com/checkout/quick?merchant_id=f0c164b7-b608-4ca3-88d9-bc576d765160&amount=50000&currency=SLE&description=Order%20Payment&merchant_name=School%20District"
+   style="display:inline-block;background:#4F46E5;color:white;padding:15px 30px;text-decoration:none;border-radius:8px;font-weight:600;font-family:system-ui,-apple-system,sans-serif;transition:all 0.2s;"
+   onmouseover="this.style.background='#4338CA';this.style.transform='translateY(-2px)';this.style.boxShadow='0 10px 20px rgba(79,70,229,0.3)'"
+   onmouseout="this.style.background='#4F46E5';this.style.transform='translateY(0)';this.style.boxShadow='none'"&gt;
+  💳 Pay Le 500.00
+&lt;/a&gt;</pre>
+        </div>
+
+        <h3>🎨 Preview:</h3>
+        <div class="demo-buttons">
+          <a href="#" class="demo-btn primary" id="preview-btn">💳 Pay Le 500.00</a>
+        </div>
+      </div>
+
+      <!-- METHOD 3: JAVASCRIPT -->
+      <div class="section">
+        <h2>⚡ Method 3: JavaScript (Dynamic Amounts)</h2>
+        <p>Perfect for cart checkouts where the amount changes.</p>
+
+        <h3>📋 Copy This Code:</h3>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyCode('js-code')">Copy</button>
+          <pre id="js-code">&lt;!-- Add this button to your page --&gt;
+&lt;button id="pay-button"
+        style="background:#4F46E5;color:white;padding:15px 30px;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:16px;"&gt;
+  Pay Now
+&lt;/button&gt;
+
+&lt;script&gt;
+document.getElementById('pay-button').addEventListener('click', function() {
+  // Get your dynamic amount (e.g., from cart total)
+  var amount = 50000; // Le 500.00
+  var description = 'Order #12345';
+
+  // Build checkout URL
+  var checkoutUrl = 'https://my.peeap.com/checkout/quick?' +
+    'merchant_id=f0c164b7-b608-4ca3-88d9-bc576d765160' +
+    '&amount=' + amount +
+    '&currency=SLE' +
+    '&description=' + encodeURIComponent(description) +
+    '&merchant_name=School%20District' +
+    '&success_url=' + encodeURIComponent(window.location.origin + '/success') +
+    '&cancel_url=' + encodeURIComponent(window.location.origin + '/cancel');
+
+  // Redirect to checkout
+  window.location.href = checkoutUrl;
+});
+&lt;/script&gt;</pre>
+        </div>
+      </div>
+
+      <!-- METHOD 4: FORM POST -->
+      <div class="section">
+        <h2>📝 Method 4: HTML Form (No JavaScript)</h2>
+        <p>Works even with JavaScript disabled. Great for simple checkout pages.</p>
+
+        <h3>📋 Copy This Code:</h3>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyCode('form-code')">Copy</button>
+          <pre id="form-code">&lt;form action="https://my.peeap.com/checkout/quick" method="GET"&gt;
+  &lt;input type="hidden" name="merchant_id" value="f0c164b7-b608-4ca3-88d9-bc576d765160"&gt;
+  &lt;input type="hidden" name="merchant_name" value="School District"&gt;
+  &lt;input type="hidden" name="currency" value="SLE"&gt;
+
+  &lt;!-- Customer can enter amount --&gt;
+  &lt;label&gt;Amount (Le):&lt;/label&gt;
+  &lt;input type="number" name="amount" value="50000" required&gt;
+
+  &lt;label&gt;Description:&lt;/label&gt;
+  &lt;input type="text" name="description" value="Payment" required&gt;
+
+  &lt;button type="submit"
+          style="background:#4F46E5;color:white;padding:15px 30px;border:none;border-radius:8px;font-weight:600;cursor:pointer;margin-top:10px;"&gt;
+    Proceed to Payment
+  &lt;/button&gt;
+&lt;/form&gt;</pre>
+        </div>
+      </div>
+
+      <!-- PARAMETERS -->
+      <div class="section">
+        <h2>📚 All Available Parameters</h2>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Parameter</th>
+              <th>Required</th>
+              <th>Description</th>
+              <th>Example</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>merchant_id</code></td>
+              <td>✅</td>
+              <td>Your merchant ID</td>
+              <td>f0c164b7-b608-4ca3-88d9...</td>
+            </tr>
+            <tr>
+              <td><code>amount</code></td>
+              <td>✅</td>
+              <td>Amount in minor units (cents)</td>
+              <td>50000 (Le 500.00)</td>
+            </tr>
+            <tr>
+              <td><code>currency</code></td>
+              <td>❌</td>
+              <td>Currency code (default: SLE)</td>
+              <td>SLE, USD, EUR, GBP, NGN, GHS</td>
+            </tr>
+            <tr>
+              <td><code>description</code></td>
+              <td>❌</td>
+              <td>Payment description</td>
+              <td>Order #12345</td>
+            </tr>
+            <tr>
+              <td><code>merchant_name</code></td>
+              <td>❌</td>
+              <td>Your business name</td>
+              <td>School District</td>
+            </tr>
+            <tr>
+              <td><code>merchant_logo</code></td>
+              <td>❌</td>
+              <td>Your logo URL</td>
+              <td>https://yoursite.com/logo.png</td>
+            </tr>
+            <tr>
+              <td><code>brand_color</code></td>
+              <td>❌</td>
+              <td>Button color (hex, no #)</td>
+              <td>4F46E5</td>
+            </tr>
+            <tr>
+              <td><code>success_url</code></td>
+              <td>❌</td>
+              <td>Where to redirect after payment</td>
+              <td>https://yoursite.com/success</td>
+            </tr>
+            <tr>
+              <td><code>cancel_url</code></td>
+              <td>❌</td>
+              <td>Where to redirect if cancelled</td>
+              <td>https://yoursite.com/cancel</td>
+            </tr>
+            <tr>
+              <td><code>reference</code></td>
+              <td>❌</td>
+              <td>Your order/invoice reference</td>
+              <td>INV-2024-001</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- CURRENCIES -->
+      <div class="section">
+        <h2>💱 Supported Currencies</h2>
+
+        <div class="feature-grid">
+          <div class="feature-card">
+            <h4>🇸🇱 SLE - Sierra Leone</h4>
+            <p>Le 500.00 = <code>amount=50000</code></p>
+          </div>
+          <div class="feature-card">
+            <h4>🇺🇸 USD - US Dollar</h4>
+            <p>$50.00 = <code>amount=5000</code></p>
+          </div>
+          <div class="feature-card">
+            <h4>🇪🇺 EUR - Euro</h4>
+            <p>€50.00 = <code>amount=5000</code></p>
+          </div>
+          <div class="feature-card">
+            <h4>🇬🇧 GBP - British Pound</h4>
+            <p>£50.00 = <code>amount=5000</code></p>
+          </div>
+          <div class="feature-card">
+            <h4>🇳🇬 NGN - Nigerian Naira</h4>
+            <p>₦500.00 = <code>amount=50000</code></p>
+          </div>
+          <div class="feature-card">
+            <h4>🇬🇭 GHS - Ghanaian Cedi</h4>
+            <p>₵50.00 = <code>amount=5000</code></p>
+          </div>
+        </div>
+
+        <div class="alert">
+          <strong>💡 Amount Format:</strong>
+          Always multiply by 100 for 2-decimal currencies.<br>
+          Example: $10.50 = 10.50 × 100 = <code>1050</code>
+        </div>
+      </div>
+
+      <!-- PAYMENT METHODS -->
+      <div class="section">
+        <h2>💳 Available Payment Methods</h2>
+
+        <div class="feature-grid">
+          <div class="feature-card">
+            <h4>📱 QR Code</h4>
+            <p>Customers scan with Peeap app for instant payment</p>
+          </div>
+          <div class="feature-card">
+            <h4>💳 National Cards</h4>
+            <p>Direct card entry with secure processing</p>
+          </div>
+          <div class="feature-card">
+            <h4>📞 Mobile Money</h4>
+            <p>Orange Money, Africell, and more</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- EXAMPLES FOR PLATFORMS -->
+      <div class="section">
+        <h2>🛠️ Platform-Specific Examples</h2>
+
+        <h3>WordPress</h3>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyCode('wordpress-code')">Copy</button>
+          <pre id="wordpress-code">&lt;!-- Add to any page/post --&gt;
+[html]
+&lt;a href="https://my.peeap.com/checkout/quick?merchant_id=f0c164b7-b608-4ca3-88d9-bc576d765160&amount=50000&currency=SLE&merchant_name=School%20District"
+   class="peeap-pay-button"&gt;
+  Pay Now
+&lt;/a&gt;
+
+&lt;style&gt;
+.peeap-pay-button {
+  display: inline-block;
+  background: #4F46E5;
+  color: white !important;
+  padding: 15px 30px;
+  text-decoration: none;
+  border-radius: 8px;
+  font-weight: 600;
+}
+.peeap-pay-button:hover {
+  background: #4338CA;
+}
+&lt;/style&gt;
+[/html]</pre>
+        </div>
+
+        <h3>Shopify</h3>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyCode('shopify-code')">Copy</button>
+          <pre id="shopify-code">&lt;!-- Add to product page template --&gt;
+&lt;button onclick="checkoutWithPeeap()"&gt;Pay with Peeap&lt;/button&gt;
+
+&lt;script&gt;
+function checkoutWithPeeap() {
+  var amount = {{ product.price | times: 100 }};
+  var url = 'https://my.peeap.com/checkout/quick?merchant_id=f0c164b7-b608-4ca3-88d9-bc576d765160&amount=' + amount + '&currency=SLE&description={{ product.title | url_param_escape }}';
+  window.location.href = url;
+}
+&lt;/script&gt;</pre>
+        </div>
+
+        <h3>Wix / Squarespace / Webflow</h3>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyCode('builder-code')">Copy</button>
+          <pre id="builder-code">&lt;!-- Add as custom HTML/Embed block --&gt;
+&lt;a href="https://my.peeap.com/checkout/quick?merchant_id=f0c164b7-b608-4ca3-88d9-bc576d765160&amount=50000&currency=SLE&merchant_name=School%20District"
+   style="display:inline-block;background:#4F46E5;color:white;padding:15px 30px;text-decoration:none;border-radius:8px;font-weight:600;font-family:sans-serif;"&gt;
+  Pay Le 500.00
+&lt;/a&gt;</pre>
+        </div>
+      </div>
+
+      <!-- SUCCESS HANDLING -->
+      <div class="section">
+        <h2>✅ Handling Success/Cancel</h2>
+
+        <p>After payment, customers are redirected to your URLs with the session ID:</p>
+
+        <h3>Success Page Example:</h3>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyCode('success-code')">Copy</button>
+          <pre id="success-code">&lt;!-- success.html --&gt;
+&lt;h1&gt;Payment Successful!&lt;/h1&gt;
+&lt;p&gt;Thank you for your payment.&lt;/p&gt;
+
+&lt;script&gt;
+// Get session ID from URL
+const urlParams = new URLSearchParams(window.location.search);
+const sessionId = urlParams.get('session_id');
+
+if (sessionId) {
+  // Optional: Verify payment on your backend
+  console.log('Payment session:', sessionId);
+
+  // Show order confirmation
+  document.write('&lt;p&gt;Order reference: ' + sessionId + '&lt;/p&gt;');
+}
+&lt;/script&gt;</pre>
+        </div>
+      </div>
+
+      <!-- TESTING -->
+      <div class="section">
+        <h2>🧪 Testing</h2>
+
+        <div class="alert">
+          <strong>🔧 Test Mode:</strong>
+          All payments are currently in <strong>LIVE MODE</strong>.<br>
+          Use small amounts for testing (e.g., Le 10 = <code>amount=1000</code>).
+        </div>
+
+        <h3>Test Cards:</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Card Number</th>
+              <th>Expiry</th>
+              <th>CVV</th>
+              <th>Result</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>4111 1111 1111 1111</code></td>
+              <td>Any future date</td>
+              <td>Any 3 digits</td>
+              <td>✅ Success</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // Update merchant info
+    const merchantId = document.getElementById('merchantId').value;
+    const merchantName = document.getElementById('merchantName');
+    const merchantLogo = document.getElementById('merchantLogo');
+    const brandColor = document.getElementById('brandColor');
+
+    function buildCheckoutUrl(amount, description = 'Payment') {
+      const baseUrl = 'http://localhost:3000/checkout/quick';
+      const params = new URLSearchParams({
+        merchant_id: merchantId,
+        amount: amount,
+        currency: 'SLE',
+        description: description,
+        merchant_name: merchantName.value || 'School District',
+        success_url: window.location.origin + '/success.html',
+        cancel_url: window.location.origin + '/cancel.html'
+      });
+
+      if (merchantLogo.value) {
+        params.append('merchant_logo', merchantLogo.value);
+      }
+
+      if (brandColor.value) {
+        params.append('brand_color', brandColor.value.replace('#', ''));
+      }
+
+      return baseUrl + '?' + params.toString();
+    }
+
+    // Update test buttons
+    document.getElementById('test-link-btn').href = buildCheckoutUrl(50000, 'Test Payment');
+    document.getElementById('preview-btn').href = buildCheckoutUrl(50000, 'Test Payment');
+
+    // Update on config change
+    [merchantName, merchantLogo, brandColor].forEach(input => {
+      input.addEventListener('input', () => {
+        document.getElementById('test-link-btn').href = buildCheckoutUrl(50000, 'Test Payment');
+        document.getElementById('preview-btn').href = buildCheckoutUrl(50000, 'Test Payment');
+      });
+    });
+
+    // Copy to clipboard
+    function copyCode(elementId) {
+      const element = document.getElementById(elementId);
+      const text = element.textContent;
+
+      navigator.clipboard.writeText(text).then(() => {
+        const button = element.previousElementSibling;
+        const originalText = button.textContent;
+        button.textContent = '✓ Copied!';
+        button.classList.add('copied');
+
+        setTimeout(() => {
+          button.textContent = originalText;
+          button.classList.remove('copied');
+        }, 2000);
+      });
+    }
+  </script>
+</body>
+</html>
