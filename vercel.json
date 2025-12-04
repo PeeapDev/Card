@@ -5,7 +5,7 @@
   "outputDirectory": "apps/web/dist",
   "framework": "vite",
   "functions": {
-    "api/**/*.ts": {
+    "api/router.ts": {
       "runtime": "@vercel/node@3.2.0"
     }
   },
@@ -28,6 +28,7 @@
     }
   ],
   "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/router" },
     { "source": "/((?!api/|embed/).*)", "destination": "/index.html" }
   ]
 }
