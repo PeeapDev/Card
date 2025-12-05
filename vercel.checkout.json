@@ -20,14 +20,16 @@
     "VITE_API_URL": "https://api.peeap.com",
     "VITE_FRONTEND_URL": "https://checkout.peeap.com",
     "FRONTEND_URL": "https://checkout.peeap.com",
-    "VITE_MERCHANT_SERVICE_URL": "https://api.peeap.com"
+    "VITE_MERCHANT_SERVICE_URL": "https://api.peeap.com",
+    "VITE_APP_MODE": "checkout"
   },
   "build": {
     "env": {
       "VITE_API_URL": "https://api.peeap.com",
       "VITE_FRONTEND_URL": "https://checkout.peeap.com",
       "FRONTEND_URL": "https://checkout.peeap.com",
-      "VITE_MERCHANT_SERVICE_URL": "https://api.peeap.com"
+      "VITE_MERCHANT_SERVICE_URL": "https://api.peeap.com",
+      "VITE_APP_MODE": "checkout"
     }
   },
   "headers": [
