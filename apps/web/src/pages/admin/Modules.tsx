@@ -17,8 +17,8 @@ import {
   CircularProgress,
   IconButton,
   Tooltip,
+  Grid,
 } from '@mui/material';
-import Grid from '@mui/material/Grid2';
 import {
   Add as AddIcon,
   Edit as EditIcon,

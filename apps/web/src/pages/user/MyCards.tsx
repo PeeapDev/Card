@@ -14,8 +14,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Grid,
 } from '@mui/material';
-import Grid from '@mui/material/Grid2';
 import {
   Visibility as VisibilityIcon,
   VisibilityOff as VisibilityOffIcon,
