@@ -17,27 +17,28 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { CardsService } from './cards.service';
-import { CardType, CardTier } from '@payment-system/database';
+import { CardType } from '@payment-system/database';
 
 class IssueCardDto {
   walletId: string;
   type: CardType;
-  tier?: CardTier;
-  nickname?: string;
+  cardholderName?: string;
   shippingAddress?: {
-    line1: string;
-    line2?: string;
+    recipientName: string;
+    addressLine1: string;
+    addressLine2?: string;
     city: string;
     state: string;
     postalCode: string;
     country: string;
+    phoneNumber?: string;
   };
 }
 
 class UpdateLimitsDto {
   dailyLimit?: number;
   monthlyLimit?: number;
-  perTransactionLimit?: number;
+  singleTransactionLimit?: number;
 }
 
 class UpdateFeaturesDto {
@@ -53,6 +54,21 @@ class UpdateFeaturesDto {
 export class CardsController {
   constructor(private readonly cardsService: CardsService) {}
 
+  @Post('tokenize')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Lookup card token by PAN + expiry (closed-loop)' })
+  @ApiResponse({ status: 200, description: 'Returns cardToken for an active card' })
+  async tokenizeCard(
+    @Body() body: { pan: string; expiryMonth: number; expiryYear: number },
+  ) {
+    const token = await this.cardsService.lookupTokenByPan(
+      body.pan,
+      Number(body.expiryMonth),
+      Number(body.expiryYear),
+    );
+    return { cardToken: token };
+  }
+
   @Post()
   @ApiOperation({ summary: 'Issue a new card' })
   @ApiResponse({ status: 201, description: 'Card issued' })
@@ -67,12 +83,11 @@ export class CardsController {
 
     return {
       id: card.id,
-      cardToken: card.cardToken,
+      token: card.token,
       lastFour: card.lastFour,
       expiryMonth: card.expiryMonth,
       expiryYear: card.expiryYear,
       type: card.type,
-      tier: card.tier,
       status: card.status,
     };
   }
@@ -88,13 +103,10 @@ export class CardsController {
       expiryMonth: card.expiryMonth,
       expiryYear: card.expiryYear,
       type: card.type,
-      tier: card.tier,
       status: card.status,
-      nickname: card.nickname,
+      cardholderName: card.cardholderName,
       dailyLimit: card.dailyLimit,
       monthlyLimit: card.monthlyLimit,
-      dailySpent: card.dailySpent,
-      monthlySpent: card.monthlySpent,
       features: {
         nfcEnabled: card.nfcEnabled,
         onlineEnabled: card.onlineEnabled,
@@ -115,21 +127,17 @@ export class CardsController {
       expiryMonth: card.expiryMonth,
       expiryYear: card.expiryYear,
       type: card.type,
-      tier: card.tier,
       status: card.status,
-      nickname: card.nickname,
+      cardholderName: card.cardholderName,
       dailyLimit: card.dailyLimit,
       monthlyLimit: card.monthlyLimit,
-      perTransactionLimit: card.perTransactionLimit,
-      dailySpent: card.dailySpent,
-      monthlySpent: card.monthlySpent,
+      singleTransactionLimit: card.singleTransactionLimit,
       features: {
         nfcEnabled: card.nfcEnabled,
         onlineEnabled: card.onlineEnabled,
         internationalEnabled: card.internationalEnabled,
         atmEnabled: card.atmEnabled,
       },
-      lastUsedAt: card.lastUsedAt,
       createdAt: card.createdAt,
     };
   }
@@ -138,11 +146,8 @@ export class CardsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Activate a card' })
   @ApiResponse({ status: 200, description: 'Card activated' })
-  async activateCard(
-    @Param('cardId') cardId: string,
-    @Body('activationCode') activationCode?: string,
-  ) {
-    const card = await this.cardsService.activateCard(cardId, activationCode);
+  async activateCard(@Param('cardId') cardId: string) {
+    const card = await this.cardsService.activateCard(cardId);
     return { status: card.status, activatedAt: card.activatedAt };
   }
 
@@ -169,14 +174,14 @@ export class CardsController {
 
   @Delete(':cardId')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Cancel a card' })
-  @ApiResponse({ status: 200, description: 'Card cancelled' })
-  async cancelCard(
+  @ApiOperation({ summary: 'Terminate a card' })
+  @ApiResponse({ status: 200, description: 'Card terminated' })
+  async terminateCard(
     @Param('cardId') cardId: string,
     @Body('reason') reason: string,
   ) {
-    const card = await this.cardsService.cancelCard(cardId, reason);
-    return { status: card.status, cancelledAt: card.cancelledAt };
+    const card = await this.cardsService.terminateCard(cardId, reason);
+    return { status: card.status, terminatedAt: card.terminatedAt };
   }
 
   @Put(':cardId/limits')
@@ -190,7 +195,7 @@ export class CardsController {
     return {
       dailyLimit: card.dailyLimit,
       monthlyLimit: card.monthlyLimit,
-      perTransactionLimit: card.perTransactionLimit,
+      singleTransactionLimit: card.singleTransactionLimit,
     };
   }
 
@@ -208,17 +213,6 @@ export class CardsController {
       internationalEnabled: card.internationalEnabled,
       atmEnabled: card.atmEnabled,
     };
-  }
-
-  @Post(':cardId/pin')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Set card PIN' })
-  @ApiResponse({ status: 204, description: 'PIN set' })
-  async setPin(
-    @Param('cardId') cardId: string,
-    @Body('pinHash') pinHash: string,
-  ) {
-    await this.cardsService.setPin(cardId, pinHash);
   }
 
   // Internal endpoint for transaction service

@@ -3,10 +3,9 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Card, CardRequest } from '@payment-system/database';
 import { CardsController } from './cards.controller';
 import { CardsService } from './cards.service';
-import { TokenVaultModule } from '../token-vault/token-vault.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Card, CardRequest]), TokenVaultModule],
+  imports: [TypeOrmModule.forFeature([Card, CardRequest])],
   controllers: [CardsController],
   providers: [CardsService],
   exports: [CardsService],

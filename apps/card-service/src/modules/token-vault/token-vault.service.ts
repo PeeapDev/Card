@@ -7,7 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { CardToken } from '@payment-system/database';
-import { encrypt, decrypt, generateCardToken } from '@payment-system/common';
+import { generateCardToken } from '@payment-system/common';
 import * as crypto from 'crypto';
 
 interface CardData {
@@ -15,256 +15,200 @@ interface CardData {
   expiryMonth: number;
   expiryYear: number;
   cvv?: string;
+  cardType?: 'VIRTUAL' | 'PHYSICAL';
 }
 
 interface TokenizedCard {
   token: string;
-  lastFour: string;
-  expiryMonth: number;
-  expiryYear: number;
-  cardBrand: string;
+  panFirst6: string;
+  panLast4: string;
 }
 
+/**
+ * Token Vault Service - Handles PCI-compliant card tokenization
+ * Stores encrypted PAN data and returns tokens for card operations
+ * 
+ * Note: For the closed-loop hosted checkout flow, we primarily use
+ * the Card entity directly (via CardsService.lookupTokenByPan) since
+ * cards are issued internally. This service is for future external
+ * card tokenization needs.
+ */
 @Injectable()
 export class TokenVaultService {
   private readonly logger = new Logger(TokenVaultService.name);
   private readonly encryptionKey: Buffer;
-  private readonly kekKey: Buffer;
+  private readonly currentKeyVersion = 1;
 
   constructor(
     @InjectRepository(CardToken)
     private readonly tokenRepository: Repository<CardToken>,
     private readonly configService: ConfigService,
   ) {
-    // In production, these should come from HSM or secure key management
+    // In production, this should come from HSM or secure key management
     const encryptionKeyHex = this.configService.get('CARD_ENCRYPTION_KEY');
-    const kekKeyHex = this.configService.get('CARD_KEK_KEY');
-
     this.encryptionKey = encryptionKeyHex
       ? Buffer.from(encryptionKeyHex, 'hex')
       : crypto.randomBytes(32);
-
-    this.kekKey = kekKeyHex
-      ? Buffer.from(kekKeyHex, 'hex')
-      : crypto.randomBytes(32);
   }
 
-  async tokenize(cardData: CardData, userId: string): Promise<TokenizedCard> {
+  /**
+   * Tokenize card data - encrypts PAN and stores token
+   */
+  async tokenize(cardData: CardData, issuedBy?: string): Promise<TokenizedCard> {
     const token = generateCardToken();
-    const lastFour = cardData.pan.slice(-4);
-    const bin = cardData.pan.slice(0, 6);
-    const cardBrand = this.detectCardBrand(cardData.pan);
+    const tokenHash = this.hashToken(token);
+    const panFirst6 = cardData.pan.slice(0, 6);
+    const panLast4 = cardData.pan.slice(-4);
 
-    // Encrypt PAN with DEK (Data Encryption Key)
-    const dek = this.generateDek();
-    const encryptedPan = this.encryptSensitiveData(cardData.pan, dek);
+    // Encrypt PAN
+    const encryptedPan = this.encryptData(cardData.pan);
 
-    // Encrypt DEK with KEK (Key Encryption Key)
-    const encryptedDek = this.encryptDek(dek);
-
-    // Hash PAN for lookups
-    const panHash = this.hashPan(cardData.pan);
-
-    // Encrypt CVV separately (if provided) - short-lived
-    let encryptedCvv: string | undefined;
-    if (cardData.cvv) {
-      encryptedCvv = this.encryptSensitiveData(cardData.cvv, dek);
-    }
+    // Encrypt expiry as string "MM/YYYY"
+    const expiryStr = `${cardData.expiryMonth.toString().padStart(2, '0')}/${cardData.expiryYear}`;
+    const encryptedExpiry = this.encryptData(expiryStr);
 
     const cardToken = this.tokenRepository.create({
       token,
+      tokenHash,
       encryptedPan,
-      encryptedDek,
-      panHash,
-      bin,
-      lastFour,
-      expiryMonth: cardData.expiryMonth,
-      expiryYear: cardData.expiryYear,
-      cardBrand,
-      userId,
-      isActive: true,
+      panFirst6,
+      panLast4,
+      encryptedExpiry,
+      keyVersion: this.currentKeyVersion,
+      cardType: cardData.cardType || 'VIRTUAL',
+      status: 'active',
+      issuedBy: issuedBy || 'peeap',
     });
 
     await this.tokenRepository.save(cardToken);
 
-    this.logger.log(`Card tokenized: ${token} for user ${userId}`);
+    this.logger.log(`Card tokenized: ${token.slice(0, 8)}...`);
 
     return {
       token,
-      lastFour,
-      expiryMonth: cardData.expiryMonth,
-      expiryYear: cardData.expiryYear,
-      cardBrand,
+      panFirst6,
+      panLast4,
     };
   }
 
-  async detokenize(token: string): Promise<{ pan: string; expiryMonth: number; expiryYear: number }> {
-    const cardToken = await this.tokenRepository.findOne({
-      where: { token, isActive: true },
-    });
-
-    if (!cardToken) {
-      throw new NotFoundException('Card token not found');
-    }
-
-    // Decrypt DEK with KEK
-    const dek = this.decryptDek(cardToken.encryptedDek);
-
-    // Decrypt PAN with DEK
-    const pan = this.decryptSensitiveData(cardToken.encryptedPan, dek);
-
-    // Update last used
-    cardToken.lastUsedAt = new Date();
-    await this.tokenRepository.save(cardToken);
-
-    return {
-      pan,
-      expiryMonth: cardToken.expiryMonth,
-      expiryYear: cardToken.expiryYear,
-    };
-  }
-
-  async getTokenInfo(token: string): Promise<{
-    lastFour: string;
-    expiryMonth: number;
-    expiryYear: number;
-    cardBrand: string;
-    bin: string;
-  }> {
-    const cardToken = await this.tokenRepository.findOne({
-      where: { token, isActive: true },
-    });
-
-    if (!cardToken) {
-      throw new NotFoundException('Card token not found');
-    }
-
-    return {
-      lastFour: cardToken.lastFour,
-      expiryMonth: cardToken.expiryMonth,
-      expiryYear: cardToken.expiryYear,
-      cardBrand: cardToken.cardBrand,
-      bin: cardToken.bin,
-    };
-  }
-
-  async findByPanHash(panHash: string): Promise<CardToken | null> {
+  /**
+   * Find token by PAN parts (first 6 / last 4)
+   */
+  async findByPanParts(panFirst6: string, panLast4: string): Promise<CardToken | null> {
     return this.tokenRepository.findOne({
-      where: { panHash, isActive: true },
+      where: {
+        panFirst6,
+        panLast4,
+        status: 'active',
+      },
     });
   }
 
+  /**
+   * Get token info (non-sensitive data only)
+   */
+  async getTokenInfo(token: string): Promise<{
+    panFirst6: string;
+    panLast4: string;
+    cardType: string;
+    status: string;
+  } | null> {
+    const cardToken = await this.tokenRepository.findOne({
+      where: { token, status: 'active' },
+    });
+
+    if (!cardToken) {
+      return null;
+    }
+
+    return {
+      panFirst6: cardToken.panFirst6,
+      panLast4: cardToken.panLast4,
+      cardType: cardToken.cardType,
+      status: cardToken.status,
+    };
+  }
+
+  /**
+   * Deactivate a token (soft delete)
+   */
   async deactivateToken(token: string): Promise<void> {
     const cardToken = await this.tokenRepository.findOne({
       where: { token },
     });
 
     if (cardToken) {
-      cardToken.isActive = false;
-      cardToken.deactivatedAt = new Date();
+      cardToken.status = 'deleted';
       await this.tokenRepository.save(cardToken);
-
-      this.logger.log(`Token deactivated: ${token}`);
+      this.logger.log(`Token deactivated: ${token.slice(0, 8)}...`);
     }
   }
 
-  async rotateTokenEncryption(token: string): Promise<void> {
+  /**
+   * Suspend a token
+   */
+  async suspendToken(token: string): Promise<void> {
     const cardToken = await this.tokenRepository.findOne({
-      where: { token, isActive: true },
+      where: { token },
     });
 
-    if (!cardToken) {
-      throw new NotFoundException('Card token not found');
+    if (cardToken) {
+      cardToken.status = 'suspended';
+      await this.tokenRepository.save(cardToken);
+      this.logger.log(`Token suspended: ${token.slice(0, 8)}...`);
     }
-
-    // Decrypt with old DEK
-    const oldDek = this.decryptDek(cardToken.encryptedDek);
-    const pan = this.decryptSensitiveData(cardToken.encryptedPan, oldDek);
-
-    // Generate new DEK and re-encrypt
-    const newDek = this.generateDek();
-    cardToken.encryptedPan = this.encryptSensitiveData(pan, newDek);
-    cardToken.encryptedDek = this.encryptDek(newDek);
-
-    await this.tokenRepository.save(cardToken);
-
-    this.logger.log(`Token encryption rotated: ${token}`);
   }
 
-  private generateDek(): Buffer {
-    return crypto.randomBytes(32);
+  /**
+   * Reactivate a suspended token
+   */
+  async reactivateToken(token: string): Promise<void> {
+    const cardToken = await this.tokenRepository.findOne({
+      where: { token, status: 'suspended' },
+    });
+
+    if (cardToken) {
+      cardToken.status = 'active';
+      await this.tokenRepository.save(cardToken);
+      this.logger.log(`Token reactivated: ${token.slice(0, 8)}...`);
+    }
   }
 
-  private encryptSensitiveData(data: string, dek: Buffer): string {
+  private encryptData(data: string): Buffer {
     const iv = crypto.randomBytes(12);
-    const cipher = crypto.createCipheriv('aes-256-gcm', dek, iv);
+    const cipher = crypto.createCipheriv('aes-256-gcm', this.encryptionKey, iv);
 
-    let encrypted = cipher.update(data, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
+    const encrypted = Buffer.concat([
+      cipher.update(data, 'utf8'),
+      cipher.final(),
+    ]);
 
     const authTag = cipher.getAuthTag();
 
-    return `${iv.toString('hex')}:${encrypted}:${authTag.toString('hex')}`;
+    // Return iv + authTag + encrypted as single buffer
+    return Buffer.concat([iv, authTag, encrypted]);
   }
 
-  private decryptSensitiveData(encryptedData: string, dek: Buffer): string {
-    const [ivHex, encrypted, authTagHex] = encryptedData.split(':');
+  private decryptData(encryptedBuffer: Buffer): string {
+    const iv = encryptedBuffer.subarray(0, 12);
+    const authTag = encryptedBuffer.subarray(12, 28);
+    const encrypted = encryptedBuffer.subarray(28);
 
-    const iv = Buffer.from(ivHex, 'hex');
-    const authTag = Buffer.from(authTagHex, 'hex');
-
-    const decipher = crypto.createDecipheriv('aes-256-gcm', dek, iv);
+    const decipher = crypto.createDecipheriv('aes-256-gcm', this.encryptionKey, iv);
     decipher.setAuthTag(authTag);
 
-    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
+    const decrypted = Buffer.concat([
+      decipher.update(encrypted),
+      decipher.final(),
+    ]);
 
-    return decrypted;
+    return decrypted.toString('utf8');
   }
 
-  private encryptDek(dek: Buffer): string {
-    const iv = crypto.randomBytes(12);
-    const cipher = crypto.createCipheriv('aes-256-gcm', this.kekKey, iv);
-
-    let encrypted = cipher.update(dek);
-    encrypted = Buffer.concat([encrypted, cipher.final()]);
-
-    const authTag = cipher.getAuthTag();
-
-    return `${iv.toString('hex')}:${encrypted.toString('hex')}:${authTag.toString('hex')}`;
-  }
-
-  private decryptDek(encryptedDek: string): Buffer {
-    const [ivHex, encryptedHex, authTagHex] = encryptedDek.split(':');
-
-    const iv = Buffer.from(ivHex, 'hex');
-    const encrypted = Buffer.from(encryptedHex, 'hex');
-    const authTag = Buffer.from(authTagHex, 'hex');
-
-    const decipher = crypto.createDecipheriv('aes-256-gcm', this.kekKey, iv);
-    decipher.setAuthTag(authTag);
-
-    let decrypted = decipher.update(encrypted);
-    decrypted = Buffer.concat([decrypted, decipher.final()]);
-
-    return decrypted;
-  }
-
-  private hashPan(pan: string): string {
-    const salt = this.configService.get('PAN_HASH_SALT', 'default-salt');
+  private hashToken(token: string): string {
     return crypto
-      .createHmac('sha256', salt)
-      .update(pan)
+      .createHash('sha256')
+      .update(token)
       .digest('hex');
-  }
-
-  private detectCardBrand(pan: string): string {
-    const bin = pan.slice(0, 6);
-    const firstDigit = pan.charAt(0);
-    const firstTwo = pan.slice(0, 2);
-
-    // Since this is a closed-loop system, we might have our own BIN ranges
-    // For now, return "INTERNAL" as the default brand
-    return 'INTERNAL';
   }
 }

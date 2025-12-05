@@ -215,12 +215,36 @@ export function HostedCheckoutPage() {
     setError(null);
 
     try {
-      // TODO: Implement card tokenization
-      // For now, create a mock card token
-      const cardToken = `tok_${Math.random().toString(36).substring(7)}`;
+      const apiUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_MERCHANT_SERVICE_URL || 'https://api.peeap.com';
 
-      // Call API to complete payment
-      const apiUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_MERCHANT_SERVICE_URL || 'https://my.peeap.com/api';
+      // Parse card expiry (MM/YY format)
+      const [expiryMonthStr, expiryYearStr] = cardExpiry.split('/');
+      const expiryMonth = parseInt(expiryMonthStr, 10);
+      // Convert 2-digit year to 4-digit (assume 20xx)
+      let expiryYear = parseInt(expiryYearStr, 10);
+      if (expiryYear < 100) {
+        expiryYear += 2000;
+      }
+
+      // Step 1: Tokenize the card (lookup existing Peeap card by PAN + expiry)
+      const tokenizeResponse = await fetch(`${apiUrl}/checkout/tokenize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pan: cardNumber.replace(/\s/g, ''),
+          expiryMonth,
+          expiryYear,
+        }),
+      });
+
+      if (!tokenizeResponse.ok) {
+        const errorData = await tokenizeResponse.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Card not found or invalid. Please use a valid Peeap card.');
+      }
+
+      const { cardToken } = await tokenizeResponse.json();
+
+      // Step 2: Complete the checkout session with the card token
       const response = await fetch(
         `${apiUrl}/checkout/sessions/${sessionId}/complete`,
         {
@@ -231,7 +255,8 @@ export function HostedCheckoutPage() {
       );
 
       if (!response.ok) {
-        throw new Error('Payment failed');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Payment failed');
       }
 
       const result = await response.json();

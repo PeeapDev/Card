@@ -81,6 +81,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } else if (path.match(/^checkout\/sessions\/[^/]+\/complete$/)) {
       const sessionId = path.split('/')[2];
       return await handleCheckoutSessionComplete(req, res, sessionId);
+    } else if (path === 'checkout/tokenize' || path === 'checkout/tokenize/') {
+      return await handleCheckoutTokenize(req, res);
     } else if (path.startsWith('checkout/create')) {
       return await handleCheckoutCreate(req, res);
     } else if (path.startsWith('checkout/card-pay')) {
@@ -1125,6 +1127,86 @@ async function handleUserCards(req: VercelRequest, res: VercelResponse, userId: 
 // ============================================================================
 // HOSTED CHECKOUT SESSION HANDLERS
 // ============================================================================
+
+/**
+ * Tokenize card by PAN lookup - finds existing Peeap card by PAN + expiry
+ * This is for the closed-loop card system (Peeap-issued cards only)
+ */
+async function handleCheckoutTokenize(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const { pan, expiryMonth, expiryYear } = req.body;
+
+    if (!pan) {
+      return res.status(400).json({ error: 'pan is required' });
+    }
+
+    // Clean the PAN (remove spaces/dashes)
+    const cleanPan = pan.replace(/[\s-]/g, '');
+    
+    // Extract bin (first 6) and last 4
+    const bin = cleanPan.slice(0, 6);
+    const lastFour = cleanPan.slice(-4);
+
+    // Find active card by bin and last_four
+    const { data: cards, error } = await supabase
+      .from('cards')
+      .select('id, token, bin, last_four, expiry_month, expiry_year, status, user_id')
+      .eq('bin', bin)
+      .eq('last_four', lastFour)
+      .eq('status', 'ACTIVE')
+      .limit(10);
+
+    if (error) {
+      console.error('[Tokenize] Database error:', error);
+      return res.status(500).json({ error: 'Database error' });
+    }
+
+    if (!cards || cards.length === 0) {
+      return res.status(404).json({ error: 'Card not found or not active' });
+    }
+
+    // If expiry provided, filter by expiry
+    let matchedCard = cards[0];
+    if (expiryMonth && expiryYear) {
+      const expMonth = Number(expiryMonth);
+      const expYear = Number(expiryYear);
+      
+      const foundCard = cards.find(card => 
+        card.expiry_month === expMonth && card.expiry_year === expYear
+      );
+
+      if (!foundCard) {
+        return res.status(400).json({ error: 'Card expiry does not match' });
+      }
+      
+      matchedCard = foundCard;
+
+      // Check if card is expired
+      const now = new Date();
+      const cardExpiry = new Date(expYear, expMonth - 1); // End of expiry month
+      cardExpiry.setMonth(cardExpiry.getMonth() + 1); // Move to start of next month
+      
+      if (now > cardExpiry) {
+        return res.status(400).json({ error: 'Card is expired' });
+      }
+    }
+
+    // Return the card token
+    return res.status(200).json({
+      cardToken: matchedCard.token,
+      lastFour: matchedCard.last_four,
+      expiryMonth: matchedCard.expiry_month,
+      expiryYear: matchedCard.expiry_year,
+    });
+  } catch (error: any) {
+    console.error('[Tokenize] Error:', error);
+    return res.status(500).json({ error: error.message || 'Tokenization failed' });
+  }
+}
 
 async function handleCheckoutSessions(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {

@@ -6,44 +6,43 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
-import { Card, CardRequest, CardStatus, CardType, CardTier } from '@payment-system/database';
-import { TokenVaultService } from '../token-vault/token-vault.service';
-import { generateCardToken, generateAuthCode } from '@payment-system/common';
+import { Card, CardRequest, CardStatus, CardType, CardRequestStatus } from '@payment-system/database';
+import { generateCardToken } from '@payment-system/common';
 import * as crypto from 'crypto';
 
 interface IssueCardDto {
   userId: string;
   walletId: string;
   type: CardType;
-  tier?: CardTier;
-  nickname?: string;
+  cardholderName?: string;
   shippingAddress?: {
-    line1: string;
-    line2?: string;
+    recipientName: string;
+    addressLine1: string;
+    addressLine2?: string;
     city: string;
     state: string;
     postalCode: string;
     country: string;
+    phoneNumber?: string;
   };
 }
 
 interface CardLimits {
   dailyLimit?: number;
   monthlyLimit?: number;
-  perTransactionLimit?: number;
+  singleTransactionLimit?: number;
 }
 
 @Injectable()
 export class CardsService {
   private readonly logger = new Logger(CardsService.name);
-  private readonly binPrefix = '4' + '00000'; // Sample BIN for closed-loop
+  private readonly binPrefix = '400000'; // Sample BIN for closed-loop
 
   constructor(
     @InjectRepository(Card)
     private readonly cardRepository: Repository<Card>,
     @InjectRepository(CardRequest)
     private readonly cardRequestRepository: Repository<CardRequest>,
-    private readonly tokenVaultService: TokenVaultService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -57,40 +56,26 @@ export class CardsService {
       const expiryMonth = now.getMonth() + 1;
       const expiryYear = now.getFullYear() + 3;
 
-      // Generate CVV
-      const cvv = this.generateCvv();
-
-      // Tokenize the card
-      const tokenizedCard = await this.tokenVaultService.tokenize(
-        {
-          pan,
-          expiryMonth,
-          expiryYear,
-          cvv,
-        },
-        dto.userId,
-      );
-
-      // Set default limits based on tier
-      const limits = this.getDefaultLimits(dto.tier || CardTier.STANDARD);
+      // Generate token
+      const token = generateCardToken();
+      const externalId = `card_${crypto.randomBytes(12).toString('hex')}`;
 
       // Create the card
       const card = manager.create(Card, {
+        externalId,
         userId: dto.userId,
         walletId: dto.walletId,
-        cardToken: tokenizedCard.token,
-        lastFour: tokenizedCard.lastFour,
+        token,
+        bin: pan.slice(0, 6),
+        lastFour: pan.slice(-4),
         expiryMonth,
         expiryYear,
+        cardholderName: dto.cardholderName,
         type: dto.type,
-        tier: dto.tier || CardTier.STANDARD,
         status: dto.type === CardType.VIRTUAL ? CardStatus.ACTIVE : CardStatus.PENDING_ACTIVATION,
-        nickname: dto.nickname,
-        dailyLimit: limits.dailyLimit,
-        monthlyLimit: limits.monthlyLimit,
-        perTransactionLimit: limits.perTransactionLimit,
-        dailySpent: 0,
-        monthlySpent: 0,
+        dailyLimit: 2000,
+        monthlyLimit: 10000,
+        singleTransactionLimit: 1000,
         nfcEnabled: true,
         onlineEnabled: true,
         internationalEnabled: false,
@@ -100,11 +85,11 @@ export class CardsService {
       await manager.save(card);
 
       // If physical card, create request for production
-      if (dto.type === CardType.PHYSICAL) {
+      if (dto.type === CardType.PHYSICAL && dto.shippingAddress) {
         const cardRequest = manager.create(CardRequest, {
           cardId: card.id,
           userId: dto.userId,
-          status: 'PENDING',
+          status: CardRequestStatus.PENDING,
           shippingAddress: dto.shippingAddress,
         });
 
@@ -117,6 +102,51 @@ export class CardsService {
 
       return card;
     });
+  }
+
+  /**
+   * Lookup an existing Peeap card by PAN + expiry and return its token.
+   * Used by hosted checkout to convert entered card details into a cardToken.
+   */
+  async lookupTokenByPan(pan: string, expiryMonth: number, expiryYear: number): Promise<string> {
+    const cleanedPan = pan.replace(/\s|-/g, '');
+    if (!/^\d{12,19}$/.test(cleanedPan)) {
+      throw new BadRequestException('Invalid card number');
+    }
+
+    const month = Number(expiryMonth);
+    const year = Number(expiryYear);
+    if (!month || month < 1 || month > 12 || !year) {
+      throw new BadRequestException('Invalid expiry');
+    }
+
+    const panFirst6 = cleanedPan.slice(0, 6);
+    const panLast4 = cleanedPan.slice(-4);
+
+    const card = await this.cardRepository.findOne({
+      where: {
+        bin: panFirst6,
+        lastFour: panLast4,
+        status: CardStatus.ACTIVE,
+      },
+    });
+
+    if (!card) {
+      throw new NotFoundException('Card not found');
+    }
+
+    // Expiry check
+    if (card.expiryMonth !== month || card.expiryYear !== year) {
+      throw new BadRequestException('Card expiry mismatch');
+    }
+
+    // Ensure not expired
+    const expiryDate = new Date(year, month, 0);
+    if (expiryDate < new Date()) {
+      throw new BadRequestException('Card is expired');
+    }
+
+    return card.token;
   }
 
   async getCard(cardId: string): Promise<Card> {
@@ -140,7 +170,7 @@ export class CardsService {
 
   async getCardByToken(cardToken: string): Promise<Card> {
     const card = await this.cardRepository.findOne({
-      where: { cardToken },
+      where: { token: cardToken },
     });
 
     if (!card) {
@@ -150,22 +180,11 @@ export class CardsService {
     return card;
   }
 
-  async activateCard(cardId: string, activationCode?: string): Promise<Card> {
+  async activateCard(cardId: string): Promise<Card> {
     const card = await this.getCard(cardId);
 
     if (card.status !== CardStatus.PENDING_ACTIVATION) {
       throw new BadRequestException('Card is not pending activation');
-    }
-
-    // For physical cards, verify activation code
-    if (card.type === CardType.PHYSICAL && activationCode) {
-      const request = await this.cardRequestRepository.findOne({
-        where: { cardId },
-      });
-
-      if (!request || request.activationCode !== activationCode) {
-        throw new BadRequestException('Invalid activation code');
-      }
     }
 
     card.status = CardStatus.ACTIVE;
@@ -180,13 +199,14 @@ export class CardsService {
   async blockCard(cardId: string, reason: string, blockedBy: 'USER' | 'SYSTEM' | 'ADMIN'): Promise<Card> {
     const card = await this.getCard(cardId);
 
-    if (card.status === CardStatus.CANCELLED) {
-      throw new BadRequestException('Card is already cancelled');
+    if (card.status === CardStatus.TERMINATED) {
+      throw new BadRequestException('Card is already terminated');
     }
 
     card.status = CardStatus.BLOCKED;
     card.blockedAt = new Date();
-    card.blockedReason = reason;
+    // Store reason in metadata since entity doesn't have blockedReason field
+    card.metadata = { ...card.metadata, blockedReason: reason, blockedBy };
     await this.cardRepository.save(card);
 
     this.logger.warn(`Card blocked: ${cardId}, reason: ${reason}, by: ${blockedBy}`);
@@ -203,7 +223,7 @@ export class CardsService {
 
     card.status = CardStatus.ACTIVE;
     card.blockedAt = null as any;
-    card.blockedReason = null as any;
+    card.metadata = { ...card.metadata, blockedReason: null, blockedBy: null };
     await this.cardRepository.save(card);
 
     this.logger.log(`Card unblocked: ${cardId}`);
@@ -211,22 +231,19 @@ export class CardsService {
     return card;
   }
 
-  async cancelCard(cardId: string, reason: string): Promise<Card> {
+  async terminateCard(cardId: string, reason: string): Promise<Card> {
     const card = await this.getCard(cardId);
 
-    if (card.status === CardStatus.CANCELLED) {
-      throw new BadRequestException('Card is already cancelled');
+    if (card.status === CardStatus.TERMINATED) {
+      throw new BadRequestException('Card is already terminated');
     }
 
-    card.status = CardStatus.CANCELLED;
-    card.cancelledAt = new Date();
-    card.cancelledReason = reason;
+    card.status = CardStatus.TERMINATED;
+    card.terminatedAt = new Date();
+    card.metadata = { ...card.metadata, terminationReason: reason };
     await this.cardRepository.save(card);
 
-    // Deactivate the token
-    await this.tokenVaultService.deactivateToken(card.cardToken);
-
-    this.logger.log(`Card cancelled: ${cardId}, reason: ${reason}`);
+    this.logger.log(`Card terminated: ${cardId}, reason: ${reason}`);
 
     return card;
   }
@@ -240,8 +257,8 @@ export class CardsService {
     if (limits.monthlyLimit !== undefined) {
       card.monthlyLimit = limits.monthlyLimit;
     }
-    if (limits.perTransactionLimit !== undefined) {
-      card.perTransactionLimit = limits.perTransactionLimit;
+    if (limits.singleTransactionLimit !== undefined) {
+      card.singleTransactionLimit = limits.singleTransactionLimit;
     }
 
     await this.cardRepository.save(card);
@@ -274,20 +291,6 @@ export class CardsService {
     return card;
   }
 
-  async setPin(cardId: string, pinHash: string): Promise<void> {
-    const card = await this.getCard(cardId);
-
-    if (card.type !== CardType.PHYSICAL) {
-      throw new BadRequestException('PIN can only be set for physical cards');
-    }
-
-    card.pinHash = pinHash;
-    card.pinSetAt = new Date();
-    await this.cardRepository.save(card);
-
-    this.logger.log(`PIN set for card: ${cardId}`);
-  }
-
   async verifyCard(
     cardToken: string,
     options?: {
@@ -314,65 +317,12 @@ export class CardsService {
     }
 
     if (options?.checkLimits && options?.amount) {
-      if (options.amount > Number(card.perTransactionLimit)) {
+      if (card.singleTransactionLimit && options.amount > Number(card.singleTransactionLimit)) {
         return { valid: false, card, reason: 'Exceeds per-transaction limit' };
-      }
-
-      const dailyRemaining = Number(card.dailyLimit) - Number(card.dailySpent);
-      if (options.amount > dailyRemaining) {
-        return { valid: false, card, reason: 'Exceeds daily limit' };
-      }
-
-      const monthlyRemaining = Number(card.monthlyLimit) - Number(card.monthlySpent);
-      if (options.amount > monthlyRemaining) {
-        return { valid: false, card, reason: 'Exceeds monthly limit' };
       }
     }
 
     return { valid: true, card };
-  }
-
-  async recordSpend(cardId: string, amount: number): Promise<void> {
-    const card = await this.getCard(cardId);
-
-    card.dailySpent = Number(card.dailySpent) + amount;
-    card.monthlySpent = Number(card.monthlySpent) + amount;
-    card.lastUsedAt = new Date();
-
-    await this.cardRepository.save(card);
-  }
-
-  async reverseSpend(cardId: string, amount: number): Promise<void> {
-    const card = await this.getCard(cardId);
-
-    card.dailySpent = Math.max(0, Number(card.dailySpent) - amount);
-    card.monthlySpent = Math.max(0, Number(card.monthlySpent) - amount);
-
-    await this.cardRepository.save(card);
-  }
-
-  async resetDailySpent(): Promise<number> {
-    const result = await this.cardRepository
-      .createQueryBuilder()
-      .update(Card)
-      .set({ dailySpent: 0 })
-      .where('daily_spent > 0')
-      .execute();
-
-    this.logger.log(`Reset daily spent for ${result.affected} cards`);
-    return result.affected || 0;
-  }
-
-  async resetMonthlySpent(): Promise<number> {
-    const result = await this.cardRepository
-      .createQueryBuilder()
-      .update(Card)
-      .set({ monthlySpent: 0 })
-      .where('monthly_spent > 0')
-      .execute();
-
-    this.logger.log(`Reset monthly spent for ${result.affected} cards`);
-    return result.affected || 0;
   }
 
   private generatePan(): string {
@@ -409,36 +359,5 @@ export class CardsService {
     }
 
     return ((10 - (sum % 10)) % 10).toString();
-  }
-
-  private generateCvv(): string {
-    return Math.floor(100 + Math.random() * 900).toString();
-  }
-
-  private getDefaultLimits(tier: CardTier): CardLimits {
-    const limits: Record<CardTier, CardLimits> = {
-      [CardTier.BASIC]: {
-        dailyLimit: 500,
-        monthlyLimit: 2000,
-        perTransactionLimit: 200,
-      },
-      [CardTier.STANDARD]: {
-        dailyLimit: 2000,
-        monthlyLimit: 10000,
-        perTransactionLimit: 1000,
-      },
-      [CardTier.PREMIUM]: {
-        dailyLimit: 10000,
-        monthlyLimit: 50000,
-        perTransactionLimit: 5000,
-      },
-      [CardTier.PLATINUM]: {
-        dailyLimit: 50000,
-        monthlyLimit: 200000,
-        perTransactionLimit: 25000,
-      },
-    };
-
-    return limits[tier] || limits[CardTier.STANDARD];
   }
 }
