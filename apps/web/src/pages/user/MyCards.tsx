@@ -14,7 +14,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Grid,
 } from '@mui/material';
 import {
   Visibility as VisibilityIcon,
@@ -205,13 +204,13 @@ export default function MyCardsPage() {
         </Alert>
       )}
 
-      <Grid container spacing={3}>
+      <Box display="flex" flexWrap="wrap" gap={3}>
         {cards.map((card) => {
           const isVisible = visibleCards[card.id];
           const expiringSoon = isCardExpiringSoon(card);
 
           return (
-            <Grid item xs={12} md={6} lg={4} key={card.id}>
+            <Box flex="1 1 300px" minWidth="300px" maxWidth="400px" key={card.id}>
               <Card elevation={3}>
                 {/* Card Visual */}
                 <Box
@@ -346,10 +345,10 @@ export default function MyCardsPage() {
                   </Box>
                 </CardContent>
               </Card>
-            </Grid>
+            </Box>
           );
         })}
-      </Grid>
+      </Box>
 
       {/* Card Details Dialog */}
       <Dialog
@@ -366,16 +365,16 @@ export default function MyCardsPage() {
                 {selectedCard.card_product.name}
               </Typography>
 
-              <Grid container spacing={2}>
-                <Grid item xs={6}>
+              <Box display="flex" flexWrap="wrap" gap={2}>
+                <Box flex="1 1 200px">
                   <Typography variant="caption" color="text.secondary">
                     Card Number
                   </Typography>
                   <Typography variant="body2">
                     {maskCardNumber(selectedCard.card_number)}
                   </Typography>
-                </Grid>
-                <Grid item xs={6}>
+                </Box>
+                <Box flex="1 1 200px">
                   <Typography variant="caption" color="text.secondary">
                     Expiry
                   </Typography>
@@ -383,14 +382,14 @@ export default function MyCardsPage() {
                     {String(selectedCard.expiry_month).padStart(2, '0')}/
                     {selectedCard.expiry_year}
                   </Typography>
-                </Grid>
-                <Grid item xs={6}>
+                </Box>
+                <Box flex="1 1 200px">
                   <Typography variant="caption" color="text.secondary">
                     CVV
                   </Typography>
                   <Typography variant="body2">{selectedCard.cvv}</Typography>
-                </Grid>
-                <Grid item xs={6}>
+                </Box>
+                <Box flex="1 1 200px">
                   <Typography variant="caption" color="text.secondary">
                     Status
                   </Typography>
@@ -399,8 +398,8 @@ export default function MyCardsPage() {
                     size="small"
                     color={getStatusColor(selectedCard.status)}
                   />
-                </Grid>
-                <Grid item xs={12}>
+                </Box>
+                <Box flex="1 1 100%">
                   <Typography variant="caption" color="text.secondary">
                     Purchased On
                   </Typography>
@@ -408,16 +407,16 @@ export default function MyCardsPage() {
                     {new Date(selectedCard.purchased_at).toLocaleDateString()} for{' '}
                     {formatCurrency(selectedCard.purchase_amount)}
                   </Typography>
-                </Grid>
-                <Grid item xs={12}>
+                </Box>
+                <Box flex="1 1 100%">
                   <Typography variant="caption" color="text.secondary">
                     Annual Fee Due
                   </Typography>
                   <Typography variant="body2">
                     {new Date(selectedCard.annual_fee_due_date).toLocaleDateString()}
                   </Typography>
-                </Grid>
-              </Grid>
+                </Box>
+              </Box>
 
               <Box mt={3}>
                 <Typography variant="subtitle2" mb={1}>

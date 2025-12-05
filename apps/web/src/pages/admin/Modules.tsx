@@ -17,7 +17,6 @@ import {
   CircularProgress,
   IconButton,
   Tooltip,
-  Grid,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -253,9 +252,9 @@ export default function ModulesPage() {
       )}
 
       {!loading && !error && modules.length > 0 && (
-        <Grid container spacing={3}>
+        <Box display="flex" flexWrap="wrap" gap={3}>
         {modules.map((module) => (
-          <Grid item xs={12} md={6} lg={4} key={module.id}>
+          <Box flex="1 1 300px" minWidth="300px" maxWidth="400px" key={module.id}>
             <Card elevation={3}>
               <CardContent>
                 <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
@@ -324,9 +323,9 @@ export default function ModulesPage() {
                 </Box>
               </CardContent>
             </Card>
-          </Grid>
+          </Box>
         ))}
-        </Grid>
+        </Box>
       )}
 
       {/* Create Module Dialog */}

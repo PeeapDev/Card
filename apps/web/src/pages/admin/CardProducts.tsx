@@ -26,7 +26,6 @@ import {
   Tabs,
   Tab,
   Divider,
-  Grid,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -432,8 +431,8 @@ export default function CardProductsPage() {
                 rows={3}
                 fullWidth
               />
-              <Grid container spacing={2}>
-                <Grid item xs={6}>
+              <Box display="flex" gap={2}>
+                <Box flex={1}>
                   <TextField
                     label="Tier"
                     type="number"
@@ -444,8 +443,8 @@ export default function CardProductsPage() {
                     fullWidth
                     required
                   />
-                </Grid>
-                <Grid item xs={6}>
+                </Box>
+                <Box flex={1}>
                   <TextField
                     label="Sort Order"
                     type="number"
@@ -455,16 +454,16 @@ export default function CardProductsPage() {
                     }
                     fullWidth
                   />
-                </Grid>
-              </Grid>
+                </Box>
+              </Box>
             </Box>
           )}
 
           {/* Pricing & Limits Tab */}
           {currentTab === 1 && (
             <Box display="flex" flexDirection="column" gap={2}>
-              <Grid container spacing={2}>
-                <Grid item xs={6}>
+              <Box display="flex" gap={2}>
+                <Box flex={1}>
                   <TextField
                     label="Purchase Price"
                     type="number"
@@ -475,8 +474,8 @@ export default function CardProductsPage() {
                     fullWidth
                     required
                   />
-                </Grid>
-                <Grid item xs={6}>
+                </Box>
+                <Box flex={1}>
                   <TextField
                     label="Annual Fee"
                     type="number"
@@ -486,8 +485,8 @@ export default function CardProductsPage() {
                     }
                     fullWidth
                   />
-                </Grid>
-              </Grid>
+                </Box>
+              </Box>
 
               <Divider />
 
@@ -527,8 +526,8 @@ export default function CardProductsPage() {
 
               <Divider />
 
-              <Grid container spacing={2}>
-                <Grid item xs={6}>
+              <Box display="flex" gap={2}>
+                <Box flex={1}>
                   <TextField
                     label="Transaction Fee (%)"
                     type="number"
@@ -541,8 +540,8 @@ export default function CardProductsPage() {
                     }
                     fullWidth
                   />
-                </Grid>
-                <Grid item xs={6}>
+                </Box>
+                <Box flex={1}>
                   <TextField
                     label="Transaction Fee (Flat)"
                     type="number"
@@ -555,8 +554,8 @@ export default function CardProductsPage() {
                     }
                     fullWidth
                   />
-                </Grid>
-              </Grid>
+                </Box>
+              </Box>
 
               <TextField
                 label="Cashback Percent"
@@ -570,8 +569,8 @@ export default function CardProductsPage() {
 
               <Divider />
 
-              <Grid container spacing={2}>
-                <Grid item xs={6}>
+              <Box display="flex" gap={2}>
+                <Box flex={1}>
                   <TextField
                     label="BIN Prefix"
                     placeholder="e.g., 520013"
@@ -580,8 +579,8 @@ export default function CardProductsPage() {
                     fullWidth
                     required
                   />
-                </Grid>
-                <Grid item xs={6}>
+                </Box>
+                <Box flex={1}>
                   <TextField
                     label="Stock Limit"
                     type="number"
@@ -595,8 +594,8 @@ export default function CardProductsPage() {
                     }
                     fullWidth
                   />
-                </Grid>
-              </Grid>
+                </Box>
+              </Box>
             </Box>
           )}
 
@@ -687,8 +686,8 @@ export default function CardProductsPage() {
                 onChange={(e) => setFormData({ ...formData, card_design_url: e.target.value })}
                 fullWidth
               />
-              <Grid container spacing={2}>
-                <Grid item xs={6}>
+              <Box display="flex" gap={2}>
+                <Box flex={1}>
                   <TextField
                     label="Card Background Color"
                     type="color"
@@ -696,8 +695,8 @@ export default function CardProductsPage() {
                     onChange={(e) => setFormData({ ...formData, card_color: e.target.value })}
                     fullWidth
                   />
-                </Grid>
-                <Grid item xs={6}>
+                </Box>
+                <Box flex={1}>
                   <TextField
                     label="Card Text Color"
                     type="color"
@@ -707,8 +706,8 @@ export default function CardProductsPage() {
                     }
                     fullWidth
                   />
-                </Grid>
-              </Grid>
+                </Box>
+              </Box>
 
               <Divider />
 

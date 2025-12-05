@@ -17,7 +17,6 @@ import {
   ListItemIcon,
   ListItemText,
   Divider,
-  Grid,
 } from '@mui/material';
 import {
   CheckCircle as CheckIcon,
@@ -219,13 +218,13 @@ export default function CardMarketplace() {
         </Card>
       )}
 
-      <Grid container spacing={3}>
+      <Box display="flex" flexWrap="wrap" gap={3}>
         {products.map((product) => {
           const owned = isOwned(product.id);
           const affordable = canAfford(product.purchase_price);
 
           return (
-            <Grid item xs={12} md={6} lg={4} key={product.id}>
+            <Box flex="1 1 300px" minWidth="300px" maxWidth="400px" key={product.id}>
               <Card
                 elevation={owned ? 10 : 3}
                 sx={{
@@ -370,10 +369,10 @@ export default function CardMarketplace() {
                   </Button>
                 </Box>
               </Card>
-            </Grid>
+            </Box>
           );
         })}
-      </Grid>
+      </Box>
 
       {/* Purchase Confirmation Dialog */}
       <Dialog
