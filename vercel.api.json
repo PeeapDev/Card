@@ -1,26 +1,20 @@
 {
   "version": 2,
   "name": "api-peeap",
-  "builds": [
-    {
-      "src": "api/router.ts",
-      "use": "@vercel/node"
-    }
-  ],
   "functions": {
     "api/router.ts": {
       "maxDuration": 30,
       "memory": 1024
     }
   },
-  "routes": [
+  "rewrites": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/router.ts"
+      "source": "/api/(.*)",
+      "destination": "/api/router"
     },
     {
-      "src": "/(.*)",
-      "dest": "/api/router.ts"
+      "source": "/(.*)",
+      "destination": "/api/router"
     }
   ],
   "env": {
