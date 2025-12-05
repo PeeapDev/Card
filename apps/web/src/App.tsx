@@ -115,7 +115,16 @@ const queryClient = new QueryClient({
 // Get the app mode from environment variable
 const APP_MODE = import.meta.env.VITE_APP_MODE || 'full'; // 'checkout', 'merchant', or 'full'
 
+// Debug log for troubleshooting
+console.log('App Mode:', APP_MODE);
+console.log('Environment:', import.meta.env);
+
 function App() {
+  // Determine which routes to show
+  const isCheckoutMode = APP_MODE === 'checkout';
+  const isMerchantMode = APP_MODE === 'merchant';
+  const isFullMode = APP_MODE === 'full' || (!isCheckoutMode && !isMerchantMode); // Fallback to full if mode is invalid
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
@@ -126,7 +135,7 @@ function App() {
                 <NotificationWrapper />
               <Routes>
               {/* Checkout App - Only show checkout and payment routes */}
-              {APP_MODE === 'checkout' && (
+              {isCheckoutMode && (
                 <>
                   {/* Redirect root to hosted checkout info page or 404 */}
                   <Route path="/" element={<Navigate to="/checkout/pay/invalid" replace />} />
@@ -161,7 +170,7 @@ function App() {
               )}
 
               {/* Merchant App - Show merchant, admin, agent, and regular user routes */}
-              {APP_MODE === 'merchant' && (
+              {isMerchantMode && (
                 <>
                   {/* Public routes */}
                   <Route path="/" element={<LandingPage />} />
@@ -774,8 +783,8 @@ function App() {
                 </>
               )}
 
-              {/* Full Mode - Show ALL routes (for local development) */}
-              {APP_MODE === 'full' && (
+              {/* Full Mode - Show ALL routes (for local development or as fallback) */}
+              {isFullMode && (
                 <>
                   {/* Public routes */}
                   <Route path="/" element={<LandingPage />} />
