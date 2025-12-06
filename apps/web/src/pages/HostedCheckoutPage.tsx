@@ -152,20 +152,21 @@ export function HostedCheckoutPage() {
       
       // Transform snake_case to camelCase
       const data: CheckoutSession = {
-        sessionId: rawData.external_id || rawData.sessionId,
+        id: rawData.id,
+        externalId: rawData.external_id || rawData.externalId,
         merchantId: rawData.merchant_id || rawData.merchantId,
         amount: rawData.amount,
-        currency: rawData.currency_code || rawData.currency,
+        currencyCode: rawData.currency_code || rawData.currencyCode || 'SLE',
         description: rawData.description,
         status: rawData.status,
         expiresAt: rawData.expires_at || rawData.expiresAt,
+        createdAt: rawData.created_at || rawData.createdAt,
         merchantName: rawData.merchant_name || rawData.merchantName,
         merchantLogoUrl: rawData.merchant_logo_url || rawData.merchantLogoUrl,
         brandColor: rawData.brand_color || rawData.brandColor || '#4F46E5',
         successUrl: rawData.success_url || rawData.successUrl,
         cancelUrl: rawData.cancel_url || rawData.cancelUrl,
         paymentMethods: rawData.payment_methods || rawData.paymentMethods || { qr: true, card: true, mobile: true },
-        metadata: rawData.metadata,
       };
 
       // Check if expired
