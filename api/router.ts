@@ -1399,7 +1399,7 @@ async function handleCheckoutSessionById(req: VercelRequest, res: VercelResponse
     const { data: session, error } = await supabase
       .from('checkout_sessions')
       .select('*')
-      .or(`id.eq.${sessionId},external_id.eq.${sessionId}`)
+      .eq('external_id', sessionId)
       .single();
 
     if (error || !session) {
@@ -1424,7 +1424,7 @@ async function handleCheckoutSessionComplete(req: VercelRequest, res: VercelResp
     const { data: session, error: fetchError } = await supabase
       .from('checkout_sessions')
       .select('*')
-      .or(`id.eq.${sessionId},external_id.eq.${sessionId}`)
+      .eq('external_id', sessionId)
       .single();
 
     if (fetchError || !session) {
