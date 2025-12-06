@@ -1206,7 +1206,7 @@ async function handleCheckoutQuick(req: VercelRequest, res: VercelResponse) {
 
     if (error) {
       console.error('[Quick Checkout] Create session error:', error);
-      return res.status(500).send(errorPage('Failed to create checkout session'));
+      return res.status(500).send(errorPage(`DB Error: ${error.message || error.code || JSON.stringify(error)}`));
     }
 
     // Redirect to hosted checkout page
