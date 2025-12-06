@@ -6,32 +6,8 @@
   "installCommand": "npm install",
   "framework": "vite",
   "devCommand": "cd apps/web && npm run dev",
-  "rewrites": [
-    {
-      "source": "/checkout/pay/:path*",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/payment/:path*",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/pay/:path*",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/t/:path*",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/deposit/:path*",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/app/:path*",
-      "destination": "/index.html"
-    }
-  ],
+  "trailingSlash": false,
+  "cleanUrls": true,
   "env": {
     "VITE_API_URL": "https://api.peeap.com",
     "VITE_FRONTEND_URL": "https://checkout.peeap.com",

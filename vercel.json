@@ -1,26 +1,10 @@
 {
   "version": 2,
-  "name": "peeap-merchant",
+  "name": "peeap-payment",
   "buildCommand": "cd apps/web && npm install && npm run build",
   "outputDirectory": "apps/web/dist",
   "installCommand": "npm install",
   "framework": "vite",
-  "routes": [
-    {
-      "src": "/admin/(.*)",
-      "dest": "/index.html"
-    },
-    {
-      "src": "/merchant/(.*)",
-      "dest": "/index.html"
-    },
-    {
-      "src": "/dashboard/(.*)",
-      "dest": "/index.html"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
-    }
-  ]
+  "trailingSlash": false,
+  "cleanUrls": true
 }
