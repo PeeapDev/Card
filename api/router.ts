@@ -73,6 +73,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handlePaymentsId(req, res);
     } else if (path.startsWith('monime/deposit')) {
       return await handleMonimeDeposit(req, res);
+    } else if (path === 'checkout/quick' || path.startsWith('checkout/quick')) {
+      return await handleCheckoutQuick(req, res);
     } else if (path === 'checkout/sessions' || path === 'checkout/sessions/') {
       return await handleCheckoutSessions(req, res);
     } else if (path.match(/^checkout\/sessions\/[^/]+$/)) {
@@ -1141,6 +1143,107 @@ async function handleUserCards(req: VercelRequest, res: VercelResponse, userId: 
 // ============================================================================
 // HOSTED CHECKOUT SESSION HANDLERS
 // ============================================================================
+
+/**
+ * Quick Checkout - Creates session and redirects to hosted checkout page
+ * URL params: merchant_id, amount, currency, description, success_url, cancel_url, merchant_name, brand_color
+ */
+async function handleCheckoutQuick(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const url = new URL(req.url || '', `http://${req.headers.host}`);
+    const params = url.searchParams;
+
+    const merchantId = params.get('merchant_id');
+    const amount = params.get('amount');
+    const currency = params.get('currency') || 'SLE';
+    const description = params.get('description') || 'Payment';
+    const successUrl = params.get('success_url');
+    const cancelUrl = params.get('cancel_url');
+    const merchantName = params.get('merchant_name');
+    const merchantLogo = params.get('merchant_logo');
+    const brandColor = params.get('brand_color') || '#4F46E5';
+    const reference = params.get('reference');
+
+    // Validate required params
+    if (!merchantId) {
+      return res.status(400).send(errorPage('merchant_id is required'));
+    }
+
+    const amountNum = parseFloat(amount || '0');
+    if (!amount || isNaN(amountNum) || amountNum <= 0) {
+      return res.status(400).send(errorPage('Valid amount is required'));
+    }
+
+    // Create checkout session
+    const sessionId = `cs_${randomUUID().replace(/-/g, '')}`;
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+    const frontendUrl = process.env.FRONTEND_URL || 'https://checkout.peeap.com';
+
+    const { data: session, error } = await supabase
+      .from('checkout_sessions')
+      .insert({
+        external_id: sessionId,
+        merchant_id: merchantId,
+        status: 'OPEN',
+        amount: amountNum,
+        currency_code: currency.toUpperCase(),
+        description,
+        merchant_name: merchantName,
+        merchant_logo_url: merchantLogo,
+        brand_color: brandColor,
+        success_url: successUrl || `${frontendUrl}/payment/success`,
+        cancel_url: cancelUrl || `${frontendUrl}/payment/cancel`,
+        payment_methods: { qr: true, card: true, mobile: true },
+        metadata: reference ? { reference } : null,
+        expires_at: expiresAt.toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[Quick Checkout] Create session error:', error);
+      return res.status(500).send(errorPage('Failed to create checkout session'));
+    }
+
+    // Redirect to hosted checkout page
+    const checkoutUrl = `${frontendUrl}/checkout/pay/${session.external_id}`;
+    return res.redirect(302, checkoutUrl);
+  } catch (error: any) {
+    console.error('[Quick Checkout] Error:', error);
+    return res.status(500).send(errorPage(error.message || 'Failed to create checkout'));
+  }
+}
+
+// Error page helper
+function errorPage(message: string): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <title>Checkout Error</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .card { background: white; padding: 2rem; border-radius: 1rem; box-shadow: 0 10px 40px rgba(0,0,0,0.1); max-width: 400px; text-align: center; }
+    .icon { font-size: 3rem; margin-bottom: 1rem; }
+    h1 { margin: 0 0 0.5rem 0; color: #ef4444; font-size: 1.5rem; }
+    p { color: #6b7280; margin: 0 0 1.5rem 0; }
+    button { background: #4f46e5; color: white; border: none; padding: 0.75rem 2rem; border-radius: 0.5rem; font-size: 1rem; cursor: pointer; }
+    button:hover { background: #4338ca; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">❌</div>
+    <h1>Checkout Error</h1>
+    <p>${message}</p>
+    <button onclick="window.history.back()">Go Back</button>
+  </div>
+</body>
+</html>`;
+}
 
 /**
  * Tokenize card by PAN lookup - finds existing Peeap card by PAN + expiry
