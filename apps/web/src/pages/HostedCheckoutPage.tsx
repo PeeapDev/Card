@@ -148,7 +148,25 @@ export function HostedCheckoutPage() {
         throw new Error('Session not found');
       }
 
-      const data: CheckoutSession = await response.json();
+      const rawData = await response.json();
+      
+      // Transform snake_case to camelCase
+      const data: CheckoutSession = {
+        sessionId: rawData.external_id || rawData.sessionId,
+        merchantId: rawData.merchant_id || rawData.merchantId,
+        amount: rawData.amount,
+        currency: rawData.currency_code || rawData.currency,
+        description: rawData.description,
+        status: rawData.status,
+        expiresAt: rawData.expires_at || rawData.expiresAt,
+        merchantName: rawData.merchant_name || rawData.merchantName,
+        merchantLogoUrl: rawData.merchant_logo_url || rawData.merchantLogoUrl,
+        brandColor: rawData.brand_color || rawData.brandColor || '#4F46E5',
+        successUrl: rawData.success_url || rawData.successUrl,
+        cancelUrl: rawData.cancel_url || rawData.cancelUrl,
+        paymentMethods: rawData.payment_methods || rawData.paymentMethods || { qr: true, card: true, mobile: true },
+        metadata: rawData.metadata,
+      };
 
       // Check if expired
       if (new Date(data.expiresAt) < new Date()) {
