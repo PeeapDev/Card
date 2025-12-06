@@ -97,6 +97,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleDepositSuccess(req, res);
     } else if (path.startsWith('deposit/cancel')) {
       return await handleDepositCancel(req, res);
+    } else if (path === '' || path === '/') {
+      // Root endpoint - API info
+      return res.status(200).json({
+        name: 'Peeap Payment API',
+        version: '1.0.0',
+        status: 'healthy',
+        endpoints: {
+          checkout: '/checkout/sessions',
+          tokenize: '/checkout/tokenize',
+          cards: '/cards/user/:userId',
+          settings: '/settings',
+        },
+        docs: 'https://docs.peeap.com',
+      });
     } else {
       return res.status(404).json({ error: 'Not found', path });
     }
