@@ -8,11 +8,27 @@
   "devCommand": "cd apps/web && npm run dev",
   "rewrites": [
     {
-      "source": "/checkout/pay/:sessionId",
+      "source": "/checkout/pay/:path*",
       "destination": "/index.html"
     },
     {
-      "source": "/:path*",
+      "source": "/payment/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/pay/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/t/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/deposit/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/app/:path*",
       "destination": "/index.html"
     }
   ],
