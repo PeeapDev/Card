@@ -9,7 +9,7 @@
  * - Merchant branding (logo, colors, name)
  * - Three payment methods: QR Code, Card, Mobile Money
  * - Dynamic QR code generation
- * - National card payment processing
+ * - PEEAP Card payment processing
  * - Login/Register flow for mobile payments with Monime
  * - Success/cancel redirects
  */
@@ -396,10 +396,10 @@ export function HostedCheckoutPage() {
     return (
       <div
         className="min-h-screen flex items-center justify-center p-4"
-        style={{ background: `linear-gradient(to bottom right, ${brandColor}, ${adjustColor(brandColor, -20)})` }}
+        style={{ background: '#f8fafc' }}
       >
-        <div className="text-center text-white">
-          <Loader2 className="w-12 h-12 animate-spin mx-auto mb-4" />
+        <div className="text-center text-gray-600">
+          <Loader2 className="w-12 h-12 animate-spin mx-auto mb-4 text-indigo-600" />
           <p>Loading checkout...</p>
         </div>
       </div>
@@ -411,7 +411,7 @@ export function HostedCheckoutPage() {
     return (
       <div
         className="min-h-screen flex items-center justify-center p-4"
-        style={{ background: `linear-gradient(to bottom right, ${brandColor}, ${adjustColor(brandColor, -20)})` }}
+        style={{ background: '#f8fafc' }}
       >
         <Card className="max-w-md w-full p-8 text-center">
           <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -439,7 +439,7 @@ export function HostedCheckoutPage() {
     return (
       <div
         className="min-h-screen flex items-center justify-center p-4"
-        style={{ background: `linear-gradient(to bottom right, ${brandColor}, ${adjustColor(brandColor, -20)})` }}
+        style={{ background: '#f8fafc' }}
       >
         <Card className="max-w-md w-full p-8 text-center">
           <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -505,7 +505,7 @@ export function HostedCheckoutPage() {
     return (
       <div
         className="min-h-screen flex items-center justify-center p-4"
-        style={{ background: `linear-gradient(to bottom right, ${brandColor}, ${adjustColor(brandColor, -20)})` }}
+        style={{ background: '#f8fafc' }}
       >
         <Card className="max-w-md w-full p-8 text-center">
           <div className="relative w-20 h-20 mx-auto mb-6">
@@ -525,7 +525,7 @@ export function HostedCheckoutPage() {
     return (
       <div
         className="min-h-screen flex items-center justify-center p-4"
-        style={{ background: `linear-gradient(to bottom right, ${brandColor}, ${adjustColor(brandColor, -20)})` }}
+        style={{ background: '#f8fafc' }}
       >
         <div className="max-w-md w-full">
           <Card className="overflow-hidden">
@@ -748,7 +748,7 @@ export function HostedCheckoutPage() {
     return (
       <div
         className="min-h-screen flex items-center justify-center p-4"
-        style={{ background: `linear-gradient(to bottom right, ${brandColor}, ${adjustColor(brandColor, -20)})` }}
+        style={{ background: '#f8fafc' }}
       >
         <div className="max-w-md w-full">
           <Card className="overflow-hidden">
@@ -811,7 +811,7 @@ export function HostedCheckoutPage() {
     return (
       <div
         className="min-h-screen flex items-center justify-center p-4"
-        style={{ background: `linear-gradient(to bottom right, ${brandColor}, ${adjustColor(brandColor, -20)})` }}
+        style={{ background: '#f8fafc' }}
       >
         <div className="max-w-md w-full">
           <Card className="overflow-hidden">
@@ -829,7 +829,7 @@ export function HostedCheckoutPage() {
                     <img src={session.merchantLogoUrl} alt={session.merchantName} className="h-8 mb-1" />
                   )}
                   <p className="font-semibold text-gray-900">{session?.merchantName || 'Merchant'}</p>
-                  <p className="text-sm text-gray-500">Pay with your national card</p>
+                  <p className="text-sm text-gray-500">Pay with your PEEAP Card</p>
                 </div>
               </div>
             </div>
@@ -950,7 +950,7 @@ export function HostedCheckoutPage() {
   return (
     <div
       className="min-h-screen flex items-center justify-center p-4"
-      style={{ background: `linear-gradient(to bottom right, ${brandColor}, ${adjustColor(brandColor, -20)})` }}
+      style={{ background: '#f8fafc' }}
     >
       <div className="max-w-md w-full">
         <Card className="overflow-hidden">
@@ -1022,7 +1022,7 @@ export function HostedCheckoutPage() {
                     <CreditCard className="w-6 h-6" />
                   </div>
                   <div className="flex-1 text-left">
-                    <p className="font-medium text-gray-900">National Card</p>
+                    <p className="font-medium text-gray-900">PEEAP Card</p>
                     <p className="text-sm text-gray-500">Pay with your card</p>
                   </div>
                 </button>
