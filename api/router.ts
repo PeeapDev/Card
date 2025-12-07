@@ -83,6 +83,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } else if (path.match(/^checkout\/sessions\/[^/]+\/complete$/)) {
       const sessionId = path.split('/')[2];
       return await handleCheckoutSessionComplete(req, res, sessionId);
+    } else if (path.match(/^checkout\/sessions\/[^/]+\/mobile-pay$/)) {
+      const sessionId = path.split('/')[2];
+      return await handleCheckoutMobilePay(req, res, sessionId);
     } else if (path === 'checkout/tokenize' || path === 'checkout/tokenize/') {
       return await handleCheckoutTokenize(req, res);
     } else if (path.startsWith('checkout/create')) {
@@ -760,6 +763,114 @@ async function handlePaymentsId(req: VercelRequest, res: VercelResponse) {
 
 async function handleMonimeDeposit(req: VercelRequest, res: VercelResponse) {
   return res.status(501).json({ error: 'Temporarily unavailable - see full implementation' });
+}
+
+// Mobile Money payment for hosted checkout - creates Monime checkout session
+async function handleCheckoutMobilePay(req: VercelRequest, res: VercelResponse, sessionId: string) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    // 1. Get checkout session
+    const { data: session, error: sessionError } = await supabase
+      .from('checkout_sessions')
+      .select('*')
+      .eq('external_id', sessionId)
+      .single();
+
+    if (sessionError || !session) {
+      return res.status(404).json({ error: 'Checkout session not found' });
+    }
+
+    if (session.status !== 'OPEN') {
+      return res.status(400).json({ error: `Session is ${session.status}` });
+    }
+
+    // Check if expired
+    if (new Date(session.expires_at) < new Date()) {
+      return res.status(400).json({ error: 'Session expired' });
+    }
+
+    // 2. Get Monime credentials from payment_settings
+    const { data: settings, error: settingsError } = await supabase
+      .from('payment_settings')
+      .select('monime_access_token, monime_space_id, monime_enabled')
+      .eq('id', SETTINGS_ID)
+      .single();
+
+    if (settingsError || !settings) {
+      console.error('[MobilePay] Settings error:', settingsError);
+      return res.status(500).json({ error: 'Payment settings not configured' });
+    }
+
+    if (!settings.monime_enabled) {
+      return res.status(400).json({ error: 'Mobile money payments are not enabled' });
+    }
+
+    if (!settings.monime_access_token || !settings.monime_space_id) {
+      return res.status(500).json({ error: 'Monime credentials not configured' });
+    }
+
+    // 3. Create Monime checkout session
+    const monimeUrl = 'https://api.monime.io/v1/checkout-sessions';
+    const idempotencyKey = `checkout_${sessionId}_${Date.now()}`;
+
+    const monimePayload = {
+      amount: session.amount,
+      currency: session.currency_code || 'SLE',
+      description: session.description || `Payment to ${session.merchant_name || 'Merchant'}`,
+      successUrl: session.success_url || `https://checkout.peeap.com/checkout/pay/${sessionId}?status=success`,
+      cancelUrl: session.cancel_url || `https://checkout.peeap.com/checkout/pay/${sessionId}?status=cancel`,
+      metadata: {
+        checkoutSessionId: session.external_id,
+        merchantId: session.merchant_id,
+      },
+    };
+
+    console.log('[MobilePay] Creating Monime session:', { sessionId, amount: session.amount });
+
+    const monimeResponse = await fetch(monimeUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${settings.monime_access_token}`,
+        'Content-Type': 'application/json',
+        'Monime-Space-Id': settings.monime_space_id,
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify(monimePayload),
+    });
+
+    const monimeData = await monimeResponse.json();
+
+    if (!monimeResponse.ok) {
+      console.error('[MobilePay] Monime error:', monimeData);
+      return res.status(500).json({ error: monimeData.message || 'Failed to create payment session' });
+    }
+
+    console.log('[MobilePay] Monime session created:', monimeData.id);
+
+    // 4. Store Monime reference in checkout session
+    await supabase
+      .from('checkout_sessions')
+      .update({
+        payment_reference: monimeData.id,
+        payment_method: 'mobile_money',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('external_id', sessionId);
+
+    // 5. Return payment URL
+    return res.status(200).json({
+      paymentUrl: monimeData.url,
+      monimeSessionId: monimeData.id,
+      expiresAt: monimeData.expiresAt,
+    });
+
+  } catch (error: any) {
+    console.error('[MobilePay] Error:', error);
+    return res.status(500).json({ error: error.message || 'Internal server error' });
+  }
 }
 
 // ============================================================================

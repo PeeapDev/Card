@@ -198,7 +198,7 @@ export function HostedCheckoutPage() {
     }
   };
 
-  const handleMethodSelect = (method: PaymentMethod) => {
+  const handleMethodSelect = async (method: PaymentMethod) => {
     setSelectedMethod(method);
 
     if (method === 'qr') {
@@ -206,11 +206,42 @@ export function HostedCheckoutPage() {
     } else if (method === 'card') {
       setStep('card_form');
     } else if (method === 'mobile') {
-      if (isAuthenticated) {
-        triggerMonimePayment();
-      } else {
-        setStep('login_prompt');
+      // For hosted checkout, directly create Monime session without login
+      await handleMobilePayment();
+    }
+  };
+
+  // Mobile Money payment via Monime - no login required for hosted checkout
+  const handleMobilePayment = async () => {
+    if (!session) return;
+
+    setStep('processing');
+    setError(null);
+
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
+      
+      const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}/mobile-pay`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to initiate mobile payment');
       }
+
+      // Redirect to Monime payment page
+      if (data.paymentUrl) {
+        window.location.href = data.paymentUrl;
+      } else {
+        throw new Error('No payment URL received');
+      }
+    } catch (err: any) {
+      console.error('Mobile payment error:', err);
+      setError(err.message || 'Payment failed. Please try again.');
+      setStep('error');
     }
   };
 
