@@ -33,8 +33,6 @@ import {
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { useAuth } from '@/context/AuthContext';
-import { monimeService, toMinorUnits } from '@/services/monime.service';
-import { supabase } from '@/lib/supabase';
 
 // Types
 interface CheckoutSession {
@@ -333,40 +331,39 @@ export function HostedCheckoutPage() {
   };
 
   const triggerMonimePayment = async () => {
-    if (!user || !session) return;
+    if (!session) return;
 
     setStep('processing');
     setError(null);
 
     try {
-      // Get user's wallet
-      const { data: wallet, error: walletError } = await supabase
-        .from('wallets')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('wallet_type', 'primary')
-        .single();
-
-      if (walletError || !wallet) {
-        throw new Error('Failed to get wallet. Please contact support.');
-      }
-
-      // Initiate Monime payment
-      const response = await monimeService.initiateDeposit({
-        walletId: wallet.id,
-        amount: toMinorUnits(session.amount),
-        currency: session.currencyCode,
-        method: 'CHECKOUT_SESSION',
-        successUrl: session.successUrl || `${window.location.origin}/payment/success`,
-        cancelUrl: session.cancelUrl || `${window.location.origin}/payment/cancel`,
-        description: session.description || `Payment for ${session.merchantName || 'Merchant'}`,
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
+      
+      // Call backend to create Monime checkout session
+      const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}/mobile-pay`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          // Include user ID if available for tracking
+          ...(user?.id ? { 'X-User-Id': user.id } : {}),
+        },
+        body: JSON.stringify({
+          userId: user?.id,
+          userEmail: user?.email,
+        }),
       });
 
-      // Open Monime checkout
-      if (response.paymentUrl) {
-        monimeService.openCheckout(response.paymentUrl, { target: '_self' });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create payment session');
+      }
+
+      // Redirect to Monime checkout page
+      if (data.paymentUrl) {
+        window.location.href = data.paymentUrl;
       } else {
-        throw new Error('No payment URL received');
+        throw new Error('No payment URL received from Monime');
       }
     } catch (err: any) {
       console.error('Mobile payment error:', err);
