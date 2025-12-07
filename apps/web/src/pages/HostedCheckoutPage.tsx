@@ -137,7 +137,8 @@ export function HostedCheckoutPage() {
     
     setStep('processing');
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
+      // Always use the production API URL for checkout
+      const apiUrl = 'https://api.peeap.com';
       const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
