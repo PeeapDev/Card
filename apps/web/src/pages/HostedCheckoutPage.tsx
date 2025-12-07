@@ -15,7 +15,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import QRCode from 'react-qr-code';
 import {
   Smartphone,
@@ -81,6 +81,7 @@ const CURRENCIES: Record<string, { symbol: string; name: string; decimals: numbe
 
 export function HostedCheckoutPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user, isAuthenticated, login, register, isLoading: authLoading } = useAuth();
 
@@ -118,9 +119,68 @@ export function HostedCheckoutPage() {
     })}`;
   };
 
+  // Handle Monime redirect with ?status=success or ?status=cancel
+  useEffect(() => {
+    const status = searchParams.get('status');
+    if (status === 'success') {
+      // Payment successful from Monime - complete the session
+      completeSession();
+    } else if (status === 'cancel') {
+      setError('Payment was cancelled');
+      setStep('error');
+    }
+  }, [searchParams]);
+
+  // Complete checkout session after successful payment
+  const completeSession = async () => {
+    if (!sessionId) return;
+    
+    setStep('processing');
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
+      const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentMethod: 'mobile_money' }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to complete session');
+      }
+
+      // Load session to get success URL
+      const sessionResponse = await fetch(`${apiUrl}/checkout/sessions/${sessionId}`);
+      const sessionData = await sessionResponse.json();
+      
+      setSession({
+        ...sessionData,
+        successUrl: sessionData.success_url || sessionData.successUrl,
+        merchantName: sessionData.merchant_name || sessionData.merchantName,
+        amount: sessionData.amount,
+        currencyCode: sessionData.currency_code || sessionData.currencyCode || 'SLE',
+      });
+      setStep('success');
+
+      // Auto-redirect to merchant after 3 seconds
+      if (sessionData.success_url || sessionData.successUrl) {
+        setTimeout(() => {
+          window.location.href = sessionData.success_url || sessionData.successUrl;
+        }, 3000);
+      }
+    } catch (err: any) {
+      console.error('Complete session error:', err);
+      setError(err.message || 'Failed to complete payment');
+      setStep('error');
+    }
+  };
+
   // Load checkout session
   useEffect(() => {
-    loadSession();
+    // Don't load if we're handling a redirect
+    if (!searchParams.get('status')) {
+      loadSession();
+    }
   }, [sessionId]);
 
   // Auto-trigger Monime when user logs in for mobile payment
