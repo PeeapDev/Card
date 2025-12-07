@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Peeap Checkout Integration Example</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .container { background: white; padding: 40px; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.1); max-width: 500px; width: 90%; }
+    h1 { font-size: 24px; margin-bottom: 8px; color: #1a1a1a; }
+    .subtitle { color: #666; margin-bottom: 24px; }
+    .product { display: flex; align-items: center; gap: 16px; padding: 16px; background: #f9fafb; border-radius: 12px; margin-bottom: 24px; }
+    .product-img { width: 80px; height: 80px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-size: 32px; }
+    .product-info h3 { font-size: 18px; color: #1a1a1a; }
+    .product-info p { color: #666; font-size: 14px; }
+    .price { font-size: 28px; font-weight: bold; color: #1a1a1a; margin-bottom: 24px; }
+    .pay-btn { width: 100%; padding: 16px; background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; border: none; border-radius: 12px; font-size: 18px; font-weight: 600; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
+    .pay-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(79, 70, 229, 0.4); }
+    .pay-btn:disabled { opacity: 0.7; cursor: not-allowed; transform: none; }
+    .powered-by { text-align: center; margin-top: 20px; color: #999; font-size: 12px; }
+    .powered-by a { color: #4F46E5; text-decoration: none; }
+    .code-section { margin-top: 40px; padding-top: 24px; border-top: 1px solid #eee; }
+    .code-section h2 { font-size: 16px; color: #1a1a1a; margin-bottom: 12px; }
+    .code-block { background: #1a1a2e; color: #a5f3fc; padding: 16px; border-radius: 8px; font-family: 'Monaco', 'Menlo', monospace; font-size: 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+    .copy-btn { margin-top: 8px; padding: 8px 16px; background: #e5e7eb; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; }
+    .copy-btn:hover { background: #d1d5db; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🛍️ Demo Store</h1>
+    <p class="subtitle">Peeap Checkout Integration Demo</p>
+    
+    <div class="product">
+      <div class="product-img">📦</div>
+      <div class="product-info">
+        <h3>Premium Product</h3>
+        <p>High quality item with fast delivery</p>
+      </div>
+    </div>
+    
+    <div class="price">Le 15,000.00</div>
+    
+    <button class="pay-btn" id="payBtn" onclick="initiateCheckout()">
+      Pay with Peeap
+    </button>
+    
+    <p class="powered-by">Secured by <a href="https://peeap.com" target="_blank">Peeap</a></p>
+    
+    <div class="code-section">
+      <h2>📋 Embed Code for Merchants</h2>
+      <div class="code-block" id="embedCode"></div>
+      <button class="copy-btn" onclick="copyCode()">Copy Code</button>
+    </div>
+  </div>
+
+  <!-- ========================================
+       PEEAP CHECKOUT INTEGRATION SCRIPT
+       Copy this script to integrate Peeap Checkout
+       ======================================== -->
+  <script>
+    // Peeap Configuration - Replace with your merchant credentials
+    const PEEAP_CONFIG = {
+      apiUrl: 'https://api.peeap.com',
+      checkoutUrl: 'https://checkout.peeap.com',
+      merchantId: 'your_merchant_id',  // Get from Peeap Developer Console
+      merchantName: 'Your Store Name',
+    };
+
+    /**
+     * Peeap Checkout Integration
+     * 
+     * Usage:
+     * 1. Include this script on your checkout page
+     * 2. Call peeapCheckout.pay() with order details
+     * 3. User is redirected to Peeap hosted checkout
+     * 4. After payment, user returns to your success/cancel URL
+     */
+    const peeapCheckout = {
+      /**
+       * Initiate a payment
+       * @param {Object} options
+       * @param {number} options.amount - Amount in minor units (e.g., 15000 for Le 15,000)
+       * @param {string} options.currency - Currency code (default: 'SLE')
+       * @param {string} options.description - Order description
+       * @param {string} options.successUrl - Redirect URL on successful payment
+       * @param {string} options.cancelUrl - Redirect URL on cancelled payment
+       * @param {Object} options.metadata - Additional order metadata
+       */
+      async pay(options) {
+        const btn = document.getElementById('payBtn');
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = 'Processing...';
+        }
+
+        try {
+          const response = await fetch(`${PEEAP_CONFIG.apiUrl}/checkout/sessions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              merchantId: PEEAP_CONFIG.merchantId,
+              merchantName: PEEAP_CONFIG.merchantName,
+              amount: options.amount,
+              currency: options.currency || 'SLE',
+              description: options.description,
+              successUrl: options.successUrl || window.location.href + '?status=success',
+              cancelUrl: options.cancelUrl || window.location.href + '?status=cancel',
+              metadata: options.metadata || {},
+            }),
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.error || 'Failed to create checkout session');
+          }
+
+          // Redirect to Peeap hosted checkout
+          window.location.href = `${PEEAP_CONFIG.checkoutUrl}/checkout/pay/${data.sessionId}`;
+
+        } catch (error) {
+          console.error('Peeap Checkout Error:', error);
+          alert('Payment failed: ' + error.message);
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Pay with Peeap';
+          }
+        }
+      }
+    };
+
+    // Demo: Initiate checkout
+    function initiateCheckout() {
+      peeapCheckout.pay({
+        amount: 15000,
+        currency: 'SLE',
+        description: 'Premium Product - Demo Store',
+        successUrl: window.location.origin + '/success',
+        cancelUrl: window.location.origin + '/cancel',
+        metadata: {
+          orderId: 'ORD-' + Date.now(),
+          productId: 'PROD-001',
+        }
+      });
+    }
+
+    // Display embed code
+    const embedCodeSnippet = `<!-- Peeap Checkout Integration -->
+<script>
+const PEEAP_CONFIG = {
+  apiUrl: 'https://api.peeap.com',
+  checkoutUrl: 'https://checkout.peeap.com',
+  merchantId: 'YOUR_MERCHANT_ID',
+  merchantName: 'Your Store Name',
+};
+
+async function payWithPeeap(amount, description) {
+  const res = await fetch(PEEAP_CONFIG.apiUrl + '/checkout/sessions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      merchantId: PEEAP_CONFIG.merchantId,
+      merchantName: PEEAP_CONFIG.merchantName,
+      amount: amount,
+      currency: 'SLE',
+      description: description,
+      successUrl: window.location.origin + '/success',
+      cancelUrl: window.location.origin + '/cancel',
+    }),
+  });
+  const data = await res.json();
+  window.location.href = PEEAP_CONFIG.checkoutUrl + '/checkout/pay/' + data.sessionId;
+}
+<\/script>
+
+<button onclick="payWithPeeap(15000, 'Your Product')">
+  Pay Le 15,000 with Peeap
+</button>`;
+
+    document.getElementById('embedCode').textContent = embedCodeSnippet;
+
+    function copyCode() {
+      navigator.clipboard.writeText(embedCodeSnippet);
+      const btn = event.target;
+      btn.textContent = 'Copied!';
+      setTimeout(() => btn.textContent = 'Copy Code', 2000);
+    }
+
+    // Check for payment status in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('status') === 'success') {
+      alert('✅ Payment successful! Thank you for your purchase.');
+    } else if (urlParams.get('status') === 'cancel') {
+      alert('❌ Payment was cancelled.');
+    }
+  </script>
+</body>
+</html>
