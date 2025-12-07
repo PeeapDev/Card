@@ -805,21 +805,35 @@ async function handleCheckoutMobilePay(req: VercelRequest, res: VercelResponse, 
 
     // 3. Create Monime checkout session
     const monimeUrl = 'https://api.monime.io/v1/checkout-sessions';
-    const idempotencyKey = `checkout_${sessionId}_${Date.now()}`;
+    // Generate UUID for idempotency key
+    const idempotencyKey = crypto.randomUUID();
 
+    // Monime expects lineItems with price object containing currency and value
     const monimePayload = {
-      amount: session.amount,
-      currency: session.currency_code || 'SLE',
-      description: session.description || `Payment to ${session.merchant_name || 'Merchant'}`,
-      successUrl: session.success_url || `https://checkout.peeap.com/checkout/pay/${sessionId}?status=success`,
-      cancelUrl: session.cancel_url || `https://checkout.peeap.com/checkout/pay/${sessionId}?status=cancel`,
+      name: session.description || `Payment to ${session.merchant_name || 'Peeap'}`,
+      description: `Checkout session ${session.external_id}`,
+      successUrl: `https://checkout.peeap.com/checkout/pay/${sessionId}?status=success`,
+      cancelUrl: `https://checkout.peeap.com/checkout/pay/${sessionId}?status=cancel`,
+      reference: session.external_id,
+      lineItems: [
+        {
+          type: 'custom',
+          name: session.description || 'Payment',
+          price: {
+            currency: session.currency_code || 'SLL',
+            value: session.amount, // Amount in minor units (e.g., 15000 for Le 15,000)
+          },
+          quantity: 1,
+        },
+      ],
       metadata: {
-        checkoutSessionId: session.external_id,
+        peeapSessionId: session.external_id,
         merchantId: session.merchant_id,
+        merchantName: session.merchant_name,
       },
     };
 
-    console.log('[MobilePay] Creating Monime session:', { sessionId, amount: session.amount });
+    console.log('[MobilePay] Creating Monime session:', JSON.stringify(monimePayload, null, 2));
 
     const monimeResponse = await fetch(monimeUrl, {
       method: 'POST',
@@ -834,28 +848,38 @@ async function handleCheckoutMobilePay(req: VercelRequest, res: VercelResponse, 
 
     const monimeData = await monimeResponse.json();
 
+    console.log('[MobilePay] Monime response:', monimeResponse.status, JSON.stringify(monimeData, null, 2));
+
     if (!monimeResponse.ok) {
       console.error('[MobilePay] Monime error:', monimeData);
-      return res.status(500).json({ error: monimeData.message || 'Failed to create payment session' });
+      return res.status(500).json({ 
+        error: monimeData.error?.message || monimeData.message || 'Failed to create Monime session',
+        details: monimeData,
+      });
     }
 
-    console.log('[MobilePay] Monime session created:', monimeData.id);
+    console.log('[MobilePay] Monime session created:', monimeData.data?.id);
+
+    // Extract session data (Monime wraps response in 'data' object)
+    const monimeSession = monimeData.data || monimeData;
 
     // 4. Store Monime reference in checkout session
     await supabase
       .from('checkout_sessions')
       .update({
-        payment_reference: monimeData.id,
+        payment_reference: monimeSession.id,
         payment_method: 'mobile_money',
         updated_at: new Date().toISOString(),
       })
       .eq('external_id', sessionId);
 
-    // 5. Return payment URL
+    // 5. Return payment URL - Monime checkout URL format
+    const paymentUrl = monimeSession.url || `https://checkout.monime.io/s/${monimeSession.id}`;
+    
     return res.status(200).json({
-      paymentUrl: monimeData.url,
-      monimeSessionId: monimeData.id,
-      expiresAt: monimeData.expiresAt,
+      paymentUrl,
+      monimeSessionId: monimeSession.id,
+      expiresAt: monimeSession.expiresAt,
     });
 
   } catch (error: any) {
