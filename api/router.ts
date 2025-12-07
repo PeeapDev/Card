@@ -858,10 +858,15 @@ async function handleCheckoutMobilePay(req: VercelRequest, res: VercelResponse, 
       });
     }
 
-    console.log('[MobilePay] Monime session created:', monimeData.data?.id);
+    // Monime response: { success: true, result: { id, redirectUrl, ... } }
+    const monimeSession = monimeData.result;
+    
+    if (!monimeSession || !monimeSession.id) {
+      console.error('[MobilePay] Invalid Monime response:', monimeData);
+      return res.status(500).json({ error: 'Invalid response from Monime' });
+    }
 
-    // Extract session data (Monime wraps response in 'data' object)
-    const monimeSession = monimeData.data || monimeData;
+    console.log('[MobilePay] Monime session created:', monimeSession.id, 'redirectUrl:', monimeSession.redirectUrl);
 
     // 4. Store Monime reference in checkout session
     await supabase
@@ -873,13 +878,11 @@ async function handleCheckoutMobilePay(req: VercelRequest, res: VercelResponse, 
       })
       .eq('external_id', sessionId);
 
-    // 5. Return payment URL - Monime checkout URL format
-    const paymentUrl = monimeSession.url || `https://checkout.monime.io/s/${monimeSession.id}`;
-    
+    // 5. Return payment URL from Monime response
     return res.status(200).json({
-      paymentUrl,
+      paymentUrl: monimeSession.redirectUrl,
       monimeSessionId: monimeSession.id,
-      expiresAt: monimeSession.expiresAt,
+      expiresAt: monimeSession.expireTime,
     });
 
   } catch (error: any) {
