@@ -820,8 +820,8 @@ async function handleCheckoutMobilePay(req: VercelRequest, res: VercelResponse, 
           type: 'custom',
           name: session.description || 'Payment',
           price: {
-            currency: session.currency_code || 'SLL',
-            value: session.amount, // Amount in minor units (e.g., 15000 for Le 15,000)
+            currency: 'SLE', // Sierra Leone New Leone
+            value: session.amount,
           },
           quantity: 1,
         },
