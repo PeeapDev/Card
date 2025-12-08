@@ -1,19 +1,25 @@
 /**
- * PEEAP PAYMENT SDK v2.2.0
+ * PEEAP PAYMENT SDK v2.3.0
  *
  * Simple, reliable payment integration for any website.
+ * Redirects to hosted checkout at checkout.peeap.com
+ *
  * Supports:
- * - Mobile Money payments (via Monime hosted checkout)
+ * - Mobile Money payments (via Monime) - LIVE mode only
  * - Card payments (Peeap closed-loop cards with PIN)
+ * - QR Code payments (Peeap app scan)
  *
  * SECURITY:
  * - Uses public key (pk_xxx) for frontend - safe to expose
  * - Secret key (sk_xxx) stays server-side only
  * - Auto-generates idempotency key to prevent duplicate payments
- * - Card PINs are verified server-side, never stored in frontend
+ *
+ * ENDPOINTS:
+ * - API: https://api.peeap.com
+ * - Checkout: https://checkout.peeap.com
  *
  * Usage:
- *   <script src="https://my.peeap.com/embed/peeap-sdk.js"></script>
+ *   <script src="https://checkout.peeap.com/embed/peeap-sdk.js"></script>
  *   <script>
  *     PeeapSDK.init({
  *       publicKey: 'pk_live_xxxxx',
@@ -21,17 +27,8 @@
  *       onError: function(error) { console.error('Error:', error); }
  *     });
  *
- *     // Mobile Money payment (redirects to Monime):
- *     PeeapSDK.createPayment({ amount: 100, currency: 'SLE' }); // Le 100.00
- *
- *     // Card payment (Peeap card with PIN):
- *     PeeapSDK.cardPayment({
- *       amount: 100,
- *       cardNumber: '620012345678',
- *       expiryMonth: '12',
- *       expiryYear: '25',
- *       pin: '1234'
- *     });
+ *     // Create payment and redirect to hosted checkout:
+ *     PeeapSDK.createPayment({ amount: 100, currency: 'SLE' }); // Le 100
  *   </script>
  */
 
@@ -45,7 +42,9 @@
     mode: 'live',
     currency: 'SLE',
     theme: 'light',
-    baseUrl: 'https://my.peeap.com'
+    apiUrl: 'https://api.peeap.com',      // API endpoint
+    checkoutUrl: 'https://checkout.peeap.com', // Hosted checkout
+    baseUrl: 'https://api.peeap.com'      // Legacy - same as apiUrl
   };
 
   // Stored callbacks
@@ -70,7 +69,7 @@
 
   // The SDK Object
   var PeeapSDK = {
-    version: '2.2.0',
+    version: '2.3.0',
 
     /**
      * Initialize the SDK
@@ -105,8 +104,17 @@
       config.currency = options.currency || 'SLE';
       config.theme = options.theme || 'light';
 
+      // Allow custom URLs for development/testing
+      if (options.apiUrl) {
+        config.apiUrl = options.apiUrl;
+        config.baseUrl = options.apiUrl;
+      }
+      if (options.checkoutUrl) {
+        config.checkoutUrl = options.checkoutUrl;
+      }
       if (options.baseUrl) {
         config.baseUrl = options.baseUrl;
+        config.apiUrl = options.baseUrl;
       }
 
       // Store callbacks
@@ -183,8 +191,8 @@
           idempotencyKey: idempotencyKey
         });
 
-        // Call API directly
-        fetch(config.baseUrl + '/api/checkout/create', {
+        // Call API to create checkout session
+        fetch(config.apiUrl + '/checkout/create', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -224,9 +232,9 @@
 
           console.log('[PeeapSDK] Checkout created:', data);
 
-          // If we got a payment URL, redirect to it
+          // If we got a payment URL, redirect to hosted checkout
           if (data.paymentUrl) {
-            console.log('[PeeapSDK] Redirecting to Monime:', data.paymentUrl);
+            console.log('[PeeapSDK] Redirecting to hosted checkout:', data.paymentUrl);
 
             // Resolve before redirect
             resolve({
@@ -237,7 +245,7 @@
               status: 'pending'
             });
 
-            // Redirect to Monime hosted page
+            // Redirect to Peeap hosted checkout page
             window.location.href = data.paymentUrl;
           } else {
             var error = {
@@ -385,7 +393,7 @@
 
         console.log('[PeeapSDK] Validating card:', options.cardNumber.substring(0, 4) + '****');
 
-        fetch(config.baseUrl + '/api/checkout/card-validate', {
+        fetch(config.apiUrl + '/checkout/card-validate', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -507,7 +515,7 @@
           cardNumber: options.cardNumber.substring(0, 4) + '****'
         });
 
-        fetch(config.baseUrl + '/api/checkout/card-pay', {
+        fetch(config.apiUrl + '/checkout/card-pay', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
