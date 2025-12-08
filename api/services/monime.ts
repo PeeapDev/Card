@@ -424,7 +424,7 @@ interface PaymentSettings {
 /**
  * Create MonimeService instance from Supabase payment settings
  */
-export async function createMonimeService(supabase: ReturnType<typeof createClient>, settingsId: string): Promise<MonimeService> {
+export async function createMonimeService(supabase: any, settingsId: string): Promise<MonimeService> {
   const { data, error } = await supabase
     .from('payment_settings')
     .select('monime_access_token, monime_space_id, monime_enabled')
