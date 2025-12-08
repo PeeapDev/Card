@@ -13,7 +13,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 
 // Types
 export interface MonimeConfig {
@@ -128,10 +128,12 @@ export function toMonimeAmount(amount: number, currency: string): number {
 
 /**
  * Convert Monime amount to display format
+ * For SLE: Divide by 10 (Monime stores as value * 10)
+ * For USD/etc: Divide by 100 (cents to dollars)
  */
 export function fromMonimeAmount(amount: number, currency: string): number {
-  const config = getCurrencyConfig(currency);
-  return amount;
+  const multiplier = getMonimeMultiplier(currency);
+  return amount / multiplier;
 }
 
 /**
@@ -413,15 +415,23 @@ export class MonimeError extends Error {
   }
 }
 
+interface PaymentSettings {
+  monime_access_token: string | null;
+  monime_space_id: string | null;
+  monime_enabled: boolean | null;
+}
+
 /**
  * Create MonimeService instance from Supabase payment settings
  */
 export async function createMonimeService(supabase: ReturnType<typeof createClient>, settingsId: string): Promise<MonimeService> {
-  const { data: settings, error } = await supabase
+  const { data, error } = await supabase
     .from('payment_settings')
     .select('monime_access_token, monime_space_id, monime_enabled')
     .eq('id', settingsId)
     .single();
+
+  const settings = data as PaymentSettings | null;
 
   if (error || !settings) {
     throw new MonimeError('Payment settings not found', 'SETTINGS_NOT_FOUND', 500);
