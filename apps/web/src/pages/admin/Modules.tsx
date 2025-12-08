@@ -120,7 +120,6 @@ export default function ModulesPage() {
     }
 
     setUploading(true);
-    setUploadProgress(0);
     setError('');
 
     try {
@@ -146,7 +145,6 @@ export default function ModulesPage() {
       setError(err.message || 'Failed to upload module');
     } finally {
       setUploading(false);
-      setUploadProgress(0);
     }
   };
 
