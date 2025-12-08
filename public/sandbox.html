@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Peeap Developer Sandbox</title>
+  <link rel="icon" href="/favicon.ico">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+    .header {
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      border-bottom: 1px solid #334155;
+      padding: 20px;
+    }
+    .header-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      color: white;
+    }
+    .logo-text {
+      font-size: 20px;
+      font-weight: 700;
+    }
+    .logo-text span {
+      color: #6366f1;
+    }
+    .mode-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .mode-indicator.live {
+      background: rgba(34, 197, 94, 0.2);
+      color: #22c55e;
+      border: 1px solid rgba(34, 197, 94, 0.3);
+    }
+    .mode-indicator.test {
+      background: rgba(251, 191, 36, 0.2);
+      color: #fbbf24;
+      border: 1px solid rgba(251, 191, 36, 0.3);
+    }
+    .mode-indicator.none {
+      background: rgba(148, 163, 184, 0.2);
+      color: #94a3b8;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+    }
+    .mode-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 20px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 30px;
+    }
+    @media (max-width: 900px) {
+      .container { grid-template-columns: 1fr; }
+    }
+    .panel {
+      background: #1e293b;
+      border-radius: 16px;
+      border: 1px solid #334155;
+      overflow: hidden;
+    }
+    .panel-header {
+      padding: 20px;
+      border-bottom: 1px solid #334155;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .panel-header h2 {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .panel-header .badge {
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(99, 102, 241, 0.2);
+      color: #818cf8;
+    }
+    .panel-body {
+      padding: 20px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: #94a3b8;
+      margin-bottom: 8px;
+    }
+    .form-group input, .form-group select, .form-group textarea {
+      width: 100%;
+      padding: 12px 16px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      color: #e2e8f0;
+      font-size: 14px;
+      font-family: inherit;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+      outline: none;
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+    }
+    .form-group input::placeholder {
+      color: #475569;
+    }
+    .form-group small {
+      display: block;
+      margin-top: 6px;
+      font-size: 12px;
+      color: #64748b;
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .btn {
+      padding: 14px 24px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      color: white;
+      width: 100%;
+    }
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+    }
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .btn-secondary {
+      background: #334155;
+      color: #e2e8f0;
+    }
+    .btn-secondary:hover {
+      background: #475569;
+    }
+    .code-block {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .code-header {
+      padding: 12px 16px;
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .code-header span {
+      font-size: 12px;
+      color: #94a3b8;
+      font-weight: 500;
+    }
+    .code-header button {
+      padding: 6px 12px;
+      background: #334155;
+      border: none;
+      border-radius: 6px;
+      color: #e2e8f0;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .code-header button:hover {
+      background: #475569;
+    }
+    .code-content {
+      padding: 16px;
+      overflow-x: auto;
+    }
+    .code-content pre {
+      margin: 0;
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #e2e8f0;
+      white-space: pre-wrap;
+    }
+    .code-content .comment { color: #64748b; }
+    .code-content .keyword { color: #c084fc; }
+    .code-content .string { color: #34d399; }
+    .code-content .function { color: #60a5fa; }
+    .code-content .number { color: #fbbf24; }
+    .log-panel {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .log-entry {
+      padding: 10px 16px;
+      border-bottom: 1px solid #334155;
+      font-family: monospace;
+      font-size: 12px;
+      display: flex;
+      gap: 10px;
+    }
+    .log-entry:last-child { border-bottom: none; }
+    .log-entry .time { color: #64748b; min-width: 80px; }
+    .log-entry .message { flex: 1; }
+    .log-entry.info .message { color: #60a5fa; }
+    .log-entry.success .message { color: #34d399; }
+    .log-entry.error .message { color: #f87171; }
+    .log-entry.warning .message { color: #fbbf24; }
+    .status-banner {
+      padding: 16px 20px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .status-banner.ready {
+      background: rgba(34, 197, 94, 0.1);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      color: #22c55e;
+    }
+    .status-banner.warning {
+      background: rgba(251, 191, 36, 0.1);
+      border: 1px solid rgba(251, 191, 36, 0.3);
+      color: #fbbf24;
+    }
+    .status-banner.error {
+      background: rgba(248, 113, 113, 0.1);
+      border: 1px solid rgba(248, 113, 113, 0.3);
+      color: #f87171;
+    }
+    .tabs {
+      display: flex;
+      gap: 4px;
+      padding: 4px;
+      background: #0f172a;
+      border-radius: 10px;
+      margin-bottom: 20px;
+    }
+    .tab {
+      flex: 1;
+      padding: 10px;
+      background: transparent;
+      border: none;
+      border-radius: 8px;
+      color: #94a3b8;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tab.active {
+      background: #334155;
+      color: #e2e8f0;
+    }
+    .tab:hover:not(.active) {
+      color: #e2e8f0;
+    }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-content">
+      <div class="logo">
+        <div class="logo-icon">P</div>
+        <div class="logo-text">Peeap <span>Sandbox</span></div>
+      </div>
+      <div class="mode-indicator none" id="modeIndicator">
+        <div class="mode-dot"></div>
+        <span id="modeText">Not Connected</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- Left Panel: Configuration -->
+    <div>
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Configuration</h2>
+          <span class="badge">Step 1</span>
+        </div>
+        <div class="panel-body">
+          <div class="form-group">
+            <label>Public Key</label>
+            <input type="text" id="publicKey" placeholder="pk_live_xxx or pk_test_xxx">
+            <small>Enter your live (pk_live_) or test (pk_test_) public key</small>
+          </div>
+
+          <button class="btn btn-primary" id="initBtn" onclick="initializeSDK()">
+            Initialize SDK
+          </button>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top: 20px;">
+        <div class="panel-header">
+          <h2>Payment Details</h2>
+          <span class="badge">Step 2</span>
+        </div>
+        <div class="panel-body">
+          <div id="statusBanner" class="status-banner warning">
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+            <span>Initialize SDK first to enable payments</span>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Amount</label>
+              <input type="number" id="amount" value="100" min="1" disabled>
+            </div>
+            <div class="form-group">
+              <label>Currency</label>
+              <select id="currency" disabled>
+                <option value="SLE">SLE - Leone</option>
+                <option value="USD">USD - Dollar</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Description</label>
+            <input type="text" id="description" value="Test Payment" disabled>
+          </div>
+
+          <button class="btn btn-primary" id="payBtn" onclick="createPayment()" disabled>
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
+            </svg>
+            Test Payment
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Panel: Code & Logs -->
+    <div>
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Integration Code</h2>
+          <span class="badge">Copy & Paste</span>
+        </div>
+        <div class="panel-body">
+          <div class="tabs">
+            <button class="tab active" onclick="showTab('html')">HTML</button>
+            <button class="tab" onclick="showTab('js')">JavaScript</button>
+            <button class="tab" onclick="showTab('python')">Python</button>
+          </div>
+
+          <div id="codeHtml" class="code-block">
+            <div class="code-header">
+              <span>index.html</span>
+              <button onclick="copyCode('html')">Copy</button>
+            </div>
+            <div class="code-content">
+              <pre id="htmlCode"></pre>
+            </div>
+          </div>
+
+          <div id="codeJs" class="code-block hidden">
+            <div class="code-header">
+              <span>payment.js</span>
+              <button onclick="copyCode('js')">Copy</button>
+            </div>
+            <div class="code-content">
+              <pre id="jsCode"></pre>
+            </div>
+          </div>
+
+          <div id="codePython" class="code-block hidden">
+            <div class="code-header">
+              <span>payment.py</span>
+              <button onclick="copyCode('python')">Copy</button>
+            </div>
+            <div class="code-content">
+              <pre id="pythonCode"></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top: 20px;">
+        <div class="panel-header">
+          <h2>Event Log</h2>
+          <span class="badge">Live</span>
+        </div>
+        <div class="panel-body log-panel" id="logPanel">
+          <div class="log-entry info">
+            <span class="time">--:--:--</span>
+            <span class="message">Enter your public key and click "Initialize SDK"</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SDK Script -->
+  <script src="/embed/peeap-sdk.js"></script>
+  <script>
+    let sdkReady = false;
+    let currentMode = null;
+    let currentKey = '';
+
+    // Update code snippets
+    function updateCodeSnippets() {
+      const key = document.getElementById('publicKey').value || 'pk_live_YOUR_PUBLIC_KEY';
+      const amount = document.getElementById('amount').value || 100;
+      const currency = document.getElementById('currency').value || 'SLE';
+      const description = document.getElementById('description').value || 'Payment';
+
+      // HTML snippet
+      document.getElementById('htmlCode').innerHTML = `<span class="comment">&lt;!-- Add to your HTML --&gt;</span>
+<span class="keyword">&lt;script</span> src=<span class="string">"https://my.peeap.com/embed/peeap-sdk.js"</span><span class="keyword">&gt;&lt;/script&gt;</span>
+<span class="keyword">&lt;script&gt;</span>
+  <span class="comment">// Initialize SDK</span>
+  <span class="function">PeeapSDK.init</span>({
+    <span class="keyword">publicKey</span>: <span class="string">'${key}'</span>,
+    <span class="keyword">onSuccess</span>: <span class="keyword">function</span>(payment) {
+      <span class="function">console.log</span>(<span class="string">'Payment successful!'</span>, payment);
+    },
+    <span class="keyword">onError</span>: <span class="keyword">function</span>(error) {
+      <span class="function">console.error</span>(<span class="string">'Payment failed:'</span>, error);
+    }
+  });
+
+  <span class="comment">// Create payment</span>
+  <span class="keyword">function</span> <span class="function">pay</span>() {
+    <span class="function">PeeapSDK.createPayment</span>({
+      <span class="keyword">amount</span>: <span class="number">${amount}</span>,
+      <span class="keyword">currency</span>: <span class="string">'${currency}'</span>,
+      <span class="keyword">description</span>: <span class="string">'${description}'</span>
+    });
+  }
+<span class="keyword">&lt;/script&gt;</span>
+
+<span class="keyword">&lt;button</span> onclick=<span class="string">"pay()"</span><span class="keyword">&gt;</span>Pay ${currency} ${amount}<span class="keyword">&lt;/button&gt;</span>`;
+
+      // JavaScript snippet
+      document.getElementById('jsCode').innerHTML = `<span class="comment">// npm install peeap-sdk</span>
+<span class="keyword">import</span> Peeap <span class="keyword">from</span> <span class="string">'peeap-sdk'</span>;
+
+<span class="keyword">const</span> peeap = <span class="keyword">new</span> <span class="function">Peeap</span>({
+  <span class="keyword">publicKey</span>: <span class="string">'${key}'</span>
+});
+
+<span class="comment">// Create payment</span>
+<span class="keyword">async function</span> <span class="function">handlePayment</span>() {
+  <span class="keyword">await</span> peeap.<span class="function">checkout</span>({
+    <span class="keyword">amount</span>: <span class="number">${amount}</span>,
+    <span class="keyword">currency</span>: <span class="string">'${currency}'</span>,
+    <span class="keyword">description</span>: <span class="string">'${description}'</span>
+  });
+}`;
+
+      // Python snippet
+      document.getElementById('pythonCode').innerHTML = `<span class="keyword">import</span> requests
+<span class="keyword">import</span> uuid
+
+<span class="keyword">def</span> <span class="function">create_payment</span>():
+    response = requests.<span class="function">post</span>(
+        <span class="string">'https://my.peeap.com/api/checkout/create'</span>,
+        json={
+            <span class="string">'publicKey'</span>: <span class="string">'${key}'</span>,
+            <span class="string">'amount'</span>: <span class="number">${amount}</span>,
+            <span class="string">'currency'</span>: <span class="string">'${currency}'</span>,
+            <span class="string">'description'</span>: <span class="string">'${description}'</span>,
+            <span class="string">'idempotencyKey'</span>: <span class="function">str</span>(uuid.<span class="function">uuid4</span>())
+        }
+    )
+    data = response.<span class="function">json</span>()
+    <span class="keyword">return</span> data[<span class="string">'paymentUrl'</span>]  <span class="comment"># Redirect user here</span>`;
+    }
+
+    // Tab switching
+    function showTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.code-block').forEach(c => c.classList.add('hidden'));
+
+      event.target.classList.add('active');
+      document.getElementById('code' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.remove('hidden');
+    }
+
+    // Copy code
+    function copyCode(type) {
+      let code = '';
+      if (type === 'html') code = document.getElementById('htmlCode').textContent;
+      else if (type === 'js') code = document.getElementById('jsCode').textContent;
+      else if (type === 'python') code = document.getElementById('pythonCode').textContent;
+
+      navigator.clipboard.writeText(code).then(() => {
+        log('Code copied to clipboard', 'success');
+      });
+    }
+
+    // Logging
+    function log(message, type = 'info') {
+      const panel = document.getElementById('logPanel');
+      const time = new Date().toLocaleTimeString();
+      const entry = document.createElement('div');
+      entry.className = 'log-entry ' + type;
+      entry.innerHTML = `<span class="time">${time}</span><span class="message">${message}</span>`;
+      panel.appendChild(entry);
+      panel.scrollTop = panel.scrollHeight;
+    }
+
+    // Initialize SDK
+    function initializeSDK() {
+      const key = document.getElementById('publicKey').value.trim();
+
+      if (!key) {
+        log('Please enter a public key', 'error');
+        return;
+      }
+
+      if (!key.startsWith('pk_live_') && !key.startsWith('pk_test_')) {
+        log('Invalid key format. Must start with pk_live_ or pk_test_', 'error');
+        return;
+      }
+
+      currentKey = key;
+      currentMode = key.startsWith('pk_live_') ? 'live' : 'test';
+
+      log('Initializing SDK...', 'info');
+
+      try {
+        PeeapSDK.init({
+          publicKey: key,
+          mode: currentMode,
+          currency: 'SLE',
+          onSuccess: function(payment) {
+            log('Payment successful! Reference: ' + payment.reference, 'success');
+          },
+          onError: function(error) {
+            log('Payment error: ' + error.message, 'error');
+          },
+          onCancel: function() {
+            log('Payment cancelled by user', 'warning');
+          }
+        });
+
+        sdkReady = true;
+
+        // Update UI
+        const modeIndicator = document.getElementById('modeIndicator');
+        modeIndicator.className = 'mode-indicator ' + currentMode;
+        document.getElementById('modeText').textContent = currentMode === 'live' ? 'Live Mode' : 'Test Mode';
+
+        document.getElementById('statusBanner').className = 'status-banner ready';
+        document.getElementById('statusBanner').innerHTML = `
+          <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+          </svg>
+          <span>SDK initialized in ${currentMode.toUpperCase()} mode - Ready to accept payments</span>
+        `;
+
+        // Enable form fields
+        document.getElementById('amount').disabled = false;
+        document.getElementById('currency').disabled = false;
+        document.getElementById('description').disabled = false;
+        document.getElementById('payBtn').disabled = false;
+
+        log('SDK initialized successfully in ' + currentMode.toUpperCase() + ' mode', 'success');
+
+        if (currentMode === 'test') {
+          log('Test mode: No real money will be charged', 'warning');
+        } else {
+          log('Live mode: Real transactions will be processed', 'warning');
+        }
+
+        updateCodeSnippets();
+
+      } catch (error) {
+        log('Failed to initialize SDK: ' + error.message, 'error');
+      }
+    }
+
+    // Create payment
+    function createPayment() {
+      if (!sdkReady) {
+        log('SDK not initialized', 'error');
+        return;
+      }
+
+      const amount = parseFloat(document.getElementById('amount').value);
+      const currency = document.getElementById('currency').value;
+      const description = document.getElementById('description').value;
+
+      if (!amount || amount <= 0) {
+        log('Please enter a valid amount', 'error');
+        return;
+      }
+
+      log('Creating checkout session...', 'info');
+
+      const payBtn = document.getElementById('payBtn');
+      payBtn.disabled = true;
+      payBtn.innerHTML = '<span>Processing...</span>';
+
+      PeeapSDK.createPayment({
+        amount: amount,
+        currency: currency,
+        description: description,
+        reference: 'SANDBOX-' + Date.now()
+      }).then(function(result) {
+        log('Redirecting to hosted checkout...', 'success');
+      }).catch(function(error) {
+        log('Error: ' + error.message, 'error');
+        payBtn.disabled = false;
+        payBtn.innerHTML = `
+          <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
+          </svg>
+          Test Payment
+        `;
+      });
+    }
+
+    // Update code on input change
+    document.getElementById('publicKey').addEventListener('input', updateCodeSnippets);
+    document.getElementById('amount').addEventListener('input', updateCodeSnippets);
+    document.getElementById('currency').addEventListener('change', updateCodeSnippets);
+    document.getElementById('description').addEventListener('input', updateCodeSnippets);
+
+    // Initialize code snippets
+    updateCodeSnippets();
+  </script>
+</body>
+</html>

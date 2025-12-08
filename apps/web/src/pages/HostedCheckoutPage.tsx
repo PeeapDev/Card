@@ -55,6 +55,7 @@ interface CheckoutSession {
   cancelUrl?: string;
   expiresAt: string;
   createdAt: string;
+  isTestMode?: boolean; // True when using test key (pk_test_xxx)
 }
 
 type PaymentMethod = 'qr' | 'card' | 'mobile';
@@ -119,17 +120,32 @@ export function HostedCheckoutPage() {
     })}`;
   };
 
-  // Handle Monime redirect with ?status=success or ?status=cancel
+  // State for retry message
+  const [retryMessage, setRetryMessage] = useState<string | null>(null);
+
+  // Handle Monime redirect with ?status=success or retry message
   useEffect(() => {
     const status = searchParams.get('status');
+    const retry = searchParams.get('retry');
+    const message = searchParams.get('message');
+
     if (status === 'success') {
       // Payment successful from Monime - complete the session
       completeSession();
-    } else if (status === 'cancel') {
-      setError('Payment was cancelled');
-      setStep('error');
+    } else if (retry === 'true' && message) {
+      // User cancelled payment - show message and let them try again
+      setRetryMessage(decodeURIComponent(message));
+      // Clear the URL params without reloading
+      window.history.replaceState({}, '', `/checkout/pay/${sessionId}`);
     }
-  }, [searchParams]);
+
+    // Also check for global message set by the HTML template
+    const globalMessage = (window as any).__CHECKOUT_MESSAGE__;
+    if (globalMessage) {
+      setRetryMessage(globalMessage);
+      delete (window as any).__CHECKOUT_MESSAGE__;
+    }
+  }, [searchParams, sessionId]);
 
   // Complete checkout session after successful payment
   const completeSession = async () => {
@@ -138,7 +154,7 @@ export function HostedCheckoutPage() {
     setStep('processing');
     try {
       // Always use the production API URL for checkout
-      const apiUrl = 'https://api.peeap.com';
+      const apiUrl = 'https://my.peeap.com/api';
       const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -200,7 +216,7 @@ export function HostedCheckoutPage() {
 
     try {
       // Call API to get session
-      const apiUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_MERCHANT_SERVICE_URL || 'https://my.peeap.com/api';
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://my.peeap.com/api';
       const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}`);
 
       if (!response.ok) {
@@ -210,6 +226,10 @@ export function HostedCheckoutPage() {
       const rawData = await response.json();
       
       // Transform snake_case to camelCase
+      // Check if test mode from metadata
+      const metadata = rawData.metadata || {};
+      const isTestMode = metadata.isTestMode === true;
+
       const data: CheckoutSession = {
         id: rawData.id,
         externalId: rawData.external_id || rawData.externalId,
@@ -230,6 +250,7 @@ export function HostedCheckoutPage() {
           : (rawData.paymentMethods && typeof rawData.paymentMethods === 'object')
             ? rawData.paymentMethods
             : { qr: true, card: true, mobile: true },
+        isTestMode: isTestMode,
       };
 
       // Check if expired
@@ -300,7 +321,7 @@ export function HostedCheckoutPage() {
     setError(null);
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_MERCHANT_SERVICE_URL || 'https://api.peeap.com';
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://my.peeap.com/api';
 
       // Parse card expiry (MM/YY format)
       const [expiryMonthStr, expiryYearStr] = cardExpiry.split('/');
@@ -402,8 +423,8 @@ export function HostedCheckoutPage() {
     setError(null);
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
-      
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://my.peeap.com/api';
+
       // Call backend to create Monime checkout session
       const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}/mobile-pay`, {
         method: 'POST',
@@ -1018,6 +1039,14 @@ export function HostedCheckoutPage() {
       style={{ background: '#f8fafc' }}
     >
       <div className="max-w-md w-full">
+        {/* Test Mode Banner */}
+        {session.isTestMode && (
+          <div className="mb-3 px-4 py-2 bg-amber-500 text-amber-950 text-center text-sm font-medium rounded-xl flex items-center justify-center gap-2">
+            <AlertCircle className="w-4 h-4" />
+            <span>SANDBOX MODE - No real payments will be processed</span>
+          </div>
+        )}
+
         <Card className="overflow-hidden">
           {/* Header */}
           <div className="bg-white border-b border-gray-100 p-6 text-center">
@@ -1052,6 +1081,22 @@ export function HostedCheckoutPage() {
 
           {/* Payment Methods */}
           <div className="p-6">
+            {/* Retry Message Banner */}
+            {retryMessage && (
+              <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm text-amber-800 font-medium">{retryMessage}</p>
+                  <button
+                    onClick={() => setRetryMessage(null)}
+                    className="text-xs text-amber-600 hover:text-amber-800 mt-1 underline"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
+
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Choose Payment Method</h2>
 
             <div className="space-y-3">
@@ -1093,19 +1138,35 @@ export function HostedCheckoutPage() {
                 </button>
               )}
 
-              {/* Mobile Money Option */}
+              {/* Mobile Money Option - Disabled in Test/Sandbox Mode */}
               {session.paymentMethods?.mobile !== false && (
                 <button
-                  onClick={() => handleMethodSelect('mobile')}
-                  className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-gray-200 hover:border-gray-300 transition-all"
+                  onClick={() => !session.isTestMode && handleMethodSelect('mobile')}
+                  disabled={session.isTestMode}
+                  className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all relative ${
+                    session.isTestMode
+                      ? 'border-gray-100 bg-gray-50 cursor-not-allowed opacity-60'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
                 >
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-orange-100 text-orange-600">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                    session.isTestMode ? 'bg-gray-200 text-gray-400' : 'bg-orange-100 text-orange-600'
+                  }`}>
                     <Smartphone className="w-6 h-6" />
                   </div>
                   <div className="flex-1 text-left">
-                    <p className="font-medium text-gray-900">Mobile Money</p>
-                    <p className="text-sm text-gray-500">Orange Money & more</p>
+                    <p className={`font-medium ${session.isTestMode ? 'text-gray-400' : 'text-gray-900'}`}>
+                      Mobile Money
+                    </p>
+                    <p className={`text-sm ${session.isTestMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      {session.isTestMode ? 'Not available in sandbox mode' : 'Orange Money & more'}
+                    </p>
                   </div>
+                  {session.isTestMode && (
+                    <span className="absolute top-2 right-2 px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-medium rounded-full">
+                      Live Only
+                    </span>
+                  )}
                 </button>
               )}
             </div>

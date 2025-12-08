@@ -947,7 +947,170 @@ async function handleCheckoutCancel(req: VercelRequest, res: VercelResponse) {
 // For now, these will return "Not implemented" responses
 
 async function handleCheckoutCreate(req: VercelRequest, res: VercelResponse) {
-  return res.status(501).json({ error: 'Temporarily unavailable - see full implementation' });
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const {
+      publicKey,
+      amount,
+      currency = 'SLE',
+      reference,
+      idempotencyKey,
+      description,
+      customerEmail,
+      customerPhone,
+      paymentMethod = 'mobile_money',
+      redirectUrl,
+      metadata
+    } = req.body;
+
+    // Validate required fields
+    if (!publicKey) {
+      return res.status(400).json({ error: 'publicKey is required' });
+    }
+
+    if (!amount || typeof amount !== 'number' || amount <= 0) {
+      return res.status(400).json({ error: 'Valid amount is required' });
+    }
+
+    // Determine if this is a live or test key
+    const isLiveKey = publicKey.startsWith('pk_live_');
+    const isTestKey = publicKey.startsWith('pk_test_');
+
+    if (!isLiveKey && !isTestKey) {
+      return res.status(400).json({ error: 'Invalid public key format. Must start with pk_live_ or pk_test_' });
+    }
+
+    // Look up business by public key
+    const keyColumn = isLiveKey ? 'live_public_key' : 'test_public_key';
+    const { data: business, error: businessError } = await supabase
+      .from('merchant_businesses')
+      .select('*')
+      .eq(keyColumn, publicKey)
+      .eq('status', 'ACTIVE')
+      .single();
+
+    if (businessError || !business) {
+      console.error('[CheckoutCreate] Business lookup failed:', businessError);
+      return res.status(401).json({ error: 'Invalid public key or business not active' });
+    }
+
+    // For live keys, check if business can process live transactions
+    if (isLiveKey) {
+      // Check approval status
+      if (business.approval_status === 'REJECTED') {
+        return res.status(403).json({ error: 'Business has been rejected. Please contact support.' });
+      }
+      if (business.approval_status === 'SUSPENDED') {
+        return res.status(403).json({ error: 'Business has been suspended. Please contact support.' });
+      }
+
+      // For pending businesses, check trial limit
+      if (business.approval_status === 'PENDING') {
+        const limit = business.trial_live_transaction_limit || 2;
+        const used = business.trial_live_transactions_used || 0;
+        if (used >= limit) {
+          return res.status(403).json({
+            error: `Trial limit reached. You have used ${limit} trial live transactions. Please wait for admin approval.`
+          });
+        }
+      }
+    }
+
+    // Check idempotency - prevent duplicate payments
+    if (idempotencyKey) {
+      const { data: existingPayment } = await supabase
+        .from('checkout_sessions')
+        .select('external_id, status')
+        .eq('idempotency_key', idempotencyKey)
+        .single();
+
+      if (existingPayment) {
+        // Return existing session - use checkout.peeap.com for hosted checkout
+        const checkoutUrl = process.env.CHECKOUT_URL || 'https://checkout.peeap.com';
+        return res.status(200).json({
+          paymentId: existingPayment.external_id,
+          sessionId: existingPayment.external_id,
+          paymentUrl: `${checkoutUrl}/checkout/pay/${existingPayment.external_id}`,
+          status: existingPayment.status,
+          message: 'Existing session returned (idempotency)'
+        });
+      }
+    }
+
+    // Create checkout session
+    const sessionId = `cs_${randomUUID().replace(/-/g, '')}`;
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+    const checkoutUrl = process.env.CHECKOUT_URL || 'https://checkout.peeap.com';
+    const frontendUrl = process.env.FRONTEND_URL || 'https://my.peeap.com';
+
+    // Determine success/cancel URLs
+    const successUrl = redirectUrl || business.callback_url || `${frontendUrl}/payment/success`;
+    const cancelUrl = business.callback_url || `${frontendUrl}/payment/cancel`;
+
+    const { data: session, error: sessionError } = await supabase
+      .from('checkout_sessions')
+      .insert({
+        external_id: sessionId,
+        merchant_id: business.id,
+        status: 'OPEN',
+        amount: amount, // Amount comes in whole units from SDK
+        currency_code: currency.toUpperCase(),
+        description: description || `Payment to ${business.name}`,
+        merchant_name: business.name,
+        merchant_logo_url: business.logo_url,
+        brand_color: '#4F46E5',
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        return_url: redirectUrl || successUrl,
+        payment_methods: { qr: true, card: true, mobile: true },
+        payment_method: paymentMethod,
+        customer_email: customerEmail,
+        customer_phone: customerPhone,
+        metadata: metadata ? { ...metadata, reference, isTestMode: isTestKey } : { reference, isTestMode: isTestKey },
+        idempotency_key: idempotencyKey,
+        expires_at: expiresAt.toISOString(),
+      })
+      .select()
+      .single();
+
+    if (sessionError) {
+      console.error('[CheckoutCreate] Session creation error:', sessionError);
+      return res.status(500).json({ error: 'Failed to create checkout session' });
+    }
+
+    // For live transactions on pending businesses, increment trial count
+    if (isLiveKey && business.approval_status === 'PENDING') {
+      await supabase
+        .from('merchant_businesses')
+        .update({
+          trial_live_transactions_used: (business.trial_live_transactions_used || 0) + 1
+        })
+        .eq('id', business.id);
+    }
+
+    console.log('[CheckoutCreate] Session created:', sessionId, 'for business:', business.name);
+
+    // Return the payment URL - use checkout.peeap.com for hosted checkout
+    const paymentUrl = `${checkoutUrl}/checkout/pay/${sessionId}`;
+
+    return res.status(200).json({
+      paymentId: sessionId,
+      sessionId: sessionId,
+      paymentUrl: paymentUrl,
+      expiresAt: session.expires_at,
+      amount: amount,
+      currency: currency,
+      businessName: business.name,
+      isTestMode: isTestKey
+    });
+
+  } catch (error: any) {
+    console.error('[CheckoutCreate] Error:', error);
+    return res.status(500).json({ error: error.message || 'Internal server error' });
+  }
 }
 
 async function handleCheckoutCardPay(req: VercelRequest, res: VercelResponse) {

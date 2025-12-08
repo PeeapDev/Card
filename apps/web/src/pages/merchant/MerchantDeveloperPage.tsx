@@ -291,7 +291,8 @@ function BusinessDetail() {
 
   // Generate the complete SDK integration script
   const getFullSDKScript = () => {
-    const baseUrl = 'https://my.peeap.com';
+    const apiUrl = 'https://api.peeap.com';
+    const checkoutUrl = 'https://checkout.peeap.com';
     const publicKey = activeKeys.public;
     return `/**
  * ============================================================================
@@ -299,185 +300,158 @@ function BusinessDetail() {
  * ============================================================================
  * Business: ${business.name}
  * Public Key: ${publicKey}
- * Mode: ${business.is_live_mode ? 'LIVE' : 'TEST'}
- * API Endpoint: ${baseUrl}/api/checkout/create
+ * Mode: ${business.is_live_mode ? 'LIVE' : 'TEST (Mobile Money disabled)'}
+ * API Endpoint: ${apiUrl}/checkout/create
+ * Checkout URL: ${checkoutUrl}/checkout/pay/{sessionId}
  *
  * SECURITY:
  * - Use PUBLIC KEY (pk_...) for frontend code - safe to expose
  * - SECRET KEY (sk_...) is for server-side only - NEVER expose in frontend
- * - Each payment request generates a unique idempotency key to prevent duplicates
  *
  * AMOUNT FORMAT:
  * - Pass amount in WHOLE units (e.g., 100 = Le 100.00)
- * - SDK automatically converts to minor units for API
  *
- * SUPPORTED LANGUAGES:
- * - JavaScript/React/Vue/Next.js: npm install peeap-sdk
- * - Python: pip install requests (use API directly)
- * - PHP: Use curl (use API directly)
- * - Any language: POST to ${baseUrl}/api/checkout/create
+ * PAYMENT METHODS:
+ * - QR Code: Always available
+ * - PEEAP Card: Always available
+ * - Mobile Money (Monime): ${business.is_live_mode ? 'Available in LIVE mode' : 'DISABLED in test mode - switch to LIVE to enable'}
  * ============================================================================
  */
 
 // ============================================================================
-// JAVASCRIPT / REACT / VUE / NEXT.JS
-// Run: npm install peeap-sdk
-// ============================================================================
-import Peeap from 'peeap-sdk';
-
-const peeap = new Peeap({
-  publicKey: '${publicKey}',
-  mode: '${business.is_live_mode ? 'live' : 'test'}',
-  currency: 'SLE'
-});
-
-// amount = whole units (100 = Le 100.00, 5000 = Le 5,000.00)
-async function handlePayment(amount, description) {
-  await peeap.checkout({
-    amount: amount,
-    currency: 'SLE',
-    description: description
-  });
-}
-
-// Example: handlePayment(100, 'Order #123');  // Le 100.00
-
-// ============================================================================
-// PYTHON
-// Run: pip install requests
+// OPTION 1: HTML / CDN (Easiest - Recommended)
+// Just add these two script tags to your HTML
 // ============================================================================
 /*
-import requests
-import uuid
+<script src="${checkoutUrl}/embed/peeap-sdk.js"></script>
+<script>
+  // Initialize SDK with your public key
+  PeeapSDK.init({
+    publicKey: '${publicKey}',
+    onSuccess: function(payment) {
+      console.log('Payment successful!', payment.reference);
+      // Redirect to your success page or update UI
+    },
+    onError: function(error) {
+      console.error('Payment failed:', error.message);
+    }
+  });
 
-def create_payment(amount, description):
-    # amount in whole units (100 = Le 100.00)
-    # API expects minor units, so multiply by 100
-    # idempotency_key prevents duplicate charges if request is retried
-    response = requests.post('${baseUrl}/api/checkout/create',
-        json={
-            'publicKey': '${publicKey}',
-            'amount': amount * 100,
-            'currency': 'SLE',
-            'description': description,
-            'paymentMethod': 'mobile_money',
-            'idempotencyKey': str(uuid.uuid4())  # Unique per payment attempt
-        },
-        headers={
-            'Content-Type': 'application/json'
-        }
-    )
-    data = response.json()
-    if data.get('paymentUrl'):
-        return data['paymentUrl']  # Redirect user to this URL
-    raise Exception(data.get('error', 'Payment failed'))
+  // Create payment and redirect to hosted checkout
+  function pay(amount, description) {
+    PeeapSDK.createPayment({
+      amount: amount,        // Amount in whole units (100 = Le 100)
+      currency: 'SLE',
+      description: description
+    });
+  }
+</script>
 
-# Example: redirect_url = create_payment(100, 'Order #123')  # Le 100.00
+<button onclick="pay(100, 'Order #123')">Pay Le 100</button>
 */
 
 // ============================================================================
-// PHP
+// OPTION 2: Direct API Call (For any backend language)
+// POST to ${apiUrl}/checkout/create
 // ============================================================================
+
+// --- JavaScript/Node.js ---
+async function createCheckout(amount, description) {
+  const response = await fetch('${apiUrl}/checkout/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      publicKey: '${publicKey}',
+      amount: amount,          // Whole units: 100 = Le 100
+      currency: 'SLE',
+      description: description
+    })
+  });
+
+  const data = await response.json();
+  if (data.paymentUrl) {
+    window.location.href = data.paymentUrl;  // Redirect to hosted checkout
+  }
+}
+
+// --- Python ---
+/*
+import requests
+
+def create_checkout(amount, description):
+    response = requests.post('${apiUrl}/checkout/create',
+        json={
+            'publicKey': '${publicKey}',
+            'amount': amount,
+            'currency': 'SLE',
+            'description': description
+        }
+    )
+    data = response.json()
+    return data['paymentUrl']  # Redirect user to this URL
+
+# Usage: redirect_url = create_checkout(100, 'Order #123')
+*/
+
+// --- PHP ---
 /*
 <?php
-function createPayment($amount, $description) {
-    // amount in whole units (100 = Le 100.00)
-    // idempotency_key prevents duplicate charges if request is retried
-    $data = [
-        'publicKey' => '${publicKey}',
-        'amount' => $amount * 100,  // Convert to minor units
-        'currency' => 'SLE',
-        'description' => $description,
-        'paymentMethod' => 'mobile_money',
-        'idempotencyKey' => uniqid('peeap_', true)  // Unique per payment attempt
-    ];
-
-    $ch = curl_init('${baseUrl}/api/checkout/create');
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+function createCheckout($amount, $description) {
+    $ch = curl_init('${apiUrl}/checkout/create');
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => json_encode([
+            'publicKey' => '${publicKey}',
+            'amount' => $amount,
+            'currency' => 'SLE',
+            'description' => $description
+        ]),
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+        CURLOPT_RETURNTRANSFER => true
+    ]);
 
     $response = json_decode(curl_exec($ch), true);
     curl_close($ch);
 
-    if (isset($response['paymentUrl'])) {
+    if ($response['paymentUrl']) {
         header('Location: ' . $response['paymentUrl']);
         exit;
     }
-    throw new Exception($response['error'] ?? 'Payment failed');
 }
 
-// Example: createPayment(100, 'Order #123');  // Le 100.00
+// Usage: createCheckout(100, 'Order #123');
 ?>
 */
 
 // ============================================================================
-// HTML / CDN (Browser Script)
+// API RESPONSE FORMAT
 // ============================================================================
 /*
-<script src="${baseUrl}/embed/peeap-sdk.js"></script>
-<script>
-  PeeapSDK.init({
-    publicKey: '${publicKey}',
-    mode: '${business.is_live_mode ? 'live' : 'test'}',
-    currency: 'SLE',
-    onSuccess: function(payment) {
-      alert('Payment successful! Ref: ' + payment.reference);
-    },
-    onError: function(error) {
-      alert('Payment failed: ' + error.message);
-    }
-  });
-
-  // amount in whole units (100 = Le 100.00)
-  // SDK auto-generates idempotency key for each payment
-  function checkout(amount, description) {
-    PeeapSDK.createPayment({ amount: amount, currency: 'SLE', description: description });
-  }
-</script>
-<button onclick="checkout(100, 'Order #123')">Pay Le 100.00</button>
+{
+  "sessionId": "cs_live_abc123...",
+  "paymentUrl": "${checkoutUrl}/checkout/pay/cs_live_abc123...",
+  "amount": 100,
+  "currency": "SLE",
+  "expiresAt": "2024-01-20T15:30:00Z",
+  "isTestMode": ${!business.is_live_mode}
+}
 */
 
 // ============================================================================
-// WEBHOOK HANDLER (to receive payment notifications)
-// Verify signature using your SECRET KEY (server-side only)
+// WEBHOOK HANDLER (Optional - receive payment notifications)
 // ============================================================================
 /*
 // Node.js/Express
 app.post('/webhook/peeap', (req, res) => {
   const { event, data } = req.body;
-  // TODO: Verify webhook signature using your secret key
 
   if (event === 'payment.completed') {
-    console.log('Payment completed:', data.reference, data.amount);
-    // Update your order status here
+    console.log('Payment completed:', data.reference);
+    // Update your order status in database
   }
 
-  res.status(200).json({ received: true });
+  res.json({ received: true });
 });
-
-// Python/Flask
-@app.route('/webhook/peeap', methods=['POST'])
-def peeap_webhook():
-    data = request.json
-    # TODO: Verify webhook signature using your secret key
-    if data.get('event') == 'payment.completed':
-        print('Payment completed:', data['data']['reference'])
-        # Update your order status here
-    return {'received': True}
-
-// PHP
-<?php
-$payload = json_decode(file_get_contents('php://input'), true);
-// TODO: Verify webhook signature using your secret key
-if ($payload['event'] === 'payment.completed') {
-    // Update your order status here
-    error_log('Payment completed: ' . $payload['data']['reference']);
-}
-http_response_code(200);
-echo json_encode(['received' => true]);
-?>
 */`;
   };
 
