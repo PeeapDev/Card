@@ -2,6 +2,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 import { createMonimeService, MonimeError } from './services/monime';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 const supabaseUrl = process.env.SUPABASE_URL || 'https://akiecgwcxadcpqlvntmf.supabase.co';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFraWVjZ3djeGFkY3BxbHZudG1mIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDI4MzMzMiwiZXhwIjoyMDc5ODU5MzMyfQ.q8R8t_aHiMReEIpeJIV-m0RCEA-n0_RDOtTX8bLJgYs';
@@ -46,6 +48,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleSettingsCheckoutCallback(req, res);
     } else if (path === 'modules' || path === 'modules/') {
       return await handleModules(req, res);
+    } else if (path === 'modules/packages' || path === 'modules/packages/') {
+      return await handleModulePackages(req, res);
+    } else if (path === 'modules/upload' || path === 'modules/upload/') {
+      return await handleModuleUpload(req, res);
+    } else if (path.match(/^modules\/packages\/[^/]+$/)) {
+      const packageId = path.split('/')[2];
+      return await handleModulePackageById(req, res, packageId);
     } else if (path.match(/^modules\/[^/]+$/)) {
       const moduleId = path.split('/')[1];
       return await handleModuleById(req, res, moduleId);
@@ -674,38 +683,68 @@ async function handleDepositCancel(req: VercelRequest, res: VercelResponse) {
 async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse, sessionId: string) {
   try {
     const url = new URL(req.url || '', `http://${req.headers.host}`);
-    const status = url.searchParams.get('status') || 'unknown';
+    const status = url.searchParams.get('status');
+    const retry = url.searchParams.get('retry');
+    const message = url.searchParams.get('message');
+    const host = req.headers.host || 'peeap-merchant.vercel.app';
+    const baseUrl = `https://${host}`;
 
-    console.log('[Checkout Pay Redirect] Session:', sessionId, 'Status:', status);
+    console.log('[Checkout Pay Redirect] Session:', sessionId, 'Status:', status, 'Retry:', retry);
 
-    // Look up the checkout session to get return URL and details
+    // If no status param (initial load or retry), serve the checkout frontend
+    if (!status) {
+      // Serve the React SPA HTML
+      const html = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Checkout - Peeap</title>
+    <script type="module" crossorigin src="/assets/index-DjeNvT3_.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DAbP98Wm.css">
+    ${retry && message ? `<script>window.__CHECKOUT_MESSAGE__ = decodeURIComponent("${encodeURIComponent(message)}");</script>` : ''}
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>`;
+      res.setHeader('Content-Type', 'text/html');
+      return res.status(200).send(html);
+    }
+
+    // If cancelled, redirect back to checkout page to try again (without status param)
+    // Do this BEFORE session lookup so redirect works even if session doesn't exist
+    if (status === 'cancel') {
+      const checkoutUrl = `${baseUrl}/checkout/pay/${sessionId}?retry=true&message=Payment+cancelled.+Please+try+another+payment+method.`;
+      return res.redirect(302, checkoutUrl);
+    }
+
+    // Look up the checkout session to get return URL and details (only needed for success)
     const { data: session } = await supabase
       .from('checkout_sessions')
       .select('*')
       .eq('external_id', sessionId)
       .single();
 
-    let returnUrl = 'https://my.peeap.com';
-    let merchantName = 'Merchant';
-    let amount = 0;
-    let currency = 'SLE';
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
 
-    if (session) {
-      // Update session status
-      const newStatus = status === 'success' ? 'completed' : status === 'cancel' ? 'cancelled' : session.status;
+    let returnUrl = session.return_url || session.cancel_url || 'https://my.peeap.com';
+    let merchantName = session.merchant_name || 'Merchant';
+    let amount = session.amount || 0;
+    let currency = session.currency_code || 'SLE';
+
+    // If success, update status and show success page
+    if (status === 'success') {
       await supabase
         .from('checkout_sessions')
         .update({
-          status: newStatus,
-          ...(status === 'success' ? { completed_at: new Date().toISOString() } : {}),
-          ...(status === 'cancel' ? { cancelled_at: new Date().toISOString() } : {})
+          status: 'COMPLETE',
+          completed_at: new Date().toISOString()
         })
         .eq('id', session.id);
-
-      returnUrl = session.return_url || session.cancel_url || returnUrl;
-      merchantName = session.merchant_name || 'Merchant';
-      amount = session.amount || 0;
-      currency = session.currency_code || 'SLE';
     }
 
     const isSuccess = status === 'success';
@@ -1079,6 +1118,176 @@ async function handleModuleById(req: VercelRequest, res: VercelResponse, moduleI
     }
 
     const { error } = await supabase.from('modules').delete().eq('id', moduleId);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ success: true });
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+// ============================================================================
+// MODULE PACKAGE HANDLERS
+// ============================================================================
+
+async function handleModulePackages(req: VercelRequest, res: VercelResponse) {
+  if (req.method === 'GET') {
+    const { data: packages, error } = await supabase
+      .from('module_packages')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ packages: packages || [], total: packages?.length || 0 });
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+async function handleModuleUpload(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const manifest = req.body;
+
+    // Validate manifest
+    if (!manifest.code || !manifest.name || !manifest.version || !manifest.category) {
+      return res.status(400).json({
+        error: 'Invalid manifest. Required fields: code, name, version, category',
+      });
+    }
+
+    // Validate code format
+    if (!/^[a-z][a-z0-9_]*$/.test(manifest.code)) {
+      return res.status(400).json({
+        error: 'Module code must start with a letter and contain only lowercase letters, numbers, and underscores',
+      });
+    }
+
+    // Check for existing system module
+    const { data: existingModule } = await supabase
+      .from('modules')
+      .select('is_system')
+      .eq('code', manifest.code)
+      .single();
+
+    if (existingModule?.is_system) {
+      return res.status(403).json({ error: `Cannot override system module "${manifest.code}"` });
+    }
+
+    // Check version conflict
+    const { data: existingPackage } = await supabase
+      .from('module_packages')
+      .select('*')
+      .eq('module_code', manifest.code)
+      .eq('version', manifest.version)
+      .single();
+
+    if (existingPackage) {
+      return res.status(409).json({
+        error: `Module "${manifest.code}" version ${manifest.version} already exists`,
+      });
+    }
+
+    // Create package record
+    const { data: packageData, error: packageError } = await supabase
+      .from('module_packages')
+      .insert({
+        module_code: manifest.code,
+        version: manifest.version,
+        file_path: `manifests/${manifest.code}/${manifest.version}/manifest.json`,
+        file_size: JSON.stringify(manifest).length,
+        checksum: '',
+        manifest,
+        status: 'pending',
+      })
+      .select()
+      .single();
+
+    if (packageError) throw packageError;
+
+    // Create/update module in database
+    const moduleData = {
+      code: manifest.code,
+      name: manifest.name,
+      description: manifest.description || '',
+      category: manifest.category,
+      version: manifest.version,
+      icon: manifest.icon || '📦',
+      is_enabled: false,
+      is_system: false,
+      is_custom: true,
+      package_id: packageData.id,
+      config: {},
+      config_schema: manifest.configSchema,
+      dependencies: manifest.dependencies || [],
+      provides: manifest.provides || [],
+      events: [...(manifest.events?.emits || []), ...(manifest.events?.listens || [])],
+      settings_path: manifest.settingsPath,
+    };
+
+    const { error: moduleError } = await supabase
+      .from('modules')
+      .upsert(moduleData, { onConflict: 'code' });
+
+    if (moduleError) {
+      await supabase.from('module_packages').delete().eq('id', packageData.id);
+      throw moduleError;
+    }
+
+    // Update package status
+    await supabase
+      .from('module_packages')
+      .update({ status: 'installed', installed_at: new Date().toISOString() })
+      .eq('id', packageData.id);
+
+    const { data: updatedPackage } = await supabase
+      .from('module_packages')
+      .select('*')
+      .eq('id', packageData.id)
+      .single();
+
+    return res.status(200).json({
+      success: true,
+      package: updatedPackage,
+      message: `Module "${manifest.name}" installed successfully`,
+    });
+  } catch (error: any) {
+    console.error('[ModuleUpload] Error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+async function handleModulePackageById(req: VercelRequest, res: VercelResponse, packageId: string) {
+  if (req.method === 'DELETE') {
+    const { data: pkg } = await supabase
+      .from('module_packages')
+      .select('*')
+      .eq('id', packageId)
+      .single();
+
+    if (!pkg) {
+      return res.status(404).json({ error: 'Package not found' });
+    }
+
+    const { data: module } = await supabase
+      .from('modules')
+      .select('is_enabled, is_custom')
+      .eq('code', pkg.module_code)
+      .single();
+
+    if (module?.is_enabled) {
+      return res.status(400).json({
+        error: 'Cannot delete package for enabled module. Disable the module first.',
+      });
+    }
+
+    if (module?.is_custom) {
+      await supabase.from('modules').delete().eq('code', pkg.module_code);
+    }
+
+    const { error } = await supabase.from('module_packages').delete().eq('id', packageId);
     if (error) return res.status(500).json({ error: error.message });
     return res.status(200).json({ success: true });
   }

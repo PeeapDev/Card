@@ -179,7 +179,7 @@ ALTER TABLE api_keys ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Admins can manage api_keys" ON api_keys
     FOR ALL USING (
         EXISTS (
-            SELECT 1 FROM users WHERE users.id = auth.uid() AND users.role IN ('admin', 'superadmin')
+            SELECT 1 FROM users WHERE users.id = auth.uid() AND (users.roles @> ARRAY['admin'] OR users.roles @> ARRAY['superadmin'])
         )
     );
 
@@ -189,7 +189,7 @@ ALTER TABLE webhooks ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Admins can manage webhooks" ON webhooks
     FOR ALL USING (
         EXISTS (
-            SELECT 1 FROM users WHERE users.id = auth.uid() AND users.role IN ('admin', 'superadmin')
+            SELECT 1 FROM users WHERE users.id = auth.uid() AND (users.roles @> ARRAY['admin'] OR users.roles @> ARRAY['superadmin'])
         )
     );
 
@@ -199,7 +199,7 @@ ALTER TABLE webhook_deliveries ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Admins can view webhook_deliveries" ON webhook_deliveries
     FOR SELECT USING (
         EXISTS (
-            SELECT 1 FROM users WHERE users.id = auth.uid() AND users.role IN ('admin', 'superadmin')
+            SELECT 1 FROM users WHERE users.id = auth.uid() AND (users.roles @> ARRAY['admin'] OR users.roles @> ARRAY['superadmin'])
         )
     );
 
@@ -209,7 +209,7 @@ ALTER TABLE api_requests ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Admins can view api_requests" ON api_requests
     FOR SELECT USING (
         EXISTS (
-            SELECT 1 FROM users WHERE users.id = auth.uid() AND users.role IN ('admin', 'superadmin')
+            SELECT 1 FROM users WHERE users.id = auth.uid() AND (users.roles @> ARRAY['admin'] OR users.roles @> ARRAY['superadmin'])
         )
     );
 
@@ -219,7 +219,7 @@ ALTER TABLE module_events ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Admins can view module_events" ON module_events
     FOR SELECT USING (
         EXISTS (
-            SELECT 1 FROM users WHERE users.id = auth.uid() AND users.role IN ('admin', 'superadmin')
+            SELECT 1 FROM users WHERE users.id = auth.uid() AND (users.roles @> ARRAY['admin'] OR users.roles @> ARRAY['superadmin'])
         )
     );
 

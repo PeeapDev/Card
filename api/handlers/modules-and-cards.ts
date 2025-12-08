@@ -135,6 +135,223 @@ export async function handleDeleteModule(req: VercelRequest, res: VercelResponse
 }
 
 // ============================================================================
+// MODULE PACKAGE MANAGEMENT HANDLERS
+// ============================================================================
+
+/**
+ * GET /api/modules/packages - List all module packages
+ */
+export async function handleGetModulePackages(req: VercelRequest, res: VercelResponse) {
+  try {
+    const { data: packages, error } = await supabase
+      .from('module_packages')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    return res.status(200).json({
+      packages: packages || [],
+      total: packages?.length || 0,
+    });
+  } catch (error: any) {
+    console.error('[ModulePackages] Get error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+/**
+ * POST /api/modules/upload - Upload a module package
+ */
+export async function handleModuleUpload(req: VercelRequest, res: VercelResponse) {
+  try {
+    // For multipart form data, we need to parse the file
+    // In Vercel, the body might be a buffer or we need to handle differently
+    const contentType = req.headers['content-type'] || '';
+
+    if (!contentType.includes('multipart/form-data') && !contentType.includes('application/json')) {
+      return res.status(400).json({ error: 'Content-Type must be multipart/form-data or application/json' });
+    }
+
+    let manifest: any;
+    let filename = 'manifest.json';
+
+    // Handle JSON manifest upload directly
+    if (contentType.includes('application/json')) {
+      manifest = req.body;
+    } else {
+      // For multipart, try to extract the file
+      // Note: Vercel serverless functions have limited multipart support
+      // In production, you'd use a library like formidable or busboy
+      return res.status(400).json({
+        error: 'For now, please upload a manifest.json file directly with Content-Type: application/json',
+        hint: 'Send a JSON body with the module manifest',
+      });
+    }
+
+    // Validate manifest
+    if (!manifest.code || !manifest.name || !manifest.version || !manifest.category) {
+      return res.status(400).json({
+        error: 'Invalid manifest. Required fields: code, name, version, category',
+      });
+    }
+
+    // Validate code format
+    if (!/^[a-z][a-z0-9_]*$/.test(manifest.code)) {
+      return res.status(400).json({
+        error: 'Module code must start with a letter and contain only lowercase letters, numbers, and underscores',
+      });
+    }
+
+    // Check for existing module
+    const { data: existingModule } = await supabase
+      .from('modules')
+      .select('is_system')
+      .eq('code', manifest.code)
+      .single();
+
+    if (existingModule?.is_system) {
+      return res.status(403).json({ error: `Cannot override system module "${manifest.code}"` });
+    }
+
+    // Check version conflict
+    const { data: existingPackage } = await supabase
+      .from('module_packages')
+      .select('*')
+      .eq('module_code', manifest.code)
+      .eq('version', manifest.version)
+      .single();
+
+    if (existingPackage) {
+      return res.status(409).json({
+        error: `Module "${manifest.code}" version ${manifest.version} already exists`,
+      });
+    }
+
+    // Create package record
+    const { data: packageData, error: packageError } = await supabase
+      .from('module_packages')
+      .insert({
+        module_code: manifest.code,
+        version: manifest.version,
+        file_path: `manifests/${manifest.code}/${manifest.version}/manifest.json`,
+        file_size: JSON.stringify(manifest).length,
+        checksum: '',
+        manifest,
+        status: 'pending',
+      })
+      .select()
+      .single();
+
+    if (packageError) throw packageError;
+
+    // Create/update module in database
+    const moduleData = {
+      code: manifest.code,
+      name: manifest.name,
+      description: manifest.description || '',
+      category: manifest.category,
+      version: manifest.version,
+      icon: manifest.icon || '📦',
+      is_enabled: false,
+      is_system: false,
+      is_custom: true,
+      package_id: packageData.id,
+      config: {},
+      config_schema: manifest.configSchema,
+      dependencies: manifest.dependencies || [],
+      provides: manifest.provides || [],
+      events: [...(manifest.events?.emits || []), ...(manifest.events?.listens || [])],
+      settings_path: manifest.settingsPath,
+    };
+
+    const { error: moduleError } = await supabase
+      .from('modules')
+      .upsert(moduleData, { onConflict: 'code' });
+
+    if (moduleError) {
+      // Cleanup package record
+      await supabase.from('module_packages').delete().eq('id', packageData.id);
+      throw moduleError;
+    }
+
+    // Update package status
+    await supabase
+      .from('module_packages')
+      .update({
+        status: 'installed',
+        installed_at: new Date().toISOString(),
+      })
+      .eq('id', packageData.id);
+
+    // Fetch updated package
+    const { data: updatedPackage } = await supabase
+      .from('module_packages')
+      .select('*')
+      .eq('id', packageData.id)
+      .single();
+
+    return res.status(200).json({
+      success: true,
+      package: updatedPackage,
+      message: `Module "${manifest.name}" installed successfully`,
+    });
+  } catch (error: any) {
+    console.error('[ModuleUpload] Error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+/**
+ * DELETE /api/modules/packages/:id - Delete a module package
+ */
+export async function handleDeleteModulePackage(req: VercelRequest, res: VercelResponse, packageId: string) {
+  try {
+    // Get package info
+    const { data: pkg, error: fetchError } = await supabase
+      .from('module_packages')
+      .select('*')
+      .eq('id', packageId)
+      .single();
+
+    if (fetchError || !pkg) {
+      return res.status(404).json({ error: 'Package not found' });
+    }
+
+    // Check if module is enabled
+    const { data: module } = await supabase
+      .from('modules')
+      .select('is_enabled, is_custom')
+      .eq('code', pkg.module_code)
+      .single();
+
+    if (module?.is_enabled) {
+      return res.status(400).json({
+        error: 'Cannot delete package for enabled module. Disable the module first.',
+      });
+    }
+
+    // Delete module if it's a custom module
+    if (module?.is_custom) {
+      await supabase.from('modules').delete().eq('code', pkg.module_code);
+    }
+
+    // Delete package record
+    const { error: deleteError } = await supabase
+      .from('module_packages')
+      .delete()
+      .eq('id', packageId);
+
+    if (deleteError) throw deleteError;
+
+    return res.status(200).json({ success: true });
+  } catch (error: any) {
+    console.error('[ModulePackages] Delete error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+// ============================================================================
 // CARD PRODUCT MANAGEMENT HANDLERS (Superadmin)
 // ============================================================================
 
