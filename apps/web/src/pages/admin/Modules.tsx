@@ -239,22 +239,42 @@ export default function ModulesPage() {
   };
 
   const handleToggleModule = async (module: Module) => {
+    const newEnabled = !module.is_enabled;
+
+    // Optimistic update - update UI immediately
+    setModules(prev => prev.map(m =>
+      m.id === module.id ? { ...m, is_enabled: newEnabled } : m
+    ));
+
     try {
       const response = await fetch(`${API_BASE}/modules/${module.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_enabled: !module.is_enabled }),
+        body: JSON.stringify({ is_enabled: newEnabled }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        setSuccess(`${module.name} ${!module.is_enabled ? 'enabled' : 'disabled'} successfully`);
-        loadModules();
+        setSuccess(`${module.name} ${newEnabled ? 'enabled' : 'disabled'} successfully`);
+        // Update with actual server response to ensure sync
+        if (data.module) {
+          setModules(prev => prev.map(m =>
+            m.id === module.id ? data.module : m
+          ));
+        }
       } else {
+        // Revert optimistic update on error
+        setModules(prev => prev.map(m =>
+          m.id === module.id ? { ...m, is_enabled: !newEnabled } : m
+        ));
         setError(data.error || 'Failed to toggle module');
       }
     } catch (err: any) {
+      // Revert optimistic update on error
+      setModules(prev => prev.map(m =>
+        m.id === module.id ? { ...m, is_enabled: !newEnabled } : m
+      ));
       setError(err.message || 'Failed to toggle module');
     }
   };
@@ -626,16 +646,26 @@ export default function ModulesPage() {
               </Box>
             )}
 
-            <Alert severity="info" sx={{ mt: 3 }}>
+            <Alert severity="success" sx={{ mt: 3 }}>
               <Typography variant="body2">
-                <strong>Module Package Structure:</strong>
+                <strong>Hot-Swap Mode:</strong> Modules are enabled immediately after upload!
               </Typography>
-              <Typography variant="caption" component="div" sx={{ mt: 1, fontFamily: 'monospace' }}>
-                my-module.zip/<br />
-                ├── manifest.json (required)<br />
-                ├── service.ts<br />
-                ├── routes.ts<br />
-                └── components/
+            </Alert>
+
+            <Alert severity="info" sx={{ mt: 2 }}>
+              <Typography variant="body2">
+                <strong>Manifest.json Example:</strong>
+              </Typography>
+              <Typography variant="caption" component="div" sx={{ mt: 1, fontFamily: 'monospace', whiteSpace: 'pre' }}>
+{`{
+  "code": "my_module",
+  "name": "My Custom Module",
+  "description": "What it does",
+  "version": "1.0.0",
+  "category": "feature",
+  "icon": "🚀",
+  "autoEnable": true
+}`}
               </Typography>
             </Alert>
           </Box>

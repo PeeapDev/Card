@@ -245,6 +245,9 @@ export async function handleModuleUpload(req: VercelRequest, res: VercelResponse
 
     if (packageError) throw packageError;
 
+    // Check if auto-enable is requested (hot-swap mode)
+    const autoEnable = manifest.autoEnable !== false; // Default to true for hot-swap
+
     // Create/update module in database
     const moduleData = {
       code: manifest.code,
@@ -253,16 +256,17 @@ export async function handleModuleUpload(req: VercelRequest, res: VercelResponse
       category: manifest.category,
       version: manifest.version,
       icon: manifest.icon || '📦',
-      is_enabled: false,
+      is_enabled: autoEnable, // Hot-swap: enable immediately
       is_system: false,
       is_custom: true,
       package_id: packageData.id,
-      config: {},
+      config: manifest.defaultConfig || {},
       config_schema: manifest.configSchema,
       dependencies: manifest.dependencies || [],
       provides: manifest.provides || [],
       events: [...(manifest.events?.emits || []), ...(manifest.events?.listens || [])],
       settings_path: manifest.settingsPath,
+      enabled_at: autoEnable ? new Date().toISOString() : null,
     };
 
     const { error: moduleError } = await supabase

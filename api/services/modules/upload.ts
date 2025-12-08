@@ -307,13 +307,16 @@ export class ModuleUploadService {
   }
 
   /**
-   * Install module from package
+   * Install module from package (hot-swap: enabled by default)
    */
   private async installModule(
     packageId: string,
     manifest: ModuleManifest,
     installedBy?: string
   ): Promise<void> {
+    // Hot-swap mode: enable immediately unless explicitly disabled
+    const autoEnable = (manifest as any).autoEnable !== false;
+
     const moduleData = {
       code: manifest.code,
       name: manifest.name,
@@ -321,11 +324,11 @@ export class ModuleUploadService {
       category: manifest.category,
       version: manifest.version,
       icon: manifest.icon || '📦',
-      is_enabled: false, // Custom modules start disabled
+      is_enabled: autoEnable, // Hot-swap: enabled by default
       is_system: false,
       is_custom: true,
       package_id: packageId,
-      config: {},
+      config: (manifest as any).defaultConfig || {},
       config_schema: manifest.configSchema,
       dependencies: manifest.dependencies || [],
       provides: manifest.provides || [],
@@ -334,6 +337,7 @@ export class ModuleUploadService {
         ...(manifest.events?.listens || []),
       ],
       settings_path: manifest.settingsPath,
+      enabled_at: autoEnable ? new Date().toISOString() : null,
     };
 
     const { error } = await this.supabase
