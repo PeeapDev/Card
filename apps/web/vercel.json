@@ -5,6 +5,7 @@
   "outputDirectory": "dist",
   "installCommand": "npm install --legacy-peer-deps",
   "rewrites": [
+    { "source": "/api/(.*)", "destination": "https://peeap-merchant.vercel.app/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
