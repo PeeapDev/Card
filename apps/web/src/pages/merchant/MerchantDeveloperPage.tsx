@@ -289,170 +289,135 @@ function BusinessDetail() {
     return Math.max(0, limit - used);
   };
 
-  // Generate the complete SDK integration script
+  // Generate the complete SDK integration script - v0 (Production Ready)
   const getFullSDKScript = () => {
     const apiUrl = 'https://api.peeap.com';
     const checkoutUrl = 'https://checkout.peeap.com';
     const publicKey = activeKeys.public;
+    const isLive = business.is_live_mode;
+
     return `/**
  * ============================================================================
- * PEEAP PAYMENT SDK INTEGRATION
+ * PEEAP PAYMENT SDK v0 - Production Ready
  * ============================================================================
  * Business: ${business.name}
- * Public Key: ${publicKey}
- * Mode: ${business.is_live_mode ? 'LIVE' : 'TEST (Mobile Money disabled)'}
- * API Endpoint: ${apiUrl}/checkout/create
- * Checkout URL: ${checkoutUrl}/checkout/pay/{sessionId}
+ * Mode: ${isLive ? 'LIVE' : 'SANDBOX (Test Mode)'}
  *
- * SECURITY:
- * - Use PUBLIC KEY (pk_...) for frontend code - safe to expose
- * - SECRET KEY (sk_...) is for server-side only - NEVER expose in frontend
+ * LIVE MODE (pk_live_xxx):
+ *   - Real payments processed
+ *   - Mobile Money (Monime): ENABLED
+ *   - Peeap Card: ENABLED
+ *   - QR Code: ENABLED
  *
- * AMOUNT FORMAT:
- * - Pass amount in WHOLE units (e.g., 100 = Le 100.00)
- *
- * PAYMENT METHODS:
- * - QR Code: Always available
- * - PEEAP Card: Always available
- * - Mobile Money (Monime): ${business.is_live_mode ? 'Available in LIVE mode' : 'DISABLED in test mode - switch to LIVE to enable'}
+ * SANDBOX MODE (pk_test_xxx):
+ *   - Test payments only (no real money)
+ *   - Mobile Money (Monime): DISABLED (grayed out)
+ *   - Peeap Card: ENABLED (use test cards)
+ *   - QR Code: ENABLED (simulated)
  * ============================================================================
  */
 
-// ============================================================================
-// OPTION 1: HTML / CDN (Easiest - Recommended)
-// Just add these two script tags to your HTML
-// ============================================================================
-/*
+<!-- STEP 1: Add SDK Script -->
 <script src="${checkoutUrl}/embed/peeap-sdk.js"></script>
-<script>
-  // Initialize SDK with your public key
-  PeeapSDK.init({
-    publicKey: '${publicKey}',
-    onSuccess: function(payment) {
-      console.log('Payment successful!', payment.reference);
-      // Redirect to your success page or update UI
-    },
-    onError: function(error) {
-      console.error('Payment failed:', error.message);
-    }
-  });
 
-  // Create payment and redirect to hosted checkout
-  function pay(amount, description) {
-    PeeapSDK.createPayment({
-      amount: amount,        // Amount in whole units (100 = Le 100)
-      currency: 'SLE',
-      description: description
-    });
+<!-- STEP 2: Initialize & Create Payment -->
+<script>
+// Initialize Peeap SDK
+PeeapSDK.init({
+  publicKey: '${publicKey}',
+  baseUrl: '${apiUrl}',  // Required for CORS
+
+  // Success callback
+  onSuccess: function(payment) {
+    console.log('Payment successful!', payment);
+    console.log('Reference:', payment.reference);
+    // TODO: Redirect to your success page
+    // window.location.href = '/order-complete?ref=' + payment.reference;
+  },
+
+  // Error callback
+  onError: function(error) {
+    console.error('Payment failed:', error.message);
+    // TODO: Show error to user
+    alert('Payment failed: ' + error.message);
+  },
+
+  // Cancel callback (optional)
+  onCancel: function() {
+    console.log('Payment cancelled by user');
   }
+});
+
+// Function to trigger payment
+function payWithPeeap(amount, description, reference) {
+  PeeapSDK.createPayment({
+    amount: amount,           // Whole units: 50000 = Le 50,000
+    currency: 'SLE',
+    description: description || 'Payment',
+    reference: reference      // Optional: your order ID
+  });
+}
 </script>
 
-<button onclick="pay(100, 'Order #123')">Pay Le 100</button>
-*/
+<!-- STEP 3: Add Payment Button -->
+<button onclick="payWithPeeap(50000, 'Order #12345', 'order_12345')">
+  Pay Le 50,000
+</button>
 
-// ============================================================================
-// OPTION 2: Direct API Call (For any backend language)
-// POST to ${apiUrl}/checkout/create
-// ============================================================================
+/**
+ * ============================================================================
+ * ALTERNATIVE: Server-Side Integration
+ * ============================================================================
+ * For backend integrations (Node.js, Python, PHP, etc.)
+ * POST to: ${apiUrl}/checkout/create
+ */
 
-// --- JavaScript/Node.js ---
-async function createCheckout(amount, description) {
-  const response = await fetch('${apiUrl}/checkout/create', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      publicKey: '${publicKey}',
-      amount: amount,          // Whole units: 100 = Le 100
-      currency: 'SLE',
-      description: description
-    })
-  });
-
-  const data = await response.json();
-  if (data.paymentUrl) {
-    window.location.href = data.paymentUrl;  // Redirect to hosted checkout
-  }
-}
-
-// --- Python ---
-/*
-import requests
-
-def create_checkout(amount, description):
-    response = requests.post('${apiUrl}/checkout/create',
-        json={
-            'publicKey': '${publicKey}',
-            'amount': amount,
-            'currency': 'SLE',
-            'description': description
-        }
-    )
-    data = response.json()
-    return data['paymentUrl']  # Redirect user to this URL
-
-# Usage: redirect_url = create_checkout(100, 'Order #123')
-*/
-
-// --- PHP ---
-/*
-<?php
-function createCheckout($amount, $description) {
-    $ch = curl_init('${apiUrl}/checkout/create');
-    curl_setopt_array($ch, [
-        CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => json_encode([
-            'publicKey' => '${publicKey}',
-            'amount' => $amount,
-            'currency' => 'SLE',
-            'description' => $description
-        ]),
-        CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
-        CURLOPT_RETURNTRANSFER => true
-    ]);
-
-    $response = json_decode(curl_exec($ch), true);
-    curl_close($ch);
-
-    if ($response['paymentUrl']) {
-        header('Location: ' . $response['paymentUrl']);
-        exit;
-    }
-}
-
-// Usage: createCheckout(100, 'Order #123');
-?>
-*/
-
-// ============================================================================
-// API RESPONSE FORMAT
-// ============================================================================
-/*
-{
-  "sessionId": "cs_live_abc123...",
-  "paymentUrl": "${checkoutUrl}/checkout/pay/cs_live_abc123...",
-  "amount": 100,
-  "currency": "SLE",
-  "expiresAt": "2024-01-20T15:30:00Z",
-  "isTestMode": ${!business.is_live_mode}
-}
-*/
-
-// ============================================================================
-// WEBHOOK HANDLER (Optional - receive payment notifications)
-// ============================================================================
-/*
-// Node.js/Express
-app.post('/webhook/peeap', (req, res) => {
-  const { event, data } = req.body;
-
-  if (event === 'payment.completed') {
-    console.log('Payment completed:', data.reference);
-    // Update your order status in database
-  }
-
-  res.json({ received: true });
+// Node.js Example
+const response = await fetch('${apiUrl}/checkout/create', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    publicKey: '${publicKey}',
+    amount: 50000,
+    currency: 'SLE',
+    description: 'Order #12345',
+    redirectUrl: 'https://yoursite.com/payment-complete'
+  })
 });
-*/`;
+const { paymentUrl } = await response.json();
+// Redirect user to: paymentUrl
+
+/**
+ * ============================================================================
+ * API Response Format
+ * ============================================================================
+ */
+// Success Response:
+{
+  "sessionId": "cs_${isLive ? 'live' : 'test'}_abc123...",
+  "paymentUrl": "${checkoutUrl}/checkout/pay/cs_${isLive ? 'live' : 'test'}_abc123...",
+  "amount": 50000,
+  "currency": "SLE",
+  "expiresAt": "2025-01-20T15:30:00Z",
+  "isTestMode": ${!isLive}
+}
+
+/**
+ * ============================================================================
+ * Webhooks (Optional)
+ * ============================================================================
+ * Receive payment notifications at your endpoint
+ */
+// POST /your-webhook-endpoint
+{
+  "event": "payment.completed",
+  "data": {
+    "reference": "order_12345",
+    "amount": 50000,
+    "currency": "SLE",
+    "status": "completed"
+  }
+}`;
   };
 
   return (
