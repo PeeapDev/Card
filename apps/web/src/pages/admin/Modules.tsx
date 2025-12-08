@@ -11,8 +11,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField,
-  FormControlLabel,
   Chip,
   Alert,
   CircularProgress,
@@ -23,12 +21,9 @@ import {
   LinearProgress,
 } from '@mui/material';
 import {
-  Add as AddIcon,
-  Edit as EditIcon,
   Delete as DeleteIcon,
   Settings as SettingsIcon,
   CloudUpload as UploadIcon,
-  Download as DownloadIcon,
   Inventory as PackageIcon,
 } from '@mui/icons-material';
 import { AdminLayout } from '@/components/layout/AdminLayout';
@@ -87,24 +82,10 @@ export default function ModulesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
-  const [selectedModule, setSelectedModule] = useState<Module | null>(null);
   const [activeTab, setActiveTab] = useState(0);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [dragActive, setDragActive] = useState(false);
-
-  const [formData, setFormData] = useState({
-    code: '',
-    name: '',
-    description: '',
-    category: 'feature',
-    version: '1.0.0',
-    icon: '',
-    config: {},
-  });
 
   useEffect(() => {
     loadModules();
@@ -279,102 +260,6 @@ export default function ModulesPage() {
     }
   };
 
-  const handleCreateModule = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/modules`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setSuccess('Module created successfully');
-        setCreateDialogOpen(false);
-        resetForm();
-        loadModules();
-      } else {
-        setError(data.error || 'Failed to create module');
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to create module');
-    }
-  };
-
-  const handleUpdateModule = async () => {
-    if (!selectedModule) return;
-
-    try {
-      const response = await fetch(`${API_BASE}/modules/${selectedModule.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setSuccess('Module updated successfully');
-        setEditDialogOpen(false);
-        setSelectedModule(null);
-        resetForm();
-        loadModules();
-      } else {
-        setError(data.error || 'Failed to update module');
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to update module');
-    }
-  };
-
-  const handleDeleteModule = async (module: Module) => {
-    if (!confirm(`Are you sure you want to delete "${module.name}"?`)) return;
-
-    try {
-      const response = await fetch(`${API_BASE}/modules/${module.id}`, {
-        method: 'DELETE',
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setSuccess('Module deleted successfully');
-        loadModules();
-      } else {
-        setError(data.error || 'Failed to delete module');
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete module');
-    }
-  };
-
-  const openEditDialog = (module: Module) => {
-    setSelectedModule(module);
-    setFormData({
-      code: module.code,
-      name: module.name,
-      description: module.description || '',
-      category: module.category || 'feature',
-      version: module.version || '1.0.0',
-      icon: module.icon || '',
-      config: module.config || {},
-    });
-    setEditDialogOpen(true);
-  };
-
-  const resetForm = () => {
-    setFormData({
-      code: '',
-      name: '',
-      description: '',
-      category: 'feature',
-      version: '1.0.0',
-      icon: '',
-      config: {},
-    });
-  };
-
   const getCategoryColor = (category: string) => {
     switch (category) {
       case 'feature':
@@ -393,22 +278,13 @@ export default function ModulesPage() {
       <Box p={3}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h4">Platform Modules</Typography>
-        <Box display="flex" gap={2}>
-          <Button
-            variant="outlined"
-            startIcon={<UploadIcon />}
-            onClick={() => setUploadDialogOpen(true)}
-          >
-            Upload Module
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setCreateDialogOpen(true)}
-          >
-            Add Custom Module
-          </Button>
-        </Box>
+        <Button
+          variant="contained"
+          startIcon={<UploadIcon />}
+          onClick={() => setUploadDialogOpen(true)}
+        >
+          Upload Module
+        </Button>
       </Box>
 
       <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 3 }}>
@@ -497,25 +373,6 @@ export default function ModulesPage() {
                         onClick={() => navigate(MODULE_SETTINGS_PATHS[module.code])}
                       >
                         <SettingsIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  )}
-                  <Tooltip title="Edit Module">
-                    <IconButton
-                      size="small"
-                      onClick={() => openEditDialog(module)}
-                    >
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                  {!module.is_system && (
-                    <Tooltip title="Delete Module">
-                      <IconButton
-                        size="small"
-                        color="error"
-                        onClick={() => handleDeleteModule(module)}
-                      >
-                        <DeleteIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
                   )}
@@ -677,106 +534,6 @@ export default function ModulesPage() {
         </DialogActions>
       </Dialog>
 
-      {/* Create Module Dialog */}
-      <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Create Custom Module</DialogTitle>
-        <DialogContent>
-          <Box display="flex" flexDirection="column" gap={2} mt={1}>
-            <TextField
-              label="Module Code"
-              placeholder="e.g., custom_feature"
-              value={formData.code}
-              onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-              fullWidth
-              required
-            />
-            <TextField
-              label="Module Name"
-              placeholder="e.g., Custom Feature"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              fullWidth
-              required
-            />
-            <TextField
-              label="Description"
-              placeholder="Describe what this module does"
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              multiline
-              rows={3}
-              fullWidth
-            />
-            <TextField
-              label="Category"
-              select
-              value={formData.category}
-              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-              SelectProps={{ native: true }}
-              fullWidth
-            >
-              <option value="feature">Feature</option>
-              <option value="security">Security</option>
-              <option value="payment">Payment</option>
-              <option value="integration">Integration</option>
-            </TextField>
-            <TextField
-              label="Icon (Emoji)"
-              placeholder="e.g., 🎯"
-              value={formData.icon}
-              onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
-              fullWidth
-            />
-            <TextField
-              label="Version"
-              value={formData.version}
-              onChange={(e) => setFormData({ ...formData, version: e.target.value })}
-              fullWidth
-            />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleCreateModule} variant="contained">
-            Create Module
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Edit Module Dialog */}
-      <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Edit Module</DialogTitle>
-        <DialogContent>
-          <Box display="flex" flexDirection="column" gap={2} mt={1}>
-            <TextField
-              label="Module Name"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              fullWidth
-            />
-            <TextField
-              label="Description"
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              multiline
-              rows={3}
-              fullWidth
-            />
-            <TextField
-              label="Icon (Emoji)"
-              value={formData.icon}
-              onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
-              fullWidth
-            />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setEditDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleUpdateModule} variant="contained">
-            Update Module
-          </Button>
-        </DialogActions>
-      </Dialog>
       </Box>
     </AdminLayout>
   );
