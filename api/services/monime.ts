@@ -98,11 +98,12 @@ export interface MonimeTransactionStatus {
 }
 
 // Currency configuration for Monime API
-// IMPORTANT: Monime expects SLE values multiplied by 10 (tested: send 10 to display 1 SLE)
+// Monime expects amounts in SMALLEST CURRENCY UNIT (cents)
+// For SLE: 100 cents = 1 Leone, so multiply by 100
 const MONIME_CURRENCY_MULTIPLIER: Record<string, number> = {
-  SLE: 10,  // Monime expects value * 10 for SLE
-  SLL: 10,  // Old Leone, same treatment
-  USD: 100, // Monime expects cents
+  SLE: 100, // Monime expects cents: 1 SLE = 100 cents
+  SLL: 100, // Old Leone, same treatment
+  USD: 100, // 1 USD = 100 cents
   EUR: 100,
   GBP: 100,
   NGN: 100,
