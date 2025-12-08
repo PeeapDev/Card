@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Card,
@@ -26,6 +27,18 @@ import {
 } from '@mui/icons-material';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 
+// Map module codes to their settings pages
+const MODULE_SETTINGS_PATHS: Record<string, string> = {
+  monime: '/admin/settings/payment',
+  paystack: '/admin/settings/payment',
+  stripe: '/admin/settings/payment',
+  deposits: '/admin/settings/payment',
+  withdrawals: '/admin/settings/payment',
+  kyc_advanced: '/admin/settings/kyc',
+  loyalty_rewards: '/admin/settings/loyalty',
+  bill_payments: '/admin/settings/billing',
+};
+
 interface Module {
   id: string;
   code: string;
@@ -45,6 +58,7 @@ interface Module {
 const API_BASE = '/api';
 
 export default function ModulesPage() {
+  const navigate = useNavigate();
   const [modules, setModules] = useState<Module[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -301,6 +315,18 @@ export default function ModulesPage() {
                 )}
 
                 <Box display="flex" justifyContent="flex-end" gap={1}>
+                  {/* Configure button for modules with settings */}
+                  {MODULE_SETTINGS_PATHS[module.code] && (
+                    <Tooltip title="Configure">
+                      <IconButton
+                        size="small"
+                        color="primary"
+                        onClick={() => navigate(MODULE_SETTINGS_PATHS[module.code])}
+                      >
+                        <SettingsIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
                   <Tooltip title="Edit Module">
                     <IconButton
                       size="small"

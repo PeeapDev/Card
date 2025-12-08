@@ -423,9 +423,22 @@ interface PaymentSettings {
 }
 
 /**
- * Create MonimeService instance from Supabase payment settings
+ * Create MonimeService instance from Supabase settings
+ * Checks both the module is_enabled and payment_settings.monime_enabled
  */
 export async function createMonimeService(supabase: any, settingsId: string): Promise<MonimeService> {
+  // First check if the Monime module is enabled
+  const { data: module } = await supabase
+    .from('modules')
+    .select('is_enabled')
+    .eq('code', 'monime')
+    .single();
+
+  if (!module?.is_enabled) {
+    throw new MonimeError('Monime module is not enabled. Enable it in Admin > Modules.', 'MODULE_DISABLED', 400);
+  }
+
+  // Then check payment settings for credentials
   const { data, error } = await supabase
     .from('payment_settings')
     .select('monime_access_token, monime_space_id, monime_enabled')
@@ -439,17 +452,30 @@ export async function createMonimeService(supabase: any, settingsId: string): Pr
   }
 
   if (!settings.monime_enabled) {
-    throw new MonimeError('Mobile money payments are not enabled', 'MONIME_DISABLED', 400);
+    throw new MonimeError('Mobile money payments are not enabled in settings', 'MONIME_DISABLED', 400);
   }
 
   if (!settings.monime_access_token || !settings.monime_space_id) {
-    throw new MonimeError('Monime credentials not configured', 'CREDENTIALS_MISSING', 500);
+    throw new MonimeError('Monime credentials not configured. Go to Admin > Settings > Payment.', 'CREDENTIALS_MISSING', 500);
   }
 
   return new MonimeService({
     accessToken: settings.monime_access_token,
     spaceId: settings.monime_space_id,
   });
+}
+
+/**
+ * Check if Monime module is enabled (quick check without creating service)
+ */
+export async function isMonimeEnabled(supabase: any): Promise<boolean> {
+  const { data: module } = await supabase
+    .from('modules')
+    .select('is_enabled')
+    .eq('code', 'monime')
+    .single();
+
+  return module?.is_enabled === true;
 }
 
 export default MonimeService;
