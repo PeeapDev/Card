@@ -19,16 +19,6 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/monime-api/, ''),
         secure: true,
       },
-      '/api/monime': {
-        target: 'https://my.peeap.com',
-        changeOrigin: true,
-        secure: true,
-      },
-      '/api/settings': {
-        target: 'https://my.peeap.com',
-        changeOrigin: true,
-        secure: true,
-      },
       '/api': {
         target: 'https://my.peeap.com',
         changeOrigin: true,

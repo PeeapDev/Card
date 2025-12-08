@@ -638,21 +638,101 @@ async function handleSettingsCheckoutCallback(req: VercelRequest, res: VercelRes
 
 async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
   const sessionId = req.query.sessionId || req.body?.sessionId || '';
+  const walletId = req.query.walletId || req.body?.walletId || '';
   const orderNumber = req.query.orderNumber || req.body?.orderNumber || '';
-  const status = req.query.status || req.body?.status || 'success';
-  const frontendUrl = process.env.FRONTEND_URL || 'https://my.peeap.com';
+
+  // Get frontend URL from settings
+  const { data: settings } = await supabase
+    .from('payment_settings')
+    .select('frontend_url')
+    .eq('id', SETTINGS_ID)
+    .single();
+  const frontendUrl = settings?.frontend_url || process.env.FRONTEND_URL || 'https://my.peeap.com';
 
   try {
-    console.log('[Deposit Success] Received callback:', { method: req.method, query: req.query });
+    console.log('[Deposit Success] Received callback:', { method: req.method, query: req.query, sessionId, walletId });
 
+    let amount = 0;
+    let currency = 'SLE';
+    let newBalance = 0;
+
+    // If we have a sessionId, verify with Monime and credit wallet
+    if (sessionId && walletId) {
+      // Get Monime credentials
+      const monimeService = await createMonimeService(supabase, SETTINGS_ID);
+
+      // Check checkout session status
+      const sessionStatus = await monimeService.getCheckoutSession(String(sessionId));
+      console.log('[Deposit Success] Monime session status:', sessionStatus);
+
+      if (sessionStatus.status === 'completed') {
+        // Get the pending transaction
+        const { data: pendingTx } = await supabase
+          .from('transactions')
+          .select('*')
+          .eq('reference', sessionId)
+          .eq('status', 'PENDING')
+          .single();
+
+        if (pendingTx) {
+          amount = pendingTx.amount;
+          currency = pendingTx.currency;
+
+          // Credit the wallet
+          const { data: wallet, error: walletError } = await supabase
+            .from('wallets')
+            .select('balance')
+            .eq('id', walletId)
+            .single();
+
+          if (wallet) {
+            const currentBalance = parseFloat(wallet.balance?.toString() || '0');
+            newBalance = currentBalance + amount;
+
+            // Update wallet balance
+            await supabase
+              .from('wallets')
+              .update({
+                balance: newBalance,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', walletId);
+
+            // Update transaction status
+            await supabase
+              .from('transactions')
+              .update({
+                status: 'COMPLETED',
+                metadata: {
+                  ...pendingTx.metadata,
+                  completedAt: new Date().toISOString(),
+                  monimeStatus: sessionStatus.status,
+                }
+              })
+              .eq('id', pendingTx.id);
+
+            console.log('[Deposit Success] Wallet credited:', { walletId, amount, newBalance });
+          }
+        }
+      }
+    }
+
+    // Redirect to frontend success page
     const redirectUrl = new URL('/deposit/success', frontendUrl);
     if (sessionId) redirectUrl.searchParams.set('sessionId', String(sessionId));
+    if (walletId) redirectUrl.searchParams.set('walletId', String(walletId));
     if (orderNumber) redirectUrl.searchParams.set('orderNumber', String(orderNumber));
-    redirectUrl.searchParams.set('status', String(status));
+    redirectUrl.searchParams.set('status', 'success');
+    if (amount > 0) redirectUrl.searchParams.set('amount', String(amount));
+    if (newBalance > 0) redirectUrl.searchParams.set('newBalance', String(newBalance));
+    redirectUrl.searchParams.set('currency', currency);
 
     return res.redirect(302, redirectUrl.toString());
   } catch (error: any) {
+    console.error('[Deposit Success] Error:', error);
     const redirectUrl = new URL('/deposit/success', frontendUrl);
+    if (sessionId) redirectUrl.searchParams.set('sessionId', String(sessionId));
+    if (walletId) redirectUrl.searchParams.set('walletId', String(walletId));
     redirectUrl.searchParams.set('error', error.message || 'Unknown error');
     return res.redirect(302, redirectUrl.toString());
   }
@@ -660,20 +740,46 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
 
 async function handleDepositCancel(req: VercelRequest, res: VercelResponse) {
   const sessionId = req.query.sessionId || req.body?.sessionId || '';
+  const walletId = req.query.walletId || req.body?.walletId || '';
   const reason = req.query.reason || req.body?.reason || 'cancelled';
-  const frontendUrl = process.env.FRONTEND_URL || 'https://my.peeap.com';
+
+  // Get frontend URL from settings
+  const { data: settings } = await supabase
+    .from('payment_settings')
+    .select('frontend_url')
+    .eq('id', SETTINGS_ID)
+    .single();
+  const frontendUrl = settings?.frontend_url || process.env.FRONTEND_URL || 'https://my.peeap.com';
 
   try {
-    console.log('[Deposit Cancel] Received callback:', { method: req.method, query: req.query });
+    console.log('[Deposit Cancel] Received callback:', { method: req.method, query: req.query, sessionId, walletId });
+
+    // Update the pending transaction to cancelled
+    if (sessionId) {
+      await supabase
+        .from('transactions')
+        .update({
+          status: 'CANCELLED',
+          metadata: {
+            cancelledAt: new Date().toISOString(),
+            reason: reason,
+          }
+        })
+        .eq('reference', sessionId)
+        .eq('status', 'PENDING');
+    }
 
     const redirectUrl = new URL('/deposit/cancel', frontendUrl);
     if (sessionId) redirectUrl.searchParams.set('sessionId', String(sessionId));
+    if (walletId) redirectUrl.searchParams.set('walletId', String(walletId));
     redirectUrl.searchParams.set('status', 'cancelled');
     redirectUrl.searchParams.set('reason', String(reason));
 
     return res.redirect(302, redirectUrl.toString());
   } catch (error: any) {
+    console.error('[Deposit Cancel] Error:', error);
     const redirectUrl = new URL('/deposit/cancel', frontendUrl);
+    if (sessionId) redirectUrl.searchParams.set('sessionId', String(sessionId));
     redirectUrl.searchParams.set('error', error.message || 'Unknown error');
     return res.redirect(302, redirectUrl.toString());
   }
@@ -1134,7 +1240,105 @@ async function handlePaymentsId(req: VercelRequest, res: VercelResponse) {
 }
 
 async function handleMonimeDeposit(req: VercelRequest, res: VercelResponse) {
-  return res.status(501).json({ error: 'Temporarily unavailable - see full implementation' });
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const { walletId, amount, currency = 'SLE', userId, description } = req.body;
+
+    // Validate required fields
+    if (!walletId) {
+      return res.status(400).json({ error: 'walletId is required' });
+    }
+    if (!amount || typeof amount !== 'number' || amount <= 0) {
+      return res.status(400).json({ error: 'Valid amount is required' });
+    }
+
+    // Verify wallet exists
+    const { data: wallet, error: walletError } = await supabase
+      .from('wallets')
+      .select('id, user_id, currency, balance')
+      .eq('id', walletId)
+      .single();
+
+    if (walletError || !wallet) {
+      console.error('[MonimeDeposit] Wallet not found:', walletId);
+      return res.status(404).json({ error: 'Wallet not found' });
+    }
+
+    // Create Monime service (validates credentials and module enabled)
+    const monimeService = await createMonimeService(supabase, SETTINGS_ID);
+
+    // Get frontend URL from settings or use default
+    const { data: settings } = await supabase
+      .from('payment_settings')
+      .select('backend_url, frontend_url')
+      .eq('id', SETTINGS_ID)
+      .single();
+
+    const backendUrl = settings?.backend_url || 'https://my.peeap.com';
+    const frontendUrl = settings?.frontend_url || 'https://my.peeap.com';
+
+    // Build success/cancel URLs
+    // These go through our API first to credit the wallet, then redirect to frontend
+    const successUrl = `${backendUrl}/api/deposit/success?walletId=${walletId}&sessionId={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${backendUrl}/api/deposit/cancel?walletId=${walletId}&sessionId={CHECKOUT_SESSION_ID}`;
+
+    console.log('[MonimeDeposit] Creating checkout session:', {
+      walletId,
+      amount,
+      currency,
+      successUrl,
+      cancelUrl,
+    });
+
+    // Create deposit checkout session
+    const result = await monimeService.createDepositCheckout({
+      walletId,
+      userId: userId || wallet.user_id,
+      amount,
+      currency,
+      successUrl,
+      cancelUrl,
+    });
+
+    console.log('[MonimeDeposit] Checkout created:', result.monimeSessionId);
+
+    // Store deposit record for tracking
+    await supabase.from('transactions').insert({
+      wallet_id: walletId,
+      type: 'DEPOSIT',
+      amount: amount,
+      currency: currency,
+      status: 'PENDING',
+      description: description || 'Mobile Money Deposit',
+      reference: result.monimeSessionId,
+      metadata: {
+        monimeSessionId: result.monimeSessionId,
+        paymentMethod: 'mobile_money',
+        initiatedAt: new Date().toISOString(),
+      },
+    });
+
+    return res.status(200).json({
+      paymentUrl: result.paymentUrl,
+      monimeSessionId: result.monimeSessionId,
+      expiresAt: result.expiresAt,
+      amount,
+      currency,
+    });
+
+  } catch (error: any) {
+    console.error('[MonimeDeposit] Error:', error);
+
+    // Handle MonimeError specifically
+    if (error instanceof MonimeError) {
+      return res.status(error.statusCode).json({ error: error.message, code: error.code });
+    }
+
+    return res.status(500).json({ error: error.message || 'Failed to initiate deposit' });
+  }
 }
 
 // Mobile Money payment for hosted checkout - creates Monime checkout session
