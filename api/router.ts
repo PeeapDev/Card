@@ -18,17 +18,24 @@ const SETTINGS_ID = '00000000-0000-0000-0000-000000000001';
  * Consolidates all API endpoints into a single serverless function to stay within Vercel's 12 function limit
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS Configuration - Allow multiple origins
-  // Allow all origins for checkout API (merchants integrate from their own domains)
-  const origin = req.headers.origin || '*';
-  res.setHeader('Access-Control-Allow-Origin', origin);
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  // CORS Configuration - Allow ALL origins for checkout API
+  // This is required for merchants to integrate from their own domains
+  const origin = req.headers.origin;
 
+  // Always allow the requesting origin (or * if no origin header)
+  res.setHeader('Access-Control-Allow-Origin', origin || '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Business-Id, X-Mode, X-User-Id');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Business-Id, X-Mode, X-User-Id, X-Requested-With');
+  res.setHeader('Access-Control-Max-Age', '86400'); // Cache preflight for 24 hours
 
+  // Only set credentials header if there's a specific origin (not wildcard)
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+
+  // Handle preflight OPTIONS request
   if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+    return res.status(204).end();
   }
 
   try {
