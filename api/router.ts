@@ -1073,10 +1073,7 @@ async function handleCheckoutCreate(req: VercelRequest, res: VercelResponse) {
         cancel_url: cancelUrl,
         return_url: redirectUrl || successUrl,
         payment_methods: { qr: true, card: true, mobile: true },
-        payment_method: paymentMethod,
-        customer_email: customerEmail,
-        customer_phone: customerPhone,
-        metadata: metadata ? { ...metadata, reference, isTestMode: isTestKey } : { reference, isTestMode: isTestKey },
+        metadata: metadata ? { ...metadata, reference, isTestMode: isTestKey, customerEmail, customerPhone, paymentMethod } : { reference, isTestMode: isTestKey, customerEmail, customerPhone, paymentMethod },
         idempotency_key: idempotencyKey,
         expires_at: expiresAt.toISOString(),
       })
