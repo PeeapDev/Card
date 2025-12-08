@@ -225,7 +225,11 @@ export function HostedCheckoutPage() {
         brandColor: rawData.brand_color || rawData.brandColor || '#4F46E5',
         successUrl: rawData.success_url || rawData.successUrl,
         cancelUrl: rawData.cancel_url || rawData.cancelUrl,
-        paymentMethods: rawData.payment_methods || rawData.paymentMethods || { qr: true, card: true, mobile: true },
+        paymentMethods: (rawData.payment_methods && typeof rawData.payment_methods === 'object')
+          ? rawData.payment_methods
+          : (rawData.paymentMethods && typeof rawData.paymentMethods === 'object')
+            ? rawData.paymentMethods
+            : { qr: true, card: true, mobile: true },
       };
 
       // Check if expired
@@ -1052,7 +1056,7 @@ export function HostedCheckoutPage() {
 
             <div className="space-y-3">
               {/* QR Code Option */}
-              {session.paymentMethods.qr && (
+              {session.paymentMethods?.qr !== false && (
                 <button
                   onClick={() => handleMethodSelect('qr')}
                   className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-gray-200 hover:border-gray-300 transition-all"
@@ -1071,7 +1075,7 @@ export function HostedCheckoutPage() {
               )}
 
               {/* Card Option */}
-              {session.paymentMethods.card && (
+              {session.paymentMethods?.card !== false && (
                 <button
                   onClick={() => handleMethodSelect('card')}
                   className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-gray-200 hover:border-gray-300 transition-all"
@@ -1090,7 +1094,7 @@ export function HostedCheckoutPage() {
               )}
 
               {/* Mobile Money Option */}
-              {session.paymentMethods.mobile && (
+              {session.paymentMethods?.mobile !== false && (
                 <button
                   onClick={() => handleMethodSelect('mobile')}
                   className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-gray-200 hover:border-gray-300 transition-all"

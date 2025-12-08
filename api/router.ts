@@ -86,6 +86,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleCheckoutCardPay(req, res);
     } else if (path.startsWith('checkout/card-validate')) {
       return await handleCheckoutCardValidate(req, res);
+    } else if (path.match(/^checkout\/pay\/[^/]+$/)) {
+      // Handle redirect from Monime payment - render success/cancel HTML page
+      const sessionId = path.split('/')[2];
+      return await handleCheckoutPayRedirect(req, res, sessionId);
     } else if (path.startsWith('checkout/success')) {
       return await handleCheckoutSuccess(req, res);
     } else if (path.startsWith('checkout/cancel')) {
@@ -663,6 +667,176 @@ async function handleDepositCancel(req: VercelRequest, res: VercelResponse) {
 // CHECKOUT HANDLERS
 // ============================================================================
 
+/**
+ * Handle redirect from Monime payment - render HTML success/cancel page
+ * This is the page users land on after completing payment on Monime
+ */
+async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse, sessionId: string) {
+  try {
+    const url = new URL(req.url || '', `http://${req.headers.host}`);
+    const status = url.searchParams.get('status') || 'unknown';
+
+    console.log('[Checkout Pay Redirect] Session:', sessionId, 'Status:', status);
+
+    // Look up the checkout session to get return URL and details
+    const { data: session } = await supabase
+      .from('checkout_sessions')
+      .select('*')
+      .eq('external_id', sessionId)
+      .single();
+
+    let returnUrl = 'https://my.peeap.com';
+    let merchantName = 'Merchant';
+    let amount = 0;
+    let currency = 'SLE';
+
+    if (session) {
+      // Update session status
+      const newStatus = status === 'success' ? 'completed' : status === 'cancel' ? 'cancelled' : session.status;
+      await supabase
+        .from('checkout_sessions')
+        .update({
+          status: newStatus,
+          ...(status === 'success' ? { completed_at: new Date().toISOString() } : {}),
+          ...(status === 'cancel' ? { cancelled_at: new Date().toISOString() } : {})
+        })
+        .eq('id', session.id);
+
+      returnUrl = session.return_url || session.cancel_url || returnUrl;
+      merchantName = session.merchant_name || 'Merchant';
+      amount = session.amount || 0;
+      currency = session.currency_code || 'SLE';
+    }
+
+    const isSuccess = status === 'success';
+    const currencySymbol = currency === 'SLE' ? 'Le' : currency;
+    const formattedAmount = `${currencySymbol} ${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+
+    // Render HTML page with animation
+    const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${isSuccess ? 'Payment Successful' : 'Payment Cancelled'} - Peeap</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      max-width: 400px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      animation: slideUp 0.5s ease-out;
+    }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(30px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .icon {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+      animation: pop 0.6s ease-out 0.2s both;
+    }
+    @keyframes pop {
+      0% { transform: scale(0); }
+      50% { transform: scale(1.2); }
+      100% { transform: scale(1); }
+    }
+    .icon.success { background: #10b981; }
+    .icon.cancel { background: #ef4444; }
+    .icon svg { width: 40px; height: 40px; color: white; }
+    h1 { font-size: 24px; color: #1f2937; margin-bottom: 8px; }
+    .amount { font-size: 32px; font-weight: 700; color: ${isSuccess ? '#10b981' : '#6b7280'}; margin: 16px 0; }
+    .merchant { color: #6b7280; margin-bottom: 24px; }
+    .message { color: #4b5563; margin-bottom: 32px; line-height: 1.6; }
+    .button {
+      display: inline-block;
+      background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+      color: white;
+      padding: 14px 32px;
+      border-radius: 10px;
+      text-decoration: none;
+      font-weight: 600;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .button:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4); }
+    .countdown { color: #9ca3af; font-size: 14px; margin-top: 16px; }
+    .peeap-logo { margin-top: 32px; opacity: 0.5; font-size: 12px; color: #9ca3af; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon ${isSuccess ? 'success' : 'cancel'}">
+      ${isSuccess
+        ? '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>'
+        : '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"/></svg>'
+      }
+    </div>
+    <h1>${isSuccess ? 'Payment Successful!' : 'Payment Cancelled'}</h1>
+    <div class="amount">${formattedAmount}</div>
+    <div class="merchant">to ${merchantName}</div>
+    <p class="message">
+      ${isSuccess
+        ? 'Your payment has been processed successfully. Thank you for your purchase!'
+        : 'Your payment was cancelled. No charges have been made to your account.'
+      }
+    </p>
+    <a href="${returnUrl}" class="button">Return to ${merchantName}</a>
+    <div class="countdown">Redirecting in <span id="timer">5</span> seconds...</div>
+    <div class="peeap-logo">Powered by Peeap</div>
+  </div>
+  <script>
+    let seconds = 5;
+    const timer = document.getElementById('timer');
+    const interval = setInterval(() => {
+      seconds--;
+      timer.textContent = seconds;
+      if (seconds <= 0) {
+        clearInterval(interval);
+        window.location.href = '${returnUrl}';
+      }
+    }, 1000);
+  </script>
+</body>
+</html>`;
+
+    res.setHeader('Content-Type', 'text/html');
+    return res.status(200).send(html);
+
+  } catch (error: any) {
+    console.error('[Checkout Pay Redirect] Error:', error);
+    // On error, show a basic error page
+    const html = `
+<!DOCTYPE html>
+<html><head><title>Error - Peeap</title></head>
+<body style="font-family:sans-serif;text-align:center;padding:50px;">
+  <h1>Something went wrong</h1>
+  <p>${error.message || 'Unable to process your request'}</p>
+  <a href="https://my.peeap.com">Return to Peeap</a>
+</body></html>`;
+    res.setHeader('Content-Type', 'text/html');
+    return res.status(500).send(html);
+  }
+}
+
 async function handleCheckoutSuccess(req: VercelRequest, res: VercelResponse) {
   try {
     const { reference, businessId, redirect, sessionId } = req.query;
@@ -797,8 +971,8 @@ async function handleCheckoutMobilePay(req: VercelRequest, res: VercelResponse, 
       description: session.description || `Payment to ${session.merchant_name || 'Peeap'}`,
       merchantName: session.merchant_name || 'Peeap',
       merchantId: session.merchant_id,
-      successUrl: `https://checkout.peeap.com/checkout/pay/${sessionId}?status=success`,
-      cancelUrl: `https://checkout.peeap.com/checkout/pay/${sessionId}?status=cancel`,
+      successUrl: `https://peeap-merchant.vercel.app/checkout/pay/${sessionId}?status=success`,
+      cancelUrl: `https://peeap-merchant.vercel.app/checkout/pay/${sessionId}?status=cancel`,
     });
 
     // 4. Store Monime reference in checkout session
