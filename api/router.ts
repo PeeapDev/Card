@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
+import { createMonimeService, MonimeError } from './services/monime';
 
 const supabaseUrl = process.env.SUPABASE_URL || 'https://akiecgwcxadcpqlvntmf.supabase.co';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFraWVjZ3djeGFkY3BxbHZudG1mIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDI4MzMzMiwiZXhwIjoyMDc5ODU5MzMyfQ.q8R8t_aHiMReEIpeJIV-m0RCEA-n0_RDOtTX8bLJgYs';
@@ -757,6 +758,7 @@ async function handleMonimeDeposit(req: VercelRequest, res: VercelResponse) {
 }
 
 // Mobile Money payment for hosted checkout - creates Monime checkout session
+// Uses centralized MonimeService for all Monime operations
 async function handleCheckoutMobilePay(req: VercelRequest, res: VercelResponse, sessionId: string) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -783,96 +785,27 @@ async function handleCheckoutMobilePay(req: VercelRequest, res: VercelResponse, 
       return res.status(400).json({ error: 'Session expired' });
     }
 
-    // 2. Get Monime credentials from payment_settings
-    const { data: settings, error: settingsError } = await supabase
-      .from('payment_settings')
-      .select('monime_access_token, monime_space_id, monime_enabled')
-      .eq('id', SETTINGS_ID)
-      .single();
+    // 2. Create Monime service (validates credentials automatically)
+    const monimeService = await createMonimeService(supabase, SETTINGS_ID);
 
-    if (settingsError || !settings) {
-      console.error('[MobilePay] Settings error:', settingsError);
-      return res.status(500).json({ error: 'Payment settings not configured' });
-    }
-
-    if (!settings.monime_enabled) {
-      return res.status(400).json({ error: 'Mobile money payments are not enabled' });
-    }
-
-    if (!settings.monime_access_token || !settings.monime_space_id) {
-      return res.status(500).json({ error: 'Monime credentials not configured' });
-    }
-
-    // 3. Create Monime checkout session
-    const monimeUrl = 'https://api.monime.io/v1/checkout-sessions';
-    // Generate UUID for idempotency key
-    const idempotencyKey = crypto.randomUUID();
-
-    // Monime expects lineItems with price object containing currency and value
-    const monimePayload = {
-      name: session.description || `Payment to ${session.merchant_name || 'Peeap'}`,
-      description: `Checkout session ${session.external_id}`,
+    // 3. Create Monime checkout session using centralized service
+    // MonimeService handles currency conversion (SLE * 10 for Monime's format)
+    const result = await monimeService.createHostedCheckout({
+      sessionId: session.external_id,
+      amount: session.amount, // MonimeService will multiply by 10 for SLE
+      currency: session.currency_code || 'SLE',
+      description: session.description || `Payment to ${session.merchant_name || 'Peeap'}`,
+      merchantName: session.merchant_name || 'Peeap',
+      merchantId: session.merchant_id,
       successUrl: `https://checkout.peeap.com/checkout/pay/${sessionId}?status=success`,
       cancelUrl: `https://checkout.peeap.com/checkout/pay/${sessionId}?status=cancel`,
-      reference: session.external_id,
-      lineItems: [
-        {
-          type: 'custom',
-          name: session.description || 'Payment',
-          price: {
-            currency: 'SLE', // Sierra Leone New Leone
-            value: session.amount,
-          },
-          quantity: 1,
-        },
-      ],
-      metadata: {
-        peeapSessionId: session.external_id,
-        merchantId: session.merchant_id,
-        merchantName: session.merchant_name,
-      },
-    };
-
-    console.log('[MobilePay] Creating Monime session:', JSON.stringify(monimePayload, null, 2));
-
-    const monimeResponse = await fetch(monimeUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${settings.monime_access_token}`,
-        'Content-Type': 'application/json',
-        'Monime-Space-Id': settings.monime_space_id,
-        'Idempotency-Key': idempotencyKey,
-      },
-      body: JSON.stringify(monimePayload),
     });
-
-    const monimeData = await monimeResponse.json();
-
-    console.log('[MobilePay] Monime response:', monimeResponse.status, JSON.stringify(monimeData, null, 2));
-
-    if (!monimeResponse.ok) {
-      console.error('[MobilePay] Monime error:', monimeData);
-      return res.status(500).json({ 
-        error: monimeData.error?.message || monimeData.message || 'Failed to create Monime session',
-        details: monimeData,
-      });
-    }
-
-    // Monime response: { success: true, result: { id, redirectUrl, ... } }
-    const monimeSession = monimeData.result;
-    
-    if (!monimeSession || !monimeSession.id) {
-      console.error('[MobilePay] Invalid Monime response:', monimeData);
-      return res.status(500).json({ error: 'Invalid response from Monime' });
-    }
-
-    console.log('[MobilePay] Monime session created:', monimeSession.id, 'redirectUrl:', monimeSession.redirectUrl);
 
     // 4. Store Monime reference in checkout session
     await supabase
       .from('checkout_sessions')
       .update({
-        payment_reference: monimeSession.id,
+        payment_reference: result.monimeSessionId,
         payment_method: 'mobile_money',
         updated_at: new Date().toISOString(),
       })
@@ -880,13 +813,19 @@ async function handleCheckoutMobilePay(req: VercelRequest, res: VercelResponse, 
 
     // 5. Return payment URL from Monime response
     return res.status(200).json({
-      paymentUrl: monimeSession.redirectUrl,
-      monimeSessionId: monimeSession.id,
-      expiresAt: monimeSession.expireTime,
+      paymentUrl: result.paymentUrl,
+      monimeSessionId: result.monimeSessionId,
+      expiresAt: result.expiresAt,
     });
 
   } catch (error: any) {
     console.error('[MobilePay] Error:', error);
+
+    // Handle MonimeError specifically
+    if (error instanceof MonimeError) {
+      return res.status(error.statusCode).json({ error: error.message, code: error.code });
+    }
+
     return res.status(500).json({ error: error.message || 'Internal server error' });
   }
 }

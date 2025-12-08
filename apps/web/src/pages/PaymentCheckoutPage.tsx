@@ -52,12 +52,17 @@ export function PaymentCheckoutPage() {
   const [isAppInstalled, setIsAppInstalled] = useState(false);
 
   // Format currency
+  // Format amount - SLE uses whole units, no conversion needed
   const formatAmount = (amount: number, currency: string) => {
+    // SLE is a whole number currency, no division by 100 needed
+    if (currency === 'SLE' || currency === 'SLL') {
+      return `Le ${new Intl.NumberFormat('en-US', { minimumFractionDigits: 0 }).format(amount)}`;
+    }
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: currency,
       minimumFractionDigits: 2
-    }).format(amount / 100);
+    }).format(amount / 100); // Only for non-SLE currencies
   };
 
   // Format time remaining

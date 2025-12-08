@@ -173,11 +173,11 @@
         var idempotencyKey = generateIdempotencyKey();
         var currency = options.currency || config.currency;
 
-        // Convert to minor units (cents) for API
-        var amountInMinorUnits = Math.round(options.amount * 100);
+        // SLE is a whole number currency - no conversion needed
+        var amount = Math.round(options.amount);
 
         console.log('[PeeapSDK] Creating payment:', {
-          amount: options.amount,
+          amount: amount,
           currency: currency,
           reference: reference,
           idempotencyKey: idempotencyKey
@@ -191,7 +191,7 @@
           },
           body: JSON.stringify({
             publicKey: config.publicKey,
-            amount: amountInMinorUnits,
+            amount: amount,
             currency: currency,
             reference: reference,
             idempotencyKey: idempotencyKey,
@@ -497,10 +497,11 @@
         var reference = options.reference || generateReference();
         var idempotencyKey = generateIdempotencyKey();
         var currency = options.currency || config.currency;
-        var amountInMinorUnits = Math.round(options.amount * 100);
+        // SLE is a whole number currency - no conversion needed
+        var amount = Math.round(options.amount);
 
         console.log('[PeeapSDK] Processing card payment:', {
-          amount: options.amount,
+          amount: amount,
           currency: currency,
           reference: reference,
           cardNumber: options.cardNumber.substring(0, 4) + '****'
@@ -517,7 +518,7 @@
             expiryMonth: options.expiryMonth,
             expiryYear: options.expiryYear,
             pin: options.pin,
-            amount: amountInMinorUnits,
+            amount: amount,
             currency: currency,
             reference: reference,
             idempotencyKey: idempotencyKey,

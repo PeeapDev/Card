@@ -87,24 +87,25 @@ const DEFAULT_MONIME_CONFIG: MonimeConfig = {
   frontendUrl: '',
 };
 
+// SLE uses whole units (no minor units) - amounts are stored as whole SLE values
 const DEFAULT_WITHDRAWAL_SETTINGS: WithdrawalSettings = {
   mobileMoneyEnabled: true,
   bankTransferEnabled: true,
-  minWithdrawalAmount: 1000, // 10.00 in minor units (SLE)
-  maxWithdrawalAmount: 50000000, // 500,000.00 in minor units
-  dailyWithdrawalLimit: 100000000, // 1,000,000.00 in minor units
+  minWithdrawalAmount: 1000, // Le 1,000
+  maxWithdrawalAmount: 50000000, // Le 50,000,000
+  dailyWithdrawalLimit: 100000000, // Le 100,000,000
   withdrawalFeePercent: 1.5,
-  withdrawalFeeFlat: 100, // 1.00 in minor units
+  withdrawalFeeFlat: 100, // Le 100
   requirePin: true,
-  autoApproveUnder: 1000000, // 10,000.00 - auto approve withdrawals under this amount
+  autoApproveUnder: 1000000, // Le 1,000,000 - auto approve withdrawals under this amount
 };
 
 const DEFAULT_DEPOSIT_SETTINGS: DepositSettings = {
   checkoutSessionEnabled: true,
   paymentCodeEnabled: true,
   mobileMoneyEnabled: true,
-  minDepositAmount: 100, // 1.00 in minor units
-  maxDepositAmount: 100000000, // 1,000,000.00 in minor units
+  minDepositAmount: 100, // Le 100
+  maxDepositAmount: 100000000, // Le 100,000,000
 };
 
 export function PaymentSettingsPage() {
@@ -118,7 +119,7 @@ export function PaymentSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [showSecrets, setShowSecrets] = useState(false);
   const [activeTab, setActiveTab] = useState<'monime' | 'withdrawal' | 'deposit'>('monime');
-  const [testAmount, setTestAmount] = useState<number>(1000); // Default 10.00 SLE in minor units
+  const [testAmount, setTestAmount] = useState<number>(1000); // Default Le 1,000
 
   useEffect(() => {
     fetchSettings();
@@ -374,16 +375,17 @@ export function PaymentSettingsPage() {
     }
   };
 
-  const formatAmount = (amountInMinor: number): string => {
-    return (amountInMinor / 100).toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+  // SLE uses whole units (no minor units) - amounts are stored and displayed as-is
+  const formatAmount = (amount: number): string => {
+    return amount.toLocaleString('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     });
   };
 
   const parseAmount = (displayAmount: string): number => {
     const num = parseFloat(displayAmount.replace(/,/g, ''));
-    return isNaN(num) ? 0 : Math.round(num * 100);
+    return isNaN(num) ? 0 : Math.round(num);
   };
 
   if (loading) {
@@ -909,7 +911,7 @@ export function PaymentSettingsPage() {
                   <strong>Fee Formula:</strong> {withdrawalSettings.withdrawalFeePercent}% + Le {formatAmount(withdrawalSettings.withdrawalFeeFlat)}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Example: For Le 10,000 withdrawal = Le {formatAmount(10000 * withdrawalSettings.withdrawalFeePercent / 100 * 100 + withdrawalSettings.withdrawalFeeFlat)} fee
+                  Example: For Le 10,000 withdrawal = Le {formatAmount(10000 * withdrawalSettings.withdrawalFeePercent / 100 + withdrawalSettings.withdrawalFeeFlat)} fee
                 </p>
               </div>
             </Card>

@@ -151,10 +151,11 @@ class PeeapSDK {
     const idempotencyKey = this.generateIdempotencyKey();
     const currency = options.currency || this.config.currency;
 
-    // Convert amount to minor units (cents) for the API
-    const amountInMinorUnits = Math.round(options.amount * 100);
+    // SLE is a whole number currency - no conversion needed
+    // For other currencies with minor units (USD, etc), they would need * 100
+    const amount = Math.round(options.amount);
 
-    console.log('[Peeap] Creating checkout:', { amount: options.amount, currency, reference, idempotencyKey });
+    console.log('[Peeap] Creating checkout:', { amount, currency, reference, idempotencyKey });
 
     try {
       // Call Peeap API to create checkout session
@@ -165,7 +166,7 @@ class PeeapSDK {
         },
         body: JSON.stringify({
           publicKey: this.config.publicKey,
-          amount: amountInMinorUnits,
+          amount,
           currency,
           reference,
           idempotencyKey,
@@ -447,10 +448,11 @@ class PeeapSDK {
     const reference = options.reference || this.generateReference();
     const idempotencyKey = this.generateIdempotencyKey();
     const currency = options.currency || this.config.currency;
-    const amountInMinorUnits = Math.round(options.amount * 100);
+    // SLE is a whole number currency - no conversion needed
+    const amount = Math.round(options.amount);
 
     console.log('[Peeap] Processing card payment:', {
-      amount: options.amount,
+      amount,
       currency,
       reference,
       cardNumber: options.cardNumber.substring(0, 4) + '****',
@@ -468,7 +470,7 @@ class PeeapSDK {
           expiryMonth: options.expiryMonth,
           expiryYear: options.expiryYear,
           pin: options.pin,
-          amount: amountInMinorUnits,
+          amount,
           currency,
           reference,
           idempotencyKey,

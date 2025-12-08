@@ -403,7 +403,16 @@ document.getElementById('payment-form').addEventListener('submit', async functio
 // Helper functions
 function formatAmount(amount: string | number, currency: string): string {
   const amt = typeof amount === 'string' ? parseFloat(amount) : amount;
-  const formatted = (amt / 100).toFixed(2);
+
+  // SLE uses whole units (no minor units), other currencies use cents
+  const isWholeUnitCurrency = currency === 'SLE' || currency === 'SLL';
+  const displayAmount = isWholeUnitCurrency ? amt : amt / 100;
+  const decimals = isWholeUnitCurrency ? 0 : 2;
+
+  const formatted = displayAmount.toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
 
   const symbols: Record<string, string> = {
     SLE: 'Le',

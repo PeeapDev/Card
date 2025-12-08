@@ -1,15 +1,18 @@
 /**
  * Currency Utilities for Sierra Leone Leone (SLE)
  *
- * The Sierra Leone Leone (SLE) is subdivided into 100 cents.
+ * The Sierra Leone Leone (SLE) is a whole number currency.
  * ISO 4217 code: SLE (as of July 2022, replacing old SLL)
  * Symbol: Le (placed before the amount)
- * Decimal places: 2
+ * Decimal places: 0 (SLE does not use cents/minor units in practice)
  *
  * Examples:
- * - Le 1.00 = 100 cents
- * - Le 0.50 = 50 cents
- * - Le 0.01 = 1 cent (minimum)
+ * - Le 1 = 1 Leone
+ * - Le 100 = 100 Leones
+ * - Le 1000 = 1,000 Leones
+ *
+ * IMPORTANT: SLE is stored and transmitted as whole units.
+ * 1 SLE = 1 SLE (no conversion needed)
  */
 
 export const CURRENCY_CONFIG = {
@@ -17,18 +20,18 @@ export const CURRENCY_CONFIG = {
     code: 'SLE',
     symbol: 'Le',
     name: 'Sierra Leonean Leone',
-    decimalPlaces: 2,
-    minorUnit: 100, // 100 cents = 1 Leone
-    minAmount: 0.01, // 1 cent
+    decimalPlaces: 0,
+    minorUnit: 1, // No minor units - 1 SLE = 1 SLE
+    minAmount: 1, // Minimum 1 Leone
   },
-  // Old Leone (for backwards compatibility)
+  // Old Leone (for backwards compatibility) - also no minor units
   SLL: {
     code: 'SLL',
     symbol: 'Le',
     name: 'Sierra Leonean Leone (old)',
-    decimalPlaces: 2,
-    minorUnit: 100,
-    minAmount: 0.01,
+    decimalPlaces: 0,
+    minorUnit: 1,
+    minAmount: 1,
   },
   // USD for reference
   USD: {

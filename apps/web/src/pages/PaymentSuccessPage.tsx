@@ -24,15 +24,15 @@ export function PaymentSuccessPage() {
     }
   }, [countdown, navigate]);
 
-  // Format amount from minor units (cents) to major units
+  // Format amount - SLE uses whole units, no conversion needed
   const formatAmount = (value: string | null) => {
-    if (!value) return '0.00';
-    // Monime returns amount in minor units (e.g., 100 = 1.00 SLE)
-    const majorUnits = Number(value) / 100;
+    if (!value) return '0';
+    // SLE is a whole number currency - display as-is
+    const amount = Number(value);
     return new Intl.NumberFormat('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(majorUnits);
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
   };
 
   return (

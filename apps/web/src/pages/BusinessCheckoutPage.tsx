@@ -407,9 +407,9 @@ export function BusinessCheckoutPage() {
     try {
       // For Mobile Money, Card, or Bank Transfer - use Monime
       if (['mobile_money', 'card', 'bank_transfer'].includes(data.selectedMethod)) {
-        // Monime expects amounts in minor units (cents), so multiply by 100
-        // User enters 50 SLE → send 5000 to API → Monime shows 50.00 SLE
-        const paymentAmount = Math.round(parseFloat(data.amount) * 100);
+        // SLE is a whole number currency - no conversion needed
+        // User enters 50 SLE → send 50 to API → Monime shows Le 50
+        const paymentAmount = Math.round(parseFloat(data.amount));
 
         // Create checkout session via our API
         // Use production URL for local development (Vite doesn't have API routes)

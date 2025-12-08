@@ -2,10 +2,13 @@
  * Monime Payment Service - Frontend Integration
  *
  * Handles deposits and withdrawals via Monime payment gateway
+ *
+ * IMPORTANT: Sierra Leone Leone (SLE) is a whole number currency.
+ * 1 SLE = 1 SLE (no minor units/cents conversion needed)
+ * Amounts are passed directly without any conversion.
  */
 
 import { api } from '@/lib/api';
-import { toMinorUnits as toMinor, fromMinorUnits as fromMinor } from '@/lib/currency';
 
 // Types
 export type DepositMethod = 'CHECKOUT_SESSION' | 'PAYMENT_CODE' | 'MOBILE_MONEY';
@@ -14,7 +17,7 @@ export type MonimeTransactionStatus = 'pending' | 'processing' | 'completed' | '
 
 export interface MonimeDepositRequest {
   walletId: string;
-  amount: number; // In minor units (cents)
+  amount: number; // In whole units (SLE uses no minor units)
   currency?: string;
   method?: DepositMethod;
   successUrl?: string;
@@ -101,9 +104,10 @@ export interface Bank {
   payoutSupported: boolean;
 }
 
-// Re-export currency utilities for backwards compatibility
-export const toMinorUnits = toMinor;
-export const fromMinorUnits = fromMinor;
+// Currency utilities - for SLE, these are no-ops since 1 SLE = 1 SLE
+// Kept for backwards compatibility but amount is passed through unchanged
+export const toMinorUnits = (amount: number, _currency?: string): number => amount;
+export const fromMinorUnits = (amount: number, _currency?: string): number => amount;
 
 export const monimeService = {
   /**

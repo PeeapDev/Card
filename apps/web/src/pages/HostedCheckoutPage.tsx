@@ -69,9 +69,9 @@ type CheckoutStep =
   | 'error'
   | 'expired';
 
-// Currency definitions
+// Currency definitions - SLE uses no decimals (whole number currency)
 const CURRENCIES: Record<string, { symbol: string; name: string; decimals: number }> = {
-  SLE: { symbol: 'Le', name: 'Sierra Leonean Leone', decimals: 2 },
+  SLE: { symbol: 'Le', name: 'Sierra Leonean Leone', decimals: 0 },
   USD: { symbol: '$', name: 'US Dollar', decimals: 2 },
   EUR: { symbol: '€', name: 'Euro', decimals: 2 },
   GBP: { symbol: '£', name: 'British Pound', decimals: 2 },
