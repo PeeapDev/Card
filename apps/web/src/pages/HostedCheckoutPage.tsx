@@ -158,7 +158,8 @@ export function HostedCheckoutPage() {
     setStep('processing');
     try {
       // Always use the production API URL for checkout
-      const apiUrl = 'https://my.peeap.com/api';
+      const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
+      const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;
       const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -219,8 +220,9 @@ export function HostedCheckoutPage() {
     }
 
     try {
-      // Call API to get session
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://my.peeap.com/api';
+      // Call API to get session - ensure /api prefix is included
+      const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
+      const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;
       const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}`);
 
       if (!response.ok) {
@@ -366,7 +368,8 @@ export function HostedCheckoutPage() {
       }
 
       // Step 5: Process the payment via API (validates PIN server-side)
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://my.peeap.com/api';
+      const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
+      const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;
 
       const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}/card-pay`, {
         method: 'POST',
@@ -450,7 +453,8 @@ export function HostedCheckoutPage() {
     setError(null);
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://my.peeap.com/api';
+      const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
+      const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;
 
       // Call backend to create Monime checkout session
       const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}/mobile-pay`, {
