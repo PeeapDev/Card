@@ -457,7 +457,7 @@
       },
       {
         "file": "apps/web/src/lib/totp.ts",
-        "hash": "3845284029138299634"
+        "hash": "1931014522067498031"
       },
       {
         "file": "apps/web/src/main.tsx",
@@ -1121,7 +1121,7 @@
       },
       {
         "file": "package.json",
-        "hash": "16349305648110182692"
+        "hash": "15133033699902343331"
       },
       {
         "file": "packages/peeap-pay-sdk/README.md",
@@ -1248,24 +1248,12 @@
         "hash": "2810744129777334042"
       },
       {
-        "file": "public/assets/index-C_vqYwSr.js",
-        "hash": "993539640043545101"
+        "file": "public/assets/index-7JWYWdrY.css",
+        "hash": "13377723478055494462"
       },
       {
-        "file": "public/assets/index-DAbP98Wm.css",
-        "hash": "14480817643404763804"
-      },
-      {
-        "file": "public/assets/index-DYD0zGYr.js",
-        "hash": "5866464188686772647"
-      },
-      {
-        "file": "public/assets/index-DjeNvT3_.js",
-        "hash": "6686494312899059406"
-      },
-      {
-        "file": "public/assets/index-NTQsWLtg.css",
-        "hash": "5000625888985775848"
+        "file": "public/assets/index-7kjsT40h.js",
+        "hash": "6332558926224251059"
       },
       {
         "file": "public/cancel.html",
@@ -1281,7 +1269,7 @@
       },
       {
         "file": "public/index.html",
-        "hash": "2484769052026230007"
+        "hash": "11270575835395097060"
       },
       {
         "file": "public/sandbox.html",
@@ -1290,6 +1278,10 @@
       {
         "file": "public/success.html",
         "hash": "4211935544802955550"
+      },
+      {
+        "file": "public/test-checkout.html",
+        "hash": "1460849670000046415"
       },
       {
         "file": "scripts/add-second-user.ts",
@@ -1653,151 +1645,765 @@
           ]
         }
       ],
-      "common": [
+      "database": [
         {
-          "file": "libs/common/package.json",
-          "hash": "11295438894311355155"
+          "file": "libs/database/package.json",
+          "hash": "15740983219817708332"
         },
         {
-          "file": "libs/common/project.json",
-          "hash": "11218863826140587120"
+          "file": "libs/database/project.json",
+          "hash": "15554128521634249092"
         },
         {
-          "file": "libs/common/src/constants/error-codes.constant.ts",
-          "hash": "11854128310550207684"
-        },
-        {
-          "file": "libs/common/src/constants/roles.constant.ts",
-          "hash": "211732039893112694"
-        },
-        {
-          "file": "libs/common/src/decorators/current-user.decorator.ts",
-          "hash": "9709495126706516596",
+          "file": "libs/database/src/entities/account/account.entity.ts",
+          "hash": "12785563953368165461",
           "deps": [
-            "npm:@nestjs/common"
+            "npm:typeorm"
           ]
         },
         {
-          "file": "libs/common/src/decorators/idempotency-key.decorator.ts",
-          "hash": "2104192712383727554",
+          "file": "libs/database/src/entities/account/journal-entry.entity.ts",
+          "hash": "17708041085762622665",
           "deps": [
-            "npm:@nestjs/common"
+            "npm:typeorm"
           ]
         },
         {
-          "file": "libs/common/src/decorators/public.decorator.ts",
-          "hash": "11463383477620593201",
+          "file": "libs/database/src/entities/account/ledger-entry.entity.ts",
+          "hash": "17596405300853629554",
           "deps": [
-            "npm:@nestjs/common"
+            "npm:typeorm"
           ]
         },
         {
-          "file": "libs/common/src/decorators/roles.decorator.ts",
-          "hash": "2185224539362360988",
+          "file": "libs/database/src/entities/account/payment-settings.entity.ts",
+          "hash": "10133474958634154092",
           "deps": [
-            "npm:@nestjs/common"
+            "npm:typeorm"
           ]
         },
         {
-          "file": "libs/common/src/dto/api-response.dto.ts",
-          "hash": "1677066188217504637",
+          "file": "libs/database/src/entities/account/wallet.entity.ts",
+          "hash": "10489558556440796439",
           "deps": [
-            "npm:@nestjs/swagger"
+            "npm:typeorm"
           ]
         },
         {
-          "file": "libs/common/src/dto/pagination.dto.ts",
-          "hash": "18271958704609417072",
+          "file": "libs/database/src/entities/card/card-request.entity.ts",
+          "hash": "12493871604059602314",
           "deps": [
-            "npm:class-validator",
-            "npm:class-transformer",
-            "npm:@nestjs/swagger"
+            "npm:typeorm"
           ]
         },
         {
-          "file": "libs/common/src/filters/http-exception.filter.ts",
-          "hash": "14603778736774297777",
+          "file": "libs/database/src/entities/card/card-token.entity.ts",
+          "hash": "11605808373027693683",
+          "deps": [
+            "npm:typeorm"
+          ]
+        },
+        {
+          "file": "libs/database/src/entities/card/card.entity.ts",
+          "hash": "13057529798563166101",
+          "deps": [
+            "npm:typeorm"
+          ]
+        },
+        {
+          "file": "libs/database/src/entities/developer/api-key.entity.ts",
+          "hash": "14858565648354631830",
+          "deps": [
+            "npm:typeorm"
+          ]
+        },
+        {
+          "file": "libs/database/src/entities/developer/webhook-delivery.entity.ts",
+          "hash": "7615058100907715445",
+          "deps": [
+            "npm:typeorm"
+          ]
+        },
+        {
+          "file": "libs/database/src/entities/developer/webhook-endpoint.entity.ts",
+          "hash": "6581918693031220220",
+          "deps": [
+            "npm:typeorm"
+          ]
+        },
+        {
+          "file": "libs/database/src/entities/fraud/fraud-rule.entity.ts",
+          "hash": "6356780847624578137",
+          "deps": [
+            "npm:typeorm"
+          ]
+        },
+        {
+          "file": "libs/database/src/entities/fraud/risk-score.entity.ts",
+          "hash": "2197098796452745989",
+          "deps": [
+            "npm:typeorm"
+          ]
+        },
+        {
+          "file": "libs/database/src/entities/identity/kyc-application.entity.ts",
+          "hash": "1224642060965626398",
+          "deps": [
+            "npm:typeorm"
+          ]
+        },
+        {
+          "file": "libs/database/src/entities/identity/session.entity.ts",
+          "hash": "15814427707887342499",
+          "deps": [
+            "npm:typeorm"
+          ]
+        },
+        {
+          "file": "libs/database/src/entities/identity/user.entity.ts",
+          "hash": "2927383763317545244",
+          "deps": [
+            "npm:typeorm"
+          ]
+        },
+        {
+          "file": "libs/database/src/entities/merchant/checkout-session.entity.ts",
+          "hash": "16368000974468812168",
+          "deps": [
+            "npm:typeorm"
+          ]
+        },
+        {
+          "file": "libs/database/src/entities/merchant/fee-schedule.entity.ts",
+          "hash": "16039851646320331284",
+          "deps": [
+            "npm:typeorm"
+          ]
+        },
+        {
+          "file": "libs/database/src/entities/merchant/merchant.entity.ts",
+          "hash": "9627057310080187003",
+          "deps": [
+            "npm:typeorm"
+          ]
+        },
+        {
+          "file": "libs/database/src/entities/notification/notification-log.entity.ts",
+          "hash": "5250041406257107826",
+          "deps": [
+            "npm:typeorm"
+          ]
+        },
+        {
+          "file": "libs/database/src/entities/notification/notification-template.entity.ts",
+          "hash": "17729252262715017886",
+          "deps": [
+            "npm:typeorm"
+          ]
+        },
+        {
+          "file": "libs/database/src/entities/settlement/settlement-batch.entity.ts",
+          "hash": "4866088307786413231",
+          "deps": [
+            "npm:typeorm"
+          ]
+        },
+        {
+          "file": "libs/database/src/entities/settlement/settlement-item.entity.ts",
+          "hash": "6282829985554778835",
+          "deps": [
+            "npm:typeorm"
+          ]
+        },
+        {
+          "file": "libs/database/src/entities/transaction/authorization.entity.ts",
+          "hash": "13712822651572611104",
+          "deps": [
+            "npm:typeorm"
+          ]
+        },
+        {
+          "file": "libs/database/src/entities/transaction/transaction-event.entity.ts",
+          "hash": "8086678031437986649",
+          "deps": [
+            "npm:typeorm"
+          ]
+        },
+        {
+          "file": "libs/database/src/entities/transaction/transaction.entity.ts",
+          "hash": "17783176589372509633",
+          "deps": [
+            "npm:typeorm"
+          ]
+        },
+        {
+          "file": "libs/database/src/enums/account-type.enum.ts",
+          "hash": "976450110204516546"
+        },
+        {
+          "file": "libs/database/src/enums/card-status.enum.ts",
+          "hash": "10540163120336630755"
+        },
+        {
+          "file": "libs/database/src/enums/transaction-state.enum.ts",
+          "hash": "12920370833084956179"
+        },
+        {
+          "file": "libs/database/src/enums/transaction-type.enum.ts",
+          "hash": "2693299707987831741"
+        },
+        {
+          "file": "libs/database/src/index.ts",
+          "hash": "9528966146029311245"
+        },
+        {
+          "file": "libs/database/tsconfig.json",
+          "hash": "4500187279542449493"
+        },
+        {
+          "file": "libs/database/tsconfig.lib.json",
+          "hash": "16806389801416457703"
+        }
+      ],
+      "settlement-service": [
+        {
+          "file": "apps/settlement-service/project.json",
+          "hash": "4464789159697980481"
+        },
+        {
+          "file": "apps/settlement-service/src/app.module.ts",
+          "hash": "7974266383936245970",
           "deps": [
             "npm:@nestjs/common",
-            "npm:express"
+            "npm:@nestjs/config",
+            "npm:@nestjs/typeorm",
+            "npm:@nestjs/schedule",
+            "npm:@golevelup/nestjs-rabbitmq",
+            "database",
+            "events"
           ]
         },
         {
-          "file": "libs/common/src/guards/jwt-auth.guard.ts",
-          "hash": "13227170001341766014",
+          "file": "apps/settlement-service/src/main.ts",
+          "hash": "16177836609106145858",
           "deps": [
-            "npm:@nestjs/common",
             "npm:@nestjs/core",
-            "npm:@nestjs/passport"
+            "npm:@nestjs/common",
+            "npm:@nestjs/config",
+            "npm:@nestjs/swagger"
           ]
         },
         {
-          "file": "libs/common/src/guards/roles.guard.ts",
-          "hash": "1542821360377754815",
+          "file": "apps/settlement-service/src/modules/settlement/settlement.controller.ts",
+          "hash": "8933244456598475803",
           "deps": [
             "npm:@nestjs/common",
-            "npm:@nestjs/core"
+            "npm:@nestjs/swagger"
           ]
         },
         {
-          "file": "libs/common/src/index.ts",
-          "hash": "11077260260386890729"
-        },
-        {
-          "file": "libs/common/src/interceptors/logging.interceptor.ts",
-          "hash": "6279235110998128985",
+          "file": "apps/settlement-service/src/modules/settlement/settlement.module.ts",
+          "hash": "3024803050596184741",
           "deps": [
             "npm:@nestjs/common",
+            "npm:@nestjs/typeorm",
+            "npm:@nestjs/axios",
+            "database"
+          ]
+        },
+        {
+          "file": "apps/settlement-service/src/modules/settlement/settlement.service.ts",
+          "hash": "89857703493735361",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/typeorm",
+            "npm:typeorm",
+            "npm:@nestjs/axios",
+            "npm:@nestjs/config",
+            "npm:@nestjs/schedule",
+            "database",
             "npm:rxjs",
-            "npm:express"
+            "npm:crypto"
           ]
         },
         {
-          "file": "libs/common/src/interceptors/transform.interceptor.ts",
-          "hash": "7624059844207427980",
+          "file": "apps/settlement-service/tsconfig.app.json",
+          "hash": "2040167222740116510"
+        },
+        {
+          "file": "apps/settlement-service/tsconfig.json",
+          "hash": "3025378044812449119"
+        },
+        {
+          "file": "apps/settlement-service/webpack.config.js",
+          "hash": "14036322274545275972",
+          "deps": [
+            "npm:@nx/webpack"
+          ]
+        }
+      ],
+      "transaction-service": [
+        {
+          "file": "apps/transaction-service/project.json",
+          "hash": "9082256636064264200"
+        },
+        {
+          "file": "apps/transaction-service/src/app.module.ts",
+          "hash": "18074722203059633163",
           "deps": [
             "npm:@nestjs/common",
+            "npm:@nestjs/config",
+            "npm:@nestjs/typeorm",
+            "npm:@golevelup/nestjs-rabbitmq",
+            "npm:@nestjs-modules/ioredis",
+            "npm:@nestjs/axios",
+            "database",
+            "events"
+          ]
+        },
+        {
+          "file": "apps/transaction-service/src/main.ts",
+          "hash": "7813704966869812808",
+          "deps": [
+            "npm:@nestjs/core",
+            "npm:@nestjs/common",
+            "npm:@nestjs/config",
+            "npm:@nestjs/swagger"
+          ]
+        },
+        {
+          "file": "apps/transaction-service/src/modules/authorizations/authorizations.controller.ts",
+          "hash": "16931640181336195742",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/swagger"
+          ]
+        },
+        {
+          "file": "apps/transaction-service/src/modules/authorizations/authorizations.module.ts",
+          "hash": "14418823405469885980",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/typeorm",
+            "database"
+          ]
+        },
+        {
+          "file": "apps/transaction-service/src/modules/authorizations/authorizations.service.ts",
+          "hash": "14718914417840082894",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/typeorm",
+            "npm:typeorm",
+            "database",
+            "npm:@nestjs/schedule"
+          ]
+        },
+        {
+          "file": "apps/transaction-service/src/modules/health/health.controller.ts",
+          "hash": "4060654631367427531",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/swagger",
+            "npm:@nestjs/terminus"
+          ]
+        },
+        {
+          "file": "apps/transaction-service/src/modules/health/health.module.ts",
+          "hash": "3842842342661664588",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/terminus"
+          ]
+        },
+        {
+          "file": "apps/transaction-service/src/modules/service-client/account-service.client.ts",
+          "hash": "3070927763204510074",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/axios",
+            "npm:@nestjs/config",
             "npm:rxjs"
           ]
         },
         {
-          "file": "libs/common/src/interfaces/jwt-payload.interface.ts",
-          "hash": "17839346679753801072"
-        },
-        {
-          "file": "libs/common/src/interfaces/request-user.interface.ts",
-          "hash": "5019266318898681817"
-        },
-        {
-          "file": "libs/common/src/utils/encryption.util.ts",
-          "hash": "9059795259519322490",
+          "file": "apps/transaction-service/src/modules/service-client/card-service.client.ts",
+          "hash": "16689207928742645828",
           "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/axios",
+            "npm:@nestjs/config",
+            "npm:rxjs"
+          ]
+        },
+        {
+          "file": "apps/transaction-service/src/modules/service-client/fraud-service.client.ts",
+          "hash": "18207930684824633059",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/axios",
+            "npm:@nestjs/config",
+            "npm:rxjs"
+          ]
+        },
+        {
+          "file": "apps/transaction-service/src/modules/service-client/service-client.module.ts",
+          "hash": "5025269391791283005",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/axios",
+            "npm:@nestjs/config"
+          ]
+        },
+        {
+          "file": "apps/transaction-service/src/modules/transactions/services/event-sourcing.service.ts",
+          "hash": "6294395568012961736",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/typeorm",
+            "npm:typeorm",
+            "database"
+          ]
+        },
+        {
+          "file": "apps/transaction-service/src/modules/transactions/state-machine/transaction-state-machine.ts",
+          "hash": "11523787177828706014",
+          "deps": [
+            "npm:@nestjs/common",
+            "database"
+          ]
+        },
+        {
+          "file": "apps/transaction-service/src/modules/transactions/transactions.controller.ts",
+          "hash": "10975623278193565403",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/swagger",
+            "database"
+          ]
+        },
+        {
+          "file": "apps/transaction-service/src/modules/transactions/transactions.module.ts",
+          "hash": "13137882438781803524",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/typeorm",
+            "npm:@nestjs/axios",
+            "database"
+          ]
+        },
+        {
+          "file": "apps/transaction-service/src/modules/transactions/transactions.service.ts",
+          "hash": "1615725131273296351",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/typeorm",
+            "npm:typeorm",
+            "database",
+            "common"
+          ]
+        },
+        {
+          "file": "apps/transaction-service/tsconfig.app.json",
+          "hash": "2040167222740116510"
+        },
+        {
+          "file": "apps/transaction-service/tsconfig.json",
+          "hash": "3025378044812449119"
+        },
+        {
+          "file": "apps/transaction-service/webpack.config.js",
+          "hash": "14036322274545275972",
+          "deps": [
+            "npm:@nx/webpack"
+          ]
+        }
+      ],
+      "merchant-service": [
+        {
+          "file": "apps/merchant-service/project.json",
+          "hash": "17005642970739599295"
+        },
+        {
+          "file": "apps/merchant-service/src/app.module.ts",
+          "hash": "18390488341522156621",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/config",
+            "npm:@nestjs/typeorm",
+            "npm:@golevelup/nestjs-rabbitmq",
+            "database",
+            "events"
+          ]
+        },
+        {
+          "file": "apps/merchant-service/src/main.ts",
+          "hash": "15294683445608864224",
+          "deps": [
+            "npm:@nestjs/core",
+            "npm:@nestjs/common",
+            "npm:@nestjs/config",
+            "npm:@nestjs/swagger"
+          ]
+        },
+        {
+          "file": "apps/merchant-service/src/modules/checkout/checkout.controller.ts",
+          "hash": "10625025829917170932",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/swagger"
+          ]
+        },
+        {
+          "file": "apps/merchant-service/src/modules/checkout/checkout.module.ts",
+          "hash": "13159436938355336187",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/typeorm",
+            "npm:@nestjs/axios",
+            "database"
+          ]
+        },
+        {
+          "file": "apps/merchant-service/src/modules/checkout/checkout.service.ts",
+          "hash": "1476013732699540080",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/typeorm",
+            "npm:typeorm",
+            "npm:@nestjs/axios",
+            "npm:@nestjs/config",
+            "database",
+            "npm:rxjs",
             "npm:crypto"
           ]
         },
         {
-          "file": "libs/common/src/utils/hash.util.ts",
-          "hash": "9089300986376433199",
+          "file": "apps/merchant-service/src/modules/merchants/merchants.controller.ts",
+          "hash": "12577689057763631118",
           "deps": [
-            "npm:argon2",
-            "npm:crypto"
+            "npm:@nestjs/common",
+            "npm:@nestjs/swagger"
           ]
         },
         {
-          "file": "libs/common/src/utils/id-generator.util.ts",
-          "hash": "12441107907071308248",
+          "file": "apps/merchant-service/src/modules/merchants/merchants.module.ts",
+          "hash": "7682888848485943622",
           "deps": [
-            "npm:uuid",
-            "npm:crypto"
+            "npm:@nestjs/common",
+            "npm:@nestjs/typeorm",
+            "database"
           ]
         },
         {
-          "file": "libs/common/tsconfig.json",
+          "file": "apps/merchant-service/src/modules/merchants/merchants.service.ts",
+          "hash": "5773699211162982068",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/typeorm",
+            "npm:typeorm",
+            "database"
+          ]
+        },
+        {
+          "file": "apps/merchant-service/tsconfig.app.json",
+          "hash": "2040167222740116510"
+        },
+        {
+          "file": "apps/merchant-service/tsconfig.json",
+          "hash": "3025378044812449119"
+        },
+        {
+          "file": "apps/merchant-service/webpack.config.js",
+          "hash": "14036322274545275972",
+          "deps": [
+            "npm:@nx/webpack"
+          ]
+        }
+      ],
+      "events": [
+        {
+          "file": "libs/events/package.json",
+          "hash": "15556706873000181216"
+        },
+        {
+          "file": "libs/events/project.json",
+          "hash": "9529411578604652411"
+        },
+        {
+          "file": "libs/events/src/constants/exchanges.ts",
+          "hash": "5201953014820394306"
+        },
+        {
+          "file": "libs/events/src/constants/queues.ts",
+          "hash": "1686727221446029384"
+        },
+        {
+          "file": "libs/events/src/constants/routing-keys.ts",
+          "hash": "1666061842457946543"
+        },
+        {
+          "file": "libs/events/src/consumers/base-consumer.ts",
+          "hash": "14924456706941741997",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:amqplib"
+          ]
+        },
+        {
+          "file": "libs/events/src/index.ts",
+          "hash": "6250081638281546825"
+        },
+        {
+          "file": "libs/events/src/publishers/base-publisher.ts",
+          "hash": "16928061836285454627",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@golevelup/nestjs-rabbitmq"
+          ]
+        },
+        {
+          "file": "libs/events/src/types/card-events.ts",
+          "hash": "3678245392890121795"
+        },
+        {
+          "file": "libs/events/src/types/event-envelope.ts",
+          "hash": "5943708728859489465"
+        },
+        {
+          "file": "libs/events/src/types/identity-events.ts",
+          "hash": "9275451524838301226"
+        },
+        {
+          "file": "libs/events/src/types/merchant-events.ts",
+          "hash": "4564120023433354105"
+        },
+        {
+          "file": "libs/events/src/types/notification-events.ts",
+          "hash": "454387801293768309",
+          "deps": [
+            "database"
+          ]
+        },
+        {
+          "file": "libs/events/src/types/payment-events.ts",
+          "hash": "7407688908941968999",
+          "deps": [
+            "database"
+          ]
+        },
+        {
+          "file": "libs/events/tsconfig.json",
           "hash": "4500187279542449493"
         },
         {
-          "file": "libs/common/tsconfig.lib.json",
+          "file": "libs/events/tsconfig.lib.json",
           "hash": "16806389801416457703"
+        }
+      ],
+      "developer-service": [
+        {
+          "file": "apps/developer-service/project.json",
+          "hash": "17716766605417432752"
+        },
+        {
+          "file": "apps/developer-service/src/app.module.ts",
+          "hash": "14656220845327850691",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/config",
+            "npm:@nestjs/typeorm",
+            "npm:@golevelup/nestjs-rabbitmq",
+            "database",
+            "events"
+          ]
+        },
+        {
+          "file": "apps/developer-service/src/main.ts",
+          "hash": "8977940486933295454",
+          "deps": [
+            "npm:@nestjs/core",
+            "npm:@nestjs/common",
+            "npm:@nestjs/config",
+            "npm:@nestjs/swagger"
+          ]
+        },
+        {
+          "file": "apps/developer-service/src/modules/api-keys/api-keys.controller.ts",
+          "hash": "11119669233657014345",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/swagger",
+            "database",
+            "common"
+          ]
+        },
+        {
+          "file": "apps/developer-service/src/modules/api-keys/api-keys.module.ts",
+          "hash": "3363370644105745146",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/typeorm",
+            "database"
+          ]
+        },
+        {
+          "file": "apps/developer-service/src/modules/api-keys/api-keys.service.ts",
+          "hash": "18108515236957041522",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/typeorm",
+            "npm:typeorm",
+            "database",
+            "common"
+          ]
+        },
+        {
+          "file": "apps/developer-service/src/modules/webhooks/webhooks.controller.ts",
+          "hash": "7571582129958754682",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/swagger"
+          ]
+        },
+        {
+          "file": "apps/developer-service/src/modules/webhooks/webhooks.module.ts",
+          "hash": "15599990800597283937",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/typeorm",
+            "npm:@nestjs/axios",
+            "database"
+          ]
+        },
+        {
+          "file": "apps/developer-service/src/modules/webhooks/webhooks.service.ts",
+          "hash": "14072727438228383136",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/typeorm",
+            "npm:typeorm",
+            "npm:@nestjs/axios",
+            "database",
+            "common",
+            "npm:rxjs",
+            "npm:crypto"
+          ]
+        },
+        {
+          "file": "apps/developer-service/tsconfig.app.json",
+          "hash": "2040167222740116510"
+        },
+        {
+          "file": "apps/developer-service/tsconfig.json",
+          "hash": "3025378044812449119"
+        },
+        {
+          "file": "apps/developer-service/webpack.config.js",
+          "hash": "14036322274545275972",
+          "deps": [
+            "npm:@nx/webpack"
+          ]
         }
       ],
       "account-service": [
@@ -2453,26 +3059,172 @@
           ]
         }
       ],
-      "merchant-service": [
+      "common": [
         {
-          "file": "apps/merchant-service/project.json",
-          "hash": "17005642970739599295"
+          "file": "libs/common/package.json",
+          "hash": "11295438894311355155"
         },
         {
-          "file": "apps/merchant-service/src/app.module.ts",
-          "hash": "18390488341522156621",
+          "file": "libs/common/project.json",
+          "hash": "11218863826140587120"
+        },
+        {
+          "file": "libs/common/src/constants/error-codes.constant.ts",
+          "hash": "11854128310550207684"
+        },
+        {
+          "file": "libs/common/src/constants/roles.constant.ts",
+          "hash": "211732039893112694"
+        },
+        {
+          "file": "libs/common/src/decorators/current-user.decorator.ts",
+          "hash": "9709495126706516596",
+          "deps": [
+            "npm:@nestjs/common"
+          ]
+        },
+        {
+          "file": "libs/common/src/decorators/idempotency-key.decorator.ts",
+          "hash": "2104192712383727554",
+          "deps": [
+            "npm:@nestjs/common"
+          ]
+        },
+        {
+          "file": "libs/common/src/decorators/public.decorator.ts",
+          "hash": "11463383477620593201",
+          "deps": [
+            "npm:@nestjs/common"
+          ]
+        },
+        {
+          "file": "libs/common/src/decorators/roles.decorator.ts",
+          "hash": "2185224539362360988",
+          "deps": [
+            "npm:@nestjs/common"
+          ]
+        },
+        {
+          "file": "libs/common/src/dto/api-response.dto.ts",
+          "hash": "1677066188217504637",
+          "deps": [
+            "npm:@nestjs/swagger"
+          ]
+        },
+        {
+          "file": "libs/common/src/dto/pagination.dto.ts",
+          "hash": "18271958704609417072",
+          "deps": [
+            "npm:class-validator",
+            "npm:class-transformer",
+            "npm:@nestjs/swagger"
+          ]
+        },
+        {
+          "file": "libs/common/src/filters/http-exception.filter.ts",
+          "hash": "14603778736774297777",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:express"
+          ]
+        },
+        {
+          "file": "libs/common/src/guards/jwt-auth.guard.ts",
+          "hash": "13227170001341766014",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/core",
+            "npm:@nestjs/passport"
+          ]
+        },
+        {
+          "file": "libs/common/src/guards/roles.guard.ts",
+          "hash": "1542821360377754815",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/core"
+          ]
+        },
+        {
+          "file": "libs/common/src/index.ts",
+          "hash": "11077260260386890729"
+        },
+        {
+          "file": "libs/common/src/interceptors/logging.interceptor.ts",
+          "hash": "6279235110998128985",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:rxjs",
+            "npm:express"
+          ]
+        },
+        {
+          "file": "libs/common/src/interceptors/transform.interceptor.ts",
+          "hash": "7624059844207427980",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:rxjs"
+          ]
+        },
+        {
+          "file": "libs/common/src/interfaces/jwt-payload.interface.ts",
+          "hash": "17839346679753801072"
+        },
+        {
+          "file": "libs/common/src/interfaces/request-user.interface.ts",
+          "hash": "5019266318898681817"
+        },
+        {
+          "file": "libs/common/src/utils/encryption.util.ts",
+          "hash": "9059795259519322490",
+          "deps": [
+            "npm:crypto"
+          ]
+        },
+        {
+          "file": "libs/common/src/utils/hash.util.ts",
+          "hash": "9089300986376433199",
+          "deps": [
+            "npm:argon2",
+            "npm:crypto"
+          ]
+        },
+        {
+          "file": "libs/common/src/utils/id-generator.util.ts",
+          "hash": "12441107907071308248",
+          "deps": [
+            "npm:uuid",
+            "npm:crypto"
+          ]
+        },
+        {
+          "file": "libs/common/tsconfig.json",
+          "hash": "4500187279542449493"
+        },
+        {
+          "file": "libs/common/tsconfig.lib.json",
+          "hash": "16806389801416457703"
+        }
+      ],
+      "fraud-service": [
+        {
+          "file": "apps/fraud-service/project.json",
+          "hash": "3168122302749846344"
+        },
+        {
+          "file": "apps/fraud-service/src/app.module.ts",
+          "hash": "14458450013677455875",
           "deps": [
             "npm:@nestjs/common",
             "npm:@nestjs/config",
             "npm:@nestjs/typeorm",
-            "npm:@golevelup/nestjs-rabbitmq",
-            "database",
-            "events"
+            "npm:@nestjs-modules/ioredis",
+            "database"
           ]
         },
         {
-          "file": "apps/merchant-service/src/main.ts",
-          "hash": "15294683445608864224",
+          "file": "apps/fraud-service/src/main.ts",
+          "hash": "8797068816134492425",
           "deps": [
             "npm:@nestjs/core",
             "npm:@nestjs/common",
@@ -2481,48 +3233,16 @@
           ]
         },
         {
-          "file": "apps/merchant-service/src/modules/checkout/checkout.controller.ts",
-          "hash": "10625025829917170932",
+          "file": "apps/fraud-service/src/modules/fraud/fraud.controller.ts",
+          "hash": "6507567898999839333",
           "deps": [
             "npm:@nestjs/common",
             "npm:@nestjs/swagger"
           ]
         },
         {
-          "file": "apps/merchant-service/src/modules/checkout/checkout.module.ts",
-          "hash": "13159436938355336187",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/typeorm",
-            "npm:@nestjs/axios",
-            "database"
-          ]
-        },
-        {
-          "file": "apps/merchant-service/src/modules/checkout/checkout.service.ts",
-          "hash": "1476013732699540080",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/typeorm",
-            "npm:typeorm",
-            "npm:@nestjs/axios",
-            "npm:@nestjs/config",
-            "database",
-            "npm:rxjs",
-            "npm:crypto"
-          ]
-        },
-        {
-          "file": "apps/merchant-service/src/modules/merchants/merchants.controller.ts",
-          "hash": "12577689057763631118",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/swagger"
-          ]
-        },
-        {
-          "file": "apps/merchant-service/src/modules/merchants/merchants.module.ts",
-          "hash": "7682888848485943622",
+          "file": "apps/fraud-service/src/modules/fraud/fraud.module.ts",
+          "hash": "1009242047088037594",
           "deps": [
             "npm:@nestjs/common",
             "npm:@nestjs/typeorm",
@@ -2530,8 +3250,8 @@
           ]
         },
         {
-          "file": "apps/merchant-service/src/modules/merchants/merchants.service.ts",
-          "hash": "5773699211162982068",
+          "file": "apps/fraud-service/src/modules/fraud/fraud.service.ts",
+          "hash": "11416192399866030985",
           "deps": [
             "npm:@nestjs/common",
             "npm:@nestjs/typeorm",
@@ -2540,99 +3260,169 @@
           ]
         },
         {
-          "file": "apps/merchant-service/tsconfig.app.json",
+          "file": "apps/fraud-service/src/modules/fraud/services/velocity.service.ts",
+          "hash": "17045215229574110541",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs-modules/ioredis",
+            "npm:ioredis"
+          ]
+        },
+        {
+          "file": "apps/fraud-service/src/modules/rules/rules.controller.ts",
+          "hash": "3016555673709835457",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/swagger"
+          ]
+        },
+        {
+          "file": "apps/fraud-service/src/modules/rules/rules.module.ts",
+          "hash": "5986836691008470273",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/typeorm",
+            "database"
+          ]
+        },
+        {
+          "file": "apps/fraud-service/src/modules/rules/rules.service.ts",
+          "hash": "14371327926497945677",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/typeorm",
+            "npm:typeorm",
+            "database"
+          ]
+        },
+        {
+          "file": "apps/fraud-service/tsconfig.app.json",
           "hash": "2040167222740116510"
         },
         {
-          "file": "apps/merchant-service/tsconfig.json",
+          "file": "apps/fraud-service/tsconfig.json",
           "hash": "3025378044812449119"
         },
         {
-          "file": "apps/merchant-service/webpack.config.js",
+          "file": "apps/fraud-service/webpack.config.js",
           "hash": "14036322274545275972",
           "deps": [
             "npm:@nx/webpack"
           ]
         }
       ],
-      "events": [
+      "card-service": [
         {
-          "file": "libs/events/package.json",
-          "hash": "15556706873000181216"
+          "file": "apps/card-service/project.json",
+          "hash": "1224188082705659306"
         },
         {
-          "file": "libs/events/project.json",
-          "hash": "9529411578604652411"
-        },
-        {
-          "file": "libs/events/src/constants/exchanges.ts",
-          "hash": "5201953014820394306"
-        },
-        {
-          "file": "libs/events/src/constants/queues.ts",
-          "hash": "1686727221446029384"
-        },
-        {
-          "file": "libs/events/src/constants/routing-keys.ts",
-          "hash": "1666061842457946543"
-        },
-        {
-          "file": "libs/events/src/consumers/base-consumer.ts",
-          "hash": "14924456706941741997",
+          "file": "apps/card-service/src/app.module.ts",
+          "hash": "2228007015185423524",
           "deps": [
             "npm:@nestjs/common",
-            "npm:amqplib"
+            "npm:@nestjs/config",
+            "npm:@nestjs/typeorm",
+            "npm:@golevelup/nestjs-rabbitmq",
+            "npm:@nestjs-modules/ioredis",
+            "database",
+            "events"
           ]
         },
         {
-          "file": "libs/events/src/index.ts",
-          "hash": "6250081638281546825"
-        },
-        {
-          "file": "libs/events/src/publishers/base-publisher.ts",
-          "hash": "16928061836285454627",
+          "file": "apps/card-service/src/main.ts",
+          "hash": "4360125797529326656",
           "deps": [
+            "npm:@nestjs/core",
             "npm:@nestjs/common",
-            "npm:@golevelup/nestjs-rabbitmq"
+            "npm:@nestjs/config",
+            "npm:@nestjs/swagger"
           ]
         },
         {
-          "file": "libs/events/src/types/card-events.ts",
-          "hash": "3678245392890121795"
-        },
-        {
-          "file": "libs/events/src/types/event-envelope.ts",
-          "hash": "5943708728859489465"
-        },
-        {
-          "file": "libs/events/src/types/identity-events.ts",
-          "hash": "9275451524838301226"
-        },
-        {
-          "file": "libs/events/src/types/merchant-events.ts",
-          "hash": "4564120023433354105"
-        },
-        {
-          "file": "libs/events/src/types/notification-events.ts",
-          "hash": "454387801293768309",
+          "file": "apps/card-service/src/modules/cards/cards.controller.ts",
+          "hash": "14117501450944624767",
           "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/swagger",
             "database"
           ]
         },
         {
-          "file": "libs/events/src/types/payment-events.ts",
-          "hash": "7407688908941968999",
+          "file": "apps/card-service/src/modules/cards/cards.module.ts",
+          "hash": "11660641502413868766",
           "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/typeorm",
             "database"
           ]
         },
         {
-          "file": "libs/events/tsconfig.json",
-          "hash": "4500187279542449493"
+          "file": "apps/card-service/src/modules/cards/cards.service.ts",
+          "hash": "2524568901613617663",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/typeorm",
+            "npm:typeorm",
+            "database",
+            "common",
+            "npm:crypto"
+          ]
         },
         {
-          "file": "libs/events/tsconfig.lib.json",
-          "hash": "16806389801416457703"
+          "file": "apps/card-service/src/modules/health/health.controller.ts",
+          "hash": "4060654631367427531",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/swagger",
+            "npm:@nestjs/terminus"
+          ]
+        },
+        {
+          "file": "apps/card-service/src/modules/health/health.module.ts",
+          "hash": "3842842342661664588",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/terminus"
+          ]
+        },
+        {
+          "file": "apps/card-service/src/modules/token-vault/token-vault.module.ts",
+          "hash": "1724476743921333680",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/typeorm",
+            "npm:@nestjs/config",
+            "database"
+          ]
+        },
+        {
+          "file": "apps/card-service/src/modules/token-vault/token-vault.service.ts",
+          "hash": "18339889122921867230",
+          "deps": [
+            "npm:@nestjs/common",
+            "npm:@nestjs/typeorm",
+            "npm:typeorm",
+            "npm:@nestjs/config",
+            "database",
+            "common",
+            "npm:crypto"
+          ]
+        },
+        {
+          "file": "apps/card-service/tsconfig.app.json",
+          "hash": "2040167222740116510"
+        },
+        {
+          "file": "apps/card-service/tsconfig.json",
+          "hash": "3025378044812449119"
+        },
+        {
+          "file": "apps/card-service/webpack.config.js",
+          "hash": "14036322274545275972",
+          "deps": [
+            "npm:@nx/webpack"
+          ]
         }
       ],
       "identity-service": [
@@ -2937,804 +3727,6 @@
           "deps": [
             "npm:@nx/webpack"
           ]
-        }
-      ],
-      "transaction-service": [
-        {
-          "file": "apps/transaction-service/project.json",
-          "hash": "9082256636064264200"
-        },
-        {
-          "file": "apps/transaction-service/src/app.module.ts",
-          "hash": "18074722203059633163",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/config",
-            "npm:@nestjs/typeorm",
-            "npm:@golevelup/nestjs-rabbitmq",
-            "npm:@nestjs-modules/ioredis",
-            "npm:@nestjs/axios",
-            "database",
-            "events"
-          ]
-        },
-        {
-          "file": "apps/transaction-service/src/main.ts",
-          "hash": "7813704966869812808",
-          "deps": [
-            "npm:@nestjs/core",
-            "npm:@nestjs/common",
-            "npm:@nestjs/config",
-            "npm:@nestjs/swagger"
-          ]
-        },
-        {
-          "file": "apps/transaction-service/src/modules/authorizations/authorizations.controller.ts",
-          "hash": "16931640181336195742",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/swagger"
-          ]
-        },
-        {
-          "file": "apps/transaction-service/src/modules/authorizations/authorizations.module.ts",
-          "hash": "14418823405469885980",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/typeorm",
-            "database"
-          ]
-        },
-        {
-          "file": "apps/transaction-service/src/modules/authorizations/authorizations.service.ts",
-          "hash": "14718914417840082894",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/typeorm",
-            "npm:typeorm",
-            "database",
-            "npm:@nestjs/schedule"
-          ]
-        },
-        {
-          "file": "apps/transaction-service/src/modules/health/health.controller.ts",
-          "hash": "4060654631367427531",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/swagger",
-            "npm:@nestjs/terminus"
-          ]
-        },
-        {
-          "file": "apps/transaction-service/src/modules/health/health.module.ts",
-          "hash": "3842842342661664588",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/terminus"
-          ]
-        },
-        {
-          "file": "apps/transaction-service/src/modules/service-client/account-service.client.ts",
-          "hash": "3070927763204510074",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/axios",
-            "npm:@nestjs/config",
-            "npm:rxjs"
-          ]
-        },
-        {
-          "file": "apps/transaction-service/src/modules/service-client/card-service.client.ts",
-          "hash": "16689207928742645828",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/axios",
-            "npm:@nestjs/config",
-            "npm:rxjs"
-          ]
-        },
-        {
-          "file": "apps/transaction-service/src/modules/service-client/fraud-service.client.ts",
-          "hash": "18207930684824633059",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/axios",
-            "npm:@nestjs/config",
-            "npm:rxjs"
-          ]
-        },
-        {
-          "file": "apps/transaction-service/src/modules/service-client/service-client.module.ts",
-          "hash": "5025269391791283005",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/axios",
-            "npm:@nestjs/config"
-          ]
-        },
-        {
-          "file": "apps/transaction-service/src/modules/transactions/services/event-sourcing.service.ts",
-          "hash": "6294395568012961736",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/typeorm",
-            "npm:typeorm",
-            "database"
-          ]
-        },
-        {
-          "file": "apps/transaction-service/src/modules/transactions/state-machine/transaction-state-machine.ts",
-          "hash": "11523787177828706014",
-          "deps": [
-            "npm:@nestjs/common",
-            "database"
-          ]
-        },
-        {
-          "file": "apps/transaction-service/src/modules/transactions/transactions.controller.ts",
-          "hash": "10975623278193565403",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/swagger",
-            "database"
-          ]
-        },
-        {
-          "file": "apps/transaction-service/src/modules/transactions/transactions.module.ts",
-          "hash": "13137882438781803524",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/typeorm",
-            "npm:@nestjs/axios",
-            "database"
-          ]
-        },
-        {
-          "file": "apps/transaction-service/src/modules/transactions/transactions.service.ts",
-          "hash": "1615725131273296351",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/typeorm",
-            "npm:typeorm",
-            "database",
-            "common"
-          ]
-        },
-        {
-          "file": "apps/transaction-service/tsconfig.app.json",
-          "hash": "2040167222740116510"
-        },
-        {
-          "file": "apps/transaction-service/tsconfig.json",
-          "hash": "3025378044812449119"
-        },
-        {
-          "file": "apps/transaction-service/webpack.config.js",
-          "hash": "14036322274545275972",
-          "deps": [
-            "npm:@nx/webpack"
-          ]
-        }
-      ],
-      "developer-service": [
-        {
-          "file": "apps/developer-service/project.json",
-          "hash": "17716766605417432752"
-        },
-        {
-          "file": "apps/developer-service/src/app.module.ts",
-          "hash": "14656220845327850691",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/config",
-            "npm:@nestjs/typeorm",
-            "npm:@golevelup/nestjs-rabbitmq",
-            "database",
-            "events"
-          ]
-        },
-        {
-          "file": "apps/developer-service/src/main.ts",
-          "hash": "8977940486933295454",
-          "deps": [
-            "npm:@nestjs/core",
-            "npm:@nestjs/common",
-            "npm:@nestjs/config",
-            "npm:@nestjs/swagger"
-          ]
-        },
-        {
-          "file": "apps/developer-service/src/modules/api-keys/api-keys.controller.ts",
-          "hash": "11119669233657014345",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/swagger",
-            "database",
-            "common"
-          ]
-        },
-        {
-          "file": "apps/developer-service/src/modules/api-keys/api-keys.module.ts",
-          "hash": "3363370644105745146",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/typeorm",
-            "database"
-          ]
-        },
-        {
-          "file": "apps/developer-service/src/modules/api-keys/api-keys.service.ts",
-          "hash": "18108515236957041522",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/typeorm",
-            "npm:typeorm",
-            "database",
-            "common"
-          ]
-        },
-        {
-          "file": "apps/developer-service/src/modules/webhooks/webhooks.controller.ts",
-          "hash": "7571582129958754682",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/swagger"
-          ]
-        },
-        {
-          "file": "apps/developer-service/src/modules/webhooks/webhooks.module.ts",
-          "hash": "15599990800597283937",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/typeorm",
-            "npm:@nestjs/axios",
-            "database"
-          ]
-        },
-        {
-          "file": "apps/developer-service/src/modules/webhooks/webhooks.service.ts",
-          "hash": "14072727438228383136",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/typeorm",
-            "npm:typeorm",
-            "npm:@nestjs/axios",
-            "database",
-            "common",
-            "npm:rxjs",
-            "npm:crypto"
-          ]
-        },
-        {
-          "file": "apps/developer-service/tsconfig.app.json",
-          "hash": "2040167222740116510"
-        },
-        {
-          "file": "apps/developer-service/tsconfig.json",
-          "hash": "3025378044812449119"
-        },
-        {
-          "file": "apps/developer-service/webpack.config.js",
-          "hash": "14036322274545275972",
-          "deps": [
-            "npm:@nx/webpack"
-          ]
-        }
-      ],
-      "settlement-service": [
-        {
-          "file": "apps/settlement-service/project.json",
-          "hash": "4464789159697980481"
-        },
-        {
-          "file": "apps/settlement-service/src/app.module.ts",
-          "hash": "7974266383936245970",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/config",
-            "npm:@nestjs/typeorm",
-            "npm:@nestjs/schedule",
-            "npm:@golevelup/nestjs-rabbitmq",
-            "database",
-            "events"
-          ]
-        },
-        {
-          "file": "apps/settlement-service/src/main.ts",
-          "hash": "16177836609106145858",
-          "deps": [
-            "npm:@nestjs/core",
-            "npm:@nestjs/common",
-            "npm:@nestjs/config",
-            "npm:@nestjs/swagger"
-          ]
-        },
-        {
-          "file": "apps/settlement-service/src/modules/settlement/settlement.controller.ts",
-          "hash": "8933244456598475803",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/swagger"
-          ]
-        },
-        {
-          "file": "apps/settlement-service/src/modules/settlement/settlement.module.ts",
-          "hash": "3024803050596184741",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/typeorm",
-            "npm:@nestjs/axios",
-            "database"
-          ]
-        },
-        {
-          "file": "apps/settlement-service/src/modules/settlement/settlement.service.ts",
-          "hash": "89857703493735361",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/typeorm",
-            "npm:typeorm",
-            "npm:@nestjs/axios",
-            "npm:@nestjs/config",
-            "npm:@nestjs/schedule",
-            "database",
-            "npm:rxjs",
-            "npm:crypto"
-          ]
-        },
-        {
-          "file": "apps/settlement-service/tsconfig.app.json",
-          "hash": "2040167222740116510"
-        },
-        {
-          "file": "apps/settlement-service/tsconfig.json",
-          "hash": "3025378044812449119"
-        },
-        {
-          "file": "apps/settlement-service/webpack.config.js",
-          "hash": "14036322274545275972",
-          "deps": [
-            "npm:@nx/webpack"
-          ]
-        }
-      ],
-      "card-service": [
-        {
-          "file": "apps/card-service/project.json",
-          "hash": "1224188082705659306"
-        },
-        {
-          "file": "apps/card-service/src/app.module.ts",
-          "hash": "2228007015185423524",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/config",
-            "npm:@nestjs/typeorm",
-            "npm:@golevelup/nestjs-rabbitmq",
-            "npm:@nestjs-modules/ioredis",
-            "database",
-            "events"
-          ]
-        },
-        {
-          "file": "apps/card-service/src/main.ts",
-          "hash": "4360125797529326656",
-          "deps": [
-            "npm:@nestjs/core",
-            "npm:@nestjs/common",
-            "npm:@nestjs/config",
-            "npm:@nestjs/swagger"
-          ]
-        },
-        {
-          "file": "apps/card-service/src/modules/cards/cards.controller.ts",
-          "hash": "14117501450944624767",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/swagger",
-            "database"
-          ]
-        },
-        {
-          "file": "apps/card-service/src/modules/cards/cards.module.ts",
-          "hash": "11660641502413868766",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/typeorm",
-            "database"
-          ]
-        },
-        {
-          "file": "apps/card-service/src/modules/cards/cards.service.ts",
-          "hash": "2524568901613617663",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/typeorm",
-            "npm:typeorm",
-            "database",
-            "common",
-            "npm:crypto"
-          ]
-        },
-        {
-          "file": "apps/card-service/src/modules/health/health.controller.ts",
-          "hash": "4060654631367427531",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/swagger",
-            "npm:@nestjs/terminus"
-          ]
-        },
-        {
-          "file": "apps/card-service/src/modules/health/health.module.ts",
-          "hash": "3842842342661664588",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/terminus"
-          ]
-        },
-        {
-          "file": "apps/card-service/src/modules/token-vault/token-vault.module.ts",
-          "hash": "1724476743921333680",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/typeorm",
-            "npm:@nestjs/config",
-            "database"
-          ]
-        },
-        {
-          "file": "apps/card-service/src/modules/token-vault/token-vault.service.ts",
-          "hash": "18339889122921867230",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/typeorm",
-            "npm:typeorm",
-            "npm:@nestjs/config",
-            "database",
-            "common",
-            "npm:crypto"
-          ]
-        },
-        {
-          "file": "apps/card-service/tsconfig.app.json",
-          "hash": "2040167222740116510"
-        },
-        {
-          "file": "apps/card-service/tsconfig.json",
-          "hash": "3025378044812449119"
-        },
-        {
-          "file": "apps/card-service/webpack.config.js",
-          "hash": "14036322274545275972",
-          "deps": [
-            "npm:@nx/webpack"
-          ]
-        }
-      ],
-      "fraud-service": [
-        {
-          "file": "apps/fraud-service/project.json",
-          "hash": "3168122302749846344"
-        },
-        {
-          "file": "apps/fraud-service/src/app.module.ts",
-          "hash": "14458450013677455875",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/config",
-            "npm:@nestjs/typeorm",
-            "npm:@nestjs-modules/ioredis",
-            "database"
-          ]
-        },
-        {
-          "file": "apps/fraud-service/src/main.ts",
-          "hash": "8797068816134492425",
-          "deps": [
-            "npm:@nestjs/core",
-            "npm:@nestjs/common",
-            "npm:@nestjs/config",
-            "npm:@nestjs/swagger"
-          ]
-        },
-        {
-          "file": "apps/fraud-service/src/modules/fraud/fraud.controller.ts",
-          "hash": "6507567898999839333",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/swagger"
-          ]
-        },
-        {
-          "file": "apps/fraud-service/src/modules/fraud/fraud.module.ts",
-          "hash": "1009242047088037594",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/typeorm",
-            "database"
-          ]
-        },
-        {
-          "file": "apps/fraud-service/src/modules/fraud/fraud.service.ts",
-          "hash": "11416192399866030985",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/typeorm",
-            "npm:typeorm",
-            "database"
-          ]
-        },
-        {
-          "file": "apps/fraud-service/src/modules/fraud/services/velocity.service.ts",
-          "hash": "17045215229574110541",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs-modules/ioredis",
-            "npm:ioredis"
-          ]
-        },
-        {
-          "file": "apps/fraud-service/src/modules/rules/rules.controller.ts",
-          "hash": "3016555673709835457",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/swagger"
-          ]
-        },
-        {
-          "file": "apps/fraud-service/src/modules/rules/rules.module.ts",
-          "hash": "5986836691008470273",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/typeorm",
-            "database"
-          ]
-        },
-        {
-          "file": "apps/fraud-service/src/modules/rules/rules.service.ts",
-          "hash": "14371327926497945677",
-          "deps": [
-            "npm:@nestjs/common",
-            "npm:@nestjs/typeorm",
-            "npm:typeorm",
-            "database"
-          ]
-        },
-        {
-          "file": "apps/fraud-service/tsconfig.app.json",
-          "hash": "2040167222740116510"
-        },
-        {
-          "file": "apps/fraud-service/tsconfig.json",
-          "hash": "3025378044812449119"
-        },
-        {
-          "file": "apps/fraud-service/webpack.config.js",
-          "hash": "14036322274545275972",
-          "deps": [
-            "npm:@nx/webpack"
-          ]
-        }
-      ],
-      "database": [
-        {
-          "file": "libs/database/package.json",
-          "hash": "15740983219817708332"
-        },
-        {
-          "file": "libs/database/project.json",
-          "hash": "15554128521634249092"
-        },
-        {
-          "file": "libs/database/src/entities/account/account.entity.ts",
-          "hash": "12785563953368165461",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/entities/account/journal-entry.entity.ts",
-          "hash": "17708041085762622665",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/entities/account/ledger-entry.entity.ts",
-          "hash": "17596405300853629554",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/entities/account/payment-settings.entity.ts",
-          "hash": "10133474958634154092",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/entities/account/wallet.entity.ts",
-          "hash": "10489558556440796439",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/entities/card/card-request.entity.ts",
-          "hash": "12493871604059602314",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/entities/card/card-token.entity.ts",
-          "hash": "11605808373027693683",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/entities/card/card.entity.ts",
-          "hash": "13057529798563166101",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/entities/developer/api-key.entity.ts",
-          "hash": "14858565648354631830",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/entities/developer/webhook-delivery.entity.ts",
-          "hash": "7615058100907715445",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/entities/developer/webhook-endpoint.entity.ts",
-          "hash": "6581918693031220220",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/entities/fraud/fraud-rule.entity.ts",
-          "hash": "6356780847624578137",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/entities/fraud/risk-score.entity.ts",
-          "hash": "2197098796452745989",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/entities/identity/kyc-application.entity.ts",
-          "hash": "1224642060965626398",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/entities/identity/session.entity.ts",
-          "hash": "15814427707887342499",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/entities/identity/user.entity.ts",
-          "hash": "2927383763317545244",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/entities/merchant/checkout-session.entity.ts",
-          "hash": "16368000974468812168",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/entities/merchant/fee-schedule.entity.ts",
-          "hash": "16039851646320331284",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/entities/merchant/merchant.entity.ts",
-          "hash": "9627057310080187003",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/entities/notification/notification-log.entity.ts",
-          "hash": "5250041406257107826",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/entities/notification/notification-template.entity.ts",
-          "hash": "17729252262715017886",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/entities/settlement/settlement-batch.entity.ts",
-          "hash": "4866088307786413231",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/entities/settlement/settlement-item.entity.ts",
-          "hash": "6282829985554778835",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/entities/transaction/authorization.entity.ts",
-          "hash": "13712822651572611104",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/entities/transaction/transaction-event.entity.ts",
-          "hash": "8086678031437986649",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/entities/transaction/transaction.entity.ts",
-          "hash": "17783176589372509633",
-          "deps": [
-            "npm:typeorm"
-          ]
-        },
-        {
-          "file": "libs/database/src/enums/account-type.enum.ts",
-          "hash": "976450110204516546"
-        },
-        {
-          "file": "libs/database/src/enums/card-status.enum.ts",
-          "hash": "10540163120336630755"
-        },
-        {
-          "file": "libs/database/src/enums/transaction-state.enum.ts",
-          "hash": "12920370833084956179"
-        },
-        {
-          "file": "libs/database/src/enums/transaction-type.enum.ts",
-          "hash": "2693299707987831741"
-        },
-        {
-          "file": "libs/database/src/index.ts",
-          "hash": "9528966146029311245"
-        },
-        {
-          "file": "libs/database/tsconfig.json",
-          "hash": "4500187279542449493"
-        },
-        {
-          "file": "libs/database/tsconfig.lib.json",
-          "hash": "16806389801416457703"
         }
       ]
     }
