@@ -802,7 +802,7 @@ async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse
     const status = url.searchParams.get('status');
     const retry = url.searchParams.get('retry');
     const message = url.searchParams.get('message');
-    const host = req.headers.host || 'peeap-merchant.vercel.app';
+    const host = req.headers.host || 'checkout.peeap.com';
     const baseUrl = `https://${host}`;
 
     console.log('[Checkout Pay Redirect] Session:', sessionId, 'Status:', status, 'Retry:', retry);
@@ -1384,8 +1384,8 @@ async function handleCheckoutMobilePay(req: VercelRequest, res: VercelResponse, 
       description: session.description || `Payment to ${session.merchant_name || 'Peeap'}`,
       merchantName: session.merchant_name || 'Peeap',
       merchantId: session.merchant_id,
-      successUrl: `https://peeap-merchant.vercel.app/checkout/pay/${sessionId}?status=success`,
-      cancelUrl: `https://peeap-merchant.vercel.app/checkout/pay/${sessionId}?status=cancel`,
+      successUrl: `https://checkout.peeap.com/checkout/pay/${sessionId}?status=success`,
+      cancelUrl: `https://checkout.peeap.com/checkout/pay/${sessionId}?status=cancel`,
     });
 
     // 4. Store Monime reference in checkout session
