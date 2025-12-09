@@ -63,6 +63,7 @@ import { PotsManagementPage } from '@/pages/admin/PotsManagementPage';
 import { BusinessCategoriesPage } from '@/pages/admin/BusinessCategoriesPage';
 import { BusinessesPage } from '@/pages/admin/BusinessesPage';
 import { SupportTicketsPage } from '@/pages/admin/SupportTicketsPage';
+import { AdminNotificationsPage } from '@/pages/admin/AdminNotificationsPage';
 import { PaymentCheckoutPage } from '@/pages/PaymentCheckoutPage';
 import { PayPage } from '@/pages/PayPage';
 import { PaymentSuccessPage } from '@/pages/PaymentSuccessPage';
@@ -74,6 +75,7 @@ import { CheckoutPage } from '@/pages/CheckoutPage';
 import { HostedCheckoutPage } from '@/pages/HostedCheckoutPage';
 import { TestCheckoutPage } from '@/pages/TestCheckoutPage';
 import { AppPaymentRedirectPage } from '@/pages/AppPaymentRedirectPage';
+import { NFCPaymentPage } from '@/pages/NFCPaymentPage';
 
 // Merchant Pages
 import { MerchantDashboard } from '@/pages/merchant/MerchantDashboard';
@@ -146,6 +148,9 @@ function App() {
 
                   {/* Payment Link Route (query params) */}
                   <Route path="/pay" element={<PayPage />} />
+
+                  {/* Secure NFC Payment Route */}
+                  <Route path="/pay/nfc/:shortCode" element={<NFCPaymentPage />} />
 
                   {/* Payment Success/Cancel Routes */}
                   <Route path="/payment/success" element={<PaymentSuccessPage />} />
@@ -557,6 +562,14 @@ function App() {
                   </RoleBasedRoute>
                 }
               />
+              <Route
+                path="/admin/notifications"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <AdminNotificationsPage />
+                  </RoleBasedRoute>
+                }
+              />
 
               {/* Merchant Routes */}
               <Route
@@ -796,6 +809,7 @@ function App() {
                   <Route path="/t/:token" element={<PaymentCheckoutPage />} />
                   <Route path="/pay/:token" element={<PaymentCheckoutPage />} />
                   <Route path="/pay" element={<PayPage />} />
+                  <Route path="/pay/nfc/:shortCode" element={<NFCPaymentPage />} />
                   <Route path="/payment/success" element={<PaymentSuccessPage />} />
                   <Route path="/payment/cancel" element={<PaymentCancelPage />} />
                   <Route path="/deposit/success" element={<DepositSuccessPage />} />
@@ -854,6 +868,7 @@ function App() {
                   <Route path="/admin/compliance" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><CompliancePage /></RoleBasedRoute>} />
                   <Route path="/admin/developers" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><DevelopersPage /></RoleBasedRoute>} />
                   <Route path="/admin/support" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><SupportTicketsPage /></RoleBasedRoute>} />
+                  <Route path="/admin/notifications" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><AdminNotificationsPage /></RoleBasedRoute>} />
 
                   {/* Merchant Routes */}
                   <Route path="/merchant" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantDashboard /></RoleBasedRoute>} />

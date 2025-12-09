@@ -638,6 +638,7 @@ export const cardService = {
         wallets (id, currency, balance)
       `)
       .eq('user_id', userId)
+      .not('status', 'in', '("REJECTED","CANCELLED")') // Hide rejected/cancelled from user view
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -858,6 +859,9 @@ export const cardService = {
 
   /**
    * Admin: Reject a card order
+   * - Refunds the payment to user's wallet
+   * - Deletes any generated card
+   * - Updates order status to REJECTED
    */
   async rejectCardOrder(orderId: string, adminId: string, notes: string): Promise<CardOrder> {
     // Get the order to refund
@@ -870,6 +874,19 @@ export const cardService = {
       p_description: `Refund for rejected card order: ${order.cardType?.name || 'Card'}`,
     });
 
+    // If a card was already generated, delete it
+    if (order.generatedCardId) {
+      const { error: deleteError } = await supabase
+        .from('cards')
+        .delete()
+        .eq('id', order.generatedCardId);
+
+      if (deleteError) {
+        console.error('Error deleting generated card:', deleteError);
+        // Continue with rejection even if card deletion fails
+      }
+    }
+
     // Update order status
     const { data, error } = await supabase
       .from('card_orders')
@@ -878,6 +895,7 @@ export const cardService = {
         reviewed_by: adminId,
         reviewed_at: new Date().toISOString(),
         review_notes: notes,
+        generated_card_id: null, // Clear the reference to deleted card
         updated_at: new Date().toISOString(),
       })
       .eq('id', orderId)
@@ -985,6 +1003,132 @@ export const cardService = {
     return {
       ...card,
       cardType: data.card_types ? mapCardType(data.card_types) : undefined,
+    };
+  },
+
+  // ==========================================
+  // Card Payment Services (Hosted Checkout)
+  // ==========================================
+
+  /**
+   * Look up a card by its 16-digit number for payment
+   * Returns card info with wallet balance (no sensitive data)
+   */
+  async lookupCardForPayment(cardNumber: string): Promise<{
+    cardId: string;
+    maskedNumber: string;
+    cardholderName: string;
+    walletId: string;
+    walletBalance: number;
+    currency: string;
+    status: string;
+  } | null> {
+    // Clean the card number (remove spaces/dashes)
+    const cleanNumber = cardNumber.replace(/[\s-]/g, '');
+
+    const { data, error } = await supabase
+      .from('cards')
+      .select(`
+        id,
+        card_number,
+        masked_number,
+        cardholder_name,
+        status,
+        wallet_id,
+        wallets (id, balance, currency)
+      `)
+      .eq('card_number', cleanNumber)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error looking up card:', error);
+      throw new Error('Failed to look up card');
+    }
+
+    if (!data) {
+      return null;
+    }
+
+    // Check if card is active
+    if (data.status !== 'ACTIVE') {
+      throw new Error(`Card is ${data.status.toLowerCase()}. Please use an active card.`);
+    }
+
+    // Get wallet data (could be object or array depending on relation)
+    const wallet = Array.isArray(data.wallets) ? data.wallets[0] : data.wallets;
+
+    return {
+      cardId: data.id,
+      maskedNumber: data.masked_number || maskCardNumber(data.card_number),
+      cardholderName: data.cardholder_name || 'Card Holder',
+      walletId: data.wallet_id,
+      walletBalance: parseFloat(wallet?.balance) || 0,
+      currency: wallet?.currency || 'SLE',
+      status: data.status,
+    };
+  },
+
+  /**
+   * Verify the card's transaction PIN
+   */
+  async verifyCardPin(cardId: string, pin: string): Promise<boolean> {
+    // Get the card's PIN from the database
+    const { data, error } = await supabase
+      .from('cards')
+      .select('transaction_pin')
+      .eq('id', cardId)
+      .single();
+
+    if (error) {
+      console.error('Error verifying PIN:', error);
+      throw new Error('Failed to verify PIN');
+    }
+
+    // Check if PIN matches
+    // In production, the PIN should be hashed, but for now we compare directly
+    if (!data.transaction_pin) {
+      throw new Error('Transaction PIN not set for this card. Please set a PIN in your Peeap app.');
+    }
+
+    return data.transaction_pin === pin;
+  },
+
+  /**
+   * Process a card payment for checkout
+   * Deducts amount from the card's linked wallet
+   */
+  async processCardPayment(params: {
+    cardId: string;
+    walletId: string;
+    amount: number;
+    merchantId: string;
+    description: string;
+    checkoutSessionId: string;
+  }): Promise<{ success: boolean; transactionId: string }> {
+    const { cardId, walletId, amount, merchantId, description, checkoutSessionId } = params;
+
+    // Use an RPC function for atomic operation (withdraw + create transaction)
+    const { data, error } = await supabase.rpc('process_card_checkout_payment', {
+      p_card_id: cardId,
+      p_wallet_id: walletId,
+      p_amount: amount,
+      p_merchant_id: merchantId,
+      p_description: description,
+      p_checkout_session_id: checkoutSessionId,
+    });
+
+    if (error) {
+      console.error('Error processing card payment:', error);
+      // Parse error message for user-friendly display
+      if (error.message.includes('insufficient')) {
+        throw new Error('Insufficient funds in your wallet');
+      }
+      throw new Error(error.message || 'Payment failed');
+    }
+
+    return {
+      success: true,
+      transactionId: data,
     };
   },
 };

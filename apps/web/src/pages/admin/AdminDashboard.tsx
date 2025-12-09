@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Users,
@@ -14,11 +14,16 @@ import {
   ShieldCheck,
   ArrowUpRight,
   Eye,
+  Bell,
+  Package,
+  CheckCheck,
 } from 'lucide-react';
 import { MotionCard } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
 import { currencyService, Currency } from '@/services/currency.service';
+import { adminNotificationService, AdminNotification } from '@/services/adminNotification.service';
+import { useAuth } from '@/context/AuthContext';
 
 interface DashboardStats {
   totalAccounts: number;
@@ -56,6 +61,8 @@ interface PendingItem {
 }
 
 export function AdminDashboard() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats>({
     totalAccounts: 0,
     activeAccounts: 0,
@@ -77,6 +84,8 @@ export function AdminDashboard() {
 
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
+  const [adminNotifications, setAdminNotifications] = useState<AdminNotification[]>([]);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   // Currency state
@@ -85,12 +94,95 @@ export function AdminDashboard() {
   useEffect(() => {
     currencyService.getDefaultCurrency().then(setDefaultCurrency);
     fetchDashboardData();
+    fetchAdminNotifications();
+
+    // Subscribe to new notifications
+    const unsubscribe = adminNotificationService.subscribeToNotifications((notification) => {
+      setAdminNotifications((prev) => [notification, ...prev].slice(0, 10));
+      setUnreadNotificationCount((prev) => prev + 1);
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
-  const currencySymbol = defaultCurrency?.symbol || '';
+  const fetchAdminNotifications = async () => {
+    try {
+      const [notifications, unreadCount] = await Promise.all([
+        adminNotificationService.getNotifications({ limit: 10 }),
+        adminNotificationService.getUnreadCount(),
+      ]);
+      setAdminNotifications(notifications);
+      setUnreadNotificationCount(unreadCount);
+    } catch (error) {
+      console.error('Error fetching admin notifications:', error);
+    }
+  };
+
+  const handleMarkAsRead = async (notificationId: string) => {
+    if (!user?.id) return;
+    try {
+      await adminNotificationService.markAsRead(notificationId, user.id);
+      setAdminNotifications((prev) =>
+        prev.map((n) => (n.id === notificationId ? { ...n, status: 'read' as const } : n))
+      );
+      setUnreadNotificationCount((prev) => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    if (!user?.id) return;
+    try {
+      await adminNotificationService.markAllAsRead(user.id);
+      setAdminNotifications((prev) =>
+        prev.map((n) => ({ ...n, status: 'read' as const }))
+      );
+      setUnreadNotificationCount(0);
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+    }
+  };
+
+  const handleNotificationClick = (notification: AdminNotification) => {
+    handleMarkAsRead(notification.id);
+    if (notification.actionUrl) {
+      navigate(notification.actionUrl);
+    }
+  };
+
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'card_order':
+        return <Package className="w-4 h-4" />;
+      case 'kyc_request':
+        return <ShieldCheck className="w-4 h-4" />;
+      case 'dispute':
+        return <AlertTriangle className="w-4 h-4" />;
+      default:
+        return <Bell className="w-4 h-4" />;
+    }
+  };
+
+  const getNotificationColor = (priority: string) => {
+    switch (priority) {
+      case 'urgent':
+        return 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 border-l-red-500';
+      case 'high':
+        return 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border-l-orange-500';
+      case 'medium':
+        return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400 border-l-yellow-500';
+      default:
+        return 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-l-blue-500';
+    }
+  };
+
+  const currencySymbol = defaultCurrency?.symbol || 'Le';
 
   const formatCurrency = (amount: number): string => {
-    return `${currencySymbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `${currencySymbol} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const fetchDashboardData = async () => {
@@ -325,6 +417,82 @@ export function AdminDashboard() {
             </div>
           </MotionCard>
         </div>
+
+        {/* Admin Notifications Section */}
+        <MotionCard className="p-6" delay={0.65}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Notifications</h2>
+              {unreadNotificationCount > 0 && (
+                <span className="inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-red-500 rounded-full">
+                  {unreadNotificationCount}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {unreadNotificationCount > 0 && (
+                <button
+                  onClick={handleMarkAllAsRead}
+                  className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 flex items-center gap-1"
+                >
+                  <CheckCheck className="w-4 h-4" />
+                  Mark all read
+                </button>
+              )}
+            </div>
+          </div>
+
+          {adminNotifications.length === 0 ? (
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              <Bell className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No notifications yet</p>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {adminNotifications.map((notification) => (
+                <div
+                  key={notification.id}
+                  onClick={() => handleNotificationClick(notification)}
+                  className={`p-3 rounded-lg border-l-4 cursor-pointer transition-all hover:shadow-md ${
+                    notification.status === 'unread'
+                      ? getNotificationColor(notification.priority)
+                      : 'bg-gray-50 dark:bg-gray-800/50 border-l-gray-300 dark:border-l-gray-600'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`p-2 rounded-lg ${
+                      notification.status === 'unread'
+                        ? getNotificationColor(notification.priority).split(' ').slice(0, 2).join(' ')
+                        : 'bg-gray-200 dark:bg-gray-700'
+                    }`}>
+                      {getNotificationIcon(notification.type)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <p className={`text-sm font-medium ${
+                          notification.status === 'unread'
+                            ? 'text-gray-900 dark:text-white'
+                            : 'text-gray-600 dark:text-gray-400'
+                        }`}>
+                          {notification.title}
+                        </p>
+                        {notification.status === 'unread' && (
+                          <span className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                        {notification.message}
+                      </p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                        {getTimeAgo(new Date(notification.createdAt))}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </MotionCard>
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

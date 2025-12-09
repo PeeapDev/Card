@@ -247,8 +247,11 @@ export function useRejectCardOrder() {
       return cardService.rejectCardOrder(orderId, user.id, notes);
     },
     onSuccess: (_, { orderId }) => {
-      queryClient.invalidateQueries({ queryKey: ['cardOrders'] });
-      queryClient.invalidateQueries({ queryKey: ['cardOrders', orderId] });
+      // Invalidate all card-related queries to refresh UI immediately
+      queryClient.invalidateQueries({ queryKey: ['cards'] }); // User's cards list (deleted card)
+      queryClient.invalidateQueries({ queryKey: ['cardOrders'] }); // User's orders
+      queryClient.invalidateQueries({ queryKey: ['cardOrders', orderId] }); // Specific order
+      queryClient.invalidateQueries({ queryKey: ['wallets'] }); // Refresh wallet balance (refund)
     },
   });
 }

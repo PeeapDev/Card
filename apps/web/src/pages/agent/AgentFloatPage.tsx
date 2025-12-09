@@ -44,10 +44,10 @@ export function AgentFloatPage() {
     }
   }, [user?.id]);
 
-  const currencySymbol = defaultCurrency?.symbol || 'Le ';
+  const currencySymbol = defaultCurrency?.symbol || 'Le';
 
   const formatCurrency = (amount: number): string => {
-    return `${currencySymbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    return `${currencySymbol} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const fetchData = async () => {
@@ -411,7 +411,7 @@ export function AgentFloatPage() {
                   className="w-full px-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-orange-500 text-2xl font-bold"
                 />
                 <div className="flex gap-2 mt-2">
-                  {[10000, 50000, 100000, 500000].map((amount) => (
+                  {[10, 50, 100, 500].map((amount) => (
                     <button
                       key={amount}
                       onClick={() => setTopupAmount(amount.toString())}

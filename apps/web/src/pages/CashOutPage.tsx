@@ -327,7 +327,7 @@ export function CashOutPage() {
 
           {/* Quick amounts */}
           <div className="grid grid-cols-4 gap-2 mb-6">
-            {[100, 500, 1000, 5000].map((quickAmount) => (
+            {[10, 50, 100, 500].map((quickAmount) => (
               <button
                 key={quickAmount}
                 onClick={() => setAmount(quickAmount.toString())}

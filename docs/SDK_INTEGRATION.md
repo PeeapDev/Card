@@ -48,7 +48,7 @@ PeeapSDK.init({
 
 ```javascript
 PeeapSDK.createPayment({
-  amount: 50000,           // Amount in whole units (50000 = Le 50,000)
+  amount: 50,              // New Leone (SLE): 50 = Le 50.00
   currency: 'SLE',         // Currency code
   description: 'Order #12345',
   reference: 'your-order-id'  // Optional: your reference
@@ -90,7 +90,7 @@ PeeapSDK.createPayment({
 <body>
   <div id="checkout">
     <h2>Complete Your Purchase</h2>
-    <p>Total: Le 50,000</p>
+    <p>Total: Le 50.00</p>
     <button id="payButton">Pay Now</button>
   </div>
 
@@ -111,7 +111,7 @@ PeeapSDK.createPayment({
     // Handle payment button click
     document.getElementById('payButton').addEventListener('click', function() {
       PeeapSDK.createPayment({
-        amount: 50000,
+        amount: 50,  // New Leone (SLE)
         currency: 'SLE',
         description: 'Order #12345'
       });
@@ -266,8 +266,8 @@ function createPeeapCheckout($orderId, $amount) {
     throw new Exception($response['error'] ?? 'Payment failed');
 }
 
-// Usage
-createPeeapCheckout($_GET['order_id'], 50000);
+// Usage - New Leone (SLE): 50 = Le 50.00
+createPeeapCheckout($_GET['order_id'], 50);
 ?>
 ```
 
@@ -287,7 +287,7 @@ createPeeapCheckout($_GET['order_id'], 50000);
 ```json
 {
   "publicKey": "pk_live_xxxxx",
-  "amount": 50000,
+  "amount": 50,
   "currency": "SLE",
   "description": "Order #12345",
   "reference": "your-order-id",
@@ -299,13 +299,15 @@ createPeeapCheckout($_GET['order_id'], 50000);
 }
 ```
 
+> **Note:** Amount is in New Leone (SLE). Example: `50` = Le 50.00
+
 ### Create Checkout Response
 
 ```json
 {
   "sessionId": "cs_live_abc123def456",
   "paymentUrl": "https://checkout.peeap.com/checkout/pay/cs_live_abc123def456",
-  "amount": 50000,
+  "amount": 50,
   "currency": "SLE",
   "expiresAt": "2025-01-20T15:30:00Z",
   "isTestMode": false

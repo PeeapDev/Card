@@ -70,20 +70,24 @@ export async function getCurrencySymbol(code: string): Promise<string> {
 
 /**
  * Format amount with currency symbol
+ * Returns format: "Le 5.00" (with space after symbol)
  */
 export async function formatCurrency(amount: number, currencyCode?: string): Promise<string> {
   const code = currencyCode || (await getDefaultCurrency()).code;
   const symbol = await getCurrencySymbol(code);
-  return `${symbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const formattedAmount = amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${symbol} ${formattedAmount}`;
 }
 
 /**
  * Format amount with currency symbol (sync version - uses cached data)
+ * Returns format: "Le 5.00" (with space after symbol)
  */
 export function formatCurrencySync(amount: number, currencyCode: string, currencies: Currency[]): string {
   const currency = currencies.find(c => c.code === currencyCode);
   const symbol = currency?.symbol || currencyCode;
-  return `${symbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const formattedAmount = amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${symbol} ${formattedAmount}`;
 }
 
 /**

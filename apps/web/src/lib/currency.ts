@@ -1,34 +1,35 @@
 /**
- * Currency Utilities for Sierra Leone Leone (SLE)
+ * Currency Utilities for Sierra Leone New Leone (SLE)
  *
- * The Sierra Leone Leone (SLE) is a whole number currency.
- * ISO 4217 code: SLE (as of July 2022, replacing old SLL)
- * Symbol: Le (placed before the amount)
- * Decimal places: 0 (SLE does not use cents/minor units in practice)
+ * As of 2024, Sierra Leone redenominated its currency, removing 3 zeros:
+ * - Old Le 1,000 (SLL) = New Le 1.00 (SLE)
+ *
+ * ISO 4217 code: SLE (New Leone, as of redenomination)
+ * Symbol: Le (placed before the amount with a space)
+ * Decimal places: 2 (the New Leone uses cents)
  *
  * Examples:
- * - Le 1 = 1 Leone
- * - Le 100 = 100 Leones
- * - Le 1000 = 1,000 Leones
+ * - Le 1.00 = 1 New Leone
+ * - Le 5.50 = 5 New Leones and 50 cents
+ * - Le 100.00 = 100 New Leones
  *
- * IMPORTANT: SLE is stored and transmitted as whole units.
- * 1 SLE = 1 SLE (no conversion needed)
+ * IMPORTANT: SLE uses 2 decimal places like most modern currencies.
  */
 
 export const CURRENCY_CONFIG = {
   SLE: {
     code: 'SLE',
     symbol: 'Le',
-    name: 'Sierra Leonean Leone',
-    decimalPlaces: 0,
-    minorUnit: 1, // No minor units - 1 SLE = 1 SLE
-    minAmount: 1, // Minimum 1 Leone
+    name: 'Sierra Leonean New Leone',
+    decimalPlaces: 2,
+    minorUnit: 100, // 100 cents = 1 Leone
+    minAmount: 0.01, // Minimum 1 cent
   },
-  // Old Leone (for backwards compatibility) - also no minor units
+  // Old Leone (deprecated - for historical reference only)
   SLL: {
     code: 'SLL',
     symbol: 'Le',
-    name: 'Sierra Leonean Leone (old)',
+    name: 'Sierra Leonean Leone (old - deprecated)',
     decimalPlaces: 0,
     minorUnit: 1,
     minAmount: 1,
@@ -74,20 +75,18 @@ export function formatCurrency(
   }
 ): string {
   const config = getCurrencyConfig(currency);
-  const { showSymbol = true, showCode = false, alwaysShowDecimals = false } = options || {};
+  const { showSymbol = true, showCode = false, alwaysShowDecimals = true } = options || {};
 
-  let formattedAmount: string;
-
-  if (alwaysShowDecimals || !Number.isInteger(amount)) {
-    formattedAmount = amount.toFixed(config.decimalPlaces);
-  } else {
-    formattedAmount = amount.toString();
-  }
+  // Always show 2 decimal places for SLE (New Leone)
+  const formattedAmount = amount.toLocaleString(undefined, {
+    minimumFractionDigits: alwaysShowDecimals ? config.decimalPlaces : 0,
+    maximumFractionDigits: config.decimalPlaces,
+  });
 
   let result = formattedAmount;
 
   if (showSymbol) {
-    result = `${config.symbol} ${result}`;
+    result = `${config.symbol} ${result}`; // Space after symbol
   }
 
   if (showCode) {

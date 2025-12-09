@@ -48,10 +48,10 @@ export function ReceiveMoneyPage() {
     currencyService.getDefaultCurrency().then(setDefaultCurrency);
   }, []);
 
-  const currencySymbol = defaultCurrency?.symbol || '';
+  const currencySymbol = defaultCurrency?.symbol || 'Le';
 
   const formatCurrency = (amount: number): string => {
-    return `${currencySymbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `${currencySymbol} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   useEffect(() => {

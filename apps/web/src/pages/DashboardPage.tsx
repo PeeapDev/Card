@@ -64,7 +64,7 @@ export function DashboardPage() {
   // Format amount with correct currency symbol
   const formatCurrency = (amount: number, currencyCode?: string): string => {
     const symbol = getCurrencySymbol(currencyCode);
-    return `${symbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `${symbol} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const totalBalance = wallets?.reduce((sum, w) => sum + (w.balance || 0), 0) || 0;

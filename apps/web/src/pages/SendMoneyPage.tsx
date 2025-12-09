@@ -92,6 +92,7 @@ export function SendMoneyPage() {
   const [walletId, setWalletId] = useState<string>('');
   const [walletBalance, setWalletBalance] = useState(0);
   const [fee, setFee] = useState(0);
+  const [allWallets, setAllWallets] = useState<Array<{ id: string; balance: number; currency: string; wallet_type: string }>>([]);
 
   // PIN Modal state
   const [showPinModal, setShowPinModal] = useState(false);
@@ -113,7 +114,7 @@ export function SendMoneyPage() {
 
   // Format amount with currency
   const formatCurrency = (amt: number): string => {
-    return `${currencySymbol}${amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `${currencySymbol} ${amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   useEffect(() => {
@@ -193,17 +194,40 @@ export function SendMoneyPage() {
   const fetchWallet = async () => {
     if (!user?.id) return;
 
-    const { data: wallet } = await supabase
-      .from('wallets')
-      .select('id, balance')
-      .eq('user_id', user.id)
-      .eq('wallet_type', 'primary')
+    // First fetch user's default wallet preference
+    const { data: userData } = await supabase
+      .from('users')
+      .select('default_wallet_id')
+      .eq('id', user.id)
       .single();
 
+    const defaultWalletId = userData?.default_wallet_id;
+
+    // Fetch all active wallets
+    const { data: wallets } = await supabase
+      .from('wallets')
+      .select('id, balance, currency, wallet_type')
+      .eq('user_id', user.id)
+      .eq('status', 'ACTIVE')
+      .order('wallet_type', { ascending: true });
+
+    if (wallets && wallets.length > 0) {
+      setAllWallets(wallets);
+      // Use default wallet from settings, or fall back to primary wallet, or first wallet
+      const selectedWallet = (defaultWalletId && wallets.find(w => w.id === defaultWalletId)) ||
+        wallets.find(w => w.wallet_type === 'primary') ||
+        wallets[0];
+      setWalletId(selectedWallet.id);
+      setWalletBalance(selectedWallet.balance);
+      fetchRecentTransfers(selectedWallet.id);
+    }
+  };
+
+  const handleWalletChange = (newWalletId: string) => {
+    const wallet = allWallets.find(w => w.id === newWalletId);
     if (wallet) {
       setWalletId(wallet.id);
       setWalletBalance(wallet.balance);
-      fetchRecentTransfers(wallet.id);
     }
   };
 
@@ -460,14 +484,29 @@ export function SendMoneyPage() {
           </div>
         </div>
 
-        {/* Balance Card */}
+        {/* Balance Card with Wallet Selector */}
         <Card className="p-4 bg-gradient-to-r from-primary-600 to-primary-500 text-white">
           <div className="flex items-center justify-between">
-            <div>
+            <div className="flex-1">
               <p className="text-sm text-primary-100">Available Balance</p>
               <p className="text-3xl font-bold">
                 {formatCurrency(walletBalance)}
               </p>
+              {/* Wallet Selector */}
+              {allWallets.length > 0 && (
+                <select
+                  value={walletId}
+                  onChange={(e) => handleWalletChange(e.target.value)}
+                  className="mt-2 px-3 py-1.5 bg-white/20 border border-white/30 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/50 cursor-pointer"
+                  style={{ colorScheme: 'dark' }}
+                >
+                  {allWallets.map((wallet) => (
+                    <option key={wallet.id} value={wallet.id} className="text-gray-900">
+                      {wallet.currency} Wallet - {formatCurrency(wallet.balance)}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
             <div className="p-3 bg-white/20 rounded-xl">
               <Wallet className="w-8 h-8" />

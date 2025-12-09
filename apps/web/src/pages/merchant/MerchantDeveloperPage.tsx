@@ -351,7 +351,7 @@ PeeapSDK.init({
 // Function to trigger payment
 function payWithPeeap(amount, description, reference) {
   PeeapSDK.createPayment({
-    amount: amount,           // Whole units: 50000 = Le 50,000
+    amount: amount,           // New Leone (SLE): 50 = Le 50.00
     currency: 'SLE',
     description: description || 'Payment',
     reference: reference      // Optional: your order ID
@@ -360,8 +360,8 @@ function payWithPeeap(amount, description, reference) {
 </script>
 
 <!-- STEP 3: Add Payment Button -->
-<button onclick="payWithPeeap(50000, 'Order #12345', 'order_12345')">
-  Pay Le 50,000
+<button onclick="payWithPeeap(50, 'Order #12345', 'order_12345')">
+  Pay Le 50.00
 </button>
 
 /**
@@ -378,7 +378,7 @@ const response = await fetch('${apiUrl}/checkout/create', {
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
     publicKey: '${publicKey}',
-    amount: 50000,
+    amount: 50,  // New Leone (SLE): 50 = Le 50.00
     currency: 'SLE',
     description: 'Order #12345',
     redirectUrl: 'https://yoursite.com/payment-complete'
@@ -396,7 +396,7 @@ const { paymentUrl } = await response.json();
 {
   "sessionId": "cs_${isLive ? 'live' : 'test'}_abc123...",
   "paymentUrl": "${checkoutUrl}/checkout/pay/cs_${isLive ? 'live' : 'test'}_abc123...",
-  "amount": 50000,
+  "amount": 50,
   "currency": "SLE",
   "expiresAt": "2025-01-20T15:30:00Z",
   "isTestMode": ${!isLive}
@@ -413,7 +413,7 @@ const { paymentUrl } = await response.json();
   "event": "payment.completed",
   "data": {
     "reference": "order_12345",
-    "amount": 50000,
+    "amount": 50,
     "currency": "SLE",
     "status": "completed"
   }

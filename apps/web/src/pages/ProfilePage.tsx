@@ -44,7 +44,7 @@ import { ProfileAvatar } from '@/components/ui/ProfileAvatar';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { clsx } from 'clsx';
-import { authenticator } from 'otplib';
+import { generateSecret, verifyTOTP, generateOTPAuthURI } from '@/lib/totp';
 import QRCode from 'qrcode';
 import { FaceLiveness } from '@/components/kyc/FaceLiveness';
 import { IdCardScanner } from '@/components/kyc/IdCardScanner';
@@ -77,6 +77,15 @@ interface UserSettings {
   hasPin: boolean;
   has2FA: boolean;
   kycStatus: string;
+  defaultWalletId?: string;
+}
+
+interface UserWallet {
+  id: string;
+  currency: string;
+  balance: number;
+  wallet_type: string;
+  status: string;
 }
 
 export function ProfilePage() {
@@ -88,7 +97,12 @@ export function ProfilePage() {
     hasPin: false,
     has2FA: false,
     kycStatus: 'PENDING',
+    defaultWalletId: undefined,
   });
+
+  // Wallet state
+  const [wallets, setWallets] = useState<UserWallet[]>([]);
+  const [savingDefaultWallet, setSavingDefaultWallet] = useState(false);
 
   // Form states
   const [firstName, setFirstName] = useState('');
@@ -139,18 +153,59 @@ export function ProfilePage() {
   useEffect(() => {
     if (user?.id) {
       loadUserSettings();
+      loadWallets();
       setFirstName(user.firstName || '');
       setLastName(user.lastName || '');
       setPhone(user.phone || '');
     }
   }, [user?.id]);
 
+  const loadWallets = async () => {
+    if (!user?.id) return;
+
+    const { data, error } = await supabase
+      .from('wallets')
+      .select('id, currency, balance, wallet_type, status')
+      .eq('user_id', user.id)
+      .eq('status', 'ACTIVE')
+      .order('wallet_type', { ascending: true });
+
+    if (!error && data) {
+      setWallets(data);
+    }
+  };
+
+  const handleSetDefaultWallet = async (walletId: string) => {
+    if (!user?.id) return;
+
+    setSavingDefaultWallet(true);
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({
+          default_wallet_id: walletId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      setSettings(prev => ({ ...prev, defaultWalletId: walletId }));
+      setMessage({ type: 'success', text: 'Default wallet updated!' });
+      setTimeout(() => setMessage(null), 3000);
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Failed to update default wallet' });
+    } finally {
+      setSavingDefaultWallet(false);
+    }
+  };
+
   const loadUserSettings = async () => {
     setIsLoading(true);
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('transaction_pin, two_factor_enabled, kyc_status')
+        .select('transaction_pin, two_factor_enabled, kyc_status, default_wallet_id')
         .eq('id', user?.id)
         .single();
 
@@ -159,6 +214,7 @@ export function ProfilePage() {
           hasPin: !!data.transaction_pin,
           has2FA: !!data.two_factor_enabled,
           kycStatus: data.kyc_status || 'NOT_STARTED',
+          defaultWalletId: data.default_wallet_id || undefined,
         });
       }
     } catch (err) {
@@ -291,16 +347,12 @@ export function ProfilePage() {
   // Initialize 2FA setup - generate secret and QR code
   const initializeTwoFA = async () => {
     try {
-      // Generate a new secret
-      const secret = authenticator.generateSecret(20);
+      // Generate a new secret using native implementation
+      const secret = generateSecret(20);
       setTwoFASecret(secret);
 
       // Generate OTPAuth URL
-      const otpAuthUrl = authenticator.keyuri(
-        user?.email || 'user',
-        'Peeap',
-        secret
-      );
+      const otpAuthUrl = generateOTPAuthURI(secret, user?.email || 'user', 'Peeap');
 
       // Generate QR code as data URL
       const qrCodeDataUrl = await QRCode.toDataURL(otpAuthUrl, {
@@ -335,11 +387,8 @@ export function ProfilePage() {
         throw new Error('Please enter a valid 6-digit code');
       }
 
-      // Verify the code using otplib
-      const isValid = authenticator.verify({
-        token: twoFACode,
-        secret: twoFASecret,
-      });
+      // Verify the code using native TOTP implementation
+      const isValid = await verifyTOTP(twoFASecret, twoFACode);
 
       if (!isValid) {
         throw new Error('Invalid verification code. Please try again.');
@@ -562,7 +611,7 @@ export function ProfilePage() {
   return (
     <MainLayout>
       <motion.div
-        className="max-w-4xl mx-auto space-y-6"
+        className="space-y-6"
         variants={containerVariants}
         initial="hidden"
         animate="visible"
@@ -600,74 +649,74 @@ export function ProfilePage() {
         {/* Profile Card */}
         <motion.div variants={itemVariants}>
           <MotionCard className="p-6" glowEffect>
-            <div className="flex flex-col sm:flex-row items-start gap-6">
-              {/* Avatar */}
-              <div className="relative">
-                <ProfileAvatar
-                  firstName={user?.firstName}
-                  lastName={user?.lastName}
-                  size="xl"
-                  className="w-24 h-24"
-                />
-                {isVerified && (
-                  <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center border-4 border-white dark:border-gray-800">
-                    <Check className="w-4 h-4 text-white" />
-                  </div>
-                )}
-              </div>
+              <div className="flex flex-col sm:flex-row items-start gap-6">
+                {/* Avatar */}
+                <div className="relative">
+                  <ProfileAvatar
+                    firstName={user?.firstName}
+                    lastName={user?.lastName}
+                    size="xl"
+                    className="w-24 h-24"
+                  />
+                  {isVerified && (
+                    <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center border-4 border-white dark:border-gray-800">
+                      <Check className="w-4 h-4 text-white" />
+                    </div>
+                  )}
+                </div>
 
-              {/* Info */}
-              <div className="flex-1">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                      {user?.firstName} {user?.lastName}
-                    </h2>
-                    <p className="text-gray-500 dark:text-gray-400">{user?.email}</p>
-                    {user?.phone && (
-                      <p className="text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-1">
-                        <Phone className="w-4 h-4" />
-                        {user.phone}
-                      </p>
+                {/* Info */}
+                <div className="flex-1">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {user?.firstName} {user?.lastName}
+                      </h2>
+                      <p className="text-gray-500 dark:text-gray-400">{user?.email}</p>
+                      {user?.phone && (
+                        <p className="text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-1">
+                          <Phone className="w-4 h-4" />
+                          {user.phone}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setActiveModal('edit-profile')}
+                      className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                    >
+                      <Edit3 className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                    </button>
+                  </div>
+
+                  {/* Quick Stats */}
+                  <div className="flex flex-wrap gap-3 mt-4">
+                    <span className={clsx(
+                      'px-3 py-1 rounded-full text-sm font-medium',
+                      isVerified
+                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                        : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
+                    )}>
+                      {isVerified ? 'Verified' : 'Unverified'}
+                    </span>
+                    {settings.has2FA && (
+                      <span className="px-3 py-1 rounded-full text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
+                        2FA Enabled
+                      </span>
+                    )}
+                    {settings.hasPin && (
+                      <span className="px-3 py-1 rounded-full text-sm font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">
+                        PIN Set
+                      </span>
                     )}
                   </div>
-                  <button
-                    onClick={() => setActiveModal('edit-profile')}
-                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                  >
-                    <Edit3 className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-                  </button>
-                </div>
-
-                {/* Quick Stats */}
-                <div className="flex flex-wrap gap-3 mt-4">
-                  <span className={clsx(
-                    'px-3 py-1 rounded-full text-sm font-medium',
-                    isVerified
-                      ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                      : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
-                  )}>
-                    {isVerified ? 'Verified' : 'Unverified'}
-                  </span>
-                  {settings.has2FA && (
-                    <span className="px-3 py-1 rounded-full text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
-                      2FA Enabled
-                    </span>
-                  )}
-                  {settings.hasPin && (
-                    <span className="px-3 py-1 rounded-full text-sm font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">
-                      PIN Set
-                    </span>
-                  )}
                 </div>
               </div>
-            </div>
-          </MotionCard>
-        </motion.div>
+            </MotionCard>
+          </motion.div>
 
-        {/* KYC Status Card */}
-        <motion.div variants={itemVariants}>
-          <MotionCard className="p-6" delay={0.1} glowEffect>
+          {/* KYC Status Card */}
+          <motion.div variants={itemVariants}>
+            <MotionCard className="p-6 h-full" delay={0.1} glowEffect>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-primary-100 dark:bg-primary-900/30 rounded-lg">
@@ -703,9 +752,11 @@ export function ProfilePage() {
           </MotionCard>
         </motion.div>
 
-        {/* Security Settings */}
-        <motion.div variants={itemVariants}>
-          <MotionCard className="p-6" delay={0.2} glowEffect>
+        {/* Security and Preferences Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Security Settings */}
+          <motion.div variants={itemVariants}>
+            <MotionCard className="p-6 h-full" delay={0.2} glowEffect>
             <div className="flex items-center gap-3 mb-6">
               <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
                 <Shield className="w-5 h-5 text-orange-600 dark:text-orange-400" />
@@ -801,7 +852,101 @@ export function ProfilePage() {
           </MotionCard>
         </motion.div>
 
-        {/* Account Limits */}
+          {/* Preferences - Default Wallet */}
+          <motion.div variants={itemVariants}>
+            <MotionCard className="p-6 h-full" delay={0.25} glowEffect>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+                <CreditCard className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-white">Preferences</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Set your default wallet for transactions</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Default Wallet for Transactions
+                </label>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                  This wallet will be selected by default when sending money or making payments
+                </p>
+
+                {wallets.length > 0 ? (
+                  <div className="space-y-2">
+                    {wallets.map((wallet) => {
+                      const isDefault = settings.defaultWalletId === wallet.id ||
+                        (!settings.defaultWalletId && wallet.wallet_type === 'primary');
+
+                      return (
+                        <motion.button
+                          key={wallet.id}
+                          whileHover={{ scale: 1.01 }}
+                          whileTap={{ scale: 0.99 }}
+                          onClick={() => handleSetDefaultWallet(wallet.id)}
+                          disabled={savingDefaultWallet}
+                          className={clsx(
+                            'w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all',
+                            isDefault
+                              ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                              : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={clsx(
+                              'w-12 h-12 rounded-xl flex items-center justify-center',
+                              wallet.currency === 'SLE' ? 'bg-green-100 dark:bg-green-900/30' :
+                              wallet.currency === 'USD' ? 'bg-blue-100 dark:bg-blue-900/30' :
+                              'bg-gray-100 dark:bg-gray-700'
+                            )}>
+                              <span className="text-lg font-bold text-gray-700 dark:text-gray-300">
+                                {wallet.currency === 'SLE' ? 'Le' : '$'}
+                              </span>
+                            </div>
+                            <div className="text-left">
+                              <p className="font-semibold text-gray-900 dark:text-white">
+                                {wallet.currency} Wallet
+                              </p>
+                              <p className="text-sm text-gray-500 dark:text-gray-400">
+                                Balance: {wallet.currency === 'SLE' ? 'Le ' : '$ '}
+                                {wallet.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {isDefault && (
+                              <span className="px-3 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 text-xs font-semibold rounded-full">
+                                Default
+                              </span>
+                            )}
+                            <div className={clsx(
+                              'w-5 h-5 rounded-full border-2 flex items-center justify-center',
+                              isDefault
+                                ? 'border-primary-500 bg-primary-500'
+                                : 'border-gray-300 dark:border-gray-600'
+                            )}>
+                              {isDefault && <Check className="w-3 h-3 text-white" />}
+                            </div>
+                          </div>
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 bg-gray-50 dark:bg-gray-800 rounded-xl">
+                    <Wallet className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                    <p className="text-gray-500 dark:text-gray-400">No wallets found</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </MotionCard>
+        </motion.div>
+        </div>
+
+        {/* Account Limits - Full Width */}
         <motion.div variants={itemVariants}>
           <MotionCard className="p-6" delay={0.3} glowEffect>
             <div className="flex items-center gap-3 mb-6">

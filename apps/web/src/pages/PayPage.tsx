@@ -81,7 +81,7 @@ export function PayPage() {
 
   // Format amount with currency
   const formatCurrency = (amt: number): string => {
-    return `${currencySymbol}${amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `${currencySymbol} ${amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   // Fee calculation

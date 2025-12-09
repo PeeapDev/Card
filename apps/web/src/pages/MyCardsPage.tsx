@@ -23,6 +23,13 @@ import {
   Settings,
   ToggleLeft,
   ToggleRight,
+  Wallet,
+  ArrowUpRight,
+  ArrowDownLeft,
+  DollarSign,
+  Radio,
+  Copy,
+  ExternalLink,
 } from 'lucide-react';
 import QRCode from 'react-qr-code';
 import { Card, CardHeader, CardTitle, Button, Input } from '@/components/ui';
@@ -41,12 +48,18 @@ import { clsx } from 'clsx';
 import type { Card as CardType } from '@/types';
 import { useNavigate } from 'react-router-dom';
 import { currencyService, Currency } from '@/services/currency.service';
+import { NFCLinkGenerator } from '@/components/payment/NFCLinkGenerator';
+import { useAuth } from '@/context/AuthContext';
+import { useNFCPaymentLinks, NFCPaymentLink } from '@/hooks/useNFCPayments';
+import { supabase } from '@/lib/supabase';
 
 export function MyCardsPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { data: cards, isLoading } = useCards();
   const { data: orders } = useCardOrders();
   const { data: wallets } = useWallets();
+  const { data: nfcPaymentLinks, isLoading: nfcLinksLoading, refetch: refetchNFCLinks } = useNFCPaymentLinks();
   const blockCard = useBlockCard();
   const unblockCard = useUnblockCard();
   const activateCard = useActivateCard();
@@ -62,7 +75,7 @@ export function MyCardsPage() {
   const currencySymbol = defaultCurrency?.symbol || '';
 
   const formatCurrency = (amount: number): string => {
-    return `${currencySymbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `${currencySymbol} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const [selectedCard, setSelectedCard] = useState<CardType | null>(null);
@@ -71,6 +84,83 @@ export function MyCardsPage() {
   const [qrInput, setQrInput] = useState('');
   const [showFlipCard, setShowFlipCard] = useState<string | null>(null);
   const [showCardModal, setShowCardModal] = useState(false);
+  const [showTopUpModal, setShowTopUpModal] = useState(false);
+  const [topUpAmount, setTopUpAmount] = useState<string>('');
+  const [topUpCard, setTopUpCard] = useState<CardType | null>(null);
+  const [showNFCSetup, setShowNFCSetup] = useState(false);
+  const [nfcSetupCard, setNfcSetupCard] = useState<CardType | null>(null);
+  const [copiedNFCLink, setCopiedNFCLink] = useState<string | null>(null);
+
+  // Get connected wallet for a card
+  const getConnectedWallet = (walletId: string) => {
+    return wallets?.find(w => w.id === walletId) || null;
+  };
+
+  // Handle top up
+  const handleTopUp = (card: CardType) => {
+    setTopUpCard(card);
+    setTopUpAmount('');
+    setShowTopUpModal(true);
+  };
+
+  // Handle NFC setup
+  const handleNFCSetup = (card: CardType) => {
+    setNfcSetupCard(card);
+    setShowNFCSetup(true);
+  };
+
+  // Copy NFC link to clipboard
+  const handleCopyNFCLink = async (shortCode: string, linkId: string) => {
+    try {
+      const paymentUrl = `${window.location.origin}/pay/nfc/${shortCode}`;
+      await navigator.clipboard.writeText(paymentUrl);
+      setCopiedNFCLink(linkId);
+      setTimeout(() => setCopiedNFCLink(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  // Deactivate NFC payment link
+  const handleDeactivateNFCLink = async (linkId: string) => {
+    if (!confirm('Are you sure you want to deactivate this payment link? It will no longer accept payments.')) {
+      return;
+    }
+    try {
+      await supabase
+        .from('nfc_payment_links')
+        .update({ status: 'inactive' })
+        .eq('id', linkId);
+      refetchNFCLinks();
+    } catch (err) {
+      console.error('Failed to deactivate link:', err);
+    }
+  };
+
+  // Get card for an NFC payment link
+  const getCardForNFCLink = (cardId?: string) => {
+    if (!cardId) return null;
+    return cards?.find(c => c.id === cardId);
+  };
+
+  const handleTopUpSubmit = async () => {
+    if (!topUpCard || !topUpAmount) return;
+
+    try {
+      // TODO: Implement actual API call to top up card
+      const amount = Number(topUpAmount);
+      const formattedAmount = amount.toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+      alert(`Top up of ${currencySymbol} ${formattedAmount} to card successful!`);
+      setShowTopUpModal(false);
+      setTopUpCard(null);
+      setTopUpAmount('');
+    } catch (error) {
+      console.error('Failed to top up card:', error);
+    }
+  };
 
   const handleToggleBlock = async (card: CardType) => {
     try {
@@ -183,6 +273,115 @@ export function MyCardsPage() {
           </div>
         )}
 
+        {/* NFC Payment Links Section */}
+        {nfcPaymentLinks && nfcPaymentLinks.length > 0 && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Wifi className="w-5 h-5 text-indigo-600" />
+                <h2 className="text-lg font-semibold text-gray-900">NFC Payment Links</h2>
+              </div>
+              <span className="text-sm text-gray-500">{nfcPaymentLinks.filter(l => l.status === 'active').length} active</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {nfcPaymentLinks.filter(l => l.status === 'active').map((link) => {
+                const linkedCard = getCardForNFCLink(link.card_id);
+                const paymentUrl = `${window.location.origin}/pay/nfc/${link.short_code}`;
+                return (
+                  <Card key={link.id} className="p-4">
+                    <div className="flex items-start gap-4">
+                      {/* NFC Icon */}
+                      <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                        <Wifi className="w-6 h-6 text-white" />
+                      </div>
+
+                      {/* Link Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-gray-900 truncate">{link.name}</p>
+                          <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded-full">
+                            Secure
+                          </span>
+                        </div>
+                        {linkedCard && (
+                          <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
+                            <CreditCard className="w-3 h-3" />
+                            Card ****{linkedCard.cardNumber.slice(-4)}
+                          </p>
+                        )}
+
+                        {/* Short Code Display */}
+                        <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 rounded-lg">
+                          <span className="text-xs text-indigo-600">Code:</span>
+                          <span className="font-mono font-bold text-indigo-900 tracking-wider">{link.short_code}</span>
+                        </div>
+
+                        {/* Payment URL - Copyable */}
+                        <div className="mt-2 flex items-center gap-2">
+                          <div className="flex-1 bg-gray-50 rounded-lg px-3 py-2 font-mono text-xs text-gray-600 truncate border border-gray-200">
+                            {paymentUrl}
+                          </div>
+                          <button
+                            onClick={() => handleCopyNFCLink(link.short_code, link.id)}
+                            className={clsx(
+                              'p-2 rounded-lg transition-colors flex-shrink-0',
+                              copiedNFCLink === link.id
+                                ? 'bg-green-100 text-green-600'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            )}
+                            title="Copy payment link"
+                          >
+                            {copiedNFCLink === link.id ? (
+                              <CheckCircle className="w-4 h-4" />
+                            ) : (
+                              <Copy className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+
+                        {/* Stats */}
+                        <div className="mt-3 flex items-center gap-4 text-sm">
+                          <div>
+                            <span className="text-gray-500">Transactions: </span>
+                            <span className="font-medium text-gray-900">{link.total_transactions}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Received: </span>
+                            <span className="font-medium text-gray-900">{currencySymbol}{link.total_amount_received?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}</span>
+                          </div>
+                        </div>
+
+                        {/* Limits */}
+                        <div className="mt-2 text-xs text-gray-500">
+                          Limit: {currencySymbol}{link.single_transaction_limit?.toLocaleString()} per txn / {currencySymbol}{link.daily_limit?.toLocaleString()} daily
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex flex-col gap-2">
+                        <button
+                          onClick={() => window.open(paymentUrl, '_blank')}
+                          className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                          title="Open payment page"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeactivateNFCLink(link.id)}
+                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Deactivate link"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Active Cards */}
         {isLoading ? (
           <div className="text-center py-12">Loading cards...</div>
@@ -211,8 +410,11 @@ export function MyCardsPage() {
                         setSelectedCard(card);
                         setShowCardModal(true);
                       }}
+                      onTopUp={() => handleTopUp(card)}
+                      onNFCSetup={() => handleNFCSetup(card)}
                       isBlocking={blockCard.isPending || unblockCard.isPending}
                       currencySymbol={currencySymbol}
+                      connectedWallet={getConnectedWallet(card.walletId)}
                     />
                   ))}
                 </div>
@@ -243,9 +445,12 @@ export function MyCardsPage() {
                         setSelectedCard(card);
                         setShowCardModal(true);
                       }}
+                      onTopUp={() => handleTopUp(card)}
+                      onNFCSetup={() => handleNFCSetup(card)}
                       isBlocking={blockCard.isPending || unblockCard.isPending}
                       isActivating={activateCard.isPending}
                       currencySymbol={currencySymbol}
+                      connectedWallet={getConnectedWallet(card.walletId)}
                     />
                   ))}
                 </div>
@@ -339,8 +544,136 @@ export function MyCardsPage() {
           currencySymbol={currencySymbol}
         />
       )}
+
+      {/* Top Up Modal */}
+      {showTopUpModal && topUpCard && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-green-600" />
+                  Top Up Card
+                </CardTitle>
+                <button onClick={() => setShowTopUpModal(false)}>
+                  <X className="w-5 h-5 text-gray-400 hover:text-gray-600" />
+                </button>
+              </div>
+            </CardHeader>
+            <div className="p-6 space-y-6">
+              {/* Card Preview */}
+              <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl p-4 text-white">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <p className="text-xs opacity-70">{topUpCard.type} Card</p>
+                    <p className="font-medium">{topUpCard.cardholderName}</p>
+                  </div>
+                  <CreditCard className="w-6 h-6 opacity-70" />
+                </div>
+                <p className="text-sm font-mono tracking-wider">
+                  •••• •••• •••• {topUpCard.cardNumber.slice(-4)}
+                </p>
+              </div>
+
+              {/* Connected Wallet Balance */}
+              {getConnectedWallet(topUpCard.walletId) && (
+                <div className="flex items-center justify-between bg-gray-50 rounded-lg p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
+                      <Wallet className="w-5 h-5 text-indigo-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">From Wallet</p>
+                      <p className="font-semibold">
+                        {currencySymbol}{getConnectedWallet(topUpCard.walletId)?.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                  </div>
+                  <ArrowDownLeft className="w-5 h-5 text-green-500" />
+                </div>
+              )}
+
+              {/* Amount Input */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Amount to Top Up
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">
+                    {currencySymbol}
+                  </span>
+                  <input
+                    type="number"
+                    value={topUpAmount}
+                    onChange={(e) => setTopUpAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 text-xl font-semibold"
+                  />
+                </div>
+                {/* Quick amounts - New Leone (SLE) after redenomination */}
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {[1, 5, 10, 50, 100].map((amount) => (
+                    <button
+                      key={amount}
+                      onClick={() => setTopUpAmount(String(amount))}
+                      className={clsx(
+                        'px-3 py-1 text-sm rounded-lg border transition-colors',
+                        topUpAmount === String(amount)
+                          ? 'bg-green-100 border-green-300 text-green-700'
+                          : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                      )}
+                    >
+                      {currencySymbol}{amount.toLocaleString()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setShowTopUpModal(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700"
+                  onClick={handleTopUpSubmit}
+                  disabled={!topUpAmount || Number(topUpAmount) <= 0}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Top Up {topUpAmount && `${currencySymbol} ${Number(topUpAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* NFC Setup Modal */}
+      {showNFCSetup && nfcSetupCard && user && (
+        <NFCLinkGenerator
+          cardId={nfcSetupCard.id}
+          userId={user.id}
+          walletId={nfcSetupCard.walletId}
+          cardholderName={nfcSetupCard.cardholderName}
+          cardLastFour={nfcSetupCard.cardNumber.slice(-4)}
+          onClose={() => {
+            setShowNFCSetup(false);
+            setNfcSetupCard(null);
+            refetchNFCLinks(); // Refresh the NFC payment links list
+          }}
+        />
+      )}
     </MainLayout>
   );
+}
+
+// Helper function to format card number in groups of 4
+function formatCardNumber(cardNumber: string): string {
+  return cardNumber.replace(/(.{4})/g, '$1 ').trim();
 }
 
 // Card Item Component
@@ -354,9 +687,12 @@ interface CardItemProps {
   onBlock: () => void;
   onActivate?: () => void;
   onViewDetails: () => void;
+  onTopUp: () => void;
+  onNFCSetup: () => void;
   isBlocking: boolean;
   isActivating?: boolean;
   currencySymbol: string;
+  connectedWallet?: { id: string; balance: number; currency: string } | null;
 }
 
 function CardItem({
@@ -369,9 +705,12 @@ function CardItem({
   onBlock,
   onActivate,
   onViewDetails,
+  onTopUp,
+  onNFCSetup,
   isBlocking,
   isActivating,
   currencySymbol,
+  connectedWallet,
 }: CardItemProps) {
   const [showControls, setShowControls] = useState(false);
   const [cardControls, setCardControls] = useState({
@@ -399,10 +738,30 @@ function CardItem({
     // TODO: API call to persist control setting
   };
 
+  // Format card number with spaces every 4 digits
+  const displayCardNumber = showDetails
+    ? formatCardNumber(card.cardNumber)
+    : card.maskedNumber
+      ? formatCardNumber(card.maskedNumber.replace(/[•]/g, '•'))
+      : '•••• •••• •••• ••••';
+
   return (
     <div className="space-y-4">
-      {/* Card Visual with Flip */}
-      <div className="card-flip-container" style={{ aspectRatio: '1.586/1' }}>
+      {/* Connected Wallet Info */}
+      {connectedWallet && (
+        <div className="flex items-center justify-between bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg px-4 py-2 border border-indigo-100">
+          <div className="flex items-center gap-2">
+            <Wallet className="w-4 h-4 text-indigo-600" />
+            <span className="text-sm text-gray-600">Linked Wallet</span>
+          </div>
+          <span className="font-semibold text-indigo-700">
+            {currencySymbol}{connectedWallet.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          </span>
+        </div>
+      )}
+
+      {/* Card Visual with Flip - Fixed positioning */}
+      <div className="card-flip-container">
         <div
           className={clsx('card-flip-inner', showFlip && 'flipped')}
           onClick={onToggleFlip}
@@ -410,7 +769,7 @@ function CardItem({
           {/* Front */}
           <div
             className={clsx(
-              'card-front bg-gradient-to-br p-6 text-white shadow-lg cursor-pointer card-shine',
+              'card-front bg-gradient-to-br p-6 text-white shadow-xl cursor-pointer card-shine',
               getCardGradient(card.type, index),
               card.status !== 'ACTIVE' && 'opacity-60'
             )}
@@ -425,107 +784,146 @@ function CardItem({
                 <p className="text-xs uppercase tracking-wider opacity-80">{card.type} Card</p>
                 <p className="text-sm mt-1 opacity-90">{card.cardholderName}</p>
               </div>
-              <CreditCard className="w-8 h-8" />
+              <div className="flex items-center gap-2">
+                {card.type === 'PHYSICAL' && <Wifi className="w-5 h-5 opacity-70" />}
+                <CreditCard className="w-8 h-8" />
+              </div>
             </div>
             <div className="absolute bottom-6 left-6 right-6">
-              <p className="text-lg tracking-widest font-mono">
-                {showDetails ? card.cardNumber : card.maskedNumber || '•••• •••• •••• ••••'}
+              {/* Card number grouped in 4 */}
+              <p className="text-xl tracking-[0.2em] font-mono">
+                {displayCardNumber}
               </p>
-              <div className="flex justify-between mt-2">
+              <div className="flex justify-between mt-3">
                 <div>
-                  <p className="text-xs opacity-70">Expires</p>
-                  <p className="text-sm">
+                  <p className="text-[10px] uppercase opacity-60 tracking-wider">Valid Thru</p>
+                  <p className="text-sm font-medium">
                     {String(card.expiryMonth).padStart(2, '0')}/{String(card.expiryYear).slice(-2)}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs opacity-70">Status</p>
-                  <p className="text-sm">{card.status}</p>
+                  <p className="text-[10px] uppercase opacity-60 tracking-wider">Status</p>
+                  <p className={clsx(
+                    'text-sm font-medium',
+                    card.status === 'ACTIVE' && 'text-green-300',
+                    card.status === 'BLOCKED' && 'text-red-300',
+                    card.status === 'INACTIVE' && 'text-yellow-300'
+                  )}>
+                    {card.status}
+                  </p>
                 </div>
               </div>
             </div>
             {/* Tap hint */}
-            <div className="absolute top-2 right-2 opacity-50">
-              <RefreshCw className="w-4 h-4" />
+            <div className="absolute top-2 right-2 opacity-40 flex items-center gap-1">
+              <span className="text-[10px]">Tap to flip</span>
+              <RefreshCw className="w-3 h-3" />
             </div>
           </div>
 
           {/* Back */}
-          <div className="card-back bg-gradient-to-br from-gray-700 to-gray-900 shadow-lg overflow-hidden cursor-pointer">
+          <div className="card-back bg-gradient-to-br from-gray-800 to-gray-900 shadow-xl overflow-hidden cursor-pointer">
             {/* Magnetic Strip */}
-            <div className="absolute top-6 left-0 right-0 h-10 bg-gray-800" />
+            <div className="absolute top-8 left-0 right-0 h-12 bg-gray-950" />
 
-            {/* Signature Strip */}
-            <div className="absolute top-20 left-4 right-20 h-8 bg-gray-200 rounded flex items-center px-2">
-              <p className="text-gray-600 text-xs font-mono tracking-wider truncate">
-                {card.cardholderName}
-              </p>
+            {/* Signature Strip with CVV */}
+            <div className="absolute top-24 left-4 right-4 flex items-end gap-2">
+              <div className="flex-1 h-10 bg-gray-200 rounded flex items-center px-3">
+                <p className="text-gray-700 text-xs font-mono tracking-wider truncate italic">
+                  {card.cardholderName}
+                </p>
+              </div>
+              <div className="bg-white rounded px-3 py-1 text-center">
+                <p className="text-[8px] text-gray-500 uppercase">CVV</p>
+                <p className="text-sm font-mono font-bold text-gray-800">
+                  {showDetails ? '123' : '•••'}
+                </p>
+              </div>
             </div>
 
             {/* QR Code for payment */}
-            <div className="absolute bottom-4 right-4 bg-white p-2 rounded-lg shadow-md">
-              <QRCode value={qrCodeData} size={80} level="M" />
+            <div className="absolute bottom-4 right-4 bg-white p-2 rounded-lg shadow-lg">
+              <QRCode value={qrCodeData} size={70} level="M" />
             </div>
 
             {/* Card info */}
             <div className="absolute bottom-4 left-4 max-w-[140px] text-white">
-              <p className="text-xs font-semibold mb-1">Scan to Pay</p>
-              <p className="text-[10px] opacity-70">Use this QR code to make instant payments without NFC</p>
+              <p className="text-xs font-semibold mb-1 flex items-center gap-1">
+                <QrCode className="w-3 h-3" />
+                Scan to Pay
+              </p>
+              <p className="text-[9px] opacity-60 leading-tight">
+                Instant payments via Peeap app
+              </p>
             </div>
 
-            {/* Card number last 4 */}
-            <div className="absolute top-20 right-4 text-white">
-              <p className="text-xs opacity-70">CVV</p>
-              <p className="text-sm font-mono">•••</p>
-            </div>
-
-            {/* Tap hint */}
-            <div className="absolute top-2 right-2 opacity-50">
-              <RefreshCw className="w-4 h-4 text-white" />
+            {/* Brand logo area */}
+            <div className="absolute top-2 right-2 opacity-40 flex items-center gap-1 text-white">
+              <span className="text-[10px]">Tap to flip</span>
+              <RefreshCw className="w-3 h-3" />
             </div>
           </div>
         </div>
       </div>
 
-      {/* Card Actions */}
+      {/* Card Actions - Redesigned */}
       <Card padding="sm">
-        <div className="flex items-center justify-between">
-          <div className="text-sm">
-            <p className="text-gray-500">Daily Limit</p>
-            <p className="font-medium">{currencySymbol}{card.dailyLimit.toLocaleString()}</p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onToggleDetails(); }} title="Toggle card number">
-              {showDetails ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onToggleFlip(); }} title="Flip card">
-              <RefreshCw className="w-4 h-4" />
-            </Button>
-            <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setShowControls(!showControls); }} title="Card controls">
-              <Settings className="w-4 h-4" />
-            </Button>
-            {card.status === 'INACTIVE' && onActivate ? (
-              <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); onActivate(); }} isLoading={isActivating}>
-                Activate
-              </Button>
-            ) : (
+        <div className="space-y-3">
+          {/* Balance & Limit Row */}
+          <div className="flex items-center justify-between">
+            <div className="text-sm">
+              <p className="text-gray-500">Daily Limit</p>
+              <p className="font-semibold text-gray-900">{currencySymbol}{card.dailyLimit.toLocaleString()}</p>
+            </div>
+            {card.status === 'ACTIVE' && (
               <Button
-                variant="ghost"
                 size="sm"
-                onClick={(e) => { e.stopPropagation(); onBlock(); }}
-                title={card.status === 'BLOCKED' ? 'Unblock' : 'Block'}
-                isLoading={isBlocking}
+                onClick={(e) => { e.stopPropagation(); onTopUp(); }}
+                className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700"
               >
-                {card.status === 'BLOCKED' ? (
-                  <Unlock className="w-4 h-4 text-green-500" />
-                ) : (
-                  <Lock className="w-4 h-4 text-red-500" />
-                )}
+                <Plus className="w-4 h-4 mr-1" />
+                Top Up
               </Button>
             )}
-            <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onViewDetails(); }}>
-              <MoreVertical className="w-4 h-4" />
-            </Button>
+          </div>
+
+          {/* Action Buttons Row */}
+          <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+            <div className="flex gap-1">
+              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onToggleDetails(); }} title="Toggle card number">
+                {showDetails ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onToggleFlip(); }} title="Flip card">
+                <RefreshCw className="w-4 h-4" />
+              </Button>
+              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setShowControls(!showControls); }} title="Card controls">
+                <Settings className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="flex gap-1">
+              {card.status === 'INACTIVE' && onActivate ? (
+                <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); onActivate(); }} isLoading={isActivating}>
+                  Activate
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => { e.stopPropagation(); onBlock(); }}
+                  title={card.status === 'BLOCKED' ? 'Unblock' : 'Block'}
+                  isLoading={isBlocking}
+                >
+                  {card.status === 'BLOCKED' ? (
+                    <Unlock className="w-4 h-4 text-green-500" />
+                  ) : (
+                    <Lock className="w-4 h-4 text-red-500" />
+                  )}
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onViewDetails(); }}>
+                <MoreVertical className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </Card>
@@ -555,6 +953,23 @@ function CardItem({
                 className={clsx('transition-colors', cardControls.nfcPayment ? 'text-green-500' : 'text-gray-300')}
               >
                 {cardControls.nfcPayment ? <ToggleRight className="w-8 h-8" /> : <ToggleLeft className="w-8 h-8" />}
+              </button>
+            </div>
+
+            {/* NFC Tag Setup */}
+            <div className="flex items-center justify-between py-2 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <Radio className="w-5 h-5 text-indigo-500" />
+                <div>
+                  <p className="text-sm font-medium">NFC Tag Setup</p>
+                  <p className="text-xs text-gray-500">Generate link for physical NFC tag</p>
+                </div>
+              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); onNFCSetup(); }}
+                className="px-3 py-1 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors"
+              >
+                Setup
               </button>
             </div>
 
@@ -639,29 +1054,33 @@ function CardDetailsModal({ card, onClose, currencySymbol }: CardDetailsModalPro
         </CardHeader>
         <div className="p-6 space-y-6">
           {/* Card Preview */}
-          <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl p-6 text-white">
+          <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl p-6 text-white shadow-xl">
             <div className="flex justify-between items-start mb-8">
               <div>
                 <p className="text-xs uppercase tracking-wider opacity-80">{card.type} Card</p>
-                <p className="font-bold mt-1">{cardWithType?.cardType?.name || 'Card'}</p>
+                <p className="font-bold mt-1">{cardWithType?.cardType?.name || 'Peeap Card'}</p>
               </div>
-              <CreditCard className="w-8 h-8 opacity-80" />
+              <div className="flex items-center gap-2">
+                {card.type === 'PHYSICAL' && <Wifi className="w-5 h-5 opacity-70" />}
+                <CreditCard className="w-8 h-8 opacity-80" />
+              </div>
             </div>
-            <p className="text-xl tracking-widest font-mono mb-4">
+            {/* Card number formatted in groups of 4 */}
+            <p className="text-xl tracking-[0.2em] font-mono mb-4">
               {showSensitive
-                ? card.cardNumber.replace(/(.{4})/g, '$1 ').trim()
+                ? formatCardNumber(card.cardNumber)
                 : '•••• •••• •••• ' + card.cardNumber.slice(-4)}
             </p>
             <div className="flex justify-between">
               <div>
-                <p className="text-xs opacity-70">EXPIRES</p>
-                <p>
+                <p className="text-[10px] uppercase opacity-60 tracking-wider">Valid Thru</p>
+                <p className="font-medium">
                   {String(card.expiryMonth).padStart(2, '0')}/{String(card.expiryYear).slice(-2)}
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-xs opacity-70">CARDHOLDER</p>
-                <p>{card.cardholderName.toUpperCase()}</p>
+                <p className="text-[10px] uppercase opacity-60 tracking-wider">Cardholder</p>
+                <p className="font-medium">{card.cardholderName.toUpperCase()}</p>
               </div>
             </div>
           </div>

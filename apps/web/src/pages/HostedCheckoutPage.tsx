@@ -30,9 +30,12 @@ import {
   UserPlus,
   ArrowLeft,
   Lock,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { useAuth } from '@/context/AuthContext';
+import { cardService } from '@/services/card.service';
 
 // Types
 interface CheckoutSession {
@@ -70,9 +73,9 @@ type CheckoutStep =
   | 'error'
   | 'expired';
 
-// Currency definitions - SLE uses no decimals (whole number currency)
+// Currency definitions - SLE uses 2 decimals after redenomination (Old Le 1,000 = New Le 1.00)
 const CURRENCIES: Record<string, { symbol: string; name: string; decimals: number }> = {
-  SLE: { symbol: 'Le', name: 'Sierra Leonean Leone', decimals: 0 },
+  SLE: { symbol: 'Le', name: 'Sierra Leonean New Leone', decimals: 2 },
   USD: { symbol: '$', name: 'US Dollar', decimals: 2 },
   EUR: { symbol: '€', name: 'Euro', decimals: 2 },
   GBP: { symbol: '£', name: 'British Pound', decimals: 2 },
@@ -92,11 +95,12 @@ export function HostedCheckoutPage() {
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Card form state
+  // Card form state (similar to Visa/Mastercard checkout)
   const [cardNumber, setCardNumber] = useState('');
+  const [cardholderName, setCardholderName] = useState('');
   const [cardExpiry, setCardExpiry] = useState('');
-  const [cardCvv, setCardCvv] = useState('');
-  const [cardName, setCardName] = useState('');
+  const [cardPin, setCardPin] = useState(''); // PIN instead of CVV
+  const [showPin, setShowPin] = useState(false);
 
   // Login form state
   const [loginMode, setLoginMode] = useState<'login' | 'register'>('login');
@@ -305,6 +309,12 @@ export function HostedCheckoutPage() {
     setSelectedMethod(null);
     setStep('select_method');
     setError(null);
+    // Reset card form state
+    setCardNumber('');
+    setCardholderName('');
+    setCardExpiry('');
+    setCardPin('');
+    setShowPin(false);
   };
 
   // QR Code URL - contains sessionId for payment
@@ -312,7 +322,7 @@ export function HostedCheckoutPage() {
     return `${window.location.origin}/pay/${sessionId}`;
   };
 
-  // Card payment processing
+  // Card payment - Single form like Visa/Mastercard checkout
   const handleCardPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!session) return;
@@ -321,53 +331,61 @@ export function HostedCheckoutPage() {
     setError(null);
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://my.peeap.com/api';
+      // Step 1: Look up the card by number
+      const cardResult = await cardService.lookupCardForPayment(cardNumber);
 
-      // Parse card expiry (MM/YY format)
-      const [expiryMonthStr, expiryYearStr] = cardExpiry.split('/');
-      const expiryMonth = parseInt(expiryMonthStr, 10);
-      // Convert 2-digit year to 4-digit (assume 20xx)
-      let expiryYear = parseInt(expiryYearStr, 10);
-      if (expiryYear < 100) {
-        expiryYear += 2000;
+      if (!cardResult) {
+        throw new Error('Card not found. Please check your card number and try again.');
       }
 
-      // Step 1: Tokenize the card (lookup existing Peeap card by PAN + expiry)
-      const tokenizeResponse = await fetch(`${apiUrl}/checkout/tokenize`, {
+      // Step 2: Validate cardholder name (case-insensitive partial match)
+      const enteredName = cardholderName.trim().toLowerCase();
+      const actualName = cardResult.cardholderName.toLowerCase();
+      if (!actualName.includes(enteredName) && !enteredName.includes(actualName.split(' ')[0])) {
+        throw new Error('Cardholder name does not match card records.');
+      }
+
+      // Step 3: Validate expiry date
+      const [expiryMonth, expiryYear] = cardExpiry.split('/').map(s => parseInt(s.trim(), 10));
+      if (!expiryMonth || !expiryYear || expiryMonth < 1 || expiryMonth > 12) {
+        throw new Error('Invalid expiry date format. Use MM/YY.');
+      }
+
+      // Check if card is expired (compare with current date)
+      const currentDate = new Date();
+      const currentYear = currentDate.getFullYear() % 100; // Get last 2 digits
+      const currentMonth = currentDate.getMonth() + 1;
+
+      if (expiryYear < currentYear || (expiryYear === currentYear && expiryMonth < currentMonth)) {
+        throw new Error('This card has expired.');
+      }
+
+      // Step 4: Check wallet balance
+      if (cardResult.walletBalance < session.amount) {
+        throw new Error(`Insufficient funds. Available balance: ${formatAmount(cardResult.walletBalance, cardResult.currency)}`);
+      }
+
+      // Step 5: Process the payment via API (validates PIN server-side)
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://my.peeap.com/api';
+
+      const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}/card-pay`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          pan: cardNumber.replace(/\s/g, ''),
-          expiryMonth,
-          expiryYear,
+          cardId: cardResult.cardId,
+          walletId: cardResult.walletId,
+          pin: cardPin,
         }),
       });
 
-      if (!tokenizeResponse.ok) {
-        const errorData = await tokenizeResponse.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Card not found or invalid. Please use a valid Peeap card.');
-      }
-
-      const { cardToken } = await tokenizeResponse.json();
-
-      // Step 2: Complete the checkout session with the card token
-      const response = await fetch(
-        `${apiUrl}/checkout/sessions/${sessionId}/complete`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cardToken }),
-        }
-      );
-
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Payment failed');
+        throw new Error(errorData.message || errorData.error || 'Payment failed');
       }
 
       const result = await response.json();
 
-      if (result.status === 'COMPLETE') {
+      if (result.status === 'COMPLETE' || result.success) {
         // Redirect to success URL if provided
         if (session.successUrl) {
           window.location.href = session.successUrl;
@@ -383,6 +401,15 @@ export function HostedCheckoutPage() {
     } finally {
       setPaymentLoading(false);
     }
+  };
+
+  // Format expiry MM/YY
+  const formatExpiry = (value: string) => {
+    const cleaned = value.replace(/\D/g, '');
+    if (cleaned.length >= 2) {
+      return `${cleaned.substring(0, 2)}/${cleaned.substring(2, 4)}`;
+    }
+    return cleaned;
   };
 
   // Mobile payment flow
@@ -463,15 +490,6 @@ export function HostedCheckoutPage() {
     const cleaned = value.replace(/\s/g, '');
     const formatted = cleaned.match(/.{1,4}/g)?.join(' ') || cleaned;
     return formatted.substring(0, 19); // Max 16 digits + 3 spaces
-  };
-
-  // Format expiry MM/YY
-  const formatExpiry = (value: string) => {
-    const cleaned = value.replace(/\D/g, '');
-    if (cleaned.length >= 2) {
-      return `${cleaned.substring(0, 2)}/${cleaned.substring(2, 4)}`;
-    }
-    return cleaned;
   };
 
   // Brand color or default
@@ -892,7 +910,7 @@ export function HostedCheckoutPage() {
     );
   }
 
-  // Card Form
+  // Card Form - Similar to Visa/Mastercard checkout
   if (step === 'card_form') {
     return (
       <div
@@ -915,7 +933,7 @@ export function HostedCheckoutPage() {
                     <img src={session.merchantLogoUrl} alt={session.merchantName} className="h-8 mb-1" />
                   )}
                   <p className="font-semibold text-gray-900">{session?.merchantName || 'Merchant'}</p>
-                  <p className="text-sm text-gray-500">Pay with your PEEAP Card</p>
+                  <p className="text-sm text-gray-500">Pay with Peeap Card</p>
                 </div>
               </div>
             </div>
@@ -938,8 +956,9 @@ export function HostedCheckoutPage() {
               </div>
             )}
 
-            {/* Card Form */}
+            {/* Card Payment Form - Like Visa/Mastercard */}
             <form onSubmit={handleCardPayment} className="p-6 space-y-4">
+              {/* Card Number */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Card Number
@@ -949,26 +968,29 @@ export function HostedCheckoutPage() {
                   value={cardNumber}
                   onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
                   placeholder="1234 5678 9012 3456"
-                  className="w-full py-3 px-4 border-2 border-gray-200 rounded-xl focus:outline-none font-mono"
+                  className="w-full py-3 px-4 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400 font-mono text-lg tracking-wider"
                   maxLength={19}
                   required
+                  autoFocus
                 />
               </div>
 
+              {/* Cardholder Name */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Cardholder Name
                 </label>
                 <input
                   type="text"
-                  value={cardName}
-                  onChange={(e) => setCardName(e.target.value)}
-                  placeholder="John Doe"
-                  className="w-full py-3 px-4 border-2 border-gray-200 rounded-xl focus:outline-none"
+                  value={cardholderName}
+                  onChange={(e) => setCardholderName(e.target.value.toUpperCase())}
+                  placeholder="JOHN DOE"
+                  className="w-full py-3 px-4 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400 uppercase"
                   required
                 />
               </div>
 
+              {/* Expiry Date and PIN (like Expiry + CVV) */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -979,31 +1001,40 @@ export function HostedCheckoutPage() {
                     value={cardExpiry}
                     onChange={(e) => setCardExpiry(formatExpiry(e.target.value))}
                     placeholder="MM/YY"
-                    className="w-full py-3 px-4 border-2 border-gray-200 rounded-xl focus:outline-none font-mono"
+                    className="w-full py-3 px-4 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400 font-mono text-center"
                     maxLength={5}
                     required
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    CVV
+                    PIN
                   </label>
-                  <input
-                    type="text"
-                    value={cardCvv}
-                    onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, '').substring(0, 3))}
-                    placeholder="123"
-                    className="w-full py-3 px-4 border-2 border-gray-200 rounded-xl focus:outline-none font-mono"
-                    maxLength={3}
-                    required
-                  />
+                  <div className="relative">
+                    <input
+                      type={showPin ? 'text' : 'password'}
+                      value={cardPin}
+                      onChange={(e) => setCardPin(e.target.value.replace(/\D/g, '').substring(0, 4))}
+                      placeholder="****"
+                      className="w-full py-3 px-4 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400 font-mono text-center tracking-widest"
+                      maxLength={4}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPin(!showPin)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
               </div>
 
               <button
                 type="submit"
-                disabled={paymentLoading}
-                className="w-full py-4 text-white rounded-xl font-semibold disabled:opacity-50 hover:opacity-90 flex items-center justify-center gap-2"
+                disabled={paymentLoading || cardNumber.replace(/\s/g, '').length < 16 || !cardholderName || cardExpiry.length < 5 || cardPin.length !== 4}
+                className="w-full py-4 text-white rounded-xl font-semibold disabled:opacity-50 hover:opacity-90 flex items-center justify-center gap-2 mt-6"
                 style={{ backgroundColor: brandColor }}
               >
                 {paymentLoading ? (
@@ -1021,7 +1052,7 @@ export function HostedCheckoutPage() {
             <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
               <div className="flex items-center justify-center gap-2 text-gray-500">
                 <Shield className="w-4 h-4" />
-                <span className="text-xs">Your payment information is secure and encrypted</span>
+                <span className="text-xs">Your payment is secure and encrypted</span>
               </div>
             </div>
           </Card>

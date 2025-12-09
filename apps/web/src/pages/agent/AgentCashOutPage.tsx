@@ -42,10 +42,10 @@ export function AgentCashOutPage() {
     }
   }, [user?.id]);
 
-  const currencySymbol = defaultCurrency?.symbol || 'Le ';
+  const currencySymbol = defaultCurrency?.symbol || 'Le';
 
   const formatCurrency = (amount: number): string => {
-    return `${currencySymbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    return `${currencySymbol} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const fetchData = async () => {

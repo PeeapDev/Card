@@ -91,6 +91,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } else if (path.match(/^checkout\/sessions\/[^/]+\/complete$/)) {
       const sessionId = path.split('/')[2];
       return await handleCheckoutSessionComplete(req, res, sessionId);
+    } else if (path.match(/^checkout\/sessions\/[^/]+\/card-pay$/)) {
+      const sessionId = path.split('/')[2];
+      return await handleCheckoutSessionCardPay(req, res, sessionId);
     } else if (path.match(/^checkout\/sessions\/[^/]+\/mobile-pay$/)) {
       const sessionId = path.split('/')[2];
       return await handleCheckoutMobilePay(req, res, sessionId);
@@ -2288,5 +2291,219 @@ async function handleCheckoutSessionComplete(req: VercelRequest, res: VercelResp
   } catch (error: any) {
     console.error('[Checkout] Complete session error:', error);
     return res.status(500).json({ error: error.message });
+  }
+}
+
+/**
+ * Handle card payment for checkout session
+ * Flow:
+ * 1. Verify the session is valid
+ * 2. Verify the card and PIN
+ * 3. Check wallet balance
+ * 4. Deduct from user's wallet
+ * 5. Credit merchant's wallet
+ * 6. Create transaction records
+ * 7. Mark session as complete
+ */
+async function handleCheckoutSessionCardPay(req: VercelRequest, res: VercelResponse, sessionId: string) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const { cardId, walletId, pin } = req.body;
+
+    // Validate required fields
+    if (!cardId || !walletId || !pin) {
+      return res.status(400).json({ error: 'cardId, walletId, and pin are required' });
+    }
+
+    console.log('[CardPay] Processing card payment for session:', sessionId);
+
+    // 1. Get the checkout session
+    const { data: session, error: sessionError } = await supabase
+      .from('checkout_sessions')
+      .select('*')
+      .eq('external_id', sessionId)
+      .single();
+
+    if (sessionError || !session) {
+      console.error('[CardPay] Session not found:', sessionId);
+      return res.status(404).json({ error: 'Checkout session not found' });
+    }
+
+    if (session.status !== 'OPEN') {
+      return res.status(400).json({ error: `Session is ${session.status.toLowerCase()}, cannot process payment` });
+    }
+
+    if (new Date(session.expires_at) < new Date()) {
+      await supabase.from('checkout_sessions').update({ status: 'EXPIRED' }).eq('id', session.id);
+      return res.status(400).json({ error: 'Session has expired' });
+    }
+
+    // 2. Verify the card exists and belongs to the wallet
+    const { data: card, error: cardError } = await supabase
+      .from('cards')
+      .select('id, wallet_id, cardholder_name, transaction_pin, status')
+      .eq('id', cardId)
+      .single();
+
+    if (cardError || !card) {
+      console.error('[CardPay] Card not found:', cardId);
+      return res.status(404).json({ error: 'Card not found' });
+    }
+
+    if (card.wallet_id !== walletId) {
+      return res.status(400).json({ error: 'Card does not belong to this wallet' });
+    }
+
+    if (card.status !== 'ACTIVE') {
+      return res.status(400).json({ error: `Card is ${card.status.toLowerCase()}. Please use an active card.` });
+    }
+
+    // 3. Verify the PIN
+    if (!card.transaction_pin) {
+      return res.status(400).json({ error: 'Transaction PIN not set for this card. Please set a PIN in your Peeap app.' });
+    }
+
+    if (card.transaction_pin !== pin) {
+      console.log('[CardPay] Invalid PIN for card:', cardId);
+      return res.status(401).json({ error: 'Invalid transaction PIN' });
+    }
+
+    // 4. Get wallet and check balance
+    const { data: wallet, error: walletError } = await supabase
+      .from('wallets')
+      .select('id, user_id, balance, currency')
+      .eq('id', walletId)
+      .single();
+
+    if (walletError || !wallet) {
+      return res.status(404).json({ error: 'Wallet not found' });
+    }
+
+    const paymentAmount = parseFloat(session.amount);
+    const walletBalance = parseFloat(wallet.balance);
+
+    if (walletBalance < paymentAmount) {
+      return res.status(400).json({
+        error: 'Insufficient funds',
+        message: `Your balance is ${wallet.currency} ${walletBalance.toFixed(2)} but the payment requires ${session.currency_code} ${paymentAmount.toFixed(2)}`
+      });
+    }
+
+    // 5. Get merchant's wallet to credit
+    const { data: merchantWallet, error: merchantWalletError } = await supabase
+      .from('wallets')
+      .select('id, balance')
+      .eq('user_id', session.merchant_id)
+      .eq('currency', session.currency_code || 'SLE')
+      .single();
+
+    if (merchantWalletError || !merchantWallet) {
+      console.error('[CardPay] Merchant wallet not found:', session.merchant_id);
+      return res.status(500).json({ error: 'Merchant wallet not found' });
+    }
+
+    // 6. Process the payment atomically
+    // Deduct from user's wallet
+    const newUserBalance = walletBalance - paymentAmount;
+    const { error: deductError } = await supabase
+      .from('wallets')
+      .update({ balance: newUserBalance, updated_at: new Date().toISOString() })
+      .eq('id', walletId);
+
+    if (deductError) {
+      console.error('[CardPay] Failed to deduct from wallet:', deductError);
+      return res.status(500).json({ error: 'Failed to process payment' });
+    }
+
+    // Credit merchant's wallet
+    const newMerchantBalance = parseFloat(merchantWallet.balance) + paymentAmount;
+    const { error: creditError } = await supabase
+      .from('wallets')
+      .update({ balance: newMerchantBalance, updated_at: new Date().toISOString() })
+      .eq('id', merchantWallet.id);
+
+    if (creditError) {
+      // Rollback user deduction
+      await supabase.from('wallets').update({ balance: walletBalance }).eq('id', walletId);
+      console.error('[CardPay] Failed to credit merchant, rolled back:', creditError);
+      return res.status(500).json({ error: 'Failed to process payment' });
+    }
+
+    // 7. Create transaction records
+    const transactionRef = `CARD-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    // User's outgoing transaction
+    await supabase.from('transactions').insert({
+      wallet_id: walletId,
+      type: 'PAYMENT',
+      amount: -paymentAmount,
+      currency: session.currency_code || 'SLE',
+      status: 'COMPLETED',
+      description: session.description || `Payment to ${session.merchant_name || 'merchant'}`,
+      reference: transactionRef,
+      metadata: {
+        checkoutSessionId: session.external_id,
+        merchantId: session.merchant_id,
+        merchantName: session.merchant_name,
+        cardId: cardId,
+        paymentMethod: 'peeap_card',
+      },
+    });
+
+    // Merchant's incoming transaction
+    await supabase.from('transactions').insert({
+      wallet_id: merchantWallet.id,
+      type: 'PAYMENT_RECEIVED',
+      amount: paymentAmount,
+      currency: session.currency_code || 'SLE',
+      status: 'COMPLETED',
+      description: `Payment from ${card.cardholder_name || 'customer'}`,
+      reference: transactionRef,
+      metadata: {
+        checkoutSessionId: session.external_id,
+        customerId: wallet.user_id,
+        cardId: cardId,
+        paymentMethod: 'peeap_card',
+      },
+    });
+
+    // 8. Mark session as complete
+    const { data: updatedSession, error: updateError } = await supabase
+      .from('checkout_sessions')
+      .update({
+        status: 'COMPLETE',
+        completed_at: new Date().toISOString(),
+        metadata: {
+          ...(session.metadata || {}),
+          paymentMethod: 'peeap_card',
+          cardId: cardId,
+          transactionRef: transactionRef,
+        },
+      })
+      .eq('id', session.id)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error('[CardPay] Failed to update session:', updateError);
+      // Payment already processed, just log the error
+    }
+
+    console.log('[CardPay] Payment successful:', { sessionId, transactionRef, amount: paymentAmount });
+
+    return res.status(200).json({
+      success: true,
+      status: 'COMPLETE',
+      transactionRef,
+      amount: paymentAmount,
+      currency: session.currency_code || 'SLE',
+    });
+
+  } catch (error: any) {
+    console.error('[CardPay] Error:', error);
+    return res.status(500).json({ error: error.message || 'Internal server error' });
   }
 }

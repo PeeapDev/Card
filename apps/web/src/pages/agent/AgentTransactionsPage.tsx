@@ -50,10 +50,10 @@ export function AgentTransactionsPage() {
     }
   }, [user?.id, filter, dateRange, page]);
 
-  const currencySymbol = defaultCurrency?.symbol || 'Le ';
+  const currencySymbol = defaultCurrency?.symbol || 'Le';
 
   const formatCurrency = (amount: number): string => {
-    return `${currencySymbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    return `${currencySymbol} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const getDateRange = (): { startDate?: Date; endDate?: Date } => {

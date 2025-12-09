@@ -36,7 +36,7 @@ import {
   Puzzle,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { NotificationBell } from '@/components/ui/NotificationBell';
+import { AdminNotificationBell } from '@/components/ui/AdminNotificationBell';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 interface AdminLayoutProps {
@@ -122,6 +122,7 @@ const navSections: NavSection[] = [
     title: 'Support',
     items: [
       { path: '/admin/support', label: 'Support Tickets', icon: Headphones },
+      { path: '/admin/notifications', label: 'Notifications', icon: Bell, badge: 'New', badgeColor: 'primary' },
     ],
   },
 ];
@@ -346,7 +347,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                 Admin Portal
               </span>
               <ThemeToggle />
-              <NotificationBell />
+              <AdminNotificationBell />
             </div>
           </div>
         </header>

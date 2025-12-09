@@ -14,6 +14,14 @@
       "destination": "/api/router"
     },
     {
+      "source": "/assets/(.*)",
+      "destination": "/assets/$1"
+    },
+    {
+      "source": "/checkout/pay/:sessionId",
+      "destination": "/api/router"
+    },
+    {
       "source": "/(.*)",
       "destination": "/api/router"
     }

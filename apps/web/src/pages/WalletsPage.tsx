@@ -46,7 +46,7 @@ export function WalletsPage() {
   // Format amount with correct currency symbol
   const formatCurrency = (amount: number, currencyCode: string): string => {
     const symbol = getCurrencySymbol(currencyCode);
-    return `${symbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `${symbol} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const [showCreateDropdown, setShowCreateDropdown] = useState(false);
@@ -613,6 +613,27 @@ export function WalletsPage() {
               </div>
             ) : (
               <div className="space-y-4">
+                {/* Wallet Selector */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Send from Wallet
+                  </label>
+                  <select
+                    value={selectedWallet.id}
+                    onChange={(e) => {
+                      const wallet = wallets?.find(w => w.id === e.target.value);
+                      if (wallet) setSelectedWallet(wallet);
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                  >
+                    {wallets?.filter(w => w.status === 'ACTIVE').map((wallet) => (
+                      <option key={wallet.id} value={wallet.id}>
+                        {wallet.currency} Wallet - {formatCurrency(wallet.balance, wallet.currency)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 {/* Available Balance */}
                 <div className="p-4 bg-gray-50 rounded-lg">
                   <p className="text-sm text-gray-500">Available Balance</p>

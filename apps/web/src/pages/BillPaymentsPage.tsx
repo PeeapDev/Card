@@ -175,7 +175,7 @@ export function BillPaymentsPage() {
   const currencySymbol = defaultCurrency?.symbol || 'Le';
 
   const formatCurrency = (amt: number): string => {
-    return `${currencySymbol}${amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `${currencySymbol} ${amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   useEffect(() => {
