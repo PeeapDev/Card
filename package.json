@@ -15,9 +15,6 @@
     "lint": "nx lint",
     "lint:all": "nx run-many --target=lint --all",
     "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\"",
-    "docker:up": "docker-compose up -d",
-    "docker:down": "docker-compose down",
-    "docker:logs": "docker-compose logs -f",
     "db:migrate": "nx run-many --target=migration:run --all",
     "db:generate": "nx run-many --target=migration:generate --all",
     "proto:generate": "bash tools/scripts/generate-proto.sh"
