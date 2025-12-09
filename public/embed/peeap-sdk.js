@@ -192,7 +192,7 @@
         });
 
         // Call API to create checkout session
-        fetch(config.apiUrl + '/checkout/create', {
+        fetch(config.apiUrl + '/api/checkout/create', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
