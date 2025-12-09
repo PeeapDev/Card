@@ -2,6 +2,12 @@
   "version": 2,
   "buildCommand": "",
   "outputDirectory": "public",
+  "git": {
+    "deploymentEnabled": {
+      "main": true
+    }
+  },
+  "cleanUrls": true,
   "functions": {
     "api/router.ts": {
       "maxDuration": 30,
