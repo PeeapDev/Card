@@ -14,16 +14,24 @@
       "destination": "/api/router"
     },
     {
-      "source": "/assets/(.*)",
-      "destination": "/assets/$1"
-    },
-    {
       "source": "/checkout/pay/:sessionId",
       "destination": "/api/router"
     },
     {
+      "source": "/assets/(.*)",
+      "destination": "/assets/$1"
+    },
+    {
+      "source": "/embed/(.*)",
+      "destination": "/embed/$1"
+    },
+    {
+      "source": "/cdn/(.*)",
+      "destination": "/cdn/$1"
+    },
+    {
       "source": "/(.*)",
-      "destination": "/api/router"
+      "destination": "/index.html"
     }
   ]
 }
