@@ -14,6 +14,7 @@ import {
   QrCode,
   PiggyBank,
   HelpCircle,
+  Smartphone,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { NotificationBell } from '@/components/ui/NotificationBell';
@@ -25,9 +26,10 @@ interface MainLayoutProps {
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { path: '/wallets', label: 'Wallets', icon: Wallet },
   { path: '/send', label: 'Send Money', icon: Send },
   { path: '/receive', label: 'Receive Money', icon: QrCode },
-  { path: '/wallets', label: 'Wallets', icon: Wallet },
+  { path: '/payout', label: 'Mobile Money Payout', icon: Smartphone },
   { path: '/pots', label: 'Savings Pots', icon: PiggyBank },
   { path: '/cards', label: 'Cards', icon: CreditCard },
   { path: '/transactions', label: 'Transactions', icon: ArrowLeftRight },

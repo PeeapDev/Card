@@ -194,15 +194,6 @@ export function SendMoneyPage() {
   const fetchWallet = async () => {
     if (!user?.id) return;
 
-    // First fetch user's default wallet preference
-    const { data: userData } = await supabase
-      .from('users')
-      .select('default_wallet_id')
-      .eq('id', user.id)
-      .single();
-
-    const defaultWalletId = userData?.default_wallet_id;
-
     // Fetch all active wallets
     const { data: wallets } = await supabase
       .from('wallets')
@@ -213,10 +204,10 @@ export function SendMoneyPage() {
 
     if (wallets && wallets.length > 0) {
       setAllWallets(wallets);
-      // Use default wallet from settings, or fall back to primary wallet, or first wallet
-      const selectedWallet = (defaultWalletId && wallets.find(w => w.id === defaultWalletId)) ||
-        wallets.find(w => w.wallet_type === 'primary') ||
-        wallets[0];
+      // Prioritize: 1) SLE wallet, 2) Primary wallet, 3) First wallet
+      const sleWallet = wallets.find(w => w.currency === 'SLE');
+      const primaryWallet = wallets.find(w => w.wallet_type === 'primary');
+      const selectedWallet = sleWallet || primaryWallet || wallets[0];
       setWalletId(selectedWallet.id);
       setWalletBalance(selectedWallet.balance);
       fetchRecentTransfers(selectedWallet.id);

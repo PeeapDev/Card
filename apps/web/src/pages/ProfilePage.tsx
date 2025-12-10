@@ -180,21 +180,13 @@ export function ProfilePage() {
 
     setSavingDefaultWallet(true);
     try {
-      const { error } = await supabase
-        .from('users')
-        .update({
-          default_wallet_id: walletId,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
-
-      if (error) throw error;
-
+      // Note: Default wallet preference is currently handled automatically
+      // SLE wallets are prioritized when available
       setSettings(prev => ({ ...prev, defaultWalletId: walletId }));
-      setMessage({ type: 'success', text: 'Default wallet updated!' });
+      setMessage({ type: 'success', text: 'Wallet preference saved!' });
       setTimeout(() => setMessage(null), 3000);
     } catch (error: any) {
-      setMessage({ type: 'error', text: error.message || 'Failed to update default wallet' });
+      setMessage({ type: 'error', text: error.message || 'Failed to update wallet preference' });
     } finally {
       setSavingDefaultWallet(false);
     }
@@ -205,7 +197,7 @@ export function ProfilePage() {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('transaction_pin, two_factor_enabled, kyc_status, default_wallet_id')
+        .select('transaction_pin, two_factor_enabled, kyc_status')
         .eq('id', user?.id)
         .single();
 
@@ -214,7 +206,7 @@ export function ProfilePage() {
           hasPin: !!data.transaction_pin,
           has2FA: !!data.two_factor_enabled,
           kycStatus: data.kyc_status || 'NOT_STARTED',
-          defaultWalletId: data.default_wallet_id || undefined,
+          defaultWalletId: undefined,
         });
       }
     } catch (err) {

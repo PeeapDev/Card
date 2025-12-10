@@ -7,37 +7,27 @@
       "main": true
     }
   },
-  "cleanUrls": true,
   "functions": {
     "api/router.ts": {
       "maxDuration": 30,
       "memory": 1024
     }
   },
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/router"
+      "src": "/api/(.*)",
+      "dest": "/api/router"
     },
     {
-      "source": "/checkout/pay/:sessionId",
-      "destination": "/api/router"
+      "src": "/checkout/pay/(.*)",
+      "dest": "/api/router"
     },
     {
-      "source": "/assets/(.*)",
-      "destination": "/assets/$1"
+      "handle": "filesystem"
     },
     {
-      "source": "/embed/(.*)",
-      "destination": "/embed/$1"
-    },
-    {
-      "source": "/cdn/(.*)",
-      "destination": "/cdn/$1"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
   ]
 }

@@ -18,6 +18,7 @@ import { ProfilePage } from '@/pages/ProfilePage';
 import { ApiDocsPage } from '@/pages/ApiDocsPage';
 import { SendMoneyPage } from '@/pages/SendMoneyPage';
 import { ReceiveMoneyPage } from '@/pages/ReceiveMoneyPage';
+import { PayoutPage } from '@/pages/PayoutPage';
 import { PotsPage } from '@/pages/PotsPage';
 import { PotDetailPage } from '@/pages/PotDetailPage';
 import { SupportPage } from '@/pages/SupportPage';
@@ -62,8 +63,10 @@ import { RolesManagementPage } from '@/pages/admin/RolesManagementPage';
 import { PotsManagementPage } from '@/pages/admin/PotsManagementPage';
 import { BusinessCategoriesPage } from '@/pages/admin/BusinessCategoriesPage';
 import { BusinessesPage } from '@/pages/admin/BusinessesPage';
+import { BusinessDetailPage } from '@/pages/admin/BusinessDetailPage';
 import { SupportTicketsPage } from '@/pages/admin/SupportTicketsPage';
 import { AdminNotificationsPage } from '@/pages/admin/AdminNotificationsPage';
+import { SmtpSettingsPage } from '@/pages/admin/SmtpSettingsPage';
 import { PaymentCheckoutPage } from '@/pages/PaymentCheckoutPage';
 import { PayPage } from '@/pages/PayPage';
 import { PaymentSuccessPage } from '@/pages/PaymentSuccessPage';
@@ -76,6 +79,7 @@ import { HostedCheckoutPage } from '@/pages/HostedCheckoutPage';
 import { TestCheckoutPage } from '@/pages/TestCheckoutPage';
 import { AppPaymentRedirectPage } from '@/pages/AppPaymentRedirectPage';
 import { NFCPaymentPage } from '@/pages/NFCPaymentPage';
+import { OnboardingPage } from '@/pages/OnboardingPage';
 
 // Merchant Pages
 import { MerchantDashboard } from '@/pages/merchant/MerchantDashboard';
@@ -97,8 +101,12 @@ import { ShopTransactionsPage } from '@/pages/merchant/ShopTransactionsPage';
 import { ShopDisputesPage } from '@/pages/merchant/ShopDisputesPage';
 import { ShopSettingsPage } from '@/pages/merchant/ShopSettingsPage';
 import { MerchantSupportPage } from '@/pages/merchant/MerchantSupportPage';
+import { MerchantNotificationsPage } from '@/pages/merchant/MerchantNotificationsPage';
+// User Notifications
+import { UserNotificationsPage } from '@/pages/UserNotificationsPage';
 // Agent Pages
 import { AgentDashboard } from '@/pages/agent/AgentDashboard';
+import { AgentNotificationsPage } from '@/pages/agent/AgentNotificationsPage';
 import { AgentSettingsPage } from '@/pages/agent/AgentSettingsPage';
 import { AgentDeveloperPage } from '@/pages/agent/AgentDeveloperPage';
 import { AgentTransactionsPage } from '@/pages/agent/AgentTransactionsPage';
@@ -182,6 +190,16 @@ function App() {
                   <Route path="/login" element={<LoginPage />} />
                   <Route path="/register" element={<RegisterPage />} />
                   <Route path="/docs" element={<ApiDocsPage />} />
+
+              {/* Onboarding Route */}
+              <Route
+                path="/onboarding"
+                element={
+                  <ProtectedRoute>
+                    <OnboardingPage />
+                  </ProtectedRoute>
+                }
+              />
 
               {/* Regular User Protected Routes */}
               <Route
@@ -531,6 +549,14 @@ function App() {
                 }
               />
               <Route
+                path="/admin/businesses/:businessId"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <BusinessDetailPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
                 path="/admin/webhooks"
                 element={
                   <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
@@ -818,6 +844,9 @@ function App() {
                   <Route path="/checkout/pay/:sessionId" element={<HostedCheckoutPage />} />
                   <Route path="/app/pay/:paymentId" element={<AppPaymentRedirectPage />} />
 
+                  {/* Onboarding Route */}
+                  <Route path="/onboarding" element={<ProtectedRoute><OnboardingPage /></ProtectedRoute>} />
+
                   {/* Regular User Protected Routes */}
                   <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
                   <Route path="/wallets" element={<ProtectedRoute><WalletsPage /></ProtectedRoute>} />
@@ -828,6 +857,7 @@ function App() {
                   <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
                   <Route path="/send" element={<ProtectedRoute><SendMoneyPage /></ProtectedRoute>} />
                   <Route path="/receive" element={<ProtectedRoute><ReceiveMoneyPage /></ProtectedRoute>} />
+                  <Route path="/payout" element={<ProtectedRoute><PayoutPage /></ProtectedRoute>} />
                   <Route path="/pots" element={<ProtectedRoute><PotsPage /></ProtectedRoute>} />
                   <Route path="/pots/:potId" element={<ProtectedRoute><PotDetailPage /></ProtectedRoute>} />
                   <Route path="/bills" element={<ProtectedRoute><BillPaymentsPage /></ProtectedRoute>} />
@@ -864,11 +894,16 @@ function App() {
                   <Route path="/admin/pots" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><PotsManagementPage /></RoleBasedRoute>} />
                   <Route path="/admin/business-categories" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><BusinessCategoriesPage /></RoleBasedRoute>} />
                   <Route path="/admin/businesses" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><BusinessesPage /></RoleBasedRoute>} />
+                  <Route path="/admin/businesses/:businessId" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><BusinessDetailPage /></RoleBasedRoute>} />
                   <Route path="/admin/webhooks" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><WebhooksPage /></RoleBasedRoute>} />
                   <Route path="/admin/compliance" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><CompliancePage /></RoleBasedRoute>} />
                   <Route path="/admin/developers" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><DevelopersPage /></RoleBasedRoute>} />
                   <Route path="/admin/support" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><SupportTicketsPage /></RoleBasedRoute>} />
                   <Route path="/admin/notifications" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><AdminNotificationsPage /></RoleBasedRoute>} />
+                  <Route path="/admin/smtp-settings" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><SmtpSettingsPage /></RoleBasedRoute>} />
+
+                  {/* User Notifications Route */}
+                  <Route path="/notifications" element={<ProtectedRoute><UserNotificationsPage /></ProtectedRoute>} />
 
                   {/* Merchant Routes */}
                   <Route path="/merchant" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantDashboard /></RoleBasedRoute>} />
@@ -881,6 +916,7 @@ function App() {
                   <Route path="/merchant/create-business" element={<RoleBasedRoute allowedRoles={['merchant']}><CreateBusinessPage /></RoleBasedRoute>} />
                   <Route path="/merchant/settings" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantSettingsPage /></RoleBasedRoute>} />
                   <Route path="/merchant/support" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantSupportPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/notifications" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantNotificationsPage /></RoleBasedRoute>} />
                   <Route path="/merchant/shops" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantShopsPage /></RoleBasedRoute>} />
                   <Route path="/merchant/upgrade" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantUpgradePage /></RoleBasedRoute>} />
                   <Route path="/merchant/shops/:businessId" element={<RoleBasedRoute allowedRoles={['merchant']}><ShopDetailPage /></RoleBasedRoute>} />
@@ -898,6 +934,7 @@ function App() {
                   <Route path="/agent/transactions" element={<RoleBasedRoute allowedRoles={['agent']}><AgentTransactionsPage /></RoleBasedRoute>} />
                   <Route path="/agent/cashout" element={<RoleBasedRoute allowedRoles={['agent']}><AgentCashOutPage /></RoleBasedRoute>} />
                   <Route path="/agent/float" element={<RoleBasedRoute allowedRoles={['agent']}><AgentFloatPage /></RoleBasedRoute>} />
+                  <Route path="/agent/notifications" element={<RoleBasedRoute allowedRoles={['agent']}><AgentNotificationsPage /></RoleBasedRoute>} />
                   <Route path="/agent/developer/*" element={<RoleBasedRoute allowedRoles={['agent']}><AgentDeveloperPage /></RoleBasedRoute>} />
                   <Route path="/agent/*" element={<RoleBasedRoute allowedRoles={['agent']}><AgentDashboard /></RoleBasedRoute>} />
 

@@ -143,11 +143,45 @@ export function PayPage() {
 
       setRecipient(recipientData);
 
+      const paymentAmount = urlAmount ? parseFloat(urlAmount) : 0;
       if (urlAmount) {
-        setAmount(parseFloat(urlAmount));
+        setAmount(paymentAmount);
       }
       if (urlNote) {
         setNote(urlNote);
+      }
+
+      // If there's an amount, create a checkout session and redirect to hosted checkout
+      if (paymentAmount > 0) {
+        try {
+          const API_BASE = import.meta.env.VITE_API_URL || 'https://peeap.vercel.app/api';
+
+          const response = await fetch(`${API_BASE}/router/checkout/sessions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              amount: paymentAmount,
+              currency: 'SLE',
+              description: urlNote || `Payment to ${recipientData.name}`,
+              recipientId: recipientData.id,
+              recipientWalletId: recipientData.walletId,
+              recipientName: recipientData.name,
+              successUrl: `${window.location.origin}/payment/success`,
+              cancelUrl: `${window.location.origin}/payment/cancel`,
+            }),
+          });
+
+          const data = await response.json();
+
+          if (data.sessionId) {
+            // Redirect to hosted checkout
+            navigate(`/checkout/pay/${data.sessionId}`);
+            return;
+          }
+        } catch (checkoutError) {
+          console.error('Failed to create checkout session:', checkoutError);
+          // Fall back to showing the old checkout page
+        }
       }
 
       // Show public checkout page (no login required)

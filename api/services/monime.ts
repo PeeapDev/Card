@@ -56,19 +56,20 @@ export interface MonimeCheckoutResponse {
   };
 }
 
+// Monime Payout Request - matches Monime API v1 format
 export interface MonimePayoutRequest {
-  amount: number;
-  currency: string;
-  destination: {
-    type: 'mobile_money' | 'bank_account';
-    phoneNumber?: string;
-    provider?: string;
-    bankCode?: string;
-    accountNumber?: string;
-    accountName?: string;
+  amount: {
+    currency: string;
+    value: number; // Minor units (e.g., 100 = 1 SLE)
   };
-  reference: string;
-  description?: string;
+  destination: {
+    type: 'momo' | 'bank';
+    providerId: string; // e.g., 'm17' for Orange Money
+    accountNumber: string; // Phone number for momo
+  };
+  source: {
+    financialAccountId: string; // Monime financial account ID
+  };
   metadata?: Record<string, string>;
 }
 
@@ -76,14 +77,47 @@ export interface MonimePayoutResponse {
   success: boolean;
   result?: {
     id: string;
-    status: string;
-    reference: string;
-    fee?: number;
-    netAmount?: number;
+    status: 'pending' | 'processing' | 'completed' | 'failed';
+    amount: {
+      currency: string;
+      value: number;
+    };
+    source?: {
+      financialAccountId: string;
+      transactionReference?: string;
+    };
+    destination?: {
+      type: string;
+      providerId?: string;
+      accountNumber?: string;
+    };
+    fees?: Array<{
+      name: string;
+      amount: { currency: string; value: number };
+    }>;
+    failureDetail?: {
+      code: string;
+      message: string;
+    };
+    createTime: string;
+    updateTime: string;
   };
   error?: {
     message: string;
     code?: string;
+  };
+}
+
+// Mobile Money Provider
+export interface MobileMoneyProvider {
+  providerId: string;
+  name: string;
+  country: string;
+  status: { active: boolean };
+  featureSet: {
+    payout: { canPayTo: boolean };
+    payment: { canPayFrom: boolean };
+    kycVerification: { canVerifyAccount: boolean };
   };
 }
 
@@ -254,9 +288,32 @@ export class MonimeService {
   /**
    * Get available banks for payout
    */
-  async getBanks(): Promise<Array<{ providerId: string; name: string; country: string }>> {
+  async getBanks(country: string = 'SL'): Promise<Array<{ providerId: string; name: string; country: string }>> {
     const response = await this.request<{ result: Array<{ providerId: string; name: string; country: string }> }>(
-      '/banks',
+      `/banks?country=${country}`,
+      'GET'
+    );
+    return response.result || [];
+  }
+
+  /**
+   * Get available mobile money providers for payout
+   * Returns providers like Orange Money (m17), Africell (m18)
+   */
+  async getMobileMoneyProviders(country: string = 'SL'): Promise<MobileMoneyProvider[]> {
+    const response = await this.request<{ result: MobileMoneyProvider[] }>(
+      `/momos?country=${country}`,
+      'GET'
+    );
+    return response.result || [];
+  }
+
+  /**
+   * Get financial accounts (to get source account ID for payouts)
+   */
+  async getFinancialAccounts(): Promise<Array<{ id: string; name: string; currency: string; balance: { value: number } }>> {
+    const response = await this.request<{ result: Array<{ id: string; name: string; currency: string; balance: { value: number } }> }>(
+      '/financial-accounts',
       'GET'
     );
     return response.result || [];
@@ -359,7 +416,14 @@ export class MonimeService {
   }
 
   /**
-   * Helper: Create payout for wallet withdrawal
+   * Helper: Create payout for wallet withdrawal to mobile money
+   * @param params.walletId - Source wallet ID (for tracking)
+   * @param params.userId - User ID (for tracking)
+   * @param params.amount - Amount in display units (e.g., 100 SLE)
+   * @param params.currency - Currency code (default: SLE)
+   * @param params.phoneNumber - Recipient phone number
+   * @param params.providerId - Mobile money provider ID (e.g., 'm17' for Orange Money)
+   * @param params.financialAccountId - Monime financial account ID for source funds
    */
   async createWithdrawal(params: {
     walletId: string;
@@ -367,25 +431,30 @@ export class MonimeService {
     amount: number;
     currency: string;
     phoneNumber: string;
-    provider?: string;
+    providerId: string;
+    financialAccountId: string;
     description?: string;
-  }): Promise<{ payoutId: string; status: string; fee?: number }> {
-    const reference = `wth_${Date.now()}_${params.walletId.slice(-8)}`;
+  }): Promise<{ payoutId: string; status: string; fees?: Array<{ name: string; amount: { currency: string; value: number } }> }> {
+    const currency = params.currency || 'SLE';
 
     const response = await this.createPayout({
-      amount: toMonimeAmount(params.amount, params.currency || 'SLE'),
-      currency: params.currency || 'SLE',
-      destination: {
-        type: 'mobile_money',
-        phoneNumber: params.phoneNumber,
-        provider: params.provider,
+      amount: {
+        currency: currency,
+        value: toMonimeAmount(params.amount, currency),
       },
-      reference,
-      description: params.description || 'Peeap Wallet Withdrawal',
+      destination: {
+        type: 'momo',
+        providerId: params.providerId,
+        accountNumber: params.phoneNumber,
+      },
+      source: {
+        financialAccountId: params.financialAccountId,
+      },
       metadata: {
         type: 'withdrawal',
         walletId: params.walletId,
         userId: params.userId,
+        description: params.description || 'Peeap Wallet Withdrawal',
       },
     });
 
@@ -396,7 +465,77 @@ export class MonimeService {
     return {
       payoutId: response.result.id,
       status: response.result.status,
-      fee: response.result.fee,
+      fees: response.result.fees,
+    };
+  }
+
+  /**
+   * Helper: Send money to mobile money number (Orange Money, Africell)
+   * This is the main method for platform-to-mobile-money transfers
+   */
+  async sendToMobileMoney(params: {
+    amount: number;
+    currency: string;
+    phoneNumber: string;
+    providerId: string;
+    financialAccountId: string;
+    userId: string;
+    walletId: string;
+    description?: string;
+  }): Promise<{
+    payoutId: string;
+    status: string;
+    fees?: Array<{ name: string; amount: { currency: string; value: number } }>;
+    totalFee?: number;
+  }> {
+    const currency = params.currency || 'SLE';
+    const monimeAmount = toMonimeAmount(params.amount, currency);
+
+    console.log('[Monime] Sending to mobile money:', {
+      amount: params.amount,
+      monimeAmount,
+      phoneNumber: params.phoneNumber,
+      providerId: params.providerId,
+    });
+
+    const response = await this.createPayout({
+      amount: {
+        currency: currency,
+        value: monimeAmount,
+      },
+      destination: {
+        type: 'momo',
+        providerId: params.providerId,
+        accountNumber: params.phoneNumber,
+      },
+      source: {
+        financialAccountId: params.financialAccountId,
+      },
+      metadata: {
+        type: 'mobile_money_send',
+        userId: params.userId,
+        walletId: params.walletId,
+        description: params.description || 'Send to Mobile Money',
+      },
+    });
+
+    if (!response.result) {
+      throw new MonimeError('Invalid response from Monime', 'INVALID_RESPONSE', 500);
+    }
+
+    // Calculate total fee
+    let totalFee = 0;
+    if (response.result.fees) {
+      totalFee = response.result.fees.reduce((sum, fee) => {
+        return sum + fromMonimeAmount(fee.amount.value, fee.amount.currency);
+      }, 0);
+    }
+
+    return {
+      payoutId: response.result.id,
+      status: response.result.status,
+      fees: response.result.fees,
+      totalFee,
     };
   }
 }

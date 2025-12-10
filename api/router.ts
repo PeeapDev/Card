@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 import { createMonimeService, MonimeError } from './services/monime';
+import { sendEmailWithConfig, SmtpConfig } from './services/email';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -117,6 +118,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleDepositSuccess(req, res);
     } else if (path.startsWith('deposit/cancel')) {
       return await handleDepositCancel(req, res);
+    } else if (path === 'test-email' || path === 'test-email/') {
+      return await handleTestEmail(req, res);
+    } else if (path === 'mobile-money/providers' || path === 'mobile-money/providers/') {
+      return await handleMobileMoneyProviders(req, res);
+    } else if (path === 'mobile-money/send' || path === 'mobile-money/send/') {
+      return await handleMobileMoneySend(req, res);
+    } else if (path === 'mobile-money/status' || path.match(/^mobile-money\/status\/[^/]+$/)) {
+      return await handleMobileMoneyStatus(req, res);
     } else if (path === '' || path === '/') {
       // Root endpoint - API info
       return res.status(200).json({
@@ -847,13 +856,140 @@ async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse
       return res.status(404).json({ error: 'Session not found' });
     }
 
-    let returnUrl = session.return_url || session.cancel_url || 'https://my.peeap.com';
     let merchantName = session.merchant_name || 'Merchant';
     let amount = session.amount || 0;
     let currency = session.currency_code || 'SLE';
+    let transactionRef = '';
 
-    // If success, update status and show success page
+    // If success, update status, credit merchant wallet, and show success page
     if (status === 'success') {
+      // Get merchant's wallet to credit
+      const { data: merchantWallet, error: merchantWalletError } = await supabase
+        .from('wallets')
+        .select('id, balance')
+        .eq('user_id', session.merchant_id)
+        .eq('currency', session.currency_code || 'SLE')
+        .single();
+
+      if (merchantWallet) {
+        const paymentAmount = parseFloat(session.amount);
+        const newMerchantBalance = parseFloat(merchantWallet.balance) + paymentAmount;
+
+        // Credit merchant's wallet
+        const { error: creditError } = await supabase
+          .from('wallets')
+          .update({ balance: newMerchantBalance, updated_at: new Date().toISOString() })
+          .eq('id', merchantWallet.id);
+
+        if (!creditError) {
+          // Create merchant's incoming transaction record
+          transactionRef = `MOBILE-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          await supabase.from('transactions').insert({
+            wallet_id: merchantWallet.id,
+            type: 'PAYMENT_RECEIVED',
+            amount: paymentAmount,
+            currency: session.currency_code || 'SLE',
+            status: 'COMPLETED',
+            description: session.description || `Mobile payment received`,
+            reference: transactionRef,
+            metadata: {
+              checkoutSessionId: session.external_id,
+              merchantId: session.merchant_id,
+              merchantName: session.merchant_name,
+              paymentMethod: 'monime_mobile',
+            },
+          });
+          console.log('[CheckoutPay] Merchant wallet credited:', { merchantId: session.merchant_id, amount: paymentAmount, ref: transactionRef });
+
+          // Send notification to merchant
+          await supabase.from('user_notifications').insert({
+            user_id: session.merchant_id,
+            type: 'payment_received',
+            title: 'Payment Received',
+            message: `You received a payment of ${currency} ${paymentAmount.toLocaleString()} via mobile money for "${session.description || 'Purchase'}"`,
+            read: false,
+            metadata: {
+              amount: paymentAmount,
+              currency: currency,
+              reference: transactionRef,
+              session_id: session.external_id,
+              payment_method: 'mobile_money',
+            },
+          });
+
+          // Create transaction record for the PAYER (if logged in)
+          const payerId = session.payer_id || (session.metadata as any)?.payerId;
+          if (payerId) {
+            console.log('[CheckoutPay] Creating payer transaction for:', payerId);
+
+            // Get or create payer's wallet
+            let { data: payerWallet } = await supabase
+              .from('wallets')
+              .select('id, balance')
+              .eq('user_id', payerId)
+              .eq('currency', session.currency_code || 'SLE')
+              .single();
+
+            // If no wallet, create one
+            if (!payerWallet) {
+              const { data: newWallet } = await supabase
+                .from('wallets')
+                .insert({
+                  user_id: payerId,
+                  currency: session.currency_code || 'SLE',
+                  balance: 0,
+                  status: 'ACTIVE',
+                })
+                .select()
+                .single();
+              payerWallet = newWallet;
+            }
+
+            if (payerWallet) {
+              // Create payer's outgoing transaction record (for their transaction history)
+              await supabase.from('transactions').insert({
+                wallet_id: payerWallet.id,
+                type: 'PAYMENT_SENT',
+                amount: -paymentAmount, // Negative to show as outgoing
+                currency: session.currency_code || 'SLE',
+                status: 'COMPLETED',
+                description: `Payment to ${session.merchant_name || 'Merchant'} - ${session.description || 'Purchase'}`,
+                reference: transactionRef,
+                metadata: {
+                  checkoutSessionId: session.external_id,
+                  merchantId: session.merchant_id,
+                  merchantName: session.merchant_name,
+                  paymentMethod: 'monime_mobile',
+                },
+              });
+              console.log('[CheckoutPay] Payer transaction created:', { payerId, amount: paymentAmount, ref: transactionRef });
+
+              // Send notification to payer
+              await supabase.from('user_notifications').insert({
+                user_id: payerId,
+                type: 'payment_sent',
+                title: 'Payment Successful',
+                message: `You paid ${currency} ${paymentAmount.toLocaleString()} to ${session.merchant_name || 'Merchant'} for "${session.description || 'Purchase'}"`,
+                read: false,
+                metadata: {
+                  amount: paymentAmount,
+                  currency: currency,
+                  reference: transactionRef,
+                  session_id: session.external_id,
+                  merchant_name: session.merchant_name,
+                  payment_method: 'mobile_money',
+                },
+              });
+            }
+          }
+        } else {
+          console.error('[CheckoutPay] Failed to credit merchant wallet:', creditError);
+        }
+      } else {
+        console.error('[CheckoutPay] Merchant wallet not found:', session.merchant_id, merchantWalletError);
+      }
+
+      // Update session status
       await supabase
         .from('checkout_sessions')
         .update({
@@ -866,6 +1002,44 @@ async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse
     const isSuccess = status === 'success';
     const currencySymbol = currency === 'SLE' ? 'Le' : currency;
     const formattedAmount = `${currencySymbol} ${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+
+    // Build proper return URL with payment verification params
+    // Use success_url for success, cancel_url for cancel
+    let returnUrl = '';
+    let hasReturnUrl = false;
+
+    if (isSuccess && session.success_url) {
+      try {
+        const successUrlObj = new URL(session.success_url);
+        successUrlObj.searchParams.set('status', 'success');
+        successUrlObj.searchParams.set('session_id', session.external_id);
+        successUrlObj.searchParams.set('reference', transactionRef || session.external_id);
+        successUrlObj.searchParams.set('amount', String(amount));
+        successUrlObj.searchParams.set('currency', currency);
+        successUrlObj.searchParams.set('payment_method', 'mobile_money');
+        returnUrl = successUrlObj.toString();
+        hasReturnUrl = true;
+      } catch (e) {
+        console.error('[CheckoutPay] Invalid success_url:', session.success_url, e);
+        returnUrl = session.success_url; // Use as-is if URL parsing fails
+        hasReturnUrl = true;
+      }
+    } else if (!isSuccess && session.cancel_url) {
+      returnUrl = session.cancel_url;
+      hasReturnUrl = true;
+    }
+
+    console.log('[CheckoutPay] Return URL:', returnUrl, 'Has Return URL:', hasReturnUrl);
+
+    // IMPORTANT: If merchant provided a success_url, redirect IMMEDIATELY
+    // This is critical for third-party integrations - they need the redirect, not our success page
+    if (hasReturnUrl && returnUrl) {
+      console.log('[CheckoutPay] Immediate redirect to merchant:', returnUrl);
+      return res.redirect(302, returnUrl);
+    }
+
+    // Only show our success page if NO return URL was provided (internal Peeap payments)
+    console.log('[CheckoutPay] No return URL, showing Peeap success page');
 
     // Render HTML page with animation
     const html = `
@@ -954,22 +1128,9 @@ async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse
         : 'Your payment was cancelled. No charges have been made to your account.'
       }
     </p>
-    <a href="${returnUrl}" class="button">Return to ${merchantName}</a>
-    <div class="countdown">Redirecting in <span id="timer">5</span> seconds...</div>
+    <a href="https://my.peeap.com/dashboard" class="button">Go to Dashboard</a>
     <div class="peeap-logo">Powered by Peeap</div>
   </div>
-  <script>
-    let seconds = 5;
-    const timer = document.getElementById('timer');
-    const interval = setInterval(() => {
-      seconds--;
-      timer.textContent = seconds;
-      if (seconds <= 0) {
-        clearInterval(interval);
-        window.location.href = '${returnUrl}';
-      }
-    }, 1000);
-  </script>
 </body>
 </html>`;
 
@@ -1352,6 +1513,9 @@ async function handleCheckoutMobilePay(req: VercelRequest, res: VercelResponse, 
   }
 
   try {
+    // Get payer info from request body (sent by frontend after user login)
+    const { userId, userEmail } = req.body || {};
+
     // 1. Get checkout session
     const { data: session, error: sessionError } = await supabase
       .from('checkout_sessions')
@@ -1388,14 +1552,26 @@ async function handleCheckoutMobilePay(req: VercelRequest, res: VercelResponse, 
       cancelUrl: `https://checkout.peeap.com/checkout/pay/${sessionId}?status=cancel`,
     });
 
-    // 4. Store Monime reference in checkout session
+    // 4. Store Monime reference and payer info in checkout session
+    const updateData: any = {
+      payment_reference: result.monimeSessionId,
+      payment_method: 'mobile_money',
+      updated_at: new Date().toISOString(),
+    };
+
+    // Store payer_id if user is logged in
+    if (userId) {
+      updateData.payer_id = userId;
+      updateData.metadata = {
+        ...(session.metadata || {}),
+        payerEmail: userEmail,
+        payerId: userId,
+      };
+    }
+
     await supabase
       .from('checkout_sessions')
-      .update({
-        payment_reference: result.monimeSessionId,
-        payment_method: 'mobile_money',
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('external_id', sessionId);
 
     // 5. Return payment URL from Monime response
@@ -2167,32 +2343,53 @@ async function handleCheckoutSessions(req: VercelRequest, res: VercelResponse) {
       successUrl,
       cancelUrl,
       paymentMethods,
-      metadata
+      metadata,
+      // P2P payment fields
+      recipientId,
+      recipientWalletId,
+      recipientName,
     } = req.body;
 
-    if (!merchantId || !amount || !currency) {
-      return res.status(400).json({ error: 'merchantId, amount, and currency are required' });
+    // Either merchantId OR recipientId is required (for P2P payments)
+    if (!amount || !currency) {
+      return res.status(400).json({ error: 'amount and currency are required' });
+    }
+
+    if (!merchantId && !recipientId) {
+      return res.status(400).json({ error: 'Either merchantId or recipientId is required' });
     }
 
     const sessionId = `cs_${randomUUID().replace(/-/g, '')}`;
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
 
+    // For P2P payments, use recipient info
+    const isP2P = !!recipientId && !merchantId;
+
     const { data: session, error } = await supabase
       .from('checkout_sessions')
       .insert({
         external_id: sessionId,
-        merchant_id: merchantId,
+        merchant_id: merchantId || null,
         status: 'OPEN',
         amount,
         currency_code: currency,
-        description,
-        merchant_name: merchantName,
+        description: description || (isP2P ? `Payment to ${recipientName || 'User'}` : description),
+        merchant_name: merchantName || (isP2P ? recipientName : null),
         merchant_logo_url: merchantLogoUrl,
         brand_color: brandColor || '#4F46E5',
         success_url: successUrl,
         cancel_url: cancelUrl,
         payment_methods: paymentMethods || { qr: true, card: true, mobile: true },
-        metadata,
+        metadata: {
+          ...metadata,
+          // Store P2P recipient info in metadata
+          ...(isP2P && {
+            type: 'p2p',
+            recipientId,
+            recipientWalletId,
+            recipientName,
+          }),
+        },
         expires_at: expiresAt.toISOString(),
       })
       .select()
@@ -2268,13 +2465,63 @@ async function handleCheckoutSessionComplete(req: VercelRequest, res: VercelResp
       return res.status(400).json({ error: 'Session expired' });
     }
 
-    // TODO: Process actual card payment here
-    // For now, just mark as complete
+    const { paymentMethod } = req.body;
+    const paymentAmount = parseFloat(session.amount);
+    let transactionRef = '';
+
+    // Credit merchant's wallet
+    const { data: merchantWallet, error: merchantWalletError } = await supabase
+      .from('wallets')
+      .select('id, balance')
+      .eq('user_id', session.merchant_id)
+      .eq('currency', session.currency_code || 'SLE')
+      .single();
+
+    if (merchantWallet) {
+      const newMerchantBalance = parseFloat(merchantWallet.balance) + paymentAmount;
+
+      const { error: creditError } = await supabase
+        .from('wallets')
+        .update({ balance: newMerchantBalance, updated_at: new Date().toISOString() })
+        .eq('id', merchantWallet.id);
+
+      if (!creditError) {
+        // Create merchant's incoming transaction record
+        transactionRef = `QR-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        await supabase.from('transactions').insert({
+          wallet_id: merchantWallet.id,
+          type: 'PAYMENT_RECEIVED',
+          amount: paymentAmount,
+          currency: session.currency_code || 'SLE',
+          status: 'COMPLETED',
+          description: session.description || `QR/App payment received`,
+          reference: transactionRef,
+          metadata: {
+            checkoutSessionId: session.external_id,
+            merchantId: session.merchant_id,
+            merchantName: session.merchant_name,
+            paymentMethod: paymentMethod || 'qr_code',
+          },
+        });
+        console.log('[CheckoutComplete] Merchant wallet credited:', { merchantId: session.merchant_id, amount: paymentAmount, ref: transactionRef });
+      } else {
+        console.error('[CheckoutComplete] Failed to credit merchant wallet:', creditError);
+      }
+    } else {
+      console.error('[CheckoutComplete] Merchant wallet not found:', session.merchant_id, merchantWalletError);
+    }
+
+    // Mark session as complete
     const { data: updatedSession, error: updateError } = await supabase
       .from('checkout_sessions')
       .update({
         status: 'COMPLETE',
         completed_at: new Date().toISOString(),
+        metadata: {
+          ...(session.metadata || {}),
+          paymentMethod: paymentMethod || 'qr_code',
+          transactionRef: transactionRef,
+        },
       })
       .eq('id', session.id)
       .select()
@@ -2287,6 +2534,7 @@ async function handleCheckoutSessionComplete(req: VercelRequest, res: VercelResp
     return res.status(200).json({
       status: 'COMPLETE',
       session: updatedSession,
+      transactionRef: transactionRef,
     });
   } catch (error: any) {
     console.error('[Checkout] Complete session error:', error);
@@ -2505,5 +2753,382 @@ async function handleCheckoutSessionCardPay(req: VercelRequest, res: VercelRespo
   } catch (error: any) {
     console.error('[CardPay] Error:', error);
     return res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+}
+
+// ============================================================================
+// TEST EMAIL HANDLER
+// ============================================================================
+
+async function handleTestEmail(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const { to, subject, html, smtpConfig } = req.body;
+
+    if (!to || !subject || !html) {
+      return res.status(400).json({ error: 'Missing required fields: to, subject, html' });
+    }
+
+    if (!smtpConfig || !smtpConfig.host || !smtpConfig.username || !smtpConfig.password) {
+      return res.status(400).json({ error: 'Missing SMTP configuration' });
+    }
+
+    const config: SmtpConfig = {
+      host: smtpConfig.host,
+      port: smtpConfig.port || 587,
+      secure: smtpConfig.secure || false,
+      username: smtpConfig.username,
+      password: smtpConfig.password,
+      fromEmail: smtpConfig.fromEmail || smtpConfig.username,
+      fromName: smtpConfig.fromName || 'Peeap',
+      isEnabled: true,
+    };
+
+    const result = await sendEmailWithConfig(config, { to, subject, html });
+
+    if (result.success) {
+      return res.status(200).json({ success: true, message: 'Test email sent successfully' });
+    } else {
+      return res.status(500).json({ error: result.error || 'Failed to send email' });
+    }
+  } catch (error: any) {
+    console.error('[TestEmail] Error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to send email' });
+  }
+}
+
+// ============================================================================
+// MOBILE MONEY HANDLERS
+// ============================================================================
+
+/**
+ * Get available mobile money providers (Orange Money, Africell, etc.)
+ */
+async function handleMobileMoneyProviders(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const country = (req.query.country as string) || 'SL';
+
+    // Create Monime service
+    const monimeService = await createMonimeService(supabase, SETTINGS_ID);
+
+    // Get mobile money providers
+    const providers = await monimeService.getMobileMoneyProviders(country);
+
+    // Filter to only active payout providers
+    const activeProviders = providers.filter(
+      p => p.status?.active && p.featureSet?.payout?.canPayTo
+    );
+
+    return res.status(200).json({
+      success: true,
+      providers: activeProviders.map(p => ({
+        providerId: p.providerId,
+        name: p.name,
+        country: p.country,
+        canPayout: p.featureSet?.payout?.canPayTo || false,
+        canPayment: p.featureSet?.payment?.canPayFrom || false,
+      })),
+    });
+  } catch (error: any) {
+    console.error('[MobileMoneyProviders] Error:', error);
+    if (error instanceof MonimeError) {
+      return res.status(error.statusCode).json({ error: error.message, code: error.code });
+    }
+    return res.status(500).json({ error: error.message || 'Failed to get providers' });
+  }
+}
+
+/**
+ * Send money to mobile money number (Orange Money, Africell)
+ */
+async function handleMobileMoneySend(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const {
+      amount,
+      currency = 'SLE',
+      phoneNumber,
+      providerId,
+      userId,
+      walletId,
+      description,
+      pin
+    } = req.body;
+
+    // Validate required fields
+    if (!amount || !phoneNumber || !providerId || !userId || !walletId) {
+      return res.status(400).json({
+        error: 'Missing required fields: amount, phoneNumber, providerId, userId, walletId'
+      });
+    }
+
+    if (amount <= 0) {
+      return res.status(400).json({ error: 'Amount must be greater than 0' });
+    }
+
+    // Validate phone number format (Sierra Leone)
+    const normalizedPhone = phoneNumber.replace(/\s+/g, '').replace(/^(\+232|232)/, '');
+    if (!/^[0-9]{8}$/.test(normalizedPhone)) {
+      return res.status(400).json({ error: 'Invalid phone number format. Expected 8 digits after country code.' });
+    }
+    const fullPhoneNumber = `+232${normalizedPhone}`;
+
+    // Get user's wallet and verify balance
+    const { data: wallet, error: walletError } = await supabase
+      .from('wallets')
+      .select('id, balance, currency, user_id, status')
+      .eq('id', walletId)
+      .eq('user_id', userId)
+      .single();
+
+    if (walletError || !wallet) {
+      return res.status(404).json({ error: 'Wallet not found' });
+    }
+
+    if (wallet.status !== 'ACTIVE') {
+      return res.status(400).json({ error: 'Wallet is not active' });
+    }
+
+    // Platform fee calculation (e.g., 2% fee, min 500 SLE, max 5000 SLE)
+    const feePercentage = 0.02;
+    const minFee = 500;
+    const maxFee = 5000;
+    let platformFee = Math.round(amount * feePercentage);
+    platformFee = Math.max(minFee, Math.min(maxFee, platformFee));
+
+    const totalDeduction = amount + platformFee;
+
+    if (wallet.balance < totalDeduction) {
+      return res.status(400).json({
+        error: 'Insufficient balance',
+        required: totalDeduction,
+        available: wallet.balance,
+        fee: platformFee,
+      });
+    }
+
+    // Create Monime service
+    const monimeService = await createMonimeService(supabase, SETTINGS_ID);
+
+    // Get financial accounts to find the source account
+    const financialAccounts = await monimeService.getFinancialAccounts();
+    const sleAccount = financialAccounts.find(a => a.currency === 'SLE') || financialAccounts[0];
+
+    if (!sleAccount) {
+      return res.status(500).json({ error: 'No financial account configured for payouts' });
+    }
+
+    // Generate unique external_id for transaction
+    const externalId = `momo_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+    // Create payout transaction record first
+    const { data: transaction, error: txError } = await supabase
+      .from('transactions')
+      .insert({
+        user_id: userId,
+        wallet_id: walletId,
+        type: 'MOBILE_MONEY_SEND',
+        amount: -totalDeduction,
+        currency: currency,
+        status: 'PROCESSING',
+        external_id: externalId,
+        description: description || `Send to ${providerId === 'm17' ? 'Orange Money' : 'Mobile Money'} ${phoneNumber}`,
+        metadata: {
+          recipient_phone: fullPhoneNumber,
+          provider_id: providerId,
+          principal_amount: amount,
+          platform_fee: platformFee,
+          payout_status: 'pending',
+        },
+      })
+      .select()
+      .single();
+
+    if (txError) {
+      console.error('[MobileMoneySend] Transaction create error:', txError);
+      throw new Error('Failed to create transaction record');
+    }
+
+    // Deduct from wallet (including fee)
+    const { error: deductError } = await supabase
+      .from('wallets')
+      .update({
+        balance: wallet.balance - totalDeduction,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', walletId);
+
+    if (deductError) {
+      // Rollback transaction status
+      await supabase
+        .from('transactions')
+        .update({ status: 'FAILED', metadata: { ...transaction.metadata, error: 'Wallet deduction failed' } })
+        .eq('id', transaction.id);
+      throw new Error('Failed to deduct from wallet');
+    }
+
+    try {
+      // Send to mobile money via Monime
+      const payoutResult = await monimeService.sendToMobileMoney({
+        amount,
+        currency,
+        phoneNumber: fullPhoneNumber,
+        providerId,
+        financialAccountId: sleAccount.id,
+        userId,
+        walletId,
+        description,
+      });
+
+      // Update transaction with Monime payout ID
+      await supabase
+        .from('transactions')
+        .update({
+          status: payoutResult.status === 'completed' ? 'COMPLETED' : 'PROCESSING',
+          reference: payoutResult.payoutId,
+          metadata: {
+            ...transaction.metadata,
+            monime_payout_id: payoutResult.payoutId,
+            payout_status: payoutResult.status,
+            monime_fees: payoutResult.fees,
+            total_fee: payoutResult.totalFee,
+          },
+        })
+        .eq('id', transaction.id);
+
+      // Create notification
+      await supabase.from('user_notifications').insert({
+        user_id: userId,
+        type: 'mobile_money_send',
+        title: 'Mobile Money Transfer',
+        message: `Your transfer of ${currency} ${amount.toLocaleString()} to ${phoneNumber} is being processed.`,
+        read: false,
+        metadata: {
+          transaction_id: transaction.id,
+          amount,
+          phone_number: phoneNumber,
+          provider: providerId,
+        },
+      });
+
+      return res.status(200).json({
+        success: true,
+        transactionId: transaction.id,
+        payoutId: payoutResult.payoutId,
+        status: payoutResult.status,
+        amount,
+        fee: platformFee,
+        totalDeducted: totalDeduction,
+        recipient: {
+          phoneNumber: fullPhoneNumber,
+          provider: providerId,
+        },
+      });
+    } catch (payoutError: any) {
+      // Payout failed - refund the wallet
+      console.error('[MobileMoneySend] Payout error:', payoutError);
+
+      await supabase
+        .from('wallets')
+        .update({
+          balance: wallet.balance, // Restore original balance
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', walletId);
+
+      await supabase
+        .from('transactions')
+        .update({
+          status: 'FAILED',
+          metadata: {
+            ...transaction.metadata,
+            error: payoutError.message || 'Payout failed',
+            refunded: true,
+          },
+        })
+        .eq('id', transaction.id);
+
+      throw payoutError;
+    }
+  } catch (error: any) {
+    console.error('[MobileMoneySend] Error:', error);
+    if (error instanceof MonimeError) {
+      return res.status(error.statusCode).json({ error: error.message, code: error.code });
+    }
+    return res.status(500).json({ error: error.message || 'Failed to send money' });
+  }
+}
+
+/**
+ * Get mobile money payout status
+ */
+async function handleMobileMoneyStatus(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const url = new URL(req.url || '', `http://${req.headers.host}`);
+    const pathParts = url.pathname.split('/');
+    const payoutId = pathParts[pathParts.length - 1];
+
+    if (!payoutId || payoutId === 'status') {
+      return res.status(400).json({ error: 'Payout ID required' });
+    }
+
+    // Create Monime service
+    const monimeService = await createMonimeService(supabase, SETTINGS_ID);
+
+    // Get payout status from Monime
+    const status = await monimeService.getPayoutStatus(payoutId);
+
+    // Update transaction if we have it
+    const { data: transaction } = await supabase
+      .from('transactions')
+      .select('id, status, metadata')
+      .eq('reference', payoutId)
+      .single();
+
+    if (transaction && transaction.status !== 'COMPLETED' && transaction.status !== 'FAILED') {
+      const newStatus = status.status === 'completed' ? 'COMPLETED' :
+                       status.status === 'failed' ? 'FAILED' : 'PROCESSING';
+
+      await supabase
+        .from('transactions')
+        .update({
+          status: newStatus,
+          metadata: {
+            ...transaction.metadata,
+            payout_status: status.status,
+            failure_reason: status.failureReason,
+          },
+        })
+        .eq('id', transaction.id);
+    }
+
+    return res.status(200).json({
+      success: true,
+      payoutId,
+      status: status.status,
+      amount: status.amount,
+      currency: status.currency,
+      failureReason: status.failureReason,
+    });
+  } catch (error: any) {
+    console.error('[MobileMoneyStatus] Error:', error);
+    if (error instanceof MonimeError) {
+      return res.status(error.statusCode).json({ error: error.message, code: error.code });
+    }
+    return res.status(500).json({ error: error.message || 'Failed to get status' });
   }
 }

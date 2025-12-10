@@ -41,6 +41,7 @@ export interface QRValidationResult {
     name: string;
     walletId: string;
   };
+  checkoutSessionId?: string; // For URL-based checkout QR codes
 }
 
 class QREngineService {
@@ -282,13 +283,74 @@ class QREngineService {
   }
 
   /**
+   * Check if QR data is a URL and extract payment info
+   */
+  private parseURLQR(qrData: string): { type: 'checkout' | 'pay' | 'qr'; id: string } | null {
+    try {
+      // Check if it's a URL
+      if (!qrData.startsWith('http://') && !qrData.startsWith('https://')) {
+        return null;
+      }
+
+      const url = new URL(qrData);
+      const pathname = url.pathname;
+
+      // Handle /pay/{sessionId} format (hosted checkout)
+      const payMatch = pathname.match(/\/pay\/([^/]+)$/);
+      if (payMatch) {
+        return { type: 'checkout', id: payMatch[1] };
+      }
+
+      // Handle /checkout/pay/{sessionId} format
+      const checkoutMatch = pathname.match(/\/checkout\/pay\/([^/]+)$/);
+      if (checkoutMatch) {
+        return { type: 'checkout', id: checkoutMatch[1] };
+      }
+
+      // Handle ?qr={reference} format
+      const qrParam = url.searchParams.get('qr');
+      if (qrParam) {
+        return { type: 'qr', id: qrParam };
+      }
+
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Validate and decode a scanned QR code
    */
   async validateQR(qrData: string): Promise<QRValidationResult> {
+    // First, check if it's a URL-based QR code
+    const urlData = this.parseURLQR(qrData);
+    if (urlData) {
+      if (urlData.type === 'checkout') {
+        // It's a checkout session - return the session ID for redirection
+        return {
+          valid: true,
+          data: {
+            type: 'merchant',
+            version: '1.0',
+            userId: '',
+            currency: 'SLE',
+            reference: urlData.id,
+          },
+          checkoutSessionId: urlData.id,
+        };
+      }
+      if (urlData.type === 'qr') {
+        // It's a QR reference - validate by reference
+        return this.validateQRByReference(urlData.id);
+      }
+    }
+
+    // Try to decode as base64-encoded PEEAPPAY format
     const data = this.decodeQRData(qrData);
 
     if (!data) {
-      return { valid: false, error: 'Invalid QR code format' };
+      return { valid: false, error: 'Invalid QR code format. Please scan a valid Peeap payment QR code.' };
     }
 
     // Check expiration for dynamic QR codes
