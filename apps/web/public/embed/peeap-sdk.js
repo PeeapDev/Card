@@ -1,35 +1,138 @@
 /**
- * PEEAP PAYMENT SDK v2.3.0
+ * PEEAP PAYMENT SDK v2.4.0
  *
  * Simple, reliable payment integration for any website.
  * Redirects to hosted checkout at checkout.peeap.com
  *
- * Supports:
- * - Mobile Money payments (via Monime) - LIVE mode only
- * - Card payments (Peeap closed-loop cards with PIN)
- * - QR Code payments (Peeap app scan)
+ * ============================================================================
+ * AI INSTRUCTIONS FOR INTEGRATION (for Claude, ChatGPT, Copilot, etc.)
+ * ============================================================================
+ *
+ * This SDK enables merchants to accept payments on their websites. After a
+ * successful payment, the customer is redirected back to the merchant's site.
+ *
+ * PAYMENT FLOW:
+ * 1. Merchant site calls PeeapSDK.createPayment() with amount
+ * 2. Customer redirects to checkout.peeap.com (hosted checkout)
+ * 3. Customer pays via: Mobile Money, Peeap Card, or QR Code scan
+ * 4. On success: redirects to merchant's redirectUrl with query params
+ * 5. On cancel: redirects with ?status=cancelled
+ *
+ * REDIRECT URL PARAMETERS (sent to merchant's thank you page):
+ *   ?status=success                - Payment completed successfully
+ *   &session_id=cs_xxxxx           - Checkout session ID for verification
+ *   &reference=ref_xxxxx           - Merchant's order reference
+ *   &amount=100                    - Amount paid (in whole units)
+ *   &currency=SLE                  - Currency code
+ *   &payment_method=mobile_money   - Method used: mobile_money, peeap_card, qr_code
+ *
+ * BUILDING A THANK YOU PAGE:
+ * Your thank you page should:
+ * 1. Parse the URL query parameters to get payment details
+ * 2. Display a confirmation message with transaction details
+ * 3. Optionally verify the payment server-side using session_id
+ *
+ * Example Thank You Page (HTML/JS):
+ * ---------------------------------
+ * <script>
+ *   const params = new URLSearchParams(window.location.search);
+ *   const status = params.get('status');
+ *   const sessionId = params.get('session_id');
+ *   const reference = params.get('reference');
+ *   const amount = params.get('amount');
+ *   const currency = params.get('currency') || 'SLE';
+ *   const paymentMethod = params.get('payment_method');
+ *
+ *   if (status === 'success') {
+ *     document.getElementById('message').innerHTML = `
+ *       <h1>Payment Successful!</h1>
+ *       <p>Amount: ${currency} ${amount}</p>
+ *       <p>Reference: ${reference}</p>
+ *       <p>Payment Method: ${paymentMethod}</p>
+ *       <p>Session ID: ${sessionId}</p>
+ *     `;
+ *   } else {
+ *     document.getElementById('message').innerHTML = '<h1>Payment Cancelled</h1>';
+ *   }
+ * </script>
+ *
+ * DISPLAYING TRANSACTION DETAILS ON THANK YOU PAGE:
+ * - Transaction Reference: params.get('reference')
+ * - Amount Paid: params.get('amount') + ' ' + params.get('currency')
+ * - Payment Method: params.get('payment_method')
+ *   - 'mobile_money' = Paid via Orange Money, Afrimoney, etc.
+ *   - 'peeap_card' = Paid using Peeap prepaid card
+ *   - 'qr_code' = Paid by scanning QR with Peeap app
+ * - Session ID: params.get('session_id') - for server verification
+ *
+ * OPTIONAL: SERVER-SIDE PAYMENT VERIFICATION
+ * For critical orders, verify the payment on your server:
+ * GET https://peeap.vercel.app/api/router/checkout/sessions/{session_id}
+ * Response includes: status ('COMPLETE'), amount, merchant_id, etc.
+ *
+ * METADATA FOR CUSTOM DATA:
+ * Pass custom data (order ID, customer info, delivery address) in metadata:
+ *   PeeapSDK.createPayment({
+ *     amount: 100,
+ *     metadata: {
+ *       orderId: 'ORD-12345',
+ *       customerId: 'CUST-789',
+ *       deliveryAddress: '123 Main St, Freetown',
+ *       items: ['Product A', 'Product B']
+ *     }
+ *   });
+ * Metadata is stored with the session and returned in verification response.
+ *
+ * ============================================================================
+ * END AI INSTRUCTIONS
+ * ============================================================================
+ *
+ * PAYMENT METHODS SUPPORTED:
+ * - Mobile Money payments (via Monime) - Orange Money, Afrimoney
+ * - Card payments (Peeap closed-loop prepaid cards with PIN)
+ * - QR Code payments (scan with Peeap mobile app)
  *
  * SECURITY:
- * - Uses public key (pk_xxx) for frontend - safe to expose
- * - Secret key (sk_xxx) stays server-side only
+ * - Uses public key (pk_xxx) for frontend - safe to expose in HTML
+ * - Secret key (sk_xxx) stays server-side only - NEVER expose
  * - Auto-generates idempotency key to prevent duplicate payments
+ * - All payments credit the merchant's Peeap wallet automatically
  *
  * ENDPOINTS:
- * - API: https://api.peeap.com
+ * - API: https://peeap.vercel.app/api/router
  * - Checkout: https://checkout.peeap.com
  *
- * Usage:
+ * BASIC USAGE:
+ * -----------
  *   <script src="https://checkout.peeap.com/embed/peeap-sdk.js"></script>
  *   <script>
+ *     // Initialize with your public key from my.peeap.com
  *     PeeapSDK.init({
  *       publicKey: 'pk_live_xxxxx',
- *       onSuccess: function(payment) { console.log('Paid!', payment); },
- *       onError: function(error) { console.error('Error:', error); }
+ *       onSuccess: function(payment) {
+ *         console.log('Payment initiated!', payment);
+ *       },
+ *       onError: function(error) {
+ *         console.error('Error:', error);
+ *       }
  *     });
  *
- *     // Create payment and redirect to hosted checkout:
- *     PeeapSDK.createPayment({ amount: 100, currency: 'SLE' }); // Le 100
+ *     // Trigger payment on button click
+ *     function payNow() {
+ *       PeeapSDK.createPayment({
+ *         amount: 100,              // Amount in whole units (Le 100.00)
+ *         currency: 'SLE',          // Currency code
+ *         description: 'Order #123', // Shows on checkout page
+ *         reference: 'ORD-123',     // Your order ID
+ *         redirectUrl: 'https://yoursite.com/thank-you', // Return URL
+ *         metadata: {               // Custom data (optional)
+ *           orderId: 'ORD-123',
+ *           customerName: 'John Doe'
+ *         }
+ *       });
+ *     }
  *   </script>
+ *   <button onclick="payNow()">Pay Le 100.00</button>
  */
 
 (function(window) {
@@ -42,9 +145,9 @@
     mode: 'live',
     currency: 'SLE',
     theme: 'light',
-    apiUrl: 'https://api.peeap.com',      // API endpoint
+    apiUrl: 'https://peeap.vercel.app/api/router',      // API endpoint
     checkoutUrl: 'https://checkout.peeap.com', // Hosted checkout
-    baseUrl: 'https://api.peeap.com'      // Legacy - same as apiUrl
+    baseUrl: 'https://peeap.vercel.app/api/router'      // Legacy - same as apiUrl
   };
 
   // Stored callbacks
@@ -192,7 +295,7 @@
         });
 
         // Call API to create checkout session
-        fetch(config.apiUrl + '/api/checkout/create', {
+        fetch(config.apiUrl + '/checkout/create', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
