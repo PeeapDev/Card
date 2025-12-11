@@ -20,7 +20,7 @@ import {
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
 import { Card } from '@/components/ui/Card';
 import { ssoService } from '@/services/sso.service';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/context/AuthContext';
 
 interface PricingPlan {
   id: string;
