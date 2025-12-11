@@ -1232,7 +1232,7 @@ async function handleCheckoutCreate(req: VercelRequest, res: VercelResponse) {
     const {
       publicKey,
       amount,
-      currency = 'SLE',
+      currency: rawCurrency = 'SLE',
       reference,
       idempotencyKey,
       description,
@@ -1243,14 +1243,48 @@ async function handleCheckoutCreate(req: VercelRequest, res: VercelResponse) {
       metadata
     } = req.body;
 
+    // =========================================================================
+    // SIERRA LEONE CURRENCY NORMALIZATION
+    // =========================================================================
+    // Sierra Leone redenominated its currency in 2022:
+    // - OLD: Leone (SLL) - 1000 old leones
+    // - NEW: New Leone (SLE/NLE) - 1 new leone (removed 3 zeros)
+    //
+    // AI platforms may use outdated currency codes (NLE, SLL, Le, Leone)
+    // We normalize all Sierra Leone currency codes to 'SLE'
+    // =========================================================================
+    let currency = (rawCurrency || 'SLE').toString().toUpperCase().trim();
+    let normalizedAmount = amount;
+
+    // Normalize currency codes
+    if (currency === 'NLE' || currency === 'LE' || currency === 'LEONE' || currency === 'LEONES') {
+      currency = 'SLE'; // New Leone ISO code
+    }
+
+    // Handle old Leone (SLL) - convert to new Leone by dividing by 1000
+    if (currency === 'SLL' || currency === 'OLD_LEONE') {
+      currency = 'SLE';
+      normalizedAmount = Math.round(amount / 1000); // Convert old to new
+      console.log(`[CheckoutCreate] Converted old Leone amount: ${amount} SLL -> ${normalizedAmount} SLE`);
+    }
+
+    // Warn if amount seems too high (likely using old Leone values)
+    // New Leone transactions are typically under 100,000 SLE
+    if (currency === 'SLE' && normalizedAmount > 100000) {
+      console.warn(`[CheckoutCreate] Warning: Large amount ${normalizedAmount} SLE - may be using old Leone values`);
+    }
+
     // Validate required fields
     if (!publicKey) {
       return res.status(400).json({ error: 'publicKey is required' });
     }
 
-    if (!amount || typeof amount !== 'number' || amount <= 0) {
+    if (!normalizedAmount || typeof normalizedAmount !== 'number' || normalizedAmount <= 0) {
       return res.status(400).json({ error: 'Valid amount is required' });
     }
+
+    // Use normalized amount
+    const finalAmount = normalizedAmount;
 
     // Determine if this is a live or test key
     const isLiveKey = publicKey.startsWith('pk_live_');
@@ -1333,7 +1367,7 @@ async function handleCheckoutCreate(req: VercelRequest, res: VercelResponse) {
         external_id: sessionId,
         merchant_id: business.id,
         status: 'OPEN',
-        amount: amount, // Amount comes in whole units from SDK
+        amount: finalAmount, // Normalized amount in New Leone (SLE)
         currency_code: currency.toUpperCase(),
         description: description || `Payment to ${business.name}`,
         merchant_name: business.name,
@@ -1375,9 +1409,10 @@ async function handleCheckoutCreate(req: VercelRequest, res: VercelResponse) {
       sessionId: sessionId,
       paymentUrl: paymentUrl,
       expiresAt: session.expires_at,
-      amount: amount,
+      amount: finalAmount,
       currency: currency,
       businessName: business.name,
+      currencyNote: 'SLE = New Leone (Sierra Leone redenominated in 2022, removing 3 zeros)',
       isTestMode: isTestKey
     });
 

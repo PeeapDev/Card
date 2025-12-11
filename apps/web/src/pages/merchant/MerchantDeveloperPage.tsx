@@ -302,10 +302,39 @@ function BusinessDetail() {
 
     return `/**
  * ============================================================================
- * PEEAP PAYMENT SDK v0 - Production Ready
+ * PEEAP PAYMENT SDK - Production Ready
  * ============================================================================
  * Business: ${business.name}
  * Mode: ${isLive ? 'LIVE' : 'SANDBOX (Test Mode)'}
+ *
+ * ⚠️  IMPORTANT: SIERRA LEONE CURRENCY (READ CAREFULLY)
+ * ============================================================================
+ * Sierra Leone REDENOMINATED its currency in 2022:
+ *
+ *   OLD Currency: Leone (SLL) - e.g., 10,000 old Leones
+ *   NEW Currency: New Leone (SLE) - e.g., 10 new Leones
+ *
+ *   CONVERSION: 1,000 old Leones = 1 new Leone (removed 3 zeros)
+ *
+ * USE THESE VALUES:
+ *   ✅ currency: 'SLE'     (correct - New Leone)
+ *   ✅ amount: 50          (means Le 50.00 new Leones)
+ *   ✅ amount: 100         (means Le 100.00 new Leones)
+ *
+ * DO NOT USE:
+ *   ❌ currency: 'NLE'     (old code - will be auto-converted to SLE)
+ *   ❌ currency: 'SLL'     (old currency - will be auto-converted)
+ *   ❌ amount: 50000       (this is old Leone thinking!)
+ *   ❌ amount: 1000000     (way too high for new Leone)
+ *
+ * TYPICAL NEW LEONE AMOUNTS:
+ *   - Small purchase: 5-50 SLE
+ *   - Medium purchase: 50-500 SLE
+ *   - Large purchase: 500-5000 SLE
+ *   - Very large: 5000+ SLE
+ *
+ * If your amount seems 1000x too high, divide by 1000!
+ * ============================================================================
  *
  * LIVE MODE (pk_live_xxx):
  *   - Real payments processed
@@ -438,6 +467,22 @@ const { paymentUrl } = await response.json();
  * Business: ${business.name}
  * Mode: ${isLive ? 'LIVE' : 'SANDBOX (Test Mode)'}
  *
+ * ⚠️  IMPORTANT: SIERRA LEONE CURRENCY (READ CAREFULLY)
+ * ============================================================================
+ * Sierra Leone REDENOMINATED its currency in 2022:
+ *
+ *   OLD: Leone (SLL) - e.g., 10,000 old Leones
+ *   NEW: New Leone (SLE) - e.g., 10 new Leones
+ *   CONVERSION: 1,000 old = 1 new (removed 3 zeros)
+ *
+ * CORRECT:
+ *   ✅ currency: 'SLE', amount: 50    (Le 50 new Leones)
+ *
+ * WRONG (will be auto-corrected but avoid):
+ *   ❌ currency: 'NLE' or 'SLL'
+ *   ❌ amount: 50000 (old Leone thinking - too high!)
+ * ============================================================================
+ *
  * USE THIS FOR:
  *   - v0.dev projects
  *   - Vercel preview deployments
@@ -555,6 +600,13 @@ PeeapV0.createPaymentLink({
  *
  * For backend integrations: Node.js, Python, PHP, Ruby, Go, etc.
  * This is the most secure integration method.
+ *
+ * ⚠️  CURRENCY NOTE: Sierra Leone redenominated in 2022
+ * ============================================================================
+ *   - Use 'SLE' (New Leone) - NOT 'NLE' or 'SLL'
+ *   - amount: 50 means Le 50.00 (new Leones)
+ *   - Old amounts (50000, 100000) are 1000x too high!
+ *   - API auto-converts NLE/SLL to SLE
  * ============================================================================
  */
 

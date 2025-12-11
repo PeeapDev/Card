@@ -1,5 +1,5 @@
 /**
- * PEEAP V0 INTEGRATION SCRIPT v1.0.0
+ * PEEAP V0 INTEGRATION SCRIPT v1.1.0
  *
  * Specifically designed for v0.dev, Vercel previews, and other
  * restricted/sandboxed environments with strict CSP policies.
@@ -9,6 +9,18 @@
  * - No popups
  * - No external script dependencies
  * - Works in any sandboxed environment
+ *
+ * ⚠️  IMPORTANT: SIERRA LEONE CURRENCY
+ * ============================================================================
+ * Sierra Leone REDENOMINATED its currency in 2022:
+ *   OLD: Leone (SLL) - 1000 old = 1 new
+ *   NEW: New Leone (SLE) - use this!
+ *
+ * CORRECT: currency: 'SLE', amount: 50 (means Le 50.00)
+ * WRONG: currency: 'NLE', amount: 50000 (old thinking!)
+ *
+ * The API auto-converts NLE/SLL to SLE, but always use SLE for clarity.
+ * ============================================================================
  *
  * Usage:
  *   // Option 1: Inline script (copy this entire file into your code)
@@ -25,8 +37,8 @@
  *
  *   // Create payment (redirects to hosted checkout)
  *   PeeapV0.pay({
- *     amount: 100,
- *     currency: 'SLE',
+ *     amount: 100,        // Le 100.00 in NEW Leones
+ *     currency: 'SLE',    // Always use 'SLE' (New Leone)
  *     description: 'Order #123',
  *     reference: 'order_123',
  *     redirectUrl: 'https://yoursite.com/payment-complete'
@@ -36,7 +48,7 @@
 (function(window) {
   'use strict';
 
-  var VERSION = '1.0.0';
+  var VERSION = '1.1.0';
   var API_URL = 'https://api.peeap.com';
   var CHECKOUT_URL = 'https://checkout.peeap.com';
 
