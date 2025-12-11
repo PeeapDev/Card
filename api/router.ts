@@ -898,13 +898,43 @@ async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse
 
     // If success, update status, credit merchant wallet, and show success page
     if (status === 'success') {
-      // Get merchant's wallet to credit
-      const { data: merchantWallet, error: merchantWalletError } = await supabase
-        .from('wallets')
-        .select('id, balance')
-        .eq('user_id', session.merchant_id)
-        .eq('currency', session.currency_code || 'SLE')
+      // Get the merchant business to find the owner's user_id
+      const { data: merchantBusiness, error: businessError } = await supabase
+        .from('merchant_businesses')
+        .select('id, merchant_id, name')
+        .eq('id', session.merchant_id)
         .single();
+
+      if (businessError || !merchantBusiness) {
+        console.error('[CheckoutPay] Merchant business not found:', session.merchant_id);
+      }
+
+      const merchantOwnerId = merchantBusiness?.merchant_id;
+      console.log('[CheckoutPay] Found merchant business:', merchantBusiness?.name, 'Owner:', merchantOwnerId);
+
+      // Get merchant owner's wallet to credit (using owner's user_id, not business id)
+      let merchantWallet = null;
+      if (merchantOwnerId) {
+        const { data: primaryWallet } = await supabase
+          .from('wallets')
+          .select('id, balance, user_id')
+          .eq('user_id', merchantOwnerId)
+          .eq('wallet_type', 'primary')
+          .single();
+
+        merchantWallet = primaryWallet;
+
+        // Fallback: try any wallet for this user
+        if (!merchantWallet) {
+          const { data: anyWallet } = await supabase
+            .from('wallets')
+            .select('id, balance, user_id')
+            .eq('user_id', merchantOwnerId)
+            .limit(1)
+            .single();
+          merchantWallet = anyWallet;
+        }
+      }
 
       if (merchantWallet) {
         const paymentAmount = parseFloat(session.amount);
@@ -917,9 +947,12 @@ async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse
           .eq('id', merchantWallet.id);
 
         if (!creditError) {
-          // Create merchant's incoming transaction record
+          // Create merchant's incoming transaction record - MUST include external_id
           transactionRef = `MOBILE-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-          await supabase.from('transactions').insert({
+          const merchantTxExternalId = `tx_merch_${randomUUID().replace(/-/g, '').substring(0, 24)}`;
+
+          const { error: txError } = await supabase.from('transactions').insert({
+            external_id: merchantTxExternalId,
             wallet_id: merchantWallet.id,
             type: 'PAYMENT_RECEIVED',
             amount: paymentAmount,
@@ -932,13 +965,19 @@ async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse
               merchantId: session.merchant_id,
               merchantName: session.merchant_name,
               paymentMethod: 'monime_mobile',
+              payerName: session.metadata?.payerName || 'Mobile Money Customer',
+              payerEmail: session.metadata?.payerEmail,
             },
           });
-          console.log('[CheckoutPay] Merchant wallet credited:', { merchantId: session.merchant_id, amount: paymentAmount, ref: transactionRef });
 
-          // Send notification to merchant
+          if (txError) {
+            console.error('[CheckoutPay] Transaction insert error:', txError);
+          }
+          console.log('[CheckoutPay] Merchant wallet credited:', { merchantOwnerId, amount: paymentAmount, ref: transactionRef });
+
+          // Send notification to merchant (use owner's user_id)
           await supabase.from('user_notifications').insert({
-            user_id: session.merchant_id,
+            user_id: merchantOwnerId,
             type: 'payment_received',
             title: 'Payment Received',
             message: `You received a payment of ${currency} ${paymentAmount.toLocaleString()} via mobile money for "${session.description || 'Purchase'}"`,
@@ -981,8 +1020,11 @@ async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse
             }
 
             if (payerWallet) {
-              // Create payer's outgoing transaction record (for their transaction history)
-              await supabase.from('transactions').insert({
+              // Create payer's outgoing transaction record (for their transaction history) - MUST include external_id
+              const payerTxExternalId = `tx_payer_${randomUUID().replace(/-/g, '').substring(0, 24)}`;
+
+              const { error: payerTxError } = await supabase.from('transactions').insert({
+                external_id: payerTxExternalId,
                 wallet_id: payerWallet.id,
                 type: 'PAYMENT_SENT',
                 amount: -paymentAmount, // Negative to show as outgoing
@@ -997,6 +1039,10 @@ async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse
                   paymentMethod: 'monime_mobile',
                 },
               });
+
+              if (payerTxError) {
+                console.error('[CheckoutPay] Payer transaction insert error:', payerTxError);
+              }
               console.log('[CheckoutPay] Payer transaction created:', { payerId, amount: paymentAmount, ref: transactionRef });
 
               // Send notification to payer
@@ -1021,7 +1067,7 @@ async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse
           console.error('[CheckoutPay] Failed to credit merchant wallet:', creditError);
         }
       } else {
-        console.error('[CheckoutPay] Merchant wallet not found:', session.merchant_id, merchantWalletError);
+        console.error('[CheckoutPay] Merchant wallet not found for owner:', merchantOwnerId);
       }
 
       // Update session status
