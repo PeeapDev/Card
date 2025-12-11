@@ -92,9 +92,10 @@ export function ScanToPayModal({ isOpen, onClose }: ScanToPayModalProps) {
 
     // Check if this is a checkout session QR code
     if (result.checkoutSessionId) {
-      // Close modal and redirect to checkout page
+      // Close modal and redirect to scan-pay page to process payment
+      // The scan-pay page handles authentication and wallet-to-wallet transfer
       onClose();
-      navigate(`/checkout/pay/${result.checkoutSessionId}`);
+      navigate(`/scan-pay/${result.checkoutSessionId}`);
       return;
     }
 

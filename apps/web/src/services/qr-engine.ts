@@ -285,7 +285,7 @@ class QREngineService {
   /**
    * Check if QR data is a URL and extract payment info
    */
-  private parseURLQR(qrData: string): { type: 'checkout' | 'pay' | 'qr'; id: string } | null {
+  private parseURLQR(qrData: string): { type: 'checkout' | 'pay' | 'qr' | 'scan-pay'; id: string } | null {
     try {
       // Check if it's a URL
       if (!qrData.startsWith('http://') && !qrData.startsWith('https://')) {
@@ -294,6 +294,12 @@ class QREngineService {
 
       const url = new URL(qrData);
       const pathname = url.pathname;
+
+      // Handle /scan-pay/{sessionId} format (QR scan from checkout)
+      const scanPayMatch = pathname.match(/\/scan-pay\/([^/]+)$/);
+      if (scanPayMatch) {
+        return { type: 'scan-pay', id: scanPayMatch[1] };
+      }
 
       // Handle /pay/{sessionId} format (hosted checkout)
       const payMatch = pathname.match(/\/pay\/([^/]+)$/);
@@ -326,8 +332,8 @@ class QREngineService {
     // First, check if it's a URL-based QR code
     const urlData = this.parseURLQR(qrData);
     if (urlData) {
-      if (urlData.type === 'checkout') {
-        // It's a checkout session - return the session ID for redirection
+      if (urlData.type === 'scan-pay' || urlData.type === 'checkout') {
+        // It's a checkout session QR - return the session ID for payment processing
         return {
           valid: true,
           data: {
