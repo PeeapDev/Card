@@ -20,6 +20,7 @@ import { Card, Button } from '@/components/ui';
 import { useWallets } from '@/hooks/useWallets';
 import { useAuth } from '@/context/AuthContext';
 import { currencyService, Currency } from '@/services/currency.service';
+import { supabase } from '@/lib/supabase';
 
 interface SendToMobileMoneyModalProps {
   isOpen: boolean;
@@ -192,15 +193,23 @@ export function SendToMobileMoneyModal({ isOpen, onClose, onSuccess }: SendToMob
     setError('');
 
     try {
+      // Get the current session token for authentication
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Please log in to continue');
+      }
+
       const response = await fetch(`${API_BASE}/router/mobile-money/send`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({
           amount: parseFloat(amount),
           currency: 'SLE',
           phoneNumber,
           providerId: detectedProviderId,
-          userId: user.id,
           walletId: selectedWalletId,
           description: description || undefined,
         }),

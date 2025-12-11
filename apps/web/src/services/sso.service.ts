@@ -42,7 +42,7 @@ export const ssoService = {
     tier?: string;
     redirectPath?: string;
   }): Promise<{ token: string; expiresAt: Date }> {
-    const token = uuidv4();
+    const token = generateUuid();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes expiry
 
     const { error } = await supabase.from('sso_tokens').insert({
