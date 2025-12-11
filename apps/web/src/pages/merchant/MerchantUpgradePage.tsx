@@ -118,18 +118,25 @@ export function MerchantUpgradePage() {
     const token = localStorage.getItem('token');
 
     if (plan.redirectToPlus) {
-      // Redirect to plus.peeap.com/auth/callback for instant login
-      // This bypasses the Plus homepage and logs user in directly
-      const callbackUrl = new URL('https://plus.peeap.com/auth/callback');
-      callbackUrl.searchParams.set('tier', plan.id);
-      callbackUrl.searchParams.set('redirect', `/setup?tier=${plan.id}`);
+      let redirectUrl: string;
+
       if (token) {
+        // User is logged in - redirect to Plus callback with token for instant login
+        const callbackUrl = new URL('https://plus.peeap.com/auth/callback');
+        callbackUrl.searchParams.set('tier', plan.id);
+        callbackUrl.searchParams.set('redirect', `/setup?tier=${plan.id}`);
         callbackUrl.searchParams.set('token', token);
+        redirectUrl = callbackUrl.toString();
+      } else {
+        // User is not logged in - redirect to Plus upgrade page
+        const upgradeUrl = new URL('https://plus.peeap.com/upgrade');
+        upgradeUrl.searchParams.set('tier', plan.id);
+        redirectUrl = upgradeUrl.toString();
       }
 
       // Small delay for UX
       setTimeout(() => {
-        window.location.href = callbackUrl.toString();
+        window.location.href = redirectUrl;
       }, 500);
     }
   };
