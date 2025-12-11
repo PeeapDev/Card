@@ -76,6 +76,7 @@ import { DepositCancelPage } from '@/pages/DepositCancelPage';
 import { BusinessCheckoutPage } from '@/pages/BusinessCheckoutPage';
 import { CheckoutPage } from '@/pages/CheckoutPage';
 import { HostedCheckoutPage } from '@/pages/HostedCheckoutPage';
+import { ScanPayPage } from '@/pages/ScanPayPage';
 import { TestCheckoutPage } from '@/pages/TestCheckoutPage';
 import { AppPaymentRedirectPage } from '@/pages/AppPaymentRedirectPage';
 import { NFCPaymentPage } from '@/pages/NFCPaymentPage';
@@ -173,6 +174,9 @@ function App() {
 
                   {/* Hosted Checkout Page - Universal developer checkout like Stripe/PayPal */}
                   <Route path="/checkout/pay/:sessionId" element={<HostedCheckoutPage />} />
+
+                  {/* Scan to Pay - For QR code scans from checkout page */}
+                  <Route path="/scan-pay/:sessionId" element={<ScanPayPage />} />
 
                   {/* App Payment Redirect - Smart deep link handler for QR scans */}
                   <Route path="/app/pay/:paymentId" element={<AppPaymentRedirectPage />} />
@@ -842,6 +846,7 @@ function App() {
                   <Route path="/deposit/cancel" element={<DepositCancelPage />} />
                   <Route path="/checkout/:businessId" element={<BusinessCheckoutPage />} />
                   <Route path="/checkout/pay/:sessionId" element={<HostedCheckoutPage />} />
+                  <Route path="/scan-pay/:sessionId" element={<ScanPayPage />} />
                   <Route path="/app/pay/:paymentId" element={<AppPaymentRedirectPage />} />
 
                   {/* Onboarding Route */}

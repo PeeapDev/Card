@@ -98,6 +98,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } else if (path.match(/^checkout\/sessions\/[^/]+\/mobile-pay$/)) {
       const sessionId = path.split('/')[2];
       return await handleCheckoutMobilePay(req, res, sessionId);
+    } else if (path.match(/^checkout\/sessions\/[^/]+\/scan-pay$/)) {
+      const sessionId = path.split('/')[2];
+      return await handleCheckoutScanPay(req, res, sessionId);
     } else if (path === 'checkout/tokenize' || path === 'checkout/tokenize/') {
       return await handleCheckoutTokenize(req, res);
     } else if (path.startsWith('checkout/create')) {
@@ -2787,6 +2790,197 @@ async function handleCheckoutSessionCardPay(req: VercelRequest, res: VercelRespo
 
   } catch (error: any) {
     console.error('[CardPay] Error:', error);
+    return res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+}
+
+// ============================================================================
+// SCAN-TO-PAY HANDLER
+// ============================================================================
+/**
+ * Handle QR code scan payment from another Peeap user
+ * Flow:
+ * 1. Customer scans QR code displayed on checkout page
+ * 2. Customer is redirected to /scan-pay/:sessionId page
+ * 3. Customer logs in and confirms payment
+ * 4. This endpoint processes wallet-to-wallet transfer
+ * 5. Merchant receives payment, session marked complete
+ */
+async function handleCheckoutScanPay(req: VercelRequest, res: VercelResponse, sessionId: string) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const { payerUserId, payerWalletId, payerName } = req.body;
+
+    // Validate required fields
+    if (!payerUserId || !payerWalletId) {
+      return res.status(400).json({ error: 'payerUserId and payerWalletId are required' });
+    }
+
+    console.log('[ScanPay] Processing scan payment for session:', sessionId, 'from user:', payerUserId);
+
+    // 1. Get the checkout session
+    const { data: session, error: sessionError } = await supabase
+      .from('checkout_sessions')
+      .select('*')
+      .eq('external_id', sessionId)
+      .single();
+
+    if (sessionError || !session) {
+      console.error('[ScanPay] Session not found:', sessionId);
+      return res.status(404).json({ error: 'Checkout session not found' });
+    }
+
+    if (session.status !== 'OPEN') {
+      return res.status(400).json({ error: `Session is ${session.status.toLowerCase()}, cannot process payment` });
+    }
+
+    if (new Date(session.expires_at) < new Date()) {
+      await supabase.from('checkout_sessions').update({ status: 'EXPIRED' }).eq('id', session.id);
+      return res.status(400).json({ error: 'Session has expired' });
+    }
+
+    // 2. Get payer's wallet and check balance
+    const { data: payerWallet, error: payerWalletError } = await supabase
+      .from('wallets')
+      .select('id, user_id, balance, currency')
+      .eq('id', payerWalletId)
+      .eq('user_id', payerUserId)
+      .single();
+
+    if (payerWalletError || !payerWallet) {
+      console.error('[ScanPay] Payer wallet not found:', payerWalletId);
+      return res.status(404).json({ error: 'Payer wallet not found' });
+    }
+
+    const paymentAmount = parseFloat(session.amount);
+    const payerBalance = parseFloat(payerWallet.balance);
+
+    if (payerBalance < paymentAmount) {
+      return res.status(400).json({
+        error: 'Insufficient funds',
+        message: `Your balance is ${payerWallet.currency} ${payerBalance.toFixed(2)} but the payment requires ${session.currency_code} ${paymentAmount.toFixed(2)}`
+      });
+    }
+
+    // 3. Get merchant's wallet to credit
+    const { data: merchantWallet, error: merchantWalletError } = await supabase
+      .from('wallets')
+      .select('id, balance, user_id')
+      .eq('user_id', session.merchant_id)
+      .eq('currency', session.currency_code || 'SLE')
+      .single();
+
+    if (merchantWalletError || !merchantWallet) {
+      console.error('[ScanPay] Merchant wallet not found:', session.merchant_id);
+      return res.status(500).json({ error: 'Merchant wallet not found' });
+    }
+
+    // Prevent self-payment
+    if (payerUserId === merchantWallet.user_id) {
+      return res.status(400).json({ error: 'Cannot pay to yourself' });
+    }
+
+    // 4. Process the payment atomically
+    // Deduct from payer's wallet
+    const newPayerBalance = payerBalance - paymentAmount;
+    const { error: deductError } = await supabase
+      .from('wallets')
+      .update({ balance: newPayerBalance, updated_at: new Date().toISOString() })
+      .eq('id', payerWalletId);
+
+    if (deductError) {
+      console.error('[ScanPay] Failed to deduct from wallet:', deductError);
+      return res.status(500).json({ error: 'Failed to process payment' });
+    }
+
+    // Credit merchant's wallet
+    const newMerchantBalance = parseFloat(merchantWallet.balance) + paymentAmount;
+    const { error: creditError } = await supabase
+      .from('wallets')
+      .update({ balance: newMerchantBalance, updated_at: new Date().toISOString() })
+      .eq('id', merchantWallet.id);
+
+    if (creditError) {
+      // Rollback payer deduction
+      await supabase.from('wallets').update({ balance: payerBalance }).eq('id', payerWalletId);
+      console.error('[ScanPay] Failed to credit merchant, rolled back:', creditError);
+      return res.status(500).json({ error: 'Failed to process payment' });
+    }
+
+    // 5. Create transaction records
+    const transactionRef = `SCAN-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    // Payer's outgoing transaction
+    await supabase.from('transactions').insert({
+      wallet_id: payerWalletId,
+      type: 'PAYMENT',
+      amount: -paymentAmount,
+      currency: session.currency_code || 'SLE',
+      status: 'COMPLETED',
+      description: session.description || `Payment to ${session.merchant_name || 'merchant'}`,
+      reference: transactionRef,
+      metadata: {
+        checkoutSessionId: session.external_id,
+        merchantId: session.merchant_id,
+        merchantName: session.merchant_name,
+        paymentMethod: 'scan_to_pay',
+      },
+    });
+
+    // Merchant's incoming transaction
+    await supabase.from('transactions').insert({
+      wallet_id: merchantWallet.id,
+      type: 'PAYMENT_RECEIVED',
+      amount: paymentAmount,
+      currency: session.currency_code || 'SLE',
+      status: 'COMPLETED',
+      description: `Payment from ${payerName || 'customer'} (QR Scan)`,
+      reference: transactionRef,
+      metadata: {
+        checkoutSessionId: session.external_id,
+        payerId: payerUserId,
+        payerName: payerName,
+        paymentMethod: 'scan_to_pay',
+      },
+    });
+
+    // 6. Mark session as complete
+    const { error: updateError } = await supabase
+      .from('checkout_sessions')
+      .update({
+        status: 'COMPLETE',
+        completed_at: new Date().toISOString(),
+        metadata: {
+          ...(session.metadata || {}),
+          paymentMethod: 'scan_to_pay',
+          payerId: payerUserId,
+          payerName: payerName,
+          transactionRef: transactionRef,
+        },
+      })
+      .eq('id', session.id);
+
+    if (updateError) {
+      console.error('[ScanPay] Failed to update session:', updateError);
+      // Payment already processed, just log the error
+    }
+
+    console.log('[ScanPay] Payment successful:', { sessionId, transactionRef, amount: paymentAmount, payer: payerUserId });
+
+    return res.status(200).json({
+      success: true,
+      status: 'COMPLETE',
+      transactionRef,
+      amount: paymentAmount,
+      currency: session.currency_code || 'SLE',
+      merchantName: session.merchant_name,
+    });
+
+  } catch (error: any) {
+    console.error('[ScanPay] Error:', error);
     return res.status(500).json({ error: error.message || 'Internal server error' });
   }
 }

@@ -305,7 +305,14 @@ export function HostedCheckoutPage() {
   };
 
   const getQRCodeData = (): string => {
-    return `${window.location.origin}/pay/${sessionId}`;
+    // Generate a web URL for the scan-pay page
+    // This URL works when scanned with any QR scanner (camera app, etc.)
+    // The scan-pay page will handle login and payment confirmation
+    if (!session) return '';
+
+    // Use the web URL that works universally
+    // The /scan-pay page will handle authentication and payment
+    return `${window.location.origin}/scan-pay/${sessionId}`;
   };
 
   // Card payment handler
