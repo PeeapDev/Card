@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -29,8 +29,10 @@ import {
   Code2,
   Bell,
   Building2,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { UpgradeOverlay } from "@/components/UpgradeOverlay";
 
 interface NavItem {
   title: string;
@@ -96,10 +98,12 @@ const navigation: NavItem[] = [
 
 type UserTier = "basic" | "business" | "business_plus" | "developer";
 
-// Mock function to get user tier - will be replaced with real auth
-function getUserTier(): UserTier {
-  // This will be replaced with actual auth context
-  return "business_plus";
+interface UserData {
+  id: string;
+  email: string;
+  businessName?: string;
+  tier: UserTier;
+  plusSetupComplete?: boolean;
 }
 
 export default function DashboardLayout({
@@ -108,10 +112,98 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [userTier] = useState<UserTier>(getUserTier);
-  const userName = "Business User";
-  const businessName = "Acme Corp";
+  const [isLoading, setIsLoading] = useState(true);
+  const [showUpgradeOverlay, setShowUpgradeOverlay] = useState(false);
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [userTier, setUserTier] = useState<UserTier>("basic");
+
+  useEffect(() => {
+    checkAuthAndTier();
+  }, []);
+
+  const checkAuthAndTier = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const storedUser = localStorage.getItem("user");
+      const plusTier = localStorage.getItem("plusTier");
+      const setupComplete = localStorage.getItem("plusSetupComplete");
+
+      if (!token) {
+        // Not logged in, redirect to login
+        router.push("/auth/login?redirect=/dashboard");
+        return;
+      }
+
+      // Check if user has completed Plus setup
+      if (storedUser) {
+        const user = JSON.parse(storedUser);
+        setUserData(user);
+
+        // Determine user tier
+        // Priority: plusTier from setup > user.tier from API > basic
+        const effectiveTier = (plusTier || user.tier || "basic") as UserTier;
+        setUserTier(effectiveTier);
+
+        // Show upgrade overlay if user is on basic tier
+        if (effectiveTier === "basic") {
+          setShowUpgradeOverlay(true);
+        }
+
+        // Check if setup is needed for new Plus users
+        if ((effectiveTier === "business" || effectiveTier === "business_plus") && !setupComplete) {
+          router.push(`/setup?tier=${effectiveTier}`);
+          return;
+        }
+      } else {
+        // Validate token with API
+        try {
+          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/validate`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            localStorage.setItem("user", JSON.stringify(data.user));
+            setUserData(data.user);
+
+            const effectiveTier = (data.user.tier || "basic") as UserTier;
+            setUserTier(effectiveTier);
+
+            if (effectiveTier === "basic") {
+              setShowUpgradeOverlay(true);
+            }
+          } else {
+            // Invalid token, redirect to login
+            localStorage.removeItem("token");
+            localStorage.removeItem("user");
+            router.push("/auth/login?redirect=/dashboard");
+            return;
+          }
+        } catch (error) {
+          console.error("Auth validation error:", error);
+          // For demo, allow access with basic tier
+          setUserTier("basic");
+          setShowUpgradeOverlay(true);
+        }
+      }
+    } catch (error) {
+      console.error("Auth check error:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    localStorage.removeItem("plusTier");
+    localStorage.removeItem("plusSetupComplete");
+    router.push("/auth/login");
+  };
+
+  const businessName = userData?.businessName || "My Business";
 
   const filteredNav = navigation.filter(
     (item) => !item.tier || item.tier.includes(userTier)
@@ -143,8 +235,21 @@ export default function DashboardLayout({
     </>
   );
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Upgrade Overlay for basic tier users */}
+      {showUpgradeOverlay && (
+        <UpgradeOverlay currentTier={userTier} />
+      )}
+
       {/* Desktop Sidebar */}
       <aside className="fixed inset-y-0 left-0 z-50 hidden w-64 border-r bg-white lg:block">
         <div className="flex h-full flex-col">
@@ -161,16 +266,18 @@ export default function DashboardLayout({
             <NavItems />
           </nav>
 
-          {/* Upgrade Banner */}
-          {userTier === "basic" && (
-            <div className="m-4 rounded-lg bg-primary/10 p-4">
-              <p className="text-sm font-medium">Upgrade to Business</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Get invoicing, subscriptions, and more
+          {/* Upgrade Banner for business tier (to upgrade to business++) */}
+          {userTier === "business" && (
+            <div className="m-4 rounded-lg bg-purple-50 border border-purple-200 p-4">
+              <p className="text-sm font-medium text-purple-900">Upgrade to Business++</p>
+              <p className="text-xs text-purple-700 mt-1">
+                Get employee cards, spending controls
               </p>
-              <Button size="sm" className="mt-3 w-full">
-                Upgrade Now
-              </Button>
+              <Link href="/upgrade?tier=business_plus">
+                <Button size="sm" variant="secondary" className="mt-3 w-full">
+                  Upgrade
+                </Button>
+              </Link>
             </div>
           )}
 
@@ -253,7 +360,7 @@ export default function DashboardLayout({
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive">
+            <DropdownMenuItem className="text-destructive" onClick={handleLogout}>
               <LogOut className="mr-2 h-4 w-4" />
               Sign out
             </DropdownMenuItem>
@@ -303,7 +410,7 @@ export default function DashboardLayout({
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive">
+            <DropdownMenuItem className="text-destructive" onClick={handleLogout}>
               <LogOut className="mr-2 h-4 w-4" />
               Sign out
             </DropdownMenuItem>
