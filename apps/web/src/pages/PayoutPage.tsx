@@ -33,7 +33,8 @@ interface MobileMoneyProvider {
 
 type Step = 'form' | 'confirm' | 'processing' | 'success' | 'error';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'https://peeap.vercel.app/api';
+// Use relative path for same-origin API requests (avoids CORS issues)
+const API_BASE = '/api';
 
 // Known provider mappings
 const PROVIDER_DISPLAY: Record<string, { name: string; color: string; icon: string; bgColor: string }> = {
