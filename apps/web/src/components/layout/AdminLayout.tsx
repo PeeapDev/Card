@@ -34,6 +34,7 @@ import {
   Headphones,
   PackagePlus,
   Puzzle,
+  Mail,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { AdminNotificationBell } from '@/components/ui/AdminNotificationBell';
@@ -115,6 +116,7 @@ const navSections: NavSection[] = [
       { path: '/admin/modules', label: 'Modules', icon: Puzzle, badge: 'New', badgeColor: 'primary' },
       { path: '/admin/roles', label: 'Role Management', icon: UserCog },
       { path: '/admin/payment-settings', label: 'Payment Settings', icon: Settings },
+      { path: '/admin/smtp-settings', label: 'SMTP / Email', icon: Mail },
       { path: '/admin/compliance', label: 'Compliance', icon: FileCheck, badge: 'Pending', badgeColor: 'yellow' },
     ],
   },

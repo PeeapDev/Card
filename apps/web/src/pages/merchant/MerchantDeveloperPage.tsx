@@ -190,6 +190,9 @@ function BusinessesList() {
   );
 }
 
+// Integration tab type
+type IntegrationTab = 'standard' | 'v0' | 'server';
+
 // Business Detail Component
 function BusinessDetail() {
   const [business, setBusiness] = useState<MerchantBusiness | null>(null);
@@ -198,6 +201,7 @@ function BusinessDetail() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [togglingMode, setTogglingMode] = useState(false);
   const [modeError, setModeError] = useState('');
+  const [integrationTab, setIntegrationTab] = useState<IntegrationTab>('standard');
 
   const navigate = useNavigate();
   const businessId = window.location.pathname.split('/').pop();
@@ -420,6 +424,369 @@ const { paymentUrl } = await response.json();
 }`;
   };
 
+  // V0/Restricted Environment SDK Script
+  const getV0SDKScript = () => {
+    const apiUrl = 'https://api.peeap.com';
+    const checkoutUrl = 'https://checkout.peeap.com';
+    const publicKey = activeKeys.public;
+    const isLive = business.is_live_mode;
+
+    return `/**
+ * ============================================================================
+ * PEEAP V0 INTEGRATION - For Restricted Environments
+ * ============================================================================
+ * Business: ${business.name}
+ * Mode: ${isLive ? 'LIVE' : 'SANDBOX (Test Mode)'}
+ *
+ * USE THIS FOR:
+ *   - v0.dev projects
+ *   - Vercel preview deployments
+ *   - CodeSandbox / StackBlitz
+ *   - Any iframe/sandboxed environment
+ *   - Environments with strict CSP policies
+ *
+ * This SDK uses REDIRECT-ONLY flow (no iframes, no popups)
+ * ============================================================================
+ */
+
+<!-- STEP 1: Add V0-Compatible SDK Script -->
+<script src="${checkoutUrl}/embed/peeap-v0.js"></script>
+
+<!-- STEP 2: Initialize & Create Payment -->
+<script>
+// Initialize Peeap V0 SDK
+PeeapV0.init({
+  publicKey: '${publicKey}',
+
+  // Called when payment succeeds (after redirect back)
+  onSuccess: function(payment) {
+    console.log('Payment successful!', payment);
+    console.log('Reference:', payment.reference);
+    // Update your UI or redirect
+  },
+
+  // Called on error
+  onError: function(error) {
+    console.error('Payment failed:', error.message);
+    alert('Payment failed: ' + error.message);
+  },
+
+  // Called when user cancels
+  onCancel: function() {
+    console.log('Payment cancelled by user');
+  }
+});
+
+// Function to trigger payment (redirects to hosted checkout)
+function payWithPeeap(amount, description, reference) {
+  PeeapV0.pay({
+    amount: amount,           // New Leone (SLE): 50 = Le 50.00
+    currency: 'SLE',
+    description: description || 'Payment',
+    reference: reference,     // Optional: your order ID
+    // After payment, user returns to current page with ?peeap_ref=xxx&peeap_status=success
+  });
+}
+</script>
+
+<!-- STEP 3: Add Payment Button -->
+<button onclick="payWithPeeap(50, 'Order #12345', 'order_12345')">
+  Pay Le 50.00
+</button>
+
+/**
+ * ============================================================================
+ * HOW IT WORKS (Redirect Flow)
+ * ============================================================================
+ * 1. User clicks payment button
+ * 2. SDK creates checkout session via API
+ * 3. User is REDIRECTED to ${checkoutUrl}/checkout/pay/{sessionId}
+ * 4. User completes payment on hosted checkout
+ * 5. User is redirected back to your site with callback params:
+ *    ?peeap_ref=order_12345&peeap_status=success
+ * 6. SDK detects callback params and triggers onSuccess
+ *
+ * This completely avoids all CSP/iframe/sandbox restrictions!
+ * ============================================================================
+ */
+
+/**
+ * ============================================================================
+ * OPTIONAL: Custom Redirect URL
+ * ============================================================================
+ */
+PeeapV0.pay({
+  amount: 100,
+  currency: 'SLE',
+  description: 'Premium Plan',
+  reference: 'plan_001',
+  redirectUrl: 'https://yoursite.com/payment-complete'  // Custom return URL
+});
+
+/**
+ * ============================================================================
+ * OPTIONAL: Generate Payment Link Without Redirect
+ * ============================================================================
+ */
+PeeapV0.createPaymentLink({
+  amount: 100,
+  currency: 'SLE',
+  description: 'Invoice #1234'
+}).then(function(result) {
+  console.log('Payment URL:', result.paymentUrl);
+  // Share this URL or open in new tab
+});`;
+  };
+
+  // Server-Side Integration Script
+  const getServerSDKScript = () => {
+    const apiUrl = 'https://api.peeap.com';
+    const checkoutUrl = 'https://checkout.peeap.com';
+    const publicKey = activeKeys.public;
+    const secretKey = showSecretKeys ? activeKeys.secret : 'sk_****_your_secret_key';
+    const isLive = business.is_live_mode;
+
+    return `/**
+ * ============================================================================
+ * PEEAP SERVER-SIDE INTEGRATION
+ * ============================================================================
+ * Business: ${business.name}
+ * Mode: ${isLive ? 'LIVE' : 'SANDBOX (Test Mode)'}
+ *
+ * For backend integrations: Node.js, Python, PHP, Ruby, Go, etc.
+ * This is the most secure integration method.
+ * ============================================================================
+ */
+
+// ============================================================================
+// NODE.JS / JAVASCRIPT
+// ============================================================================
+
+// Create Checkout Session
+async function createCheckoutSession(orderData) {
+  const response = await fetch('${apiUrl}/api/checkout/create', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      // For server-side, you can use secret key for additional security
+      // 'Authorization': 'Bearer ${secretKey}'
+    },
+    body: JSON.stringify({
+      publicKey: '${publicKey}',
+      amount: orderData.amount,        // e.g., 100 = Le 100.00
+      currency: orderData.currency || 'SLE',
+      description: orderData.description,
+      reference: orderData.orderId,    // Your order ID
+      redirectUrl: orderData.redirectUrl,
+      customerEmail: orderData.email,
+      customerPhone: orderData.phone,
+      metadata: {
+        orderId: orderData.orderId,
+        customerId: orderData.customerId
+      }
+    })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to create checkout');
+  }
+
+  return data;
+  // Returns: { sessionId, paymentUrl, expiresAt }
+}
+
+// Usage in Express.js
+app.post('/api/create-order', async (req, res) => {
+  try {
+    const { amount, description } = req.body;
+
+    // Create your order in database first
+    const order = await db.orders.create({ amount, description, status: 'pending' });
+
+    // Create Peeap checkout session
+    const checkout = await createCheckoutSession({
+      amount: amount,
+      description: description,
+      orderId: order.id,
+      redirectUrl: \`\${process.env.APP_URL}/order/\${order.id}/complete\`
+    });
+
+    // Redirect user to payment page
+    res.redirect(checkout.paymentUrl);
+
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+// ============================================================================
+// PYTHON (requests)
+// ============================================================================
+
+import requests
+
+def create_checkout_session(amount, description, reference, redirect_url=None):
+    response = requests.post(
+        '${apiUrl}/api/checkout/create',
+        json={
+            'publicKey': '${publicKey}',
+            'amount': amount,
+            'currency': 'SLE',
+            'description': description,
+            'reference': reference,
+            'redirectUrl': redirect_url
+        }
+    )
+
+    if response.status_code != 200:
+        raise Exception(response.json().get('error', 'Failed to create checkout'))
+
+    return response.json()
+
+# Usage
+checkout = create_checkout_session(
+    amount=100,
+    description='Premium Plan',
+    reference='order_123',
+    redirect_url='https://yoursite.com/payment-complete'
+)
+print(f"Redirect user to: {checkout['paymentUrl']}")
+
+
+// ============================================================================
+// PHP (cURL)
+// ============================================================================
+
+<?php
+function createCheckoutSession($amount, $description, $reference, $redirectUrl = null) {
+    $ch = curl_init('${apiUrl}/api/checkout/create');
+
+    $data = [
+        'publicKey' => '${publicKey}',
+        'amount' => $amount,
+        'currency' => 'SLE',
+        'description' => $description,
+        'reference' => $reference,
+        'redirectUrl' => $redirectUrl
+    ];
+
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => json_encode($data),
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+        CURLOPT_RETURNTRANSFER => true
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $result = json_decode($response, true);
+
+    if ($httpCode !== 200) {
+        throw new Exception($result['error'] ?? 'Failed to create checkout');
+    }
+
+    return $result;
+}
+
+// Usage
+$checkout = createCheckoutSession(100, 'Order #123', 'order_123', 'https://yoursite.com/complete');
+header('Location: ' . $checkout['paymentUrl']);
+exit;
+?>
+
+
+// ============================================================================
+// WEBHOOK VERIFICATION (Recommended)
+// ============================================================================
+
+// Verify webhook signature (Node.js example)
+const crypto = require('crypto');
+
+function verifyWebhookSignature(payload, signature, secret) {
+  const expectedSignature = crypto
+    .createHmac('sha256', secret)
+    .update(JSON.stringify(payload))
+    .digest('hex');
+
+  return crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(expectedSignature)
+  );
+}
+
+// Webhook endpoint
+app.post('/webhooks/peeap', express.json(), (req, res) => {
+  const signature = req.headers['x-peeap-signature'];
+
+  if (!verifyWebhookSignature(req.body, signature, '${secretKey}')) {
+    return res.status(401).json({ error: 'Invalid signature' });
+  }
+
+  const { event, data } = req.body;
+
+  switch (event) {
+    case 'payment.completed':
+      // Mark order as paid
+      await db.orders.update(data.reference, { status: 'paid' });
+      break;
+
+    case 'payment.failed':
+      // Handle failed payment
+      await db.orders.update(data.reference, { status: 'failed' });
+      break;
+  }
+
+  res.json({ received: true });
+});
+
+
+// ============================================================================
+// API RESPONSE FORMATS
+// ============================================================================
+
+// Create Checkout Response:
+{
+  "sessionId": "cs_${isLive ? 'live' : 'test'}_abc123...",
+  "paymentUrl": "${checkoutUrl}/checkout/pay/cs_${isLive ? 'live' : 'test'}_abc123...",
+  "expiresAt": "2025-01-20T15:30:00Z",
+  "amount": 100,
+  "currency": "SLE",
+  "isTestMode": ${!isLive}
+}
+
+// Webhook Payload:
+{
+  "event": "payment.completed",
+  "timestamp": "2025-01-20T14:30:00Z",
+  "data": {
+    "reference": "order_123",
+    "sessionId": "cs_${isLive ? 'live' : 'test'}_abc123",
+    "amount": 100,
+    "currency": "SLE",
+    "status": "completed",
+    "paidAt": "2025-01-20T14:30:00Z",
+    "paymentMethod": "mobile_money"
+  }
+}`;
+  };
+
+  // Get current script based on selected tab
+  const getCurrentScript = () => {
+    switch (integrationTab) {
+      case 'v0':
+        return getV0SDKScript();
+      case 'server':
+        return getServerSDKScript();
+      default:
+        return getFullSDKScript();
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header with Mode Toggle */}
@@ -615,7 +982,7 @@ const { paymentUrl } = await response.json();
         <p className="text-sm text-gray-500">Add payment capabilities to your website or application</p>
       </div>
 
-      {/* Complete SDK Documentation */}
+      {/* Complete SDK Documentation with Tabs */}
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -624,14 +991,84 @@ const { paymentUrl } = await response.json();
           </div>
           <div className="flex items-center gap-2">
             <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded">AI-Ready</span>
-            <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded">v1.0.0</span>
+            <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded">v2.3.0</span>
           </div>
         </div>
-        <p className="text-sm text-gray-600 mb-4">
-          Copy and share this complete integration guide. Works with any website, React, Vue, Next.js,
-          or AI platforms like <strong>Lovable</strong>, <strong>v0</strong>, <strong>Bolt</strong>, and others.
-          The documentation includes all supported currencies, payment methods, API endpoints, and examples.
-        </p>
+
+        {/* Integration Type Tabs */}
+        <div className="flex flex-wrap gap-2 mb-4 p-1 bg-gray-100 rounded-lg">
+          <button
+            onClick={() => setIntegrationTab('standard')}
+            className={`flex-1 min-w-[120px] px-4 py-2.5 rounded-md text-sm font-medium transition-all ${
+              integrationTab === 'standard'
+                ? 'bg-white shadow text-primary-700 ring-1 ring-primary-200'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+            }`}
+          >
+            <div className="flex items-center justify-center gap-2">
+              <Globe className="w-4 h-4" />
+              <span>Standard SDK</span>
+            </div>
+            <p className="text-xs text-gray-500 mt-0.5 hidden sm:block">Most websites</p>
+          </button>
+          <button
+            onClick={() => setIntegrationTab('v0')}
+            className={`flex-1 min-w-[120px] px-4 py-2.5 rounded-md text-sm font-medium transition-all ${
+              integrationTab === 'v0'
+                ? 'bg-white shadow text-orange-700 ring-1 ring-orange-200'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+            }`}
+          >
+            <div className="flex items-center justify-center gap-2">
+              <AlertTriangle className="w-4 h-4" />
+              <span>v0 / Restricted</span>
+            </div>
+            <p className="text-xs text-gray-500 mt-0.5 hidden sm:block">v0.dev, sandboxes</p>
+          </button>
+          <button
+            onClick={() => setIntegrationTab('server')}
+            className={`flex-1 min-w-[120px] px-4 py-2.5 rounded-md text-sm font-medium transition-all ${
+              integrationTab === 'server'
+                ? 'bg-white shadow text-blue-700 ring-1 ring-blue-200'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+            }`}
+          >
+            <div className="flex items-center justify-center gap-2">
+              <Settings className="w-4 h-4" />
+              <span>Server-Side</span>
+            </div>
+            <p className="text-xs text-gray-500 mt-0.5 hidden sm:block">Node, Python, PHP</p>
+          </button>
+        </div>
+
+        {/* Tab Description */}
+        <div className="mb-4">
+          {integrationTab === 'standard' && (
+            <div className="p-3 bg-primary-50 border border-primary-100 rounded-lg">
+              <p className="text-sm text-primary-800">
+                <strong>Standard SDK</strong> - Best for most websites, React, Vue, Next.js, and AI platforms like
+                <strong> Lovable</strong>, <strong>Bolt</strong>, and others. Uses hosted checkout with redirect flow.
+              </p>
+            </div>
+          )}
+          {integrationTab === 'v0' && (
+            <div className="p-3 bg-orange-50 border border-orange-100 rounded-lg">
+              <p className="text-sm text-orange-800">
+                <strong>V0 / Restricted Environment SDK</strong> - Specifically designed for <strong>v0.dev</strong>,
+                Vercel previews, CodeSandbox, StackBlitz, and any environment with strict CSP policies.
+                Uses pure redirect flow with no iframes or popups.
+              </p>
+            </div>
+          )}
+          {integrationTab === 'server' && (
+            <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>Server-Side Integration</strong> - For backend-first architectures using Node.js, Python, PHP,
+                Ruby, or Go. Includes webhook verification and secure API patterns.
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* Quick highlights */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
@@ -644,8 +1081,12 @@ const { paymentUrl } = await response.json();
             <p className="font-semibold text-gray-900">5</p>
           </div>
           <div className="p-3 bg-gray-50 rounded-lg text-center">
-            <p className="text-xs text-gray-500">Frameworks</p>
-            <p className="font-semibold text-gray-900">All</p>
+            <p className="text-xs text-gray-500">
+              {integrationTab === 'v0' ? 'Environment' : 'Frameworks'}
+            </p>
+            <p className="font-semibold text-gray-900">
+              {integrationTab === 'v0' ? 'Sandboxed' : 'All'}
+            </p>
           </div>
           <div className="p-3 bg-gray-50 rounded-lg text-center">
             <p className="text-xs text-gray-500">Setup Time</p>
@@ -655,10 +1096,10 @@ const { paymentUrl } = await response.json();
 
         <div className="relative">
           <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-sm overflow-x-auto max-h-[500px] overflow-y-auto">
-            <code>{getFullSDKScript()}</code>
+            <code>{getCurrentScript()}</code>
           </pre>
           <button
-            onClick={() => copyToClipboard(getFullSDKScript(), 'sdk')}
+            onClick={() => copyToClipboard(getCurrentScript(), 'sdk')}
             className="absolute top-2 right-2 px-3 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors flex items-center gap-2"
           >
             {copiedKey === 'sdk' ? (
@@ -669,7 +1110,7 @@ const { paymentUrl } = await response.json();
             ) : (
               <>
                 <Copy className="w-4 h-4" />
-                Copy SDK
+                Copy Code
               </>
             )}
           </button>
@@ -677,8 +1118,17 @@ const { paymentUrl } = await response.json();
 
         <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
           <p className="text-sm text-yellow-800">
-            <strong>Tip:</strong> Paste this entire code into ChatGPT, Claude, Lovable, v0, or any AI platform -
-            they will understand the full API and help integrate it into your project.
+            {integrationTab === 'v0' ? (
+              <>
+                <strong>Using v0.dev?</strong> Copy this code and paste it directly into your v0 project.
+                It's designed to work without triggering CSP blocks or "content blocked" errors.
+              </>
+            ) : (
+              <>
+                <strong>Tip:</strong> Paste this entire code into ChatGPT, Claude, Lovable, v0, or any AI platform -
+                they will understand the full API and help integrate it into your project.
+              </>
+            )}
           </p>
         </div>
       </Card>

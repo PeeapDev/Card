@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Store,
   Search,
@@ -28,6 +29,7 @@ import { useAuth } from '@/context/AuthContext';
 
 export function BusinessesPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [businesses, setBusinesses] = useState<MerchantBusiness[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -349,10 +351,7 @@ export function BusinessesPage() {
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => {
-                            setSelectedBusiness(business);
-                            setShowDetailModal(true);
-                          }}
+                          onClick={() => navigate(`/admin/businesses/${business.id}`)}
                           className="p-2 hover:bg-gray-100 rounded-lg"
                           title="View Details"
                         >

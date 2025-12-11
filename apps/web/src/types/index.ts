@@ -49,6 +49,7 @@ export interface RegisterRequest {
   firstName: string;
   lastName: string;
   phone?: string;
+  role?: 'user' | 'merchant' | 'agent';
 }
 
 export interface Wallet {

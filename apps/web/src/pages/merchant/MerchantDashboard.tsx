@@ -11,9 +11,11 @@ import {
   Download,
   RefreshCw,
   Settings,
+  QrCode,
 } from 'lucide-react';
 import { MotionCard, GradientCard } from '@/components/ui/Card';
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
+import { ScanToPayModal } from '@/components/payment/ScanToPayModal';
 import { currencyService, Currency } from '@/services/currency.service';
 
 // Animation variants
@@ -39,6 +41,9 @@ const itemVariants = {
 export function MerchantDashboard() {
   // Currency state
   const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
+
+  // Scan to Pay modal state
+  const [showScanToPay, setShowScanToPay] = useState(false);
 
   useEffect(() => {
     currencyService.getDefaultCurrency().then(setDefaultCurrency);
@@ -253,6 +258,18 @@ export function MerchantDashboard() {
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
+                  onClick={() => setShowScanToPay(true)}
+                  className="w-full p-4 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30 rounded-lg text-left transition-colors flex items-center gap-3 border border-primary-200 dark:border-primary-800"
+                >
+                  <QrCode className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+                  <div>
+                    <p className="font-medium text-sm text-gray-900 dark:text-white">Scan to Pay</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Scan customer QR to charge</p>
+                  </div>
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
                   className="w-full p-4 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-left transition-colors flex items-center gap-3"
                 >
                   <RefreshCw className="w-5 h-5 text-gray-600 dark:text-gray-400" />
@@ -288,6 +305,25 @@ export function MerchantDashboard() {
           </motion.div>
         </motion.div>
       </div>
+
+      {/* Floating Scan to Pay Button - Mobile */}
+      <motion.button
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.95 }}
+        onClick={() => setShowScanToPay(true)}
+        className="fixed bottom-6 right-6 z-40 w-14 h-14 bg-primary-600 hover:bg-primary-700 text-white rounded-full shadow-lg flex items-center justify-center md:hidden"
+        aria-label="Scan to Pay"
+      >
+        <QrCode className="w-6 h-6" />
+      </motion.button>
+
+      {/* Scan to Pay Modal */}
+      <ScanToPayModal
+        isOpen={showScanToPay}
+        onClose={() => setShowScanToPay(false)}
+      />
     </MerchantLayout>
   );
 }

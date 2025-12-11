@@ -169,6 +169,10 @@ export const authService = {
 
     const externalId = `usr_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+    // Determine the role to assign
+    const assignedRole = data.role || 'user';
+    console.log('Registration - Role received:', data.role, 'Assigned role:', assignedRole);
+
     // Create user
     // Note: In production, hash the password before storing!
     const { data: newUser, error } = await supabase
@@ -183,7 +187,7 @@ export const authService = {
         status: 'ACTIVE',
         kyc_status: 'NOT_STARTED',
         email_verified: false,
-        roles: 'user',
+        roles: assignedRole,
         kyc_tier: 0,
       })
       .select()
@@ -200,7 +204,7 @@ export const authService = {
       firstName: newUser.first_name,
       lastName: newUser.last_name,
       phone: newUser.phone,
-      roles: ['user'],
+      roles: [assignedRole as UserRole],
       kycStatus: newUser.kyc_status,
       kycTier: newUser.kyc_tier,
       emailVerified: newUser.email_verified,

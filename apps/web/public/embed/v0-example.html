@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Peeap V0 Integration Example</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    h1 { color: #1a1a1a; margin-bottom: 8px; }
+    p { color: #666; margin-bottom: 20px; }
+    .amount { font-size: 32px; font-weight: 700; color: #4F46E5; margin: 20px 0; }
+    .pay-btn {
+      width: 100%;
+      padding: 16px 24px;
+      font-size: 18px;
+      font-weight: 600;
+      color: white;
+      background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .pay-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4); }
+    .pay-btn:disabled { opacity: 0.7; cursor: not-allowed; transform: none; }
+    .status { padding: 12px; border-radius: 8px; margin-top: 16px; display: none; }
+    .status.success { background: #d1fae5; color: #065f46; display: block; }
+    .status.error { background: #fee2e2; color: #991b1b; display: block; }
+    .code-block {
+      background: #1a1a1a;
+      color: #e5e5e5;
+      padding: 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .code-block .comment { color: #6b7280; }
+    .code-block .string { color: #a5d6ff; }
+    .code-block .keyword { color: #ff7b72; }
+    .code-block .function { color: #d2a8ff; }
+  </style>
+</head>
+<body>
+
+  <!-- DEMO PAYMENT CARD -->
+  <div class="card">
+    <h1>School Fees Payment</h1>
+    <p>Pay your school fees securely with Peeap</p>
+    <div class="amount">Le 500.00</div>
+    <button class="pay-btn" id="payBtn" onclick="handlePayment()">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+      </svg>
+      Pay with Peeap
+    </button>
+    <div class="status" id="status"></div>
+  </div>
+
+  <!-- INTEGRATION CODE EXAMPLE -->
+  <div class="card">
+    <h2>V0 Integration Code</h2>
+    <p>Copy this code into your v0 project:</p>
+    <pre class="code-block"><span class="comment">// Step 1: Add the V0-compatible SDK script</span>
+<span class="keyword">&lt;script</span> src=<span class="string">"https://checkout.peeap.com/embed/peeap-v0.js"</span><span class="keyword">&gt;&lt;/script&gt;</span>
+
+<span class="keyword">&lt;script&gt;</span>
+<span class="comment">// Step 2: Initialize with your public key</span>
+<span class="function">PeeapV0</span>.<span class="function">init</span>({
+  publicKey: <span class="string">'pk_live_your_key_here'</span>,
+
+  <span class="comment">// Called when payment succeeds</span>
+  onSuccess: <span class="keyword">function</span>(payment) {
+    console.<span class="function">log</span>(<span class="string">'Payment successful!'</span>, payment);
+    <span class="comment">// Redirect to success page or update UI</span>
+  },
+
+  <span class="comment">// Called on error</span>
+  onError: <span class="keyword">function</span>(error) {
+    console.<span class="function">error</span>(<span class="string">'Payment failed:'</span>, error.message);
+    <span class="function">alert</span>(<span class="string">'Payment failed: '</span> + error.message);
+  }
+});
+
+<span class="comment">// Step 3: Create payment on button click</span>
+<span class="keyword">function</span> <span class="function">handlePayment</span>() {
+  <span class="function">PeeapV0</span>.<span class="function">pay</span>({
+    amount: <span class="string">500</span>,           <span class="comment">// Le 500.00</span>
+    currency: <span class="string">'SLE'</span>,
+    description: <span class="string">'School Fees'</span>,
+    reference: <span class="string">'order_'</span> + Date.<span class="function">now</span>()
+  });
+}
+<span class="keyword">&lt;/script&gt;</span></pre>
+  </div>
+
+  <!-- PEEAP V0 SDK -->
+  <script src="peeap-v0.js"></script>
+
+  <script>
+    // Initialize Peeap V0 SDK
+    PeeapV0.init({
+      publicKey: 'pk_live_e6013bf56fd5ddcee7b719b5acd104147a906fe3bf6c239c',
+
+      onSuccess: function(payment) {
+        console.log('Payment successful!', payment);
+        showStatus('success', 'Payment successful! Reference: ' + payment.reference);
+      },
+
+      onError: function(error) {
+        console.error('Payment failed:', error);
+        showStatus('error', 'Payment failed: ' + error.message);
+      },
+
+      onCancel: function() {
+        console.log('Payment cancelled');
+        showStatus('error', 'Payment was cancelled');
+      }
+    });
+
+    // Handle payment button click
+    function handlePayment() {
+      var btn = document.getElementById('payBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="animation: spin 1s linear infinite;"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" opacity="0.3"/><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="4" fill="none"/></svg> Processing...';
+
+      PeeapV0.pay({
+        amount: 500,
+        currency: 'SLE',
+        description: 'School Fees Payment',
+        reference: 'school_' + Date.now(),
+        customer: {
+          email: 'student@example.com',
+          name: 'John Doe'
+        }
+      }).catch(function(err) {
+        btn.disabled = false;
+        btn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg> Pay with Peeap';
+      });
+    }
+
+    // Show status message
+    function showStatus(type, message) {
+      var status = document.getElementById('status');
+      status.className = 'status ' + type;
+      status.textContent = message;
+    }
+  </script>
+
+  <style>
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+  </style>
+
+</body>
+</html>

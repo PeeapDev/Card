@@ -1,21 +1,12 @@
 /**
  * Hosted Checkout Page
  *
- * Universal checkout page for developers/merchants similar to Stripe/PayPal
+ * Clean, modern checkout page inspired by Stripe
  * URL format: /checkout/pay/:sessionId
- *
- * Features:
- * - Loads checkout session from API
- * - Merchant branding (logo, colors, name)
- * - Three payment methods: QR Code, Card, Mobile Money
- * - Dynamic QR code generation
- * - PEEAP Card payment processing
- * - Login/Register flow for mobile payments with Monime
- * - Success/cancel redirects
  */
 
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import QRCode from 'react-qr-code';
 import {
   Smartphone,
@@ -32,8 +23,8 @@ import {
   Lock,
   Eye,
   EyeOff,
+  ChevronRight,
 } from 'lucide-react';
-import { Card } from '@/components/ui/Card';
 import { useAuth } from '@/context/AuthContext';
 import { cardService } from '@/services/card.service';
 
@@ -58,7 +49,7 @@ interface CheckoutSession {
   cancelUrl?: string;
   expiresAt: string;
   createdAt: string;
-  isTestMode?: boolean; // True when using test key (pk_test_xxx)
+  isTestMode?: boolean;
 }
 
 type PaymentMethod = 'qr' | 'card' | 'mobile';
@@ -73,7 +64,7 @@ type CheckoutStep =
   | 'error'
   | 'expired';
 
-// Currency definitions - SLE uses 2 decimals after redenomination (Old Le 1,000 = New Le 1.00)
+// Currency definitions
 const CURRENCIES: Record<string, { symbol: string; name: string; decimals: number }> = {
   SLE: { symbol: 'Le', name: 'Sierra Leonean New Leone', decimals: 2 },
   USD: { symbol: '$', name: 'US Dollar', decimals: 2 },
@@ -86,7 +77,6 @@ const CURRENCIES: Record<string, { symbol: string; name: string; decimals: numbe
 export function HostedCheckoutPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
   const { user, isAuthenticated, login, register, isLoading: authLoading } = useAuth();
 
   // State
@@ -95,11 +85,11 @@ export function HostedCheckoutPage() {
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Card form state (similar to Visa/Mastercard checkout)
+  // Card form state
   const [cardNumber, setCardNumber] = useState('');
   const [cardholderName, setCardholderName] = useState('');
   const [cardExpiry, setCardExpiry] = useState('');
-  const [cardPin, setCardPin] = useState(''); // PIN instead of CVV
+  const [cardPin, setCardPin] = useState('');
   const [showPin, setShowPin] = useState(false);
 
   // Login form state
@@ -114,6 +104,8 @@ export function HostedCheckoutPage() {
   const [loginError, setLoginError] = useState<string | null>(null);
 
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const [retryMessage, setRetryMessage] = useState<string | null>(null);
+  const [paymentMethodUsed, setPaymentMethodUsed] = useState<string>('');
 
   // Format amount with currency
   const formatAmount = (amt: number, curr: string): string => {
@@ -124,26 +116,32 @@ export function HostedCheckoutPage() {
     })}`;
   };
 
-  // State for retry message
-  const [retryMessage, setRetryMessage] = useState<string | null>(null);
+  // Build success redirect URL
+  const buildSuccessRedirectUrl = (baseUrl: string, sessionData: any, paymentMethod: string): string => {
+    const url = new URL(baseUrl);
+    url.searchParams.set('status', 'success');
+    url.searchParams.set('session_id', sessionData.external_id || sessionData.externalId || sessionId || '');
+    url.searchParams.set('reference', sessionData.reference || '');
+    url.searchParams.set('amount', String(sessionData.amount || 0));
+    url.searchParams.set('currency', sessionData.currency_code || sessionData.currencyCode || 'SLE');
+    url.searchParams.set('payment_method', paymentMethod);
+    return url.toString();
+  };
 
-  // Handle Monime redirect with ?status=success or retry message
+  // Handle Monime redirect
   useEffect(() => {
-    const status = searchParams.get('status');
-    const retry = searchParams.get('retry');
-    const message = searchParams.get('message');
+    const urlParams = new URLSearchParams(window.location.search);
+    const status = urlParams.get('status') || searchParams.get('status');
+    const retry = urlParams.get('retry') || searchParams.get('retry');
+    const message = urlParams.get('message') || searchParams.get('message');
 
-    if (status === 'success') {
-      // Payment successful from Monime - complete the session
-      completeSession();
+    if (status === 'success' && sessionId) {
+      completeSessionOnRedirect();
     } else if (retry === 'true' && message) {
-      // User cancelled payment - show message and let them try again
       setRetryMessage(decodeURIComponent(message));
-      // Clear the URL params without reloading
       window.history.replaceState({}, '', `/checkout/pay/${sessionId}`);
     }
 
-    // Also check for global message set by the HTML template
     const globalMessage = (window as any).__CHECKOUT_MESSAGE__;
     if (globalMessage) {
       setRetryMessage(globalMessage);
@@ -151,47 +149,50 @@ export function HostedCheckoutPage() {
     }
   }, [searchParams, sessionId]);
 
-  // Complete checkout session after successful payment
-  const completeSession = async () => {
+  const completeSessionOnRedirect = async () => {
     if (!sessionId) return;
-    
+
     setStep('processing');
+
     try {
-      // Always use the production API URL for checkout
       const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
       const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;
+
       const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ paymentMethod: 'mobile_money' }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        const data = await response.json();
         throw new Error(data.error || 'Failed to complete session');
       }
 
-      // Load session to get success URL
       const sessionResponse = await fetch(`${apiUrl}/checkout/sessions/${sessionId}`);
       const sessionData = await sessionResponse.json();
-      
-      setSession({
+
+      const updatedSession = {
         ...sessionData,
         successUrl: sessionData.success_url || sessionData.successUrl,
         merchantName: sessionData.merchant_name || sessionData.merchantName,
         amount: sessionData.amount,
         currencyCode: sessionData.currency_code || sessionData.currencyCode || 'SLE',
-      });
+      };
+      setSession(updatedSession);
+      setPaymentMethodUsed('mobile_money');
       setStep('success');
 
-      // Auto-redirect to merchant after 3 seconds
-      if (sessionData.success_url || sessionData.successUrl) {
+      window.history.replaceState({}, '', `/checkout/pay/${sessionId}`);
+
+      const successUrl = sessionData.success_url || sessionData.successUrl;
+      if (successUrl) {
         setTimeout(() => {
-          window.location.href = sessionData.success_url || sessionData.successUrl;
+          window.location.href = buildSuccessRedirectUrl(successUrl, sessionData, 'mobile_money');
         }, 3000);
       }
     } catch (err: any) {
-      console.error('Complete session error:', err);
       setError(err.message || 'Failed to complete payment');
       setStep('error');
     }
@@ -199,13 +200,12 @@ export function HostedCheckoutPage() {
 
   // Load checkout session
   useEffect(() => {
-    // Don't load if we're handling a redirect
     if (!searchParams.get('status')) {
       loadSession();
     }
   }, [sessionId]);
 
-  // Auto-trigger Monime when user logs in for mobile payment
+  // Auto-trigger Monime when user logs in
   useEffect(() => {
     if (isAuthenticated && user && selectedMethod === 'mobile' && step === 'login_prompt') {
       triggerMonimePayment();
@@ -220,7 +220,6 @@ export function HostedCheckoutPage() {
     }
 
     try {
-      // Call API to get session - ensure /api prefix is included
       const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
       const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;
       const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}`);
@@ -230,9 +229,6 @@ export function HostedCheckoutPage() {
       }
 
       const rawData = await response.json();
-      
-      // Transform snake_case to camelCase
-      // Check if test mode from metadata
       const metadata = rawData.metadata || {};
       const isTestMode = metadata.isTestMode === true;
 
@@ -248,25 +244,19 @@ export function HostedCheckoutPage() {
         createdAt: rawData.created_at || rawData.createdAt,
         merchantName: rawData.merchant_name || rawData.merchantName,
         merchantLogoUrl: rawData.merchant_logo_url || rawData.merchantLogoUrl,
-        brandColor: rawData.brand_color || rawData.brandColor || '#4F46E5',
+        brandColor: rawData.brand_color || rawData.brandColor || '#635BFF',
         successUrl: rawData.success_url || rawData.successUrl,
         cancelUrl: rawData.cancel_url || rawData.cancelUrl,
-        paymentMethods: (rawData.payment_methods && typeof rawData.payment_methods === 'object')
-          ? rawData.payment_methods
-          : (rawData.paymentMethods && typeof rawData.paymentMethods === 'object')
-            ? rawData.paymentMethods
-            : { qr: true, card: true, mobile: true },
+        paymentMethods: rawData.payment_methods || rawData.paymentMethods || { qr: true, card: true, mobile: true },
         isTestMode: isTestMode,
       };
 
-      // Check if expired
       if (new Date(data.expiresAt) < new Date()) {
         setSession(data);
         setStep('expired');
         return;
       }
 
-      // Check if already completed
       if (data.status === 'COMPLETE') {
         setError('This checkout session has already been completed');
         setStep('error');
@@ -282,7 +272,6 @@ export function HostedCheckoutPage() {
       setSession(data);
       setStep('select_method');
     } catch (err: any) {
-      console.error('Failed to load session:', err);
       setError(err.message || 'Failed to load checkout session');
       setStep('error');
     }
@@ -296,12 +285,9 @@ export function HostedCheckoutPage() {
     } else if (method === 'card') {
       setStep('card_form');
     } else if (method === 'mobile') {
-      // For mobile money, user must login first to use Monime
       if (isAuthenticated && user) {
-        // Already logged in - trigger Monime payment immediately
         triggerMonimePayment();
       } else {
-        // Show login/register form
         setStep('login_prompt');
       }
     }
@@ -311,7 +297,6 @@ export function HostedCheckoutPage() {
     setSelectedMethod(null);
     setStep('select_method');
     setError(null);
-    // Reset card form state
     setCardNumber('');
     setCardholderName('');
     setCardExpiry('');
@@ -319,12 +304,11 @@ export function HostedCheckoutPage() {
     setShowPin(false);
   };
 
-  // QR Code URL - contains sessionId for payment
   const getQRCodeData = (): string => {
     return `${window.location.origin}/pay/${sessionId}`;
   };
 
-  // Card payment - Single form like Visa/Mastercard checkout
+  // Card payment handler
   const handleCardPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!session) return;
@@ -333,41 +317,35 @@ export function HostedCheckoutPage() {
     setError(null);
 
     try {
-      // Step 1: Look up the card by number
       const cardResult = await cardService.lookupCardForPayment(cardNumber);
 
       if (!cardResult) {
-        throw new Error('Card not found. Please check your card number and try again.');
+        throw new Error('Card not found. Please check your card number.');
       }
 
-      // Step 2: Validate cardholder name (case-insensitive partial match)
       const enteredName = cardholderName.trim().toLowerCase();
       const actualName = cardResult.cardholderName.toLowerCase();
       if (!actualName.includes(enteredName) && !enteredName.includes(actualName.split(' ')[0])) {
-        throw new Error('Cardholder name does not match card records.');
+        throw new Error('Cardholder name does not match.');
       }
 
-      // Step 3: Validate expiry date
       const [expiryMonth, expiryYear] = cardExpiry.split('/').map(s => parseInt(s.trim(), 10));
       if (!expiryMonth || !expiryYear || expiryMonth < 1 || expiryMonth > 12) {
-        throw new Error('Invalid expiry date format. Use MM/YY.');
+        throw new Error('Invalid expiry date. Use MM/YY.');
       }
 
-      // Check if card is expired (compare with current date)
       const currentDate = new Date();
-      const currentYear = currentDate.getFullYear() % 100; // Get last 2 digits
+      const currentYear = currentDate.getFullYear() % 100;
       const currentMonth = currentDate.getMonth() + 1;
 
       if (expiryYear < currentYear || (expiryYear === currentYear && expiryMonth < currentMonth)) {
         throw new Error('This card has expired.');
       }
 
-      // Step 4: Check wallet balance
       if (cardResult.walletBalance < session.amount) {
-        throw new Error(`Insufficient funds. Available balance: ${formatAmount(cardResult.walletBalance, cardResult.currency)}`);
+        throw new Error(`Insufficient funds. Available: ${formatAmount(cardResult.walletBalance, cardResult.currency)}`);
       }
 
-      // Step 5: Process the payment via API (validates PIN server-side)
       const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
       const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;
 
@@ -389,9 +367,9 @@ export function HostedCheckoutPage() {
       const result = await response.json();
 
       if (result.status === 'COMPLETE' || result.success) {
-        // Redirect to success URL if provided
+        setPaymentMethodUsed('peeap_card');
         if (session.successUrl) {
-          window.location.href = session.successUrl;
+          window.location.href = buildSuccessRedirectUrl(session.successUrl, session, 'peeap_card');
         } else {
           setStep('success');
         }
@@ -399,14 +377,12 @@ export function HostedCheckoutPage() {
         throw new Error('Payment was not successful');
       }
     } catch (err: any) {
-      console.error('Card payment error:', err);
       setError(err.message || 'Payment failed. Please try again.');
     } finally {
       setPaymentLoading(false);
     }
   };
 
-  // Format expiry MM/YY
   const formatExpiry = (value: string) => {
     const cleaned = value.replace(/\D/g, '');
     if (cleaned.length >= 2) {
@@ -415,7 +391,6 @@ export function HostedCheckoutPage() {
     return cleaned;
   };
 
-  // Mobile payment flow
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginLoading(true);
@@ -423,9 +398,8 @@ export function HostedCheckoutPage() {
 
     try {
       await login({ email: phoneOrEmail, password });
-      // useEffect will trigger Monime payment
     } catch (err: any) {
-      setLoginError(err.message || 'Login failed. Please try again.');
+      setLoginError(err.message || 'Login failed.');
     } finally {
       setLoginLoading(false);
     }
@@ -438,9 +412,8 @@ export function HostedCheckoutPage() {
 
     try {
       await register({ email, phone, password, firstName, lastName });
-      // useEffect will trigger Monime payment
     } catch (err: any) {
-      setLoginError(err.message || 'Registration failed. Please try again.');
+      setLoginError(err.message || 'Registration failed.');
     } finally {
       setLoginLoading(false);
     }
@@ -456,12 +429,10 @@ export function HostedCheckoutPage() {
       const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
       const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;
 
-      // Call backend to create Monime checkout session
       const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}/mobile-pay`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          // Include user ID if available for tracking
           ...(user?.id ? { 'X-User-Id': user.id } : {}),
         },
         body: JSON.stringify({
@@ -476,39 +447,32 @@ export function HostedCheckoutPage() {
         throw new Error(data.error || 'Failed to create payment session');
       }
 
-      // Redirect to Monime checkout page
       if (data.paymentUrl) {
         window.location.href = data.paymentUrl;
       } else {
-        throw new Error('No payment URL received from Monime');
+        throw new Error('No payment URL received');
       }
     } catch (err: any) {
-      console.error('Mobile payment error:', err);
       setError(err.message || 'Payment failed. Please try again.');
       setStep('error');
     }
   };
 
-  // Format card number with spaces
   const formatCardNumber = (value: string) => {
     const cleaned = value.replace(/\s/g, '');
     const formatted = cleaned.match(/.{1,4}/g)?.join(' ') || cleaned;
-    return formatted.substring(0, 19); // Max 16 digits + 3 spaces
+    return formatted.substring(0, 19);
   };
 
-  // Brand color or default
-  const brandColor = session?.brandColor || '#4F46E5';
+  const brandColor = session?.brandColor || '#635BFF';
 
   // Loading state
   if (step === 'loading' || authLoading) {
     return (
-      <div
-        className="min-h-screen flex items-center justify-center p-4"
-        style={{ background: '#f8fafc' }}
-      >
-        <div className="text-center text-gray-600">
-          <Loader2 className="w-12 h-12 animate-spin mx-auto mb-4 text-indigo-600" />
-          <p>Loading checkout...</p>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-indigo-600" />
+          <p className="text-gray-600">Loading checkout...</p>
         </div>
       </div>
     );
@@ -517,27 +481,22 @@ export function HostedCheckoutPage() {
   // Expired state
   if (step === 'expired') {
     return (
-      <div
-        className="min-h-screen flex items-center justify-center p-4"
-        style={{ background: '#f8fafc' }}
-      >
-        <Card className="max-w-md w-full p-8 text-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 text-center">
           <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <AlertCircle className="w-8 h-8 text-orange-600" />
           </div>
-          <h1 className="text-xl font-bold text-gray-900 mb-2">Session Expired</h1>
-          <p className="text-gray-600 mb-6">
-            This checkout session has expired. Please contact the merchant to get a new payment link.
-          </p>
+          <h1 className="text-xl font-semibold text-gray-900 mb-2">Session Expired</h1>
+          <p className="text-gray-500 mb-6">Please request a new payment link from the merchant.</p>
           {session?.cancelUrl && (
             <button
               onClick={() => window.location.href = session.cancelUrl!}
-              className="w-full px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200"
+              className="w-full py-3 px-4 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
             >
               Return to Merchant
             </button>
           )}
-        </Card>
+        </div>
       </div>
     );
   }
@@ -545,34 +504,30 @@ export function HostedCheckoutPage() {
   // Error state
   if (step === 'error') {
     return (
-      <div
-        className="min-h-screen flex items-center justify-center p-4"
-        style={{ background: '#f8fafc' }}
-      >
-        <Card className="max-w-md w-full p-8 text-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 text-center">
           <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <XCircle className="w-8 h-8 text-red-600" />
           </div>
-          <h1 className="text-xl font-bold text-gray-900 mb-2">Payment Error</h1>
-          <p className="text-gray-600 mb-6">{error || 'Something went wrong'}</p>
+          <h1 className="text-xl font-semibold text-gray-900 mb-2">Payment Error</h1>
+          <p className="text-gray-500 mb-6">{error || 'Something went wrong'}</p>
           <div className="space-y-3">
             <button
               onClick={handleBackToMethods}
-              className="w-full px-6 py-3 text-white rounded-xl font-medium hover:opacity-90"
-              style={{ backgroundColor: brandColor }}
+              className="w-full py-3 px-4 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors"
             >
               Try Again
             </button>
             {session?.cancelUrl && (
               <button
                 onClick={() => window.location.href = session.cancelUrl!}
-                className="w-full px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200"
+                className="w-full py-3 px-4 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
               >
-                Cancel & Return to Merchant
+                Return to Merchant
               </button>
             )}
           </div>
-        </Card>
+        </div>
       </div>
     );
   }
@@ -580,30 +535,30 @@ export function HostedCheckoutPage() {
   // Success state
   if (step === 'success') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center p-4">
-        <Card className="max-w-md w-full p-8 text-center">
-          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 text-center">
+          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce">
             <CheckCircle className="w-10 h-10 text-green-600" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Payment Successful!</h1>
           {session && (
-            <p className="text-gray-600 mb-2">
-              You paid {formatAmount(session.amount, session.currencyCode)}
+            <p className="text-3xl font-bold text-green-600 mb-2">
+              {formatAmount(session.amount, session.currencyCode)}
             </p>
           )}
           {session?.merchantName && (
-            <p className="text-sm text-gray-500 mb-6">to {session.merchantName}</p>
+            <p className="text-gray-500 mb-6">Paid to {session.merchantName}</p>
           )}
+          <p className="text-sm text-gray-400 mb-6">Redirecting you back...</p>
           {session?.successUrl && (
             <button
-              onClick={() => window.location.href = session.successUrl!}
-              className="w-full py-4 text-white rounded-xl font-semibold hover:opacity-90"
-              style={{ backgroundColor: brandColor }}
+              onClick={() => window.location.href = buildSuccessRedirectUrl(session.successUrl!, session, paymentMethodUsed || 'unknown')}
+              className="w-full py-3 px-4 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors"
             >
-              Return to {session.merchantName || 'Merchant'}
+              Continue to {session.merchantName || 'Merchant'}
             </button>
           )}
-        </Card>
+        </div>
       </div>
     );
   }
@@ -611,92 +566,73 @@ export function HostedCheckoutPage() {
   // Processing state
   if (step === 'processing') {
     return (
-      <div
-        className="min-h-screen flex items-center justify-center p-4"
-        style={{ background: '#f8fafc' }}
-      >
-        <Card className="max-w-md w-full p-8 text-center">
-          <div className="relative w-20 h-20 mx-auto mb-6">
-            <div className="absolute inset-0 border-4 border-indigo-200 rounded-full"></div>
-            <div className="absolute inset-0 border-4 rounded-full border-t-transparent animate-spin" style={{ borderColor: `${brandColor} transparent transparent transparent` }}></div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 text-center">
+          <div className="relative w-16 h-16 mx-auto mb-6">
+            <div className="absolute inset-0 border-4 border-gray-200 rounded-full"></div>
+            <div className="absolute inset-0 border-4 border-indigo-600 rounded-full border-t-transparent animate-spin"></div>
           </div>
-          <h1 className="text-xl font-bold text-gray-900 mb-2">Processing Payment</h1>
-          <p className="text-gray-600">Please wait...</p>
+          <h1 className="text-xl font-semibold text-gray-900 mb-2">Processing Payment</h1>
+          <p className="text-gray-500">Please wait...</p>
           <p className="text-xs text-gray-400 mt-4">Do not close this window</p>
-        </Card>
+        </div>
       </div>
     );
   }
 
-  // Login/Register prompt for mobile payment
+  // Login/Register form
   if (step === 'login_prompt') {
     return (
-      <div
-        className="min-h-screen flex items-center justify-center p-4"
-        style={{ background: '#f8fafc' }}
-      >
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="max-w-md w-full">
-          <Card className="overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
             {/* Header */}
-            <div className="bg-white border-b border-gray-100 p-4">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={handleBackToMethods}
-                  className="p-2 hover:bg-gray-100 rounded-lg"
-                >
-                  <ArrowLeft className="w-5 h-5 text-gray-600" />
+            <div className="px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center">
+                <button onClick={handleBackToMethods} className="p-2 -ml-2 hover:bg-gray-100 rounded-lg transition-colors">
+                  <ArrowLeft className="w-5 h-5 text-gray-500" />
                 </button>
-                <div className="flex-1">
-                  {session?.merchantLogoUrl && (
-                    <img src={session.merchantLogoUrl} alt={session.merchantName} className="h-8 mb-1" />
-                  )}
-                  <p className="font-semibold text-gray-900">{session?.merchantName || 'Merchant'}</p>
-                  <p className="text-sm text-gray-500">Sign in to complete payment</p>
+                <div className="ml-3">
+                  <p className="font-semibold text-gray-900">{session?.merchantName || 'Checkout'}</p>
+                  <p className="text-sm text-gray-500">Sign in to continue</p>
                 </div>
               </div>
             </div>
 
-            {/* Amount Display */}
+            {/* Amount */}
             {session && (
-              <div className="p-6 text-center bg-gray-50 border-b border-gray-100">
-                <p className="text-sm text-gray-500">Amount to pay</p>
+              <div className="px-6 py-6 bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-gray-100">
+                <p className="text-sm text-gray-600 mb-1">Total amount</p>
                 <p className="text-3xl font-bold text-gray-900">
                   {formatAmount(session.amount, session.currencyCode)}
                 </p>
               </div>
             )}
 
-            {/* Login/Register Toggle */}
-            <div className="p-4 border-b border-gray-100">
-              <div className="flex bg-gray-100 rounded-xl p-1">
+            {/* Tab Toggle */}
+            <div className="px-6 pt-6">
+              <div className="flex bg-gray-100 rounded-lg p-1">
                 <button
                   onClick={() => setLoginMode('login')}
-                  className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
-                    loginMode === 'login'
-                      ? 'bg-white shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
+                  className={`flex-1 py-2.5 text-sm font-medium rounded-md transition-all ${
+                    loginMode === 'login' ? 'bg-white shadow text-gray-900' : 'text-gray-600'
                   }`}
-                  style={loginMode === 'login' ? { color: brandColor } : {}}
                 >
                   Sign In
                 </button>
                 <button
                   onClick={() => setLoginMode('register')}
-                  className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
-                    loginMode === 'register'
-                      ? 'bg-white shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
+                  className={`flex-1 py-2.5 text-sm font-medium rounded-md transition-all ${
+                    loginMode === 'register' ? 'bg-white shadow text-gray-900' : 'text-gray-600'
                   }`}
-                  style={loginMode === 'register' ? { color: brandColor } : {}}
                 >
                   Create Account
                 </button>
               </div>
             </div>
 
-            {/* Error Message */}
             {loginError && (
-              <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700 text-sm">
+              <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-100 rounded-lg flex items-center gap-2 text-red-700 text-sm">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
                 {loginError}
               </div>
@@ -706,46 +642,34 @@ export function HostedCheckoutPage() {
             {loginMode === 'login' && (
               <form onSubmit={handleLogin} className="p-6 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Phone Number or Email
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Email or Phone</label>
                   <input
                     type="text"
                     value={phoneOrEmail}
                     onChange={(e) => setPhoneOrEmail(e.target.value)}
-                    placeholder="+232 76 123456 or email@example.com"
-                    className="w-full py-3 px-4 border-2 border-gray-200 rounded-xl focus:outline-none"
-                    style={{ borderColor: `${brandColor}40` }}
+                    placeholder="you@example.com"
+                    className="w-full py-3 px-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Password
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
                   <input
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter your password"
-                    className="w-full py-3 px-4 border-2 border-gray-200 rounded-xl focus:outline-none"
+                    placeholder="Enter password"
+                    className="w-full py-3 px-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                     required
                   />
                 </div>
                 <button
                   type="submit"
                   disabled={loginLoading}
-                  className="w-full py-4 text-white rounded-xl font-semibold disabled:opacity-50 hover:opacity-90 flex items-center justify-center gap-2"
-                  style={{ backgroundColor: brandColor }}
+                  className="w-full py-3.5 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
                 >
-                  {loginLoading ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <>
-                      <LogIn className="w-5 h-5" />
-                      Sign In & Pay {session && formatAmount(session.amount, session.currencyCode)}
-                    </>
-                  )}
+                  {loginLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogIn className="w-5 h-5" />}
+                  {loginLoading ? 'Signing in...' : `Pay ${session ? formatAmount(session.amount, session.currencyCode) : ''}`}
                 </button>
               </form>
             )}
@@ -753,99 +677,82 @@ export function HostedCheckoutPage() {
             {/* Register Form */}
             {loginMode === 'register' && (
               <form onSubmit={handleRegister} className="p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      First Name
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">First Name</label>
                     <input
                       type="text"
                       value={firstName}
                       onChange={(e) => setFirstName(e.target.value)}
                       placeholder="John"
-                      className="w-full py-3 px-4 border-2 border-gray-200 rounded-xl focus:outline-none"
+                      className="w-full py-3 px-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                       required
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Last Name
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Last Name</label>
                     <input
                       type="text"
                       value={lastName}
                       onChange={(e) => setLastName(e.target.value)}
                       placeholder="Doe"
-                      className="w-full py-3 px-4 border-2 border-gray-200 rounded-xl focus:outline-none"
+                      className="w-full py-3 px-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                       required
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email Address
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="john@example.com"
-                    className="w-full py-3 px-4 border-2 border-gray-200 rounded-xl focus:outline-none"
+                    placeholder="you@example.com"
+                    className="w-full py-3 px-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Phone Number
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Phone</label>
                   <input
                     type="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="+232 76 123456"
-                    className="w-full py-3 px-4 border-2 border-gray-200 rounded-xl focus:outline-none"
+                    className="w-full py-3 px-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Password
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
                   <input
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Create a password"
-                    className="w-full py-3 px-4 border-2 border-gray-200 rounded-xl focus:outline-none"
+                    placeholder="Create password"
+                    className="w-full py-3 px-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                     required
                   />
                 </div>
                 <button
                   type="submit"
                   disabled={loginLoading}
-                  className="w-full py-4 text-white rounded-xl font-semibold disabled:opacity-50 hover:opacity-90 flex items-center justify-center gap-2"
-                  style={{ backgroundColor: brandColor }}
+                  className="w-full py-3.5 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
                 >
-                  {loginLoading ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <>
-                      <UserPlus className="w-5 h-5" />
-                      Create Account & Pay {session && formatAmount(session.amount, session.currencyCode)}
-                    </>
-                  )}
+                  {loginLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <UserPlus className="w-5 h-5" />}
+                  {loginLoading ? 'Creating...' : `Create Account & Pay`}
                 </button>
               </form>
             )}
 
-            {/* Security Footer */}
+            {/* Footer */}
             <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
-              <div className="flex items-center justify-center gap-2 text-gray-500">
+              <div className="flex items-center justify-center gap-2 text-gray-400 text-sm">
                 <Shield className="w-4 h-4" />
-                <span className="text-xs">Secured by Peeap</span>
+                <span>Secured by Peeap</span>
               </div>
             </div>
-          </Card>
+          </div>
         </div>
       </div>
     );
@@ -854,173 +761,133 @@ export function HostedCheckoutPage() {
   // QR Display
   if (step === 'qr_display') {
     return (
-      <div
-        className="min-h-screen flex items-center justify-center p-4"
-        style={{ background: '#f8fafc' }}
-      >
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="max-w-md w-full">
-          <Card className="overflow-hidden">
-            {/* Header */}
-            <div className="bg-white border-b border-gray-100 p-4">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={handleBackToMethods}
-                  className="p-2 hover:bg-gray-100 rounded-lg"
-                >
-                  <ArrowLeft className="w-5 h-5 text-gray-600" />
+          <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center">
+                <button onClick={handleBackToMethods} className="p-2 -ml-2 hover:bg-gray-100 rounded-lg transition-colors">
+                  <ArrowLeft className="w-5 h-5 text-gray-500" />
                 </button>
-                <div className="flex-1 text-center">
-                  {session?.merchantLogoUrl && (
-                    <img src={session.merchantLogoUrl} alt={session.merchantName} className="h-8 mx-auto mb-1" />
-                  )}
-                  <p className="font-semibold text-gray-900">{session?.merchantName || 'Merchant'}</p>
+                <div className="ml-3 flex-1 text-center">
+                  <p className="font-semibold text-gray-900">{session?.merchantName || 'Checkout'}</p>
                 </div>
               </div>
             </div>
 
-            {/* Amount */}
             {session && (
-              <div className="p-6 text-center bg-gray-50 border-b border-gray-100">
-                <p className="text-sm text-gray-500">Amount to pay</p>
-                <p className="text-4xl font-bold text-gray-900">
-                  {formatAmount(session.amount, session.currencyCode)}
-                </p>
-                {session.description && (
-                  <p className="text-sm text-gray-500 mt-2">{session.description}</p>
-                )}
-              </div>
-            )}
-
-            {/* QR Code */}
-            <div className="p-8 text-center">
-              <div className="bg-white p-6 rounded-xl inline-block shadow-md border-2" style={{ borderColor: `${brandColor}40` }}>
-                <QRCode value={getQRCodeData()} size={200} level="M" />
-              </div>
-              <p className="text-sm text-gray-600 mt-4">
-                Scan this QR code with your Peeap app to complete payment
-              </p>
-            </div>
-
-            {/* Security Footer */}
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
-              <div className="flex items-center justify-center gap-2 text-gray-500">
-                <Shield className="w-4 h-4" />
-                <span className="text-xs">Secured by Peeap</span>
-              </div>
-            </div>
-          </Card>
-        </div>
-      </div>
-    );
-  }
-
-  // Card Form - Similar to Visa/Mastercard checkout
-  if (step === 'card_form') {
-    return (
-      <div
-        className="min-h-screen flex items-center justify-center p-4"
-        style={{ background: '#f8fafc' }}
-      >
-        <div className="max-w-md w-full">
-          <Card className="overflow-hidden">
-            {/* Header */}
-            <div className="bg-white border-b border-gray-100 p-4">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={handleBackToMethods}
-                  className="p-2 hover:bg-gray-100 rounded-lg"
-                >
-                  <ArrowLeft className="w-5 h-5 text-gray-600" />
-                </button>
-                <div className="flex-1">
-                  {session?.merchantLogoUrl && (
-                    <img src={session.merchantLogoUrl} alt={session.merchantName} className="h-8 mb-1" />
-                  )}
-                  <p className="font-semibold text-gray-900">{session?.merchantName || 'Merchant'}</p>
-                  <p className="text-sm text-gray-500">Pay with Peeap Card</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Amount */}
-            {session && (
-              <div className="p-6 text-center bg-gray-50 border-b border-gray-100">
-                <p className="text-sm text-gray-500">Amount to pay</p>
+              <div className="px-6 py-6 bg-gradient-to-r from-indigo-50 to-purple-50 text-center border-b border-gray-100">
+                <p className="text-sm text-gray-600 mb-1">Total amount</p>
                 <p className="text-3xl font-bold text-gray-900">
                   {formatAmount(session.amount, session.currencyCode)}
                 </p>
               </div>
             )}
 
-            {/* Error Message */}
+            <div className="p-8 text-center">
+              <div className="inline-block p-4 bg-white rounded-2xl shadow-lg border border-gray-100">
+                <QRCode value={getQRCodeData()} size={200} level="M" />
+              </div>
+              <p className="text-gray-600 mt-6 text-sm">
+                Scan this QR code with your Peeap app
+              </p>
+            </div>
+
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
+              <div className="flex items-center justify-center gap-2 text-gray-400 text-sm">
+                <Shield className="w-4 h-4" />
+                <span>Secured by Peeap</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Card Form
+  if (step === 'card_form') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full">
+          <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center">
+                <button onClick={handleBackToMethods} className="p-2 -ml-2 hover:bg-gray-100 rounded-lg transition-colors">
+                  <ArrowLeft className="w-5 h-5 text-gray-500" />
+                </button>
+                <div className="ml-3">
+                  <p className="font-semibold text-gray-900">{session?.merchantName || 'Checkout'}</p>
+                  <p className="text-sm text-gray-500">Pay with Peeap Card</p>
+                </div>
+              </div>
+            </div>
+
+            {session && (
+              <div className="px-6 py-6 bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-gray-100">
+                <p className="text-sm text-gray-600 mb-1">Total amount</p>
+                <p className="text-3xl font-bold text-gray-900">
+                  {formatAmount(session.amount, session.currencyCode)}
+                </p>
+              </div>
+            )}
+
             {error && (
-              <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700 text-sm">
+              <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-100 rounded-lg flex items-center gap-2 text-red-700 text-sm">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
                 {error}
               </div>
             )}
 
-            {/* Card Payment Form - Like Visa/Mastercard */}
             <form onSubmit={handleCardPayment} className="p-6 space-y-4">
-              {/* Card Number */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Card Number
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Card Number</label>
                 <input
                   type="text"
                   value={cardNumber}
                   onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
                   placeholder="1234 5678 9012 3456"
-                  className="w-full py-3 px-4 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400 font-mono text-lg tracking-wider"
+                  className="w-full py-3 px-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-lg tracking-wide"
                   maxLength={19}
                   required
                   autoFocus
                 />
               </div>
 
-              {/* Cardholder Name */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Cardholder Name
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Cardholder Name</label>
                 <input
                   type="text"
                   value={cardholderName}
                   onChange={(e) => setCardholderName(e.target.value.toUpperCase())}
                   placeholder="JOHN DOE"
-                  className="w-full py-3 px-4 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400 uppercase"
+                  className="w-full py-3 px-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent uppercase"
                   required
                 />
               </div>
 
-              {/* Expiry Date and PIN (like Expiry + CVV) */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Expiry Date
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Expiry</label>
                   <input
                     type="text"
                     value={cardExpiry}
                     onChange={(e) => setCardExpiry(formatExpiry(e.target.value))}
                     placeholder="MM/YY"
-                    className="w-full py-3 px-4 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400 font-mono text-center"
+                    className="w-full py-3 px-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-center"
                     maxLength={5}
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    PIN
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">PIN</label>
                   <div className="relative">
                     <input
                       type={showPin ? 'text' : 'password'}
                       value={cardPin}
                       onChange={(e) => setCardPin(e.target.value.replace(/\D/g, '').substring(0, 4))}
                       placeholder="****"
-                      className="w-full py-3 px-4 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400 font-mono text-center tracking-widest"
+                      className="w-full py-3 px-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-center tracking-widest"
                       maxLength={4}
                       required
                     />
@@ -1038,167 +905,149 @@ export function HostedCheckoutPage() {
               <button
                 type="submit"
                 disabled={paymentLoading || cardNumber.replace(/\s/g, '').length < 16 || !cardholderName || cardExpiry.length < 5 || cardPin.length !== 4}
-                className="w-full py-4 text-white rounded-xl font-semibold disabled:opacity-50 hover:opacity-90 flex items-center justify-center gap-2 mt-6"
-                style={{ backgroundColor: brandColor }}
+                className="w-full py-3.5 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2 transition-colors"
               >
                 {paymentLoading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
-                  <>
-                    <Lock className="w-5 h-5" />
-                    Pay {session && formatAmount(session.amount, session.currencyCode)}
-                  </>
+                  <Lock className="w-5 h-5" />
                 )}
+                {paymentLoading ? 'Processing...' : `Pay ${session ? formatAmount(session.amount, session.currencyCode) : ''}`}
               </button>
             </form>
 
-            {/* Security Footer */}
             <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
-              <div className="flex items-center justify-center gap-2 text-gray-500">
+              <div className="flex items-center justify-center gap-2 text-gray-400 text-sm">
                 <Shield className="w-4 h-4" />
-                <span className="text-xs">Your payment is secure and encrypted</span>
+                <span>Your payment is secure and encrypted</span>
               </div>
             </div>
-          </Card>
+          </div>
         </div>
       </div>
     );
   }
 
-  // Main page - Payment method selection
+  // Main checkout page - Payment method selection
   if (!session) return null;
 
   return (
-    <div
-      className="min-h-screen flex items-center justify-center p-4"
-      style={{ background: '#f8fafc' }}
-    >
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="max-w-md w-full">
         {/* Test Mode Banner */}
         {session.isTestMode && (
-          <div className="mb-3 px-4 py-2 bg-amber-500 text-amber-950 text-center text-sm font-medium rounded-xl flex items-center justify-center gap-2">
+          <div className="mb-4 py-2 px-4 bg-amber-400 text-amber-900 text-center text-sm font-medium rounded-lg flex items-center justify-center gap-2">
             <AlertCircle className="w-4 h-4" />
-            <span>SANDBOX MODE - No real payments will be processed</span>
+            TEST MODE - No real payments
           </div>
         )}
 
-        <Card className="overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
           {/* Header */}
-          <div className="bg-white border-b border-gray-100 p-6 text-center">
+          <div className="px-6 py-6 text-center border-b border-gray-100">
             {session.merchantLogoUrl ? (
-              <img
-                src={session.merchantLogoUrl}
-                alt={session.merchantName}
-                className="h-16 mx-auto mb-3"
-              />
+              <img src={session.merchantLogoUrl} alt={session.merchantName} className="h-12 mx-auto mb-3" />
             ) : (
-              <div
-                className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3"
-                style={{ backgroundColor: `${brandColor}20` }}
-              >
-                <CreditCard className="w-8 h-8" style={{ color: brandColor }} />
+              <div className="w-14 h-14 bg-indigo-100 rounded-xl flex items-center justify-center mx-auto mb-3">
+                <CreditCard className="w-7 h-7 text-indigo-600" />
               </div>
             )}
-            <h1 className="text-xl font-bold text-gray-900">Secure Checkout</h1>
-            <p className="text-sm text-gray-500">{session.merchantName || 'Merchant'}</p>
+            <h1 className="text-lg font-semibold text-gray-900">{session.merchantName || 'Checkout'}</h1>
           </div>
 
           {/* Amount Display */}
-          <div className="p-6 text-center bg-gray-50 border-b border-gray-100">
-            <p className="text-sm text-gray-500">Amount to pay</p>
-            <p className="text-4xl font-bold text-gray-900">
-              {formatAmount(session.amount, session.currencyCode)}
-            </p>
-            {session.description && (
-              <p className="text-sm text-gray-500 mt-2">{session.description}</p>
-            )}
+          <div className="px-6 py-6 bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-gray-100">
+            <div className="text-center">
+              <p className="text-sm text-gray-600 mb-1">Total amount</p>
+              <p className="text-4xl font-bold text-gray-900">
+                {formatAmount(session.amount, session.currencyCode)}
+              </p>
+              {session.description && (
+                <p className="text-sm text-gray-500 mt-2">{session.description}</p>
+              )}
+            </div>
           </div>
 
           {/* Payment Methods */}
           <div className="p-6">
-            {/* Retry Message Banner */}
             {retryMessage && (
-              <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+              <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm text-amber-800 font-medium">{retryMessage}</p>
-                  <button
-                    onClick={() => setRetryMessage(null)}
-                    className="text-xs text-amber-600 hover:text-amber-800 mt-1 underline"
-                  >
+                  <p className="text-sm text-amber-800">{retryMessage}</p>
+                  <button onClick={() => setRetryMessage(null)} className="text-xs text-amber-600 mt-1 underline">
                     Dismiss
                   </button>
                 </div>
               </div>
             )}
 
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Choose Payment Method</h2>
+            <p className="text-sm font-medium text-gray-700 mb-4">Select payment method</p>
 
             <div className="space-y-3">
-              {/* QR Code Option */}
+              {/* QR Code */}
               {session.paymentMethods?.qr !== false && (
                 <button
                   onClick={() => handleMethodSelect('qr')}
-                  className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-gray-200 hover:border-gray-300 transition-all"
+                  className="w-full flex items-center p-4 rounded-xl border-2 border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all group"
                 >
-                  <div
-                    className="w-12 h-12 rounded-xl flex items-center justify-center"
-                    style={{ backgroundColor: `${brandColor}20`, color: brandColor }}
-                  >
-                    <QrCode className="w-6 h-6" />
+                  <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center group-hover:bg-indigo-200 transition-colors">
+                    <QrCode className="w-6 h-6 text-indigo-600" />
                   </div>
-                  <div className="flex-1 text-left">
-                    <p className="font-medium text-gray-900">QR Code</p>
+                  <div className="ml-4 flex-1 text-left">
+                    <p className="font-semibold text-gray-900">QR Code</p>
                     <p className="text-sm text-gray-500">Scan with Peeap app</p>
                   </div>
+                  <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-indigo-600 transition-colors" />
                 </button>
               )}
 
-              {/* Card Option */}
+              {/* Peeap Card */}
               {session.paymentMethods?.card !== false && (
                 <button
                   onClick={() => handleMethodSelect('card')}
-                  className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-gray-200 hover:border-gray-300 transition-all"
+                  className="w-full flex items-center p-4 rounded-xl border-2 border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all group"
                 >
-                  <div
-                    className="w-12 h-12 rounded-xl flex items-center justify-center"
-                    style={{ backgroundColor: `${brandColor}20`, color: brandColor }}
-                  >
-                    <CreditCard className="w-6 h-6" />
+                  <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center group-hover:bg-purple-200 transition-colors">
+                    <CreditCard className="w-6 h-6 text-purple-600" />
                   </div>
-                  <div className="flex-1 text-left">
-                    <p className="font-medium text-gray-900">PEEAP Card</p>
+                  <div className="ml-4 flex-1 text-left">
+                    <p className="font-semibold text-gray-900">Peeap Card</p>
                     <p className="text-sm text-gray-500">Pay with your card</p>
                   </div>
+                  <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-indigo-600 transition-colors" />
                 </button>
               )}
 
-              {/* Mobile Money Option - Disabled in Test/Sandbox Mode */}
+              {/* Mobile Money */}
               {session.paymentMethods?.mobile !== false && (
                 <button
                   onClick={() => !session.isTestMode && handleMethodSelect('mobile')}
                   disabled={session.isTestMode}
-                  className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all relative ${
+                  className={`w-full flex items-center p-4 rounded-xl border-2 transition-all group relative ${
                     session.isTestMode
                       ? 'border-gray-100 bg-gray-50 cursor-not-allowed opacity-60'
-                      : 'border-gray-200 hover:border-gray-300'
+                      : 'border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/50'
                   }`}
                 >
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                    session.isTestMode ? 'bg-gray-200 text-gray-400' : 'bg-orange-100 text-orange-600'
-                  }`}>
-                    <Smartphone className="w-6 h-6" />
+                    session.isTestMode ? 'bg-gray-200' : 'bg-orange-100 group-hover:bg-orange-200'
+                  } transition-colors`}>
+                    <Smartphone className={`w-6 h-6 ${session.isTestMode ? 'text-gray-400' : 'text-orange-600'}`} />
                   </div>
-                  <div className="flex-1 text-left">
-                    <p className={`font-medium ${session.isTestMode ? 'text-gray-400' : 'text-gray-900'}`}>
+                  <div className="ml-4 flex-1 text-left">
+                    <p className={`font-semibold ${session.isTestMode ? 'text-gray-400' : 'text-gray-900'}`}>
                       Mobile Money
                     </p>
                     <p className={`text-sm ${session.isTestMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                      {session.isTestMode ? 'Not available in sandbox mode' : 'Orange Money & more'}
+                      {session.isTestMode ? 'Not available in test mode' : 'Orange Money, Africell'}
                     </p>
                   </div>
+                  {!session.isTestMode && (
+                    <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-indigo-600 transition-colors" />
+                  )}
                   {session.isTestMode && (
-                    <span className="absolute top-2 right-2 px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-medium rounded-full">
+                    <span className="absolute top-2 right-2 px-2 py-0.5 bg-gray-200 text-gray-500 text-xs font-medium rounded-full">
                       Live Only
                     </span>
                   )}
@@ -1207,39 +1056,19 @@ export function HostedCheckoutPage() {
             </div>
           </div>
 
-          {/* Security Footer */}
+          {/* Footer */}
           <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
-            <div className="flex items-center justify-center gap-2 text-gray-500">
+            <div className="flex items-center justify-center gap-2 text-gray-400 text-sm">
               <Shield className="w-4 h-4" />
-              <span className="text-xs">Secured by Peeap</span>
+              <span>Secured by Peeap</span>
             </div>
           </div>
-        </Card>
-
-        {/* Powered by */}
-        <div className="text-center mt-4">
-          <a
-            href="https://peeap.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-white/70 hover:text-white"
-          >
-            Powered by Peeap
-          </a>
         </div>
+
+        <p className="text-center mt-4 text-sm text-gray-400">
+          Powered by <a href="https://peeap.com" target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:text-indigo-600">Peeap</a>
+        </p>
       </div>
     </div>
   );
-}
-
-// Helper function to adjust color brightness
-function adjustColor(color: string, amount: number): string {
-  const clamp = (num: number) => Math.min(Math.max(num, 0), 255);
-
-  const num = parseInt(color.replace('#', ''), 16);
-  const r = clamp((num >> 16) + amount);
-  const g = clamp(((num >> 8) & 0x00FF) + amount);
-  const b = clamp((num & 0x0000FF) + amount);
-
-  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
 }

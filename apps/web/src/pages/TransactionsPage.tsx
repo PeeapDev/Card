@@ -1,16 +1,27 @@
 import { useState } from 'react';
-import { ArrowUpRight, ArrowDownRight, Search, Filter, Download } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Search, Filter, Download, AlertTriangle, X, Loader2, MoreVertical, Flag } from 'lucide-react';
 import { Card, CardHeader, CardTitle, Button, Input } from '@/components/ui';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useWallets, useWalletTransactions } from '@/hooks/useWallets';
 import { clsx } from 'clsx';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
 import type { Transaction } from '@/types';
 
 export function TransactionsPage() {
+  const { user } = useAuth();
   const { data: wallets } = useWallets();
   const [selectedWallet, setSelectedWallet] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
+
+  // Dispute state
+  const [showDisputeModal, setShowDisputeModal] = useState(false);
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const [disputeReason, setDisputeReason] = useState('');
+  const [disputeDescription, setDisputeDescription] = useState('');
+  const [disputeLoading, setDisputeLoading] = useState(false);
+  const [disputeSuccess, setDisputeSuccess] = useState(false);
 
   const { data: transactionsData, isLoading } = useWalletTransactions(
     selectedWallet || wallets?.[0]?.id || '',
@@ -94,6 +105,71 @@ export function TransactionsPage() {
       t.merchantName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       t.type.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Check if transaction can be disputed (outgoing payments only)
+  const canDispute = (transaction: Transaction) => {
+    const disputeableTypes = ['PAYMENT', 'PAYMENT_SENT', 'TRANSFER', 'WITHDRAWAL'];
+    // Check by type - outgoing transaction types can be disputed
+    return (
+      disputeableTypes.includes(transaction.type) &&
+      transaction.status === 'COMPLETED'
+    );
+  };
+
+  const openDisputeModal = (transaction: Transaction) => {
+    setSelectedTransaction(transaction);
+    setDisputeReason('');
+    setDisputeDescription('');
+    setDisputeSuccess(false);
+    setShowDisputeModal(true);
+  };
+
+  const handleSubmitDispute = async () => {
+    if (!selectedTransaction || !disputeReason || !user) return;
+
+    setDisputeLoading(true);
+    try {
+      // Create dispute record
+      const { error } = await supabase.from('disputes').insert({
+        transaction_id: selectedTransaction.id,
+        user_id: user.id,
+        status: 'OPEN',
+        reason: disputeReason,
+        description: disputeDescription,
+        amount: Math.abs(selectedTransaction.amount),
+        currency: selectedTransaction.currency || 'SLE',
+        metadata: {
+          transaction_type: selectedTransaction.type,
+          transaction_date: selectedTransaction.createdAt,
+          merchant_name: selectedTransaction.merchantName,
+          reference: selectedTransaction.reference,
+        },
+      });
+
+      if (error) throw error;
+
+      // Send notification
+      await supabase.from('user_notifications').insert({
+        user_id: user.id,
+        type: 'dispute_created',
+        title: 'Dispute Submitted',
+        message: `Your dispute for ${selectedTransaction.currency || 'SLE'} ${Math.abs(selectedTransaction.amount).toLocaleString()} has been submitted. We will review it within 24-48 hours.`,
+        read: false,
+        metadata: {
+          transaction_id: selectedTransaction.id,
+          amount: Math.abs(selectedTransaction.amount),
+          reason: disputeReason,
+        },
+      });
+
+      setDisputeSuccess(true);
+    } catch (err: any) {
+      console.error('Error creating dispute:', err);
+      alert(err.message || 'Failed to submit dispute. Please try again.');
+    } finally {
+      setDisputeLoading(false);
+    }
+  };
 
   return (
     <MainLayout>
@@ -187,24 +263,35 @@ export function TransactionsPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p
-                        className={clsx('text-sm font-medium', getAmountColor(transaction.type))}
-                      >
-                        {getAmountPrefix(transaction.type)}$
-                        {transaction.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                      </p>
-                      <p
-                        className={clsx(
-                          'text-xs',
-                          transaction.status === 'COMPLETED' && 'text-green-600',
-                          transaction.status === 'PENDING' && 'text-yellow-600',
-                          transaction.status === 'FAILED' && 'text-red-600',
-                          transaction.status === 'REVERSED' && 'text-purple-600'
-                        )}
-                      >
-                        {transaction.status}
-                      </p>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <p
+                          className={clsx('text-sm font-medium', getAmountColor(transaction.type))}
+                        >
+                          {getAmountPrefix(transaction.type)}$
+                          {Math.abs(transaction.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </p>
+                        <p
+                          className={clsx(
+                            'text-xs',
+                            transaction.status === 'COMPLETED' && 'text-green-600',
+                            transaction.status === 'PENDING' && 'text-yellow-600',
+                            transaction.status === 'FAILED' && 'text-red-600',
+                            transaction.status === 'REVERSED' && 'text-purple-600'
+                          )}
+                        >
+                          {transaction.status}
+                        </p>
+                      </div>
+                      {canDispute(transaction) && (
+                        <button
+                          onClick={() => openDisputeModal(transaction)}
+                          className="p-2 hover:bg-red-50 rounded-lg text-red-600 transition-colors"
+                          title="Dispute Transaction"
+                        >
+                          <Flag className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -242,6 +329,130 @@ export function TransactionsPage() {
           )}
         </Card>
       </div>
+
+      {/* Dispute Modal */}
+      {showDisputeModal && selectedTransaction && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between p-4 border-b">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+                <h2 className="text-lg font-semibold text-gray-900">Dispute Transaction</h2>
+              </div>
+              <button
+                onClick={() => setShowDisputeModal(false)}
+                className="p-1 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            {disputeSuccess ? (
+              <div className="p-6 text-center">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Flag className="w-8 h-8 text-green-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Dispute Submitted</h3>
+                <p className="text-gray-500 mb-6">
+                  Your dispute has been submitted successfully. Our team will review it within 24-48 hours and contact you with an update.
+                </p>
+                <Button onClick={() => setShowDisputeModal(false)} className="w-full">
+                  Close
+                </Button>
+              </div>
+            ) : (
+              <div className="p-4 space-y-4">
+                {/* Transaction Summary */}
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-500">Transaction</span>
+                    <span className="text-sm font-medium">
+                      {selectedTransaction.merchantName || selectedTransaction.description || selectedTransaction.type}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center mt-1">
+                    <span className="text-sm text-gray-500">Amount</span>
+                    <span className="text-sm font-medium text-red-600">
+                      ${Math.abs(selectedTransaction.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center mt-1">
+                    <span className="text-sm text-gray-500">Date</span>
+                    <span className="text-sm font-medium">{formatDate(selectedTransaction.createdAt)}</span>
+                  </div>
+                </div>
+
+                {/* Dispute Reason */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Reason for Dispute *
+                  </label>
+                  <select
+                    value={disputeReason}
+                    onChange={(e) => setDisputeReason(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  >
+                    <option value="">Select a reason</option>
+                    <option value="unauthorized">Unauthorized Transaction</option>
+                    <option value="not_received">Goods/Service Not Received</option>
+                    <option value="wrong_amount">Wrong Amount Charged</option>
+                    <option value="duplicate">Duplicate Charge</option>
+                    <option value="fraud">Suspected Fraud</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Additional Details
+                  </label>
+                  <textarea
+                    value={disputeDescription}
+                    onChange={(e) => setDisputeDescription(e.target.value)}
+                    placeholder="Please provide any additional information about this dispute..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    rows={3}
+                  />
+                </div>
+
+                {/* Warning */}
+                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-sm text-yellow-800">
+                    Please note: Filing a false dispute may result in account suspension. Only file a dispute if you have a legitimate concern.
+                  </p>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setShowDisputeModal(false)}
+                    disabled={disputeLoading}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    className="flex-1 bg-red-600 hover:bg-red-700"
+                    onClick={handleSubmitDispute}
+                    disabled={!disputeReason || disputeLoading}
+                  >
+                    {disputeLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        Submitting...
+                      </>
+                    ) : (
+                      'Submit Dispute'
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </MainLayout>
   );
 }
