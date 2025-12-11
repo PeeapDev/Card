@@ -2,8 +2,95 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { authService } from "@/lib/auth";
+import { authService, User } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
 import { Loader2 } from "lucide-react";
+
+/**
+ * SSO Callback Handler
+ *
+ * This page handles Single Sign-On from my.peeap.com to plus.peeap.com
+ *
+ * Flow:
+ * 1. my.peeap.com redirects to plus.peeap.com/auth/callback?token=xxx&tier=xxx
+ * 2. This page decodes the token and validates user exists in shared Supabase DB
+ * 3. If valid, stores token locally and redirects to dashboard/setup
+ */
+
+interface TokenPayload {
+  userId: string;
+  email: string;
+  roles: string[];
+  tier?: string;
+  exp: number;
+}
+
+async function validateTokenFromMyPeeap(token: string): Promise<{ valid: boolean; user?: User }> {
+  try {
+    // Decode the base64 token (same format used by both apps)
+    const payload: TokenPayload = JSON.parse(atob(token));
+
+    // Check if token is expired
+    if (payload.exp < Date.now()) {
+      console.error("SSO: Token expired");
+      return { valid: false };
+    }
+
+    // Validate user exists in shared Supabase database
+    const { data: users, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", payload.userId)
+      .limit(1);
+
+    if (error || !users || users.length === 0) {
+      console.error("SSO: User not found in database", error);
+      return { valid: false };
+    }
+
+    const dbUser = users[0];
+
+    // Parse roles
+    let userRoles: string[] = ["user"];
+    if (dbUser.roles) {
+      userRoles = dbUser.roles.split(",").map((r: string) => r.trim());
+    } else if (dbUser.role) {
+      userRoles = [dbUser.role];
+    }
+
+    // Determine tier
+    let tier: "basic" | "business" | "business_plus" | "developer" = "basic";
+    if (dbUser.tier) {
+      tier = dbUser.tier;
+    } else if (userRoles.includes("business_plus") || userRoles.includes("corporate")) {
+      tier = "business_plus";
+    } else if (userRoles.includes("business") || userRoles.includes("merchant")) {
+      tier = "business";
+    } else if (userRoles.includes("developer")) {
+      tier = "developer";
+    }
+
+    const user: User = {
+      id: dbUser.id,
+      email: dbUser.email,
+      firstName: dbUser.first_name,
+      lastName: dbUser.last_name,
+      phone: dbUser.phone,
+      roles: userRoles,
+      tier,
+      businessName: dbUser.business_name || dbUser.first_name,
+      kycStatus: dbUser.kyc_status,
+      kycTier: dbUser.kyc_tier,
+      emailVerified: dbUser.email_verified,
+      createdAt: dbUser.created_at,
+    };
+
+    return { valid: true, user };
+  } catch (error) {
+    console.error("SSO: Token validation error", error);
+    return { valid: false };
+  }
+}
 
 function AuthCallbackContent() {
   const router = useRouter();
@@ -19,6 +106,8 @@ function AuthCallbackContent() {
         const tier = searchParams.get("tier");
         const redirectTo = searchParams.get("redirect") || "/dashboard";
 
+        console.log("SSO Callback - Token present:", !!token, "Tier:", tier);
+
         if (!token) {
           // No token - check if already authenticated
           if (authService.isAuthenticated()) {
@@ -31,27 +120,29 @@ function AuthCallbackContent() {
           return;
         }
 
-        // Validate and use the token
-        const { valid, user } = await authService.validateToken(token);
+        // Validate token against shared Supabase database
+        const { valid, user } = await validateTokenFromMyPeeap(token);
 
         if (!valid || !user) {
           setStatus("error");
-          setErrorMessage("Invalid or expired token");
+          setErrorMessage("Invalid or expired token. Please login again.");
           setTimeout(() => router.replace("/auth/login"), 2000);
           return;
         }
 
-        // Store tokens
+        console.log("SSO: User validated:", user.email, "Tier:", user.tier);
+
+        // Store tokens using Plus's token key
         authService.setTokens({
           accessToken: token,
-          refreshToken: token, // In production, this should be a separate refresh token
+          refreshToken: token, // Same token for now
           expiresIn: 3600,
         });
 
         // Store user data
         localStorage.setItem("user", JSON.stringify(user));
 
-        // Store tier
+        // Store tier - use URL tier param or user's actual tier
         const userTier = tier || user.tier || "basic";
         localStorage.setItem("plusTier", userTier);
 
@@ -65,9 +156,9 @@ function AuthCallbackContent() {
           router.replace(redirectTo);
         }
       } catch (error) {
-        console.error("Auto-login error:", error);
+        console.error("SSO Auto-login error:", error);
         setStatus("error");
-        setErrorMessage("Authentication failed");
+        setErrorMessage("Authentication failed. Please try again.");
         setTimeout(() => router.replace("/auth/login"), 2000);
       }
     };

@@ -118,21 +118,27 @@ export function MerchantUpgradePage() {
     // Note: my.peeap.com stores token as 'accessToken', not 'token'
     const token = localStorage.getItem('accessToken');
 
+    // Debug: log token status (remove in production)
+    console.log('SSO Upgrade - Token found:', !!token, 'Token length:', token?.length || 0);
+
     if (plan.redirectToPlus) {
       let redirectUrl: string;
 
       if (token) {
         // User is logged in - redirect to Plus callback with token for instant login
+        // The callback page will validate the token against shared Supabase DB
         const callbackUrl = new URL('https://plus.peeap.com/auth/callback');
         callbackUrl.searchParams.set('tier', plan.id);
         callbackUrl.searchParams.set('redirect', `/setup?tier=${plan.id}`);
         callbackUrl.searchParams.set('token', token);
         redirectUrl = callbackUrl.toString();
+        console.log('SSO Upgrade - Redirecting to callback with token');
       } else {
         // User is not logged in - redirect to Plus upgrade page
         const upgradeUrl = new URL('https://plus.peeap.com/upgrade');
         upgradeUrl.searchParams.set('tier', plan.id);
         redirectUrl = upgradeUrl.toString();
+        console.log('SSO Upgrade - No token, redirecting to upgrade page');
       }
 
       // Small delay for UX
