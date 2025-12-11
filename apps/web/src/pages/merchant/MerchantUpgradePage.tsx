@@ -1,18 +1,13 @@
 /**
  * Merchant Upgrade Page
  * Allows merchants to upgrade to Business or Business++ (Corporate) tiers
- * Business and Business++ redirect to plus.peeap.com
+ * Business and Business++ redirect to plus.peeap.com via database-backed SSO
  */
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Crown,
   Check,
-  Building2,
-  Zap,
-  Shield,
-  BarChart3,
   ArrowRight,
   Loader2,
   CreditCard,
@@ -24,6 +19,8 @@ import {
 } from 'lucide-react';
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
 import { Card } from '@/components/ui/Card';
+import { ssoService } from '@/services/sso.service';
+import { useAuth } from '@/hooks/useAuth';
 
 interface PricingPlan {
   id: string;
@@ -41,7 +38,9 @@ interface PricingPlan {
 export function MerchantUpgradePage() {
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const plans: PricingPlan[] = [
     {
@@ -113,38 +112,32 @@ export function MerchantUpgradePage() {
 
     setSelectedPlan(plan.id);
     setProcessing(true);
-
-    // Get auth token for cross-domain authentication
-    // Note: my.peeap.com stores token as 'accessToken', not 'token'
-    const token = localStorage.getItem('accessToken');
-
-    // Debug: log token status (remove in production)
-    console.log('SSO Upgrade - Token found:', !!token, 'Token length:', token?.length || 0);
+    setError(null);
 
     if (plan.redirectToPlus) {
-      let redirectUrl: string;
+      try {
+        if (!user?.id) {
+          // User not logged in - redirect to Plus upgrade page to login there
+          const upgradeUrl = new URL('https://plus.peeap.com/upgrade');
+          upgradeUrl.searchParams.set('tier', plan.id);
+          window.location.href = upgradeUrl.toString();
+          return;
+        }
 
-      if (token) {
-        // User is logged in - redirect to Plus callback with token for instant login
-        // The callback page will validate the token against shared Supabase DB
-        const callbackUrl = new URL('https://plus.peeap.com/auth/callback');
-        callbackUrl.searchParams.set('tier', plan.id);
-        callbackUrl.searchParams.set('redirect', `/setup?tier=${plan.id}`);
-        callbackUrl.searchParams.set('token', token);
-        redirectUrl = callbackUrl.toString();
-        console.log('SSO Upgrade - Redirecting to callback with token');
-      } else {
-        // User is not logged in - redirect to Plus upgrade page
-        const upgradeUrl = new URL('https://plus.peeap.com/upgrade');
-        upgradeUrl.searchParams.set('tier', plan.id);
-        redirectUrl = upgradeUrl.toString();
-        console.log('SSO Upgrade - No token, redirecting to upgrade page');
-      }
+        // Generate a one-time SSO token stored in the database
+        const redirectUrl = await ssoService.getRedirectUrl({
+          userId: user.id,
+          tier: plan.id,
+          redirectPath: `/setup?tier=${plan.id}`,
+        });
 
-      // Small delay for UX
-      setTimeout(() => {
+        // Redirect to Plus with the SSO token
         window.location.href = redirectUrl;
-      }, 500);
+      } catch (err) {
+        console.error('SSO redirect failed:', err);
+        setError('Failed to redirect. Please try again.');
+        setProcessing(false);
+      }
     }
   };
 

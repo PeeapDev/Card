@@ -3280,21 +3280,37 @@ async function handleMobileMoneySend(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // Authenticate user from Authorization header (Bearer token)
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+
+    // Verify token with Supabase
+    const { data: { user: authUser }, error: authError } = await supabaseAnon.auth.getUser(token);
+
+    if (authError || !authUser) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    const authenticatedUserId = authUser.id;
+
     const {
       amount,
       currency = 'SLE',
       phoneNumber,
       providerId,
-      userId,
       walletId,
       description,
       pin
     } = req.body;
 
-    // Validate required fields
-    if (!amount || !phoneNumber || !providerId || !userId || !walletId) {
+    // Validate required fields (userId comes from authenticated token, not request body)
+    if (!amount || !phoneNumber || !providerId || !walletId) {
       return res.status(400).json({
-        error: 'Missing required fields: amount, phoneNumber, providerId, userId, walletId'
+        error: 'Missing required fields: amount, phoneNumber, providerId, walletId'
       });
     }
 
@@ -3309,16 +3325,16 @@ async function handleMobileMoneySend(req: VercelRequest, res: VercelResponse) {
     }
     const fullPhoneNumber = `+232${normalizedPhone}`;
 
-    // Get user's wallet and verify balance
+    // Get user's wallet and verify balance (using authenticated user ID, not client-provided)
     const { data: wallet, error: walletError } = await supabase
       .from('wallets')
       .select('id, balance, currency, user_id, status')
       .eq('id', walletId)
-      .eq('user_id', userId)
+      .eq('user_id', authenticatedUserId)
       .single();
 
     if (walletError || !wallet) {
-      return res.status(404).json({ error: 'Wallet not found' });
+      return res.status(404).json({ error: 'Wallet not found or access denied' });
     }
 
     if (wallet.status !== 'ACTIVE') {

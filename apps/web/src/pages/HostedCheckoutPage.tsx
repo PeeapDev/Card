@@ -150,6 +150,39 @@ export function HostedCheckoutPage() {
     }
   }, [searchParams, sessionId]);
 
+  // Play payment sound
+  const playSound = (type: 'success' | 'error') => {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      if (type === 'success') {
+        // Pleasant success chime (two ascending notes)
+        oscillator.frequency.setValueAtTime(523.25, audioContext.currentTime); // C5
+        oscillator.frequency.setValueAtTime(659.25, audioContext.currentTime + 0.15); // E5
+        oscillator.frequency.setValueAtTime(783.99, audioContext.currentTime + 0.3); // G5
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.8);
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.8);
+      } else {
+        // Error buzz (two descending notes)
+        oscillator.frequency.setValueAtTime(300, audioContext.currentTime);
+        oscillator.frequency.setValueAtTime(200, audioContext.currentTime + 0.2);
+        gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.4);
+      }
+    } catch (e) {
+      console.log('Could not play sound:', e);
+    }
+  };
+
   const completeSessionOnRedirect = async () => {
     if (!sessionId) return;
 
@@ -159,41 +192,104 @@ export function HostedCheckoutPage() {
       const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
       const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;
 
-      const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}/complete`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ paymentMethod: 'mobile_money' }),
-      });
+      // First, check current session status
+      const checkResponse = await fetch(`${apiUrl}/checkout/sessions/${sessionId}`);
+      const sessionData = await checkResponse.json();
 
-      const data = await response.json();
+      console.log('[Checkout] Session status on redirect:', sessionData.status);
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to complete session');
+      // If already COMPLETE, just show success
+      if (sessionData.status === 'COMPLETE') {
+        console.log('[Checkout] Session already complete, showing success');
+        const updatedSession = {
+          ...sessionData,
+          successUrl: sessionData.success_url || sessionData.successUrl,
+          merchantName: sessionData.merchant_name || sessionData.merchantName,
+          amount: sessionData.amount,
+          currencyCode: sessionData.currency_code || sessionData.currencyCode || 'SLE',
+        };
+        setSession(updatedSession);
+        setPaymentMethodUsed('mobile_money');
+        playSound('success');
+        setStep('success');
+        window.history.replaceState({}, '', `/checkout/pay/${sessionId}`);
+
+        const successUrl = sessionData.success_url || sessionData.successUrl;
+        if (successUrl) {
+          setTimeout(() => {
+            window.location.href = buildSuccessRedirectUrl(successUrl, sessionData, 'mobile_money');
+          }, 3000);
+        }
+        return;
       }
 
-      const sessionResponse = await fetch(`${apiUrl}/checkout/sessions/${sessionId}`);
-      const sessionData = await sessionResponse.json();
+      // If session is still OPEN, complete it
+      if (sessionData.status === 'OPEN') {
+        console.log('[Checkout] Completing session...');
+        const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}/complete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paymentMethod: 'mobile_money' }),
+        });
 
-      const updatedSession = {
-        ...sessionData,
-        successUrl: sessionData.success_url || sessionData.successUrl,
-        merchantName: sessionData.merchant_name || sessionData.merchantName,
-        amount: sessionData.amount,
-        currencyCode: sessionData.currency_code || sessionData.currencyCode || 'SLE',
-      };
-      setSession(updatedSession);
-      setPaymentMethodUsed('mobile_money');
-      setStep('success');
+        const data = await response.json();
 
-      window.history.replaceState({}, '', `/checkout/pay/${sessionId}`);
+        if (!response.ok) {
+          // If error is "Session is not open", it may have been completed by webhook
+          if (data.error?.includes('not open')) {
+            console.log('[Checkout] Session may have been completed by webhook, checking again...');
+            const recheckResponse = await fetch(`${apiUrl}/checkout/sessions/${sessionId}`);
+            const recheckData = await recheckResponse.json();
+            if (recheckData.status === 'COMPLETE') {
+              const updatedSession = {
+                ...recheckData,
+                successUrl: recheckData.success_url || recheckData.successUrl,
+                merchantName: recheckData.merchant_name || recheckData.merchantName,
+                amount: recheckData.amount,
+                currencyCode: recheckData.currency_code || recheckData.currencyCode || 'SLE',
+              };
+              setSession(updatedSession);
+              setPaymentMethodUsed('mobile_money');
+              playSound('success');
+              setStep('success');
+              window.history.replaceState({}, '', `/checkout/pay/${sessionId}`);
+              return;
+            }
+          }
+          throw new Error(data.error || 'Failed to complete session');
+        }
 
-      const successUrl = sessionData.success_url || sessionData.successUrl;
-      if (successUrl) {
-        setTimeout(() => {
-          window.location.href = buildSuccessRedirectUrl(successUrl, sessionData, 'mobile_money');
-        }, 3000);
+        // Successfully completed, fetch updated session
+        const finalResponse = await fetch(`${apiUrl}/checkout/sessions/${sessionId}`);
+        const finalData = await finalResponse.json();
+
+        const updatedSession = {
+          ...finalData,
+          successUrl: finalData.success_url || finalData.successUrl,
+          merchantName: finalData.merchant_name || finalData.merchantName,
+          amount: finalData.amount,
+          currencyCode: finalData.currency_code || finalData.currencyCode || 'SLE',
+        };
+        setSession(updatedSession);
+        setPaymentMethodUsed('mobile_money');
+        playSound('success');
+        setStep('success');
+
+        window.history.replaceState({}, '', `/checkout/pay/${sessionId}`);
+
+        const successUrl = finalData.success_url || finalData.successUrl;
+        if (successUrl) {
+          setTimeout(() => {
+            window.location.href = buildSuccessRedirectUrl(successUrl, finalData, 'mobile_money');
+          }, 3000);
+        }
+      } else {
+        // Session is in unexpected state (EXPIRED, CANCELLED, etc.)
+        throw new Error(`Payment session is ${sessionData.status.toLowerCase()}`);
       }
     } catch (err: any) {
+      console.error('[Checkout] Error completing session:', err);
+      playSound('error');
       setError(err.message || 'Failed to complete payment');
       setStep('error');
     }
@@ -278,9 +374,12 @@ export function HostedCheckoutPage() {
     }
   };
 
-  // Handle payment completion
+  // Handle payment completion (for QR scan payments)
   const handlePaymentComplete = useCallback((data: any) => {
     console.log('[Checkout] Payment COMPLETE detected! Showing success...');
+
+    // Play success sound
+    playSound('success');
 
     // Update session with completed data
     const updatedSession: CheckoutSession = {
@@ -517,9 +616,13 @@ export function HostedCheckoutPage() {
       const result = await response.json();
 
       if (result.status === 'COMPLETE' || result.success) {
+        playSound('success');
         setPaymentMethodUsed('peeap_card');
+        setStep('success');
         if (session.successUrl) {
-          window.location.href = buildSuccessRedirectUrl(session.successUrl, session, 'peeap_card');
+          setTimeout(() => {
+            window.location.href = buildSuccessRedirectUrl(session.successUrl!, session, 'peeap_card');
+          }, 3000);
         } else {
           setStep('success');
         }
@@ -527,6 +630,7 @@ export function HostedCheckoutPage() {
         throw new Error('Payment was not successful');
       }
     } catch (err: any) {
+      playSound('error');
       setError(err.message || 'Payment failed. Please try again.');
     } finally {
       setPaymentLoading(false);

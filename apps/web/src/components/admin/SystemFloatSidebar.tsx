@@ -48,6 +48,7 @@ import { profitAnalyticsService, ProfitData, ProfitSummary, ProfitChartData } fr
 import { currencyService, Currency } from '@/services/currency.service';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
+import MonimeAnalyticsSection from './MonimeAnalyticsSection';
 
 interface SystemFloatSidebarProps {
   onOpenFloat: () => void;
@@ -636,6 +637,9 @@ export function SystemFloatSidebar({
                 )}
               </AnimatePresence>
             </div>
+
+            {/* Monime Gateway Analytics Section */}
+            <MonimeAnalyticsSection currency={selectedCurrency || 'SLE'} />
           </motion.div>
         )}
       </AnimatePresence>

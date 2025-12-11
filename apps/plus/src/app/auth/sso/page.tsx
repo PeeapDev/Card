@@ -1,0 +1,224 @@
+"use client";
+
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { supabase } from "@/lib/supabase";
+import { Loader2, CheckCircle, XCircle } from "lucide-react";
+
+/**
+ * SSO Authentication Page
+ *
+ * Validates one-time SSO tokens stored in the database.
+ *
+ * Flow:
+ * 1. Receive token from URL: /auth/sso?token=xxx
+ * 2. Look up token in sso_tokens table
+ * 3. Validate token (exists, not expired, not used)
+ * 4. Fetch user from users table
+ * 5. Mark token as used
+ * 6. Create session and redirect to dashboard/setup
+ */
+
+interface SsoToken {
+  id: string;
+  user_id: string;
+  token: string;
+  target_app: string;
+  tier?: string;
+  redirect_path?: string;
+  expires_at: string;
+  used_at?: string;
+  created_at: string;
+}
+
+interface User {
+  id: string;
+  email: string;
+  first_name?: string;
+  last_name?: string;
+  phone?: string;
+  roles?: string;
+  tier?: string;
+  business_name?: string;
+}
+
+async function validateAndConsumeSsoToken(token: string): Promise<{
+  success: boolean;
+  user?: User;
+  tier?: string;
+  redirectPath?: string;
+  error?: string;
+}> {
+  try {
+    // Step 1: Find the token in the database
+    const { data: tokens, error: findError } = await supabase
+      .from("sso_tokens")
+      .select("*")
+      .eq("token", token)
+      .is("used_at", null)
+      .limit(1);
+
+    if (findError) {
+      console.error("SSO: Database error finding token:", findError);
+      return { success: false, error: "Database error" };
+    }
+
+    if (!tokens || tokens.length === 0) {
+      return { success: false, error: "Invalid or already used token" };
+    }
+
+    const ssoToken = tokens[0] as SsoToken;
+
+    // Step 2: Check if token is expired
+    if (new Date(ssoToken.expires_at) < new Date()) {
+      return { success: false, error: "Token has expired" };
+    }
+
+    // Step 3: Mark token as used (one-time use)
+    const { error: updateError } = await supabase
+      .from("sso_tokens")
+      .update({ used_at: new Date().toISOString() })
+      .eq("id", ssoToken.id);
+
+    if (updateError) {
+      console.error("SSO: Failed to mark token as used:", updateError);
+      // Continue anyway - token validation was successful
+    }
+
+    // Step 4: Fetch the user from the database
+    const { data: users, error: userError } = await supabase
+      .from("users")
+      .select("id, email, first_name, last_name, phone, roles, tier, business_name")
+      .eq("id", ssoToken.user_id)
+      .limit(1);
+
+    if (userError || !users || users.length === 0) {
+      console.error("SSO: User not found:", userError);
+      return { success: false, error: "User not found" };
+    }
+
+    const user = users[0] as User;
+
+    return {
+      success: true,
+      user,
+      tier: ssoToken.tier,
+      redirectPath: ssoToken.redirect_path,
+    };
+  } catch (error) {
+    console.error("SSO: Unexpected error:", error);
+    return { success: false, error: "Authentication failed" };
+  }
+}
+
+function SsoContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  useEffect(() => {
+    const handleSso = async () => {
+      const token = searchParams.get("token");
+
+      if (!token) {
+        setStatus("error");
+        setErrorMessage("No SSO token provided");
+        setTimeout(() => router.replace("/auth/login"), 2000);
+        return;
+      }
+
+      // Validate and consume the SSO token
+      const result = await validateAndConsumeSsoToken(token);
+
+      if (!result.success || !result.user) {
+        setStatus("error");
+        setErrorMessage(result.error || "Authentication failed");
+        setTimeout(() => router.replace("/auth/login"), 2000);
+        return;
+      }
+
+      // Successfully validated - store user session
+      // Generate a session token for Plus
+      const sessionToken = btoa(JSON.stringify({
+        userId: result.user.id,
+        email: result.user.email,
+        roles: result.user.roles?.split(",") || ["user"],
+        tier: result.tier || result.user.tier || "basic",
+        exp: Date.now() + 3600000, // 1 hour
+      }));
+
+      // Store in Plus's expected format
+      if (typeof window !== "undefined") {
+        localStorage.setItem("token", sessionToken);
+        localStorage.setItem("user", JSON.stringify({
+          id: result.user.id,
+          email: result.user.email,
+          firstName: result.user.first_name,
+          lastName: result.user.last_name,
+          phone: result.user.phone,
+          roles: result.user.roles?.split(",") || ["user"],
+          tier: result.tier || result.user.tier || "basic",
+          businessName: result.user.business_name,
+        }));
+        localStorage.setItem("plusTier", result.tier || result.user.tier || "basic");
+      }
+
+      setStatus("success");
+
+      // Redirect to the intended destination
+      const redirectPath = result.redirectPath || "/dashboard";
+      setTimeout(() => router.replace(redirectPath), 1000);
+    };
+
+    handleSso();
+  }, [router, searchParams]);
+
+  return (
+    <div className="text-center">
+      {status === "loading" && (
+        <>
+          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
+          <h1 className="text-xl font-semibold mb-2">Signing you in...</h1>
+          <p className="text-muted-foreground">Validating your credentials</p>
+        </>
+      )}
+
+      {status === "success" && (
+        <>
+          <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+          <h1 className="text-xl font-semibold mb-2">Welcome to PeeAP Plus!</h1>
+          <p className="text-muted-foreground">Redirecting to your dashboard...</p>
+        </>
+      )}
+
+      {status === "error" && (
+        <>
+          <XCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h1 className="text-xl font-semibold mb-2">Authentication Failed</h1>
+          <p className="text-muted-foreground">{errorMessage}</p>
+          <p className="text-sm text-muted-foreground mt-2">Redirecting to login...</p>
+        </>
+      )}
+    </div>
+  );
+}
+
+function LoadingFallback() {
+  return (
+    <div className="text-center">
+      <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
+      <h1 className="text-xl font-semibold mb-2">Loading...</h1>
+    </div>
+  );
+}
+
+export default function SsoPage() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <Suspense fallback={<LoadingFallback />}>
+        <SsoContent />
+      </Suspense>
+    </div>
+  );
+}
