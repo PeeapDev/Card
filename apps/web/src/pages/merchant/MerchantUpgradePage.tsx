@@ -115,7 +115,8 @@ export function MerchantUpgradePage() {
     setProcessing(true);
 
     // Get auth token for cross-domain authentication
-    const token = localStorage.getItem('token');
+    // Note: my.peeap.com stores token as 'accessToken', not 'token'
+    const token = localStorage.getItem('accessToken');
 
     if (plan.redirectToPlus) {
       let redirectUrl: string;
