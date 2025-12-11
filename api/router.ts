@@ -129,6 +129,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleMobileMoneySend(req, res);
     } else if (path === 'mobile-money/status' || path.match(/^mobile-money\/status\/[^/]+$/)) {
       return await handleMobileMoneyStatus(req, res);
+    } else if (path === 'monime/analytics' || path === 'monime/analytics/') {
+      return await handleMonimeAnalytics(req, res);
+    } else if (path === 'monime/transactions' || path === 'monime/transactions/') {
+      return await handleMonimeTransactions(req, res);
     } else if (path === 'payouts' || path === 'payouts/') {
       return await handlePayouts(req, res);
     } else if (path === 'payouts/user/cashout' || path === 'payouts/user/cashout/') {
@@ -1657,6 +1661,8 @@ async function handleCheckoutMobilePay(req: VercelRequest, res: VercelResponse, 
 
     // 3. Create Monime checkout session using centralized service
     // MonimeService handles currency conversion (SLE * 10 for Monime's format)
+    // IMPORTANT: Redirect to API endpoint (api.peeap.com) NOT frontend (checkout.peeap.com)
+    // The API handles crediting merchant wallet and redirects to success page
     const result = await monimeService.createHostedCheckout({
       sessionId: session.external_id,
       amount: session.amount, // MonimeService will multiply by 10 for SLE
@@ -1664,8 +1670,8 @@ async function handleCheckoutMobilePay(req: VercelRequest, res: VercelResponse, 
       description: session.description || `Payment to ${session.merchant_name || 'Peeap'}`,
       merchantName: session.merchant_name || 'Peeap',
       merchantId: session.merchant_id,
-      successUrl: `https://checkout.peeap.com/checkout/pay/${sessionId}?status=success`,
-      cancelUrl: `https://checkout.peeap.com/checkout/pay/${sessionId}?status=cancel`,
+      successUrl: `https://api.peeap.com/api/checkout/pay/${sessionId}?status=success`,
+      cancelUrl: `https://api.peeap.com/api/checkout/pay/${sessionId}?status=cancel`,
     });
 
     // 4. Store Monime reference and payer info in checkout session
@@ -3624,6 +3630,210 @@ async function handleMobileMoneyStatus(req: VercelRequest, res: VercelResponse) 
       return res.status(error.statusCode).json({ error: error.message, code: error.code });
     }
     return res.status(500).json({ error: error.message || 'Failed to get status' });
+  }
+}
+
+// ============================================================================
+// MONIME ANALYTICS HANDLERS
+// ============================================================================
+
+/**
+ * Get Monime analytics - fetches real transaction data from Monime API
+ * This pulls data directly from Monime's financial transactions endpoint
+ */
+async function handleMonimeAnalytics(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    // Get Monime credentials from settings
+    const { data: settings, error: settingsError } = await supabase
+      .from('payment_settings')
+      .select('monime_access_token, monime_space_id, monime_source_account_id')
+      .eq('id', SETTINGS_ID)
+      .single();
+
+    if (settingsError || !settings?.monime_access_token || !settings?.monime_space_id) {
+      return res.status(400).json({ error: 'Monime credentials not configured' });
+    }
+
+    const { monime_access_token, monime_space_id, monime_source_account_id } = settings;
+
+    // Fetch financial transactions from Monime API
+    // Get both credits (inflows) and debits (outflows)
+    const [creditsResponse, debitsResponse] = await Promise.all([
+      fetch(`https://api.monime.io/v1/financial-transactions?type=credit&limit=50${monime_source_account_id ? `&financialAccountId=${monime_source_account_id}` : ''}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${monime_access_token}`,
+          'Monime-Space-Id': monime_space_id,
+          'Content-Type': 'application/json',
+        },
+      }),
+      fetch(`https://api.monime.io/v1/financial-transactions?type=debit&limit=50${monime_source_account_id ? `&financialAccountId=${monime_source_account_id}` : ''}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${monime_access_token}`,
+          'Monime-Space-Id': monime_space_id,
+          'Content-Type': 'application/json',
+        },
+      }),
+    ]);
+
+    const creditsData = await creditsResponse.json() as any;
+    const debitsData = await debitsResponse.json() as any;
+
+    if (!creditsResponse.ok) {
+      console.error('[MonimeAnalytics] Credits fetch error:', creditsData);
+    }
+    if (!debitsResponse.ok) {
+      console.error('[MonimeAnalytics] Debits fetch error:', debitsData);
+    }
+
+    const credits = creditsData.result || [];
+    const debits = debitsData.result || [];
+
+    // Calculate totals
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay()).toISOString();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+    const filterByDate = (txns: any[], startDate: string) => {
+      return txns.filter(t => t.createTime && t.createTime >= startDate);
+    };
+
+    const sumAmount = (txns: any[]) => {
+      return txns.reduce((sum, t) => sum + (t.amount?.value || 0), 0);
+    };
+
+    // All time totals
+    const totalInflows = sumAmount(credits);
+    const totalOutflows = sumAmount(debits);
+
+    // Today totals
+    const todayCredits = filterByDate(credits, todayStart);
+    const todayDebits = filterByDate(debits, todayStart);
+    const todayInflows = sumAmount(todayCredits);
+    const todayOutflows = sumAmount(todayDebits);
+
+    // This week totals
+    const weekCredits = filterByDate(credits, weekStart);
+    const weekDebits = filterByDate(debits, weekStart);
+    const weekInflows = sumAmount(weekCredits);
+    const weekOutflows = sumAmount(weekDebits);
+
+    // This month totals
+    const monthCredits = filterByDate(credits, monthStart);
+    const monthDebits = filterByDate(debits, monthStart);
+    const monthInflows = sumAmount(monthCredits);
+    const monthOutflows = sumAmount(monthDebits);
+
+    // Get currency from first transaction or default to SLE
+    const currency = credits[0]?.amount?.currency || debits[0]?.amount?.currency || 'SLL';
+
+    return res.status(200).json({
+      success: true,
+      currency,
+      summary: {
+        today: {
+          totalDeposits: todayInflows,
+          totalWithdrawals: todayOutflows,
+          depositCount: todayCredits.length,
+          withdrawalCount: todayDebits.length,
+          netFlow: todayInflows - todayOutflows,
+        },
+        thisWeek: {
+          totalDeposits: weekInflows,
+          totalWithdrawals: weekOutflows,
+          depositCount: weekCredits.length,
+          withdrawalCount: weekDebits.length,
+          netFlow: weekInflows - weekOutflows,
+        },
+        thisMonth: {
+          totalDeposits: monthInflows,
+          totalWithdrawals: monthOutflows,
+          depositCount: monthCredits.length,
+          withdrawalCount: monthDebits.length,
+          netFlow: monthInflows - monthOutflows,
+        },
+        allTime: {
+          totalDeposits: totalInflows,
+          totalWithdrawals: totalOutflows,
+          depositCount: credits.length,
+          withdrawalCount: debits.length,
+          netFlow: totalInflows - totalOutflows,
+        },
+      },
+      recentTransactions: [...credits.slice(0, 10), ...debits.slice(0, 10)]
+        .sort((a, b) => new Date(b.createTime).getTime() - new Date(a.createTime).getTime())
+        .slice(0, 20),
+    });
+  } catch (error: any) {
+    console.error('[MonimeAnalytics] Error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to fetch Monime analytics' });
+  }
+}
+
+/**
+ * Get Monime transactions - fetches raw transaction list from Monime API
+ */
+async function handleMonimeTransactions(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const url = new URL(req.url || '', `http://${req.headers.host}`);
+    const type = url.searchParams.get('type') || ''; // credit or debit
+    const limit = url.searchParams.get('limit') || '50';
+    const after = url.searchParams.get('after') || '';
+
+    // Get Monime credentials from settings
+    const { data: settings, error: settingsError } = await supabase
+      .from('payment_settings')
+      .select('monime_access_token, monime_space_id, monime_source_account_id')
+      .eq('id', SETTINGS_ID)
+      .single();
+
+    if (settingsError || !settings?.monime_access_token || !settings?.monime_space_id) {
+      return res.status(400).json({ error: 'Monime credentials not configured' });
+    }
+
+    const { monime_access_token, monime_space_id, monime_source_account_id } = settings;
+
+    // Build query params
+    let queryParams = `limit=${limit}`;
+    if (type) queryParams += `&type=${type}`;
+    if (after) queryParams += `&after=${after}`;
+    if (monime_source_account_id) queryParams += `&financialAccountId=${monime_source_account_id}`;
+
+    // Fetch financial transactions from Monime API
+    const response = await fetch(`https://api.monime.io/v1/financial-transactions?${queryParams}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${monime_access_token}`,
+        'Monime-Space-Id': monime_space_id,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const data = await response.json() as any;
+
+    if (!response.ok) {
+      console.error('[MonimeTransactions] Fetch error:', data);
+      return res.status(response.status).json({ error: data.error?.message || 'Failed to fetch transactions' });
+    }
+
+    return res.status(200).json({
+      success: true,
+      transactions: data.result || [],
+      pagination: data.pagination || { count: 0, next: null },
+    });
+  } catch (error: any) {
+    console.error('[MonimeTransactions] Error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to fetch Monime transactions' });
   }
 }
 
