@@ -12,15 +12,23 @@ export default function AuthDebugPage() {
   const [result, setResult] = useState<string>("");
   const [loading, setLoading] = useState(false);
 
+  interface TokenPayload {
+    userId?: string;
+    email?: string;
+    roles?: string[];
+    tier?: string;
+    exp?: number;
+  }
+
   const testToken = async () => {
     setLoading(true);
     setResult("");
 
     try {
       // Step 1: Decode the token
-      let payload;
+      let payload: TokenPayload;
       try {
-        payload = JSON.parse(atob(token));
+        payload = JSON.parse(atob(token)) as TokenPayload;
         setResult(prev => prev + `\n✅ Token decoded successfully:\n${JSON.stringify(payload, null, 2)}\n`);
       } catch (e) {
         setResult(`❌ Failed to decode token: ${e}`);
@@ -29,8 +37,8 @@ export default function AuthDebugPage() {
       }
 
       // Step 2: Check expiration
-      if (payload.exp < Date.now()) {
-        setResult(prev => prev + `\n❌ Token expired at ${new Date(payload.exp).toISOString()}\n`);
+      if (!payload.exp || payload.exp < Date.now()) {
+        setResult(prev => prev + `\n❌ Token expired at ${payload.exp ? new Date(payload.exp).toISOString() : 'unknown'}\n`);
         setLoading(false);
         return;
       }
