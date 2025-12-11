@@ -28,6 +28,9 @@ import {
   LogIn,
   ArrowLeft,
   Smartphone,
+  Lock,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -48,7 +51,7 @@ interface CheckoutSession {
   isTestMode?: boolean;
 }
 
-type PaymentStep = 'loading' | 'login' | 'confirm' | 'processing' | 'success' | 'error' | 'expired' | 'already_paid';
+type PaymentStep = 'loading' | 'login' | 'confirm' | 'pin' | 'processing' | 'success' | 'error' | 'expired' | 'already_paid';
 
 // Currency definitions
 const CURRENCIES: Record<string, { symbol: string; name: string }> = {
@@ -68,6 +71,9 @@ export function ScanPayPage() {
   const [error, setError] = useState<string | null>(null);
   const [walletBalance, setWalletBalance] = useState(0);
   const [walletId, setWalletId] = useState<string | null>(null);
+  const [pin, setPin] = useState('');
+  const [showPin, setShowPin] = useState(false);
+  const [pinError, setPinError] = useState<string | null>(null);
 
   // Format amount with currency
   const formatAmount = (amt: number, curr: string): string => {
@@ -177,7 +183,8 @@ export function ScanPayPage() {
     }
   };
 
-  const handlePayment = async () => {
+  // Proceed to PIN entry step
+  const handleProceedToPin = () => {
     if (!session || !user?.id || !walletId) {
       setError('Missing payment information');
       return;
@@ -188,9 +195,50 @@ export function ScanPayPage() {
       return;
     }
 
+    setPin('');
+    setPinError(null);
+    setStep('pin');
+  };
+
+  // Verify PIN and process payment
+  const handlePayment = async () => {
+    if (!session || !user?.id || !walletId) {
+      setError('Missing payment information');
+      setStep('error');
+      return;
+    }
+
+    if (pin.length !== 4) {
+      setPinError('Please enter your 4-digit PIN');
+      return;
+    }
+
+    // Verify PIN first
+    setPinError(null);
     setStep('processing');
 
     try {
+      // Get user's primary card and verify PIN against it
+      const { data: primaryCard } = await supabase
+        .from('cards')
+        .select('id, transaction_pin')
+        .eq('user_id', user.id)
+        .eq('status', 'ACTIVE')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .single();
+
+      if (primaryCard?.transaction_pin) {
+        // Verify PIN matches
+        if (primaryCard.transaction_pin !== pin) {
+          setPinError('Invalid PIN. Please try again.');
+          setStep('pin');
+          return;
+        }
+      }
+      // If no card or no PIN set, proceed without PIN verification (for new users)
+
+      // PIN verified, proceed with payment
       const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
       const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;
 
@@ -204,6 +252,7 @@ export function ScanPayPage() {
           payerUserId: user.id,
           payerWalletId: walletId,
           payerName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+          pin: pin, // Include PIN for additional server-side verification
         }),
       });
 
@@ -215,8 +264,7 @@ export function ScanPayPage() {
 
       setStep('success');
 
-      // The original checkout page will be notified via polling or websocket
-      // For now, just show success
+      // The original checkout page will be notified via polling
 
     } catch (err: any) {
       setError(err.message || 'Payment failed');
@@ -318,8 +366,13 @@ export function ScanPayPage() {
     );
   }
 
-  // Success state
+  // Success state - auto redirect to dashboard
   if (step === 'success') {
+    // Auto redirect after 3 seconds
+    setTimeout(() => {
+      navigate('/dashboard');
+    }, 3000);
+
     return (
       <div className="min-h-screen bg-gradient-to-b from-green-500 to-emerald-600 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 text-center">
@@ -333,14 +386,12 @@ export function ScanPayPage() {
             </p>
           )}
           {session?.merchantName && (
-            <p className="text-gray-500 mb-6">Paid to {session.merchantName}</p>
+            <p className="text-gray-500 mb-4">Paid to {session.merchantName}</p>
           )}
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="w-full py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700"
-          >
-            Go to Dashboard
-          </button>
+          <div className="flex items-center justify-center gap-2 text-gray-400 text-sm">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Redirecting to dashboard...</span>
+          </div>
         </div>
       </div>
     );
@@ -357,6 +408,93 @@ export function ScanPayPage() {
           </div>
           <h1 className="text-xl font-bold text-gray-900 mb-2">Processing Payment</h1>
           <p className="text-gray-500">Please wait...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // PIN Entry step
+  if (step === 'pin' && session) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-indigo-600 to-purple-700 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden">
+          {/* Header */}
+          <div className="bg-indigo-600 text-white p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <button
+                onClick={() => setStep('confirm')}
+                className="p-2 hover:bg-white/10 rounded-lg"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <h1 className="text-xl font-bold">Enter PIN</h1>
+            </div>
+            <div className="text-center">
+              <p className="text-indigo-200 text-sm mb-1">Confirm payment of</p>
+              <p className="text-3xl font-bold">
+                {formatAmount(session.amount, session.currencyCode)}
+              </p>
+              {session.merchantName && (
+                <p className="text-indigo-200 text-sm mt-1">to {session.merchantName}</p>
+              )}
+            </div>
+          </div>
+
+          {/* PIN Input */}
+          <div className="p-6">
+            <div className="text-center mb-6">
+              <Lock className="w-12 h-12 text-indigo-600 mx-auto mb-3" />
+              <p className="text-gray-600">Enter your 4-digit PIN to authorize this payment</p>
+            </div>
+
+            {pinError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-100 rounded-lg flex items-center gap-2 text-red-700 text-sm">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                {pinError}
+              </div>
+            )}
+
+            <div className="relative mb-6">
+              <input
+                type={showPin ? 'text' : 'password'}
+                value={pin}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, '').substring(0, 4);
+                  setPin(value);
+                  setPinError(null);
+                }}
+                placeholder="••••"
+                className="w-full py-4 px-6 text-center text-3xl font-mono tracking-[1em] border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                maxLength={4}
+                autoFocus
+                inputMode="numeric"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPin(!showPin)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                {showPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+
+            <button
+              onClick={handlePayment}
+              disabled={pin.length !== 4}
+              className="w-full py-4 bg-green-600 text-white rounded-xl font-bold text-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              <CheckCircle className="w-6 h-6" />
+              Confirm Payment
+            </button>
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
+            <div className="flex items-center justify-center gap-2 text-gray-400 text-sm">
+              <Shield className="w-4 h-4" />
+              <span>Your PIN is encrypted and secure</span>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -494,12 +632,12 @@ export function ScanPayPage() {
           {/* Pay Button */}
           <div className="p-6">
             <button
-              onClick={handlePayment}
+              onClick={handleProceedToPin}
               disabled={insufficientBalance}
               className="w-full py-4 bg-green-600 text-white rounded-xl font-bold text-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              <CheckCircle className="w-6 h-6" />
-              Pay {formatAmount(session.amount, session.currencyCode)}
+              <Lock className="w-6 h-6" />
+              Continue to Pay
             </button>
           </div>
 

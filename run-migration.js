@@ -1,4 +1,4 @@
-// Run migration for checkout_sessions table
+// Run migration for payouts table
 const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 
@@ -8,38 +8,35 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY || 'eyJhbGciOiJIUzI1
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 async function runMigration() {
-  console.log('Running checkout_sessions migration...');
+  // Get migration file from command line arg or use default
+  const migrationFile = process.argv[2] || './scripts/migrations/031_payouts_table.sql';
+  console.log(`Running migration: ${migrationFile}\n`);
 
   // Read the SQL file
-  const sql = fs.readFileSync('./scripts/migrations/030_checkout_sessions.sql', 'utf8');
+  const sql = fs.readFileSync(migrationFile, 'utf8');
 
   // Execute via RPC - we need to run raw SQL
   const { data, error } = await supabase.rpc('exec_sql', { sql_query: sql });
 
   if (error) {
-    console.error('Migration error:', error);
-
-    // Try alternative - direct query if available
-    console.log('Trying alternative method...');
-
-    // Split SQL into statements and run separately via insert/select
-    // Actually, we'll need to use the REST API directly
-    const statements = sql.split(';').filter(s => s.trim());
-
-    for (const stmt of statements) {
-      if (stmt.trim()) {
-        console.log('Executing:', stmt.substring(0, 50) + '...');
-        // This won't work for DDL, but let's see
-      }
-    }
-
-    console.log('\\nMigration requires direct database access.');
-    console.log('Please run this SQL in Supabase Dashboard > SQL Editor:');
-    console.log('\\n' + sql);
+    console.error('Migration via RPC failed:', error.message);
+    console.log('\n⚠️  Please run this migration directly in Supabase SQL Editor:');
+    console.log('   https://supabase.com/dashboard/project/akiecgwcxadcpqlvntmf/sql\n');
+    console.log('   Copy the contents of:', migrationFile);
+    console.log('\n--- SQL Content ---\n');
+    console.log(sql);
     return;
   }
 
-  console.log('Migration completed:', data);
+  console.log('Migration completed successfully!');
+
+  // Verify the table
+  const { data: testData, error: testError } = await supabase.from('payouts').select('id').limit(1);
+  if (testError) {
+    console.log('Table verification failed:', testError.message);
+  } else {
+    console.log('✅ Payouts table is accessible!');
+  }
 }
 
 runMigration();

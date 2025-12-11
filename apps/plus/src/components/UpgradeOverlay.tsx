@@ -1,9 +1,11 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Lock,
   FileText,
@@ -14,16 +16,65 @@ import {
   Sparkles,
   ArrowRight,
   X,
+  Wallet,
+  CheckCircle2,
+  Loader2,
+  AlertTriangle,
 } from "lucide-react";
 
 interface UpgradeOverlayProps {
   currentTier?: string;
   onClose?: () => void;
   showClose?: boolean;
+  isActivation?: boolean; // True if user had setup but hasn't paid
+  pendingTier?: string; // The tier they selected but haven't paid for
+  monthlyFee?: number;
+  onActivate?: () => void;
 }
 
-export function UpgradeOverlay({ currentTier = "basic", onClose, showClose = false }: UpgradeOverlayProps) {
+export function UpgradeOverlay({
+  currentTier = "basic",
+  onClose,
+  showClose = false,
+  isActivation = false,
+  pendingTier,
+  monthlyFee = 0,
+  onActivate,
+}: UpgradeOverlayProps) {
   const router = useRouter();
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [showActivation, setShowActivation] = useState(false);
+
+  // Check if this is a returning user who hasn't paid
+  useEffect(() => {
+    const setupComplete = localStorage.getItem("plusSetupComplete");
+    const paymentComplete = localStorage.getItem("plusPaymentComplete");
+    const storedTier = localStorage.getItem("plusTier");
+
+    if (setupComplete === "true" && paymentComplete !== "true" && storedTier && storedTier !== "basic") {
+      setShowActivation(true);
+    }
+  }, []);
+
+  const formatPrice = (price: number) => {
+    return new Intl.NumberFormat("en-SL").format(price);
+  };
+
+  const handleActivate = async () => {
+    setIsProcessing(true);
+
+    // Simulate payment
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    localStorage.setItem("plusPaymentComplete", "true");
+    setIsProcessing(false);
+
+    if (onActivate) {
+      onActivate();
+    } else {
+      window.location.reload();
+    }
+  };
 
   const features = [
     {
@@ -57,6 +108,106 @@ export function UpgradeOverlay({ currentTier = "basic", onClose, showClose = fal
       tier: "business_plus",
     },
   ];
+
+  // Get stored fee for activation
+  const storedFee = typeof window !== "undefined"
+    ? parseFloat(localStorage.getItem("plusMonthlyFee") || "0")
+    : 0;
+  const storedTier = typeof window !== "undefined"
+    ? localStorage.getItem("plusTier") || ""
+    : "";
+
+  const activationFee = monthlyFee || storedFee;
+  const activationTierName = (pendingTier || storedTier) === "business_plus" ? "Business++" : "Business";
+
+  // Show activation UI for returning unpaid users
+  if (showActivation || isActivation) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+
+        <Card className="relative z-10 w-full max-w-md mx-4 shadow-2xl">
+          <CardHeader className="text-center pb-2">
+            <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <AlertTriangle className="w-8 h-8 text-amber-600" />
+            </div>
+            <CardTitle className="text-xl">Activate Your Account</CardTitle>
+            <CardDescription>
+              Your {activationTierName} plan setup is complete but payment is pending.
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent className="space-y-4">
+            <Alert className="border-amber-200 bg-amber-50">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-amber-800">
+                Complete payment to unlock all your selected features and add-ons.
+              </AlertDescription>
+            </Alert>
+
+            {/* Payment details */}
+            <div className="bg-muted rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Plan</span>
+                <Badge>{activationTierName}</Badge>
+              </div>
+              <div className="flex items-center justify-between pt-2 border-t">
+                <span className="font-medium">Monthly Fee</span>
+                <span className="text-lg font-bold text-primary">
+                  NLE {formatPrice(activationFee)}
+                </span>
+              </div>
+            </div>
+
+            {/* Payment method */}
+            <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <Wallet className="w-5 h-5 text-blue-600" />
+              <div className="flex-1">
+                <p className="text-sm font-medium">PeeAP Wallet</p>
+                <p className="text-xs text-muted-foreground">
+                  Payment from your my.peeap.com wallet
+                </p>
+              </div>
+              <CheckCircle2 className="w-5 h-5 text-blue-600" />
+            </div>
+          </CardContent>
+
+          <CardFooter className="flex flex-col gap-3">
+            <Button
+              size="lg"
+              className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
+              onClick={handleActivate}
+              disabled={isProcessing}
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing Payment...
+                </>
+              ) : (
+                <>
+                  <CreditCard className="mr-2 h-4 w-4" />
+                  Activate Account - Pay NLE {formatPrice(activationFee)}
+                </>
+              )}
+            </Button>
+
+            <Button
+              variant="ghost"
+              className="w-full text-muted-foreground"
+              onClick={() => {
+                window.location.href = "https://my.peeap.com/dashboard";
+              }}
+              disabled={isProcessing}
+            >
+              Return to my.peeap.com
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -130,7 +281,7 @@ export function UpgradeOverlay({ currentTier = "basic", onClose, showClose = fal
           </Button>
 
           <p className="text-xs text-center text-muted-foreground">
-            Starting at SLE 150,000/month. Cancel anytime.
+            Starting at NLE 150/month. Cancel anytime.
           </p>
         </CardFooter>
       </Card>

@@ -1,408 +1,37 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { toast } from "sonner";
-import { Eye, EyeOff, Loader2, Building2, Code2 } from "lucide-react";
+import {
+  ArrowRight,
+  Building2,
+  CheckCircle2,
+  Shield,
+  Users,
+  Sparkles,
+} from "lucide-react";
 
-type AccountType = "business" | "developer";
-type BusinessTier = "basic" | "business" | "business_plus";
+const PEEAP_REGISTER_URL = "https://my.peeap.com/register";
+const PEEAP_MERCHANT_URL = "https://my.peeap.com/merchant";
 
-const tierLabels: Record<BusinessTier, string> = {
-  basic: "Basic (Free)",
-  business: "Business (SLE 150,000/mo)",
-  business_plus: "Business++ (SLE 500,000/mo)",
-};
+export default function RegisterPage() {
+  const handleCreateAccount = () => {
+    // Redirect to my.peeap.com registration with return URL
+    const returnUrl = encodeURIComponent(`${window.location.origin}/upgrade`);
+    window.location.href = `${PEEAP_REGISTER_URL}?redirect=${returnUrl}&source=plus`;
+  };
 
-function RegisterForm() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const [isLoading, setIsLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [accountType, setAccountType] = useState<AccountType>("business");
-
-  const [formData, setFormData] = useState({
-    // Common fields
-    email: "",
-    password: "",
-    confirmPassword: "",
-    phone: "",
-    // Business fields
-    businessName: "",
-    businessType: "",
-    tier: "basic" as BusinessTier,
-    // Developer fields
-    companyName: "",
-    website: "",
-    useCase: "",
-  });
-
-  // Get tier from URL params
-  useEffect(() => {
-    const tierParam = searchParams.get("tier") as BusinessTier | null;
-    const typeParam = searchParams.get("type");
-
-    if (tierParam && ["basic", "business", "business_plus"].includes(tierParam)) {
-      setFormData((prev) => ({ ...prev, tier: tierParam }));
-    }
-    if (typeParam === "developer") {
-      setAccountType("developer");
-    }
-  }, [searchParams]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (formData.password !== formData.confirmPassword) {
-      toast.error("Passwords do not match");
-      return;
-    }
-
-    if (formData.password.length < 8) {
-      toast.error("Password must be at least 8 characters");
-      return;
-    }
-
-    setIsLoading(true);
-
-    try {
-      const payload = accountType === "business"
-        ? {
-            type: "business",
-            email: formData.email,
-            password: formData.password,
-            phone: formData.phone,
-            businessName: formData.businessName,
-            businessType: formData.businessType,
-            tier: formData.tier,
-          }
-        : {
-            type: "developer",
-            email: formData.email,
-            password: formData.password,
-            phone: formData.phone,
-            companyName: formData.companyName,
-            website: formData.website,
-            useCase: formData.useCase,
-          };
-
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/register/business`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Registration failed");
-      }
-
-      toast.success("Account created successfully!");
-
-      // Store token if returned
-      if (data.token) {
-        localStorage.setItem("token", data.token);
-        localStorage.setItem("user", JSON.stringify(data.user));
-        router.push("/dashboard");
-      } else {
-        router.push("/auth/login?registered=true");
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Registration failed");
-    } finally {
-      setIsLoading(false);
-    }
+  const handleExistingMerchant = () => {
+    // Redirect to merchant upgrade page
+    const returnUrl = encodeURIComponent(`${window.location.origin}/upgrade`);
+    window.location.href = `${PEEAP_MERCHANT_URL}/upgrade?redirect=${returnUrl}`;
   };
 
   return (
-    <Card>
-      <CardHeader className="text-center">
-        <CardTitle>Create your account</CardTitle>
-        <CardDescription>Choose the account type that fits your needs</CardDescription>
-      </CardHeader>
-
-      <Tabs value={accountType} onValueChange={(v) => setAccountType(v as AccountType)} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 mx-6 max-w-[calc(100%-48px)]">
-          <TabsTrigger value="business" className="flex items-center gap-2">
-            <Building2 className="h-4 w-4" />
-            Business
-          </TabsTrigger>
-          <TabsTrigger value="developer" className="flex items-center gap-2">
-            <Code2 className="h-4 w-4" />
-            Developer
-          </TabsTrigger>
-        </TabsList>
-
-        <form onSubmit={handleSubmit}>
-          <TabsContent value="business">
-            <CardContent className="space-y-4 pt-4">
-              <div className="space-y-2">
-                <Label htmlFor="tier">Plan</Label>
-                <Select
-                  value={formData.tier}
-                  onValueChange={(v) => setFormData({ ...formData, tier: v as BusinessTier })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a plan" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="basic">{tierLabels.basic}</SelectItem>
-                    <SelectItem value="business">{tierLabels.business}</SelectItem>
-                    <SelectItem value="business_plus">{tierLabels.business_plus}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="businessName">Business Name</Label>
-                <Input
-                  id="businessName"
-                  placeholder="Your Company Ltd"
-                  value={formData.businessName}
-                  onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="businessType">Business Type</Label>
-                <Select
-                  value={formData.businessType}
-                  onValueChange={(v) => setFormData({ ...formData, businessType: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select business type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="retail">Retail</SelectItem>
-                    <SelectItem value="restaurant">Restaurant / Food</SelectItem>
-                    <SelectItem value="services">Professional Services</SelectItem>
-                    <SelectItem value="ecommerce">E-commerce</SelectItem>
-                    <SelectItem value="education">Education</SelectItem>
-                    <SelectItem value="healthcare">Healthcare</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@company.com"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone Number</Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  placeholder="+232 XX XXX XXXX"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Create a strong password"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm Password</Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  placeholder="Confirm your password"
-                  value={formData.confirmPassword}
-                  onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                  required
-                />
-              </div>
-            </CardContent>
-          </TabsContent>
-
-          <TabsContent value="developer">
-            <CardContent className="space-y-4 pt-4">
-              <div className="space-y-2">
-                <Label htmlFor="companyName">Company / Project Name</Label>
-                <Input
-                  id="companyName"
-                  placeholder="Your Company or Project"
-                  value={formData.companyName}
-                  onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="website">Website (optional)</Label>
-                <Input
-                  id="website"
-                  type="url"
-                  placeholder="https://yourcompany.com"
-                  value={formData.website}
-                  onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="useCase">What will you build?</Label>
-                <Select
-                  value={formData.useCase}
-                  onValueChange={(v) => setFormData({ ...formData, useCase: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select use case" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="payments">Accept Payments</SelectItem>
-                    <SelectItem value="marketplace">Marketplace / Platform</SelectItem>
-                    <SelectItem value="fintech">Fintech App</SelectItem>
-                    <SelectItem value="saas">SaaS / Subscriptions</SelectItem>
-                    <SelectItem value="cards">Card Issuance</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="devEmail">Email</Label>
-                <Input
-                  id="devEmail"
-                  type="email"
-                  placeholder="you@company.com"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="devPhone">Phone Number</Label>
-                <Input
-                  id="devPhone"
-                  type="tel"
-                  placeholder="+232 XX XXX XXXX"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="devPassword">Password</Label>
-                <div className="relative">
-                  <Input
-                    id="devPassword"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Create a strong password"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="devConfirmPassword">Confirm Password</Label>
-                <Input
-                  id="devConfirmPassword"
-                  type="password"
-                  placeholder="Confirm your password"
-                  value={formData.confirmPassword}
-                  onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                  required
-                />
-              </div>
-            </CardContent>
-          </TabsContent>
-
-          <CardFooter className="flex flex-col gap-4">
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating account...
-                </>
-              ) : (
-                "Create Account"
-              )}
-            </Button>
-            <p className="text-sm text-center text-muted-foreground">
-              Already have an account?{" "}
-              <Link href="/auth/login" className="text-primary hover:underline">
-                Sign in
-              </Link>
-            </p>
-            <p className="text-xs text-center text-muted-foreground">
-              By creating an account, you agree to our{" "}
-              <Link href="/terms" className="underline">Terms of Service</Link>
-              {" "}and{" "}
-              <Link href="/privacy" className="underline">Privacy Policy</Link>
-            </p>
-          </CardFooter>
-        </form>
-      </Tabs>
-    </Card>
-  );
-}
-
-function RegisterFormFallback() {
-  return (
-    <Card>
-      <CardHeader className="text-center">
-        <CardTitle>Create your account</CardTitle>
-        <CardDescription>Loading...</CardDescription>
-      </CardHeader>
-      <CardContent className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </CardContent>
-    </Card>
-  );
-}
-
-export default function RegisterPage() {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-12">
-      <div className="w-full max-w-lg">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-gray-50 to-white px-4 py-12">
+      <div className="w-full max-w-xl">
         {/* Logo */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2">
@@ -413,9 +42,130 @@ export default function RegisterPage() {
           </Link>
         </div>
 
-        <Suspense fallback={<RegisterFormFallback />}>
-          <RegisterForm />
-        </Suspense>
+        <Card className="shadow-xl">
+          <CardHeader className="text-center pb-2">
+            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Building2 className="w-8 h-8 text-primary" />
+            </div>
+            <CardTitle className="text-2xl">Get Started with PeeAP Plus</CardTitle>
+            <CardDescription className="text-base">
+              PeeAP Plus is the premium business platform for PeeAP merchants
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent className="space-y-6 pt-4">
+            {/* Benefits */}
+            <div className="grid gap-3">
+              <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
+                <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <CheckCircle2 className="w-4 h-4 text-green-600" />
+                </div>
+                <div>
+                  <p className="font-medium">Use Your Existing PeeAP Account</p>
+                  <p className="text-sm text-muted-foreground">
+                    Sign up once at my.peeap.com and access all PeeAP services
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
+                <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Shield className="w-4 h-4 text-blue-600" />
+                </div>
+                <div>
+                  <p className="font-medium">You Become the Business Owner</p>
+                  <p className="text-sm text-muted-foreground">
+                    Full admin rights to manage your team and business settings
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
+                <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Users className="w-4 h-4 text-purple-600" />
+                </div>
+                <div>
+                  <p className="font-medium">Add Team Members Later</p>
+                  <p className="text-sm text-muted-foreground">
+                    Invite staff and assign roles after your account is set up
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* How it works */}
+            <div className="border-t pt-4">
+              <p className="text-sm font-medium text-center mb-4">How it works</p>
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <span className="w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center text-xs font-medium">1</span>
+                  Create account
+                </span>
+                <ArrowRight className="w-4 h-4" />
+                <span className="flex items-center gap-1">
+                  <span className="w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center text-xs font-medium">2</span>
+                  Choose plan
+                </span>
+                <ArrowRight className="w-4 h-4" />
+                <span className="flex items-center gap-1">
+                  <span className="w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center text-xs font-medium">3</span>
+                  Setup Plus
+                </span>
+              </div>
+            </div>
+          </CardContent>
+
+          <CardFooter className="flex flex-col gap-3 pt-2">
+            <Button
+              size="lg"
+              className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600"
+              onClick={handleCreateAccount}
+            >
+              <Sparkles className="mr-2 h-4 w-4" />
+              Create PeeAP Account
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+
+            <div className="relative w-full">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-white px-2 text-muted-foreground">
+                  Already have an account?
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 w-full">
+              <Link href="/auth/login" className="w-full">
+                <Button variant="outline" className="w-full">
+                  Sign In
+                </Button>
+              </Link>
+              <Button variant="outline" onClick={handleExistingMerchant}>
+                Upgrade Existing
+              </Button>
+            </div>
+
+            <p className="text-xs text-center text-muted-foreground pt-2">
+              By continuing, you agree to our{" "}
+              <Link href="/terms" className="underline hover:text-foreground">Terms of Service</Link>
+              {" "}and{" "}
+              <Link href="/privacy" className="underline hover:text-foreground">Privacy Policy</Link>
+            </p>
+          </CardFooter>
+        </Card>
+
+        {/* Info box */}
+        <div className="mt-6 text-center">
+          <p className="text-sm text-muted-foreground">
+            Need help?{" "}
+            <a href="mailto:support@peeap.com" className="text-primary hover:underline">
+              Contact Support
+            </a>
+          </p>
+        </div>
       </div>
     </div>
   );

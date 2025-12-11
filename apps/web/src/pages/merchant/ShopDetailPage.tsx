@@ -39,6 +39,16 @@ interface Transaction {
   currency: string;
   status: string;
   customer_email?: string;
+  description?: string;
+  reference?: string;
+  type?: string;
+  metadata?: {
+    payerName?: string;
+    payerId?: string;
+    paymentMethod?: string;
+    merchantName?: string;
+    checkoutSessionId?: string;
+  };
   created_at: string;
 }
 
@@ -86,11 +96,19 @@ export function ShopDetailPage() {
       if (businessError) throw businessError;
       setBusiness(businessData);
 
-      // Fetch recent transactions for this business
+      // Fetch the merchant's wallet to get transactions
+      const { data: merchantWallet } = await supabase
+        .from('wallets')
+        .select('id')
+        .eq('user_id', businessData.merchant_id)
+        .eq('wallet_type', 'primary')
+        .single();
+
+      // Fetch recent transactions for this merchant's wallet
       const { data: transactionData } = await supabase
         .from('transactions')
         .select('*')
-        .eq('business_id', businessId)
+        .eq('wallet_id', merchantWallet?.id || '')
         .order('created_at', { ascending: false })
         .limit(5);
 
@@ -106,11 +124,11 @@ export function ShopDetailPage() {
 
       setRecentDisputes(disputeData || []);
 
-      // Calculate stats
+      // Calculate stats from merchant wallet transactions
       const { data: allTransactions } = await supabase
         .from('transactions')
         .select('amount, status')
-        .eq('business_id', businessId);
+        .eq('wallet_id', merchantWallet?.id || '');
 
       if (allTransactions) {
         const total = allTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
@@ -378,15 +396,27 @@ export function ShopDetailPage() {
                 recentTransactions.map((tx) => (
                   <div key={tx.id} className="p-4 flex items-center justify-between">
                     <div>
-                      <p className="font-medium text-gray-900">{tx.customer_email || 'Customer'}</p>
-                      <p className="text-xs text-gray-500">{formatDate(tx.created_at)}</p>
+                      <p className="font-medium text-gray-900">
+                        {tx.metadata?.payerName || tx.customer_email || 'Customer'}
+                      </p>
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <span>{formatDate(tx.created_at)}</span>
+                        {tx.metadata?.paymentMethod && (
+                          <span className="px-1.5 py-0.5 bg-gray-100 rounded">
+                            {tx.metadata.paymentMethod === 'scan_to_pay' ? 'QR Scan' :
+                             tx.metadata.paymentMethod === 'mobile_money' ? 'Mobile Money' :
+                             tx.metadata.paymentMethod === 'peeap_card' ? 'Card' :
+                             tx.metadata.paymentMethod}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="text-right">
                       <p className="font-semibold text-gray-900">{formatCurrency(tx.amount)}</p>
                       <span className={`text-xs px-2 py-0.5 rounded ${
-                        tx.status === 'completed' || tx.status === 'success'
+                        tx.status === 'completed' || tx.status === 'success' || tx.status === 'COMPLETED'
                           ? 'bg-green-100 text-green-700'
-                          : tx.status === 'pending'
+                          : tx.status === 'pending' || tx.status === 'PENDING'
                           ? 'bg-yellow-100 text-yellow-700'
                           : 'bg-red-100 text-red-700'
                       }`}>

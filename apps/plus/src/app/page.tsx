@@ -23,7 +23,7 @@ const tiers = [
   },
   {
     name: "Business",
-    price: "SLE 150,000",
+    price: "NLE 150",
     period: "/month",
     description: "For growing businesses that need more tools",
     features: [
@@ -42,7 +42,7 @@ const tiers = [
   },
   {
     name: "Business++",
-    price: "SLE 500,000",
+    price: "NLE 500",
     period: "/month",
     description: "For enterprises needing full control",
     features: [

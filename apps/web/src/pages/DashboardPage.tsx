@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Wallet, CreditCard, ArrowUpRight, ArrowDownRight, TrendingUp, Send, Users, QrCode, Smartphone } from 'lucide-react';
+import { Wallet, CreditCard, ArrowUpRight, ArrowDownRight, TrendingUp, Send, Users, QrCode, Smartphone, Building2 } from 'lucide-react';
 import { MotionCard, CardHeader, CardTitle, CardDescription } from '@/components/ui';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useAuth } from '@/context/AuthContext';
@@ -353,6 +353,15 @@ export function DashboardPage() {
                   </div>
                   <span className="text-sm font-medium text-gray-900 dark:text-white text-center">Send to<br/>Mobile Money</span>
                 </button>
+                <Link
+                  to="/withdraw"
+                  className="flex flex-col items-center p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center mb-2">
+                    <Building2 className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <span className="text-sm font-medium text-gray-900 dark:text-white text-center">Withdraw</span>
+                </Link>
                 <Link
                   to="/wallets?action=transfer"
                   className="flex flex-col items-center p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"

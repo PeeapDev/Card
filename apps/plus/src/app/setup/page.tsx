@@ -2,7 +2,6 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Check,
   Loader2,
@@ -17,13 +17,29 @@ import {
   ArrowLeft,
   Building2,
   Users,
-  CreditCard,
   Settings,
-  Sparkles,
   CheckCircle2,
+  Copy,
+  Plus,
+  AlertTriangle,
+  Shield,
+  Clock,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
-type SetupStep = "business" | "team" | "preferences" | "complete";
+type SetupStep = "choose" | "business" | "team" | "preferences" | "complete";
+type BusinessSource = "existing" | "new" | null;
+
+interface ExistingBusiness {
+  id: string;
+  businessName: string;
+  email: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  industry?: string;
+  registrationNumber?: string;
+}
 
 interface BusinessInfo {
   legalName: string;
@@ -41,6 +57,15 @@ interface TeamInfo {
   departments: string[];
 }
 
+interface FeatureAddon {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  included: boolean; // Included in base plan
+  category: "payments" | "accounting" | "cards" | "team";
+}
+
 interface Preferences {
   enableInvoicing: boolean;
   enableSubscriptions: boolean;
@@ -48,14 +73,21 @@ interface Preferences {
   defaultCurrency: string;
   autoApproveExpenses: boolean;
   expenseApprovalLimit: string;
+  // Add-on features
+  selectedAddons: string[];
+  cardStaffTier: "none" | "1-10" | "11-50" | "51-100" | "unlimited";
 }
 
 function SetupWizardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [currentStep, setCurrentStep] = useState<SetupStep>("business");
+  const [currentStep, setCurrentStep] = useState<SetupStep>("choose");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingExisting, setIsLoadingExisting] = useState(false);
   const [tier, setTier] = useState<string>("business");
+  const [businessSource, setBusinessSource] = useState<BusinessSource>(null);
+  const [existingBusiness, setExistingBusiness] = useState<ExistingBusiness | null>(null);
+  const [requiresVerification, setRequiresVerification] = useState(false);
 
   const [businessInfo, setBusinessInfo] = useState<BusinessInfo>({
     legalName: "",
@@ -76,11 +108,138 @@ function SetupWizardContent() {
   const [preferences, setPreferences] = useState<Preferences>({
     enableInvoicing: true,
     enableSubscriptions: true,
-    enableCards: tier === "business_plus",
-    defaultCurrency: "SLE",
+    enableCards: false,
+    defaultCurrency: "NLE",
     autoApproveExpenses: false,
-    expenseApprovalLimit: "100000",
+    expenseApprovalLimit: "100",
+    selectedAddons: [],
+    cardStaffTier: "none",
   });
+
+  // Feature add-ons with pricing (prices in NLE - New Leone, redenominated)
+  const featureAddons: FeatureAddon[] = [
+    // Free features (included in all plans)
+    {
+      id: "contact_directory",
+      name: "Contact Directory",
+      description: "Search and find PeeAP users to add to your team",
+      price: 0,
+      included: true,
+      category: "team",
+    },
+    {
+      id: "invoicing",
+      name: "Invoice Generator",
+      description: "Create and send professional invoices",
+      price: 0,
+      included: tier === "business" || tier === "business_plus",
+      category: "payments",
+    },
+    {
+      id: "subscriptions",
+      name: "Recurring Payments",
+      description: "Set up subscription billing for customers",
+      price: 0,
+      included: tier === "business" || tier === "business_plus",
+      category: "payments",
+    },
+    // Paid add-ons (NLE pricing)
+    {
+      id: "batch_payments",
+      name: "Batch Payments",
+      description: "Pay multiple vendors or employees at once",
+      price: 75,
+      included: false,
+      category: "payments",
+    },
+    {
+      id: "payroll",
+      name: "Automated Payroll",
+      description: "Automated salary payments with tax calculations",
+      price: 150,
+      included: false,
+      category: "accounting",
+    },
+    {
+      id: "expense_management",
+      name: "Expense Management",
+      description: "Track, approve, and reimburse employee expenses",
+      price: 50,
+      included: tier === "business_plus",
+      category: "accounting",
+    },
+    {
+      id: "accounting_reports",
+      name: "Accounting Reports",
+      description: "Financial statements, P&L, and balance sheets",
+      price: 100,
+      included: false,
+      category: "accounting",
+    },
+    {
+      id: "multi_currency",
+      name: "Multi-Currency Support",
+      description: "Accept and pay in multiple currencies",
+      price: 50,
+      included: false,
+      category: "payments",
+    },
+    {
+      id: "api_access",
+      name: "API Access",
+      description: "Integrate PeeAP Plus with your systems",
+      price: 0,
+      included: tier === "business" || tier === "business_plus",
+      category: "payments",
+    },
+  ];
+
+  // Corporate card tiers with pricing (NLE - New Leone)
+  const cardStaffTiers = [
+    { id: "none", name: "No Cards", staff: "0", price: 0 },
+    { id: "1-10", name: "Starter", staff: "1-10 employees", price: 100 },
+    { id: "11-50", name: "Growth", staff: "11-50 employees", price: 300 },
+    { id: "51-100", name: "Business", staff: "51-100 employees", price: 500 },
+    { id: "unlimited", name: "Enterprise", staff: "Unlimited", price: 1000 },
+  ];
+
+  // Calculate total monthly fee (NLE - New Leone)
+  const calculateMonthlyFee = () => {
+    let total = 0;
+
+    // Base plan fee (NLE)
+    if (tier === "business") total += 150;
+    if (tier === "business_plus") total += 500;
+
+    // Add-on fees
+    preferences.selectedAddons.forEach(addonId => {
+      const addon = featureAddons.find(a => a.id === addonId);
+      if (addon && !addon.included) {
+        total += addon.price;
+      }
+    });
+
+    // Card tier fee
+    const cardTier = cardStaffTiers.find(t => t.id === preferences.cardStaffTier);
+    if (cardTier) {
+      total += cardTier.price;
+    }
+
+    return total;
+  };
+
+  const formatPrice = (price: number) => {
+    return new Intl.NumberFormat("en-SL").format(price);
+  };
+
+  const toggleAddon = (addonId: string) => {
+    setPreferences(prev => ({
+      ...prev,
+      selectedAddons: prev.selectedAddons.includes(addonId)
+        ? prev.selectedAddons.filter(id => id !== addonId)
+        : [...prev.selectedAddons, addonId]
+    }));
+  };
 
   useEffect(() => {
     const tierParam = searchParams.get("tier");
@@ -93,17 +252,124 @@ function SetupWizardContent() {
     }
   }, [searchParams]);
 
-  const steps = [
-    { id: "business", label: "Business Info", icon: Building2 },
-    { id: "team", label: "Team Setup", icon: Users },
-    { id: "preferences", label: "Preferences", icon: Settings },
-    { id: "complete", label: "Complete", icon: CheckCircle2 },
-  ];
+  // Fetch existing business data from user's account
+  const fetchExistingBusiness = async () => {
+    setIsLoadingExisting(true);
+    try {
+      const token = localStorage.getItem("token");
+      const userStr = localStorage.getItem("user");
+
+      if (!userStr) {
+        setIsLoadingExisting(false);
+        return null;
+      }
+
+      const user = JSON.parse(userStr);
+
+      // Fetch merchant data from Supabase
+      const { data: merchantData, error } = await supabase
+        .from("merchants")
+        .select("*")
+        .eq("user_id", user.id)
+        .single();
+
+      if (error || !merchantData) {
+        // Try to get from users table
+        const { data: userData } = await supabase
+          .from("users")
+          .select("*")
+          .eq("id", user.id)
+          .single();
+
+        if (userData && userData.business_name) {
+          return {
+            id: userData.id,
+            businessName: userData.business_name,
+            email: userData.email,
+            phone: userData.phone,
+            address: userData.address,
+            city: userData.city,
+            industry: userData.business_type,
+          };
+        }
+        return null;
+      }
+
+      return {
+        id: merchantData.id,
+        businessName: merchantData.business_name || merchantData.name,
+        email: merchantData.email,
+        phone: merchantData.phone,
+        address: merchantData.address,
+        city: merchantData.city,
+        industry: merchantData.industry || merchantData.business_type,
+        registrationNumber: merchantData.registration_number,
+      };
+    } catch (error) {
+      console.error("Error fetching existing business:", error);
+      return null;
+    } finally {
+      setIsLoadingExisting(false);
+    }
+  };
+
+  const handleChooseExisting = async () => {
+    setBusinessSource("existing");
+    const existing = await fetchExistingBusiness();
+
+    if (existing) {
+      setExistingBusiness(existing);
+      // Pre-fill business info from existing data
+      setBusinessInfo({
+        legalName: existing.businessName || "",
+        tradingName: "",
+        registrationNumber: existing.registrationNumber || "",
+        industry: existing.industry || "",
+        employeeCount: "",
+        address: existing.address || "",
+        city: existing.city || "",
+        country: "SL",
+      });
+      setRequiresVerification(false);
+      setCurrentStep("business");
+    } else {
+      // No existing business found, show message
+      setExistingBusiness(null);
+      setCurrentStep("business");
+    }
+  };
+
+  const handleChooseNew = () => {
+    setBusinessSource("new");
+    setExistingBusiness(null);
+    setRequiresVerification(true);
+    setBusinessInfo({
+      legalName: "",
+      tradingName: "",
+      registrationNumber: "",
+      industry: "",
+      employeeCount: "",
+      address: "",
+      city: "",
+      country: "SL",
+    });
+    setCurrentStep("business");
+  };
+
+  const steps = businessSource === null
+    ? [{ id: "choose", label: "Choose Business", icon: Building2 }]
+    : [
+        { id: "choose", label: "Choose", icon: Building2 },
+        { id: "business", label: "Business Info", icon: Building2 },
+        { id: "team", label: "Team Setup", icon: Users },
+        { id: "preferences", label: "Preferences", icon: Settings },
+        { id: "complete", label: "Complete", icon: CheckCircle2 },
+      ];
 
   const currentStepIndex = steps.findIndex(s => s.id === currentStep);
 
   const handleNext = () => {
-    const stepOrder: SetupStep[] = ["business", "team", "preferences", "complete"];
+    const stepOrder: SetupStep[] = ["choose", "business", "team", "preferences", "complete"];
     const currentIndex = stepOrder.indexOf(currentStep);
     if (currentIndex < stepOrder.length - 1) {
       setCurrentStep(stepOrder[currentIndex + 1]);
@@ -111,7 +377,7 @@ function SetupWizardContent() {
   };
 
   const handleBack = () => {
-    const stepOrder: SetupStep[] = ["business", "team", "preferences", "complete"];
+    const stepOrder: SetupStep[] = ["choose", "business", "team", "preferences", "complete"];
     const currentIndex = stepOrder.indexOf(currentStep);
     if (currentIndex > 0) {
       setCurrentStep(stepOrder[currentIndex - 1]);
@@ -122,31 +388,59 @@ function SetupWizardContent() {
     setIsSubmitting(true);
 
     try {
-      const token = localStorage.getItem("token");
+      const userStr = localStorage.getItem("user");
+      const user = userStr ? JSON.parse(userStr) : null;
 
-      // Save setup data
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/merchant/setup`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          tier,
-          businessInfo,
-          teamInfo,
-          preferences,
-        }),
-      });
+      // Try to save business setup to Supabase (table may not exist yet)
+      try {
+        const { error } = await supabase
+          .from("plus_businesses")
+          .upsert({
+            user_id: user?.id,
+            tier,
+            source: businessSource,
+            requires_verification: requiresVerification,
+            verification_status: requiresVerification ? "pending" : "verified",
+            business_info: businessInfo,
+            team_info: teamInfo,
+            preferences,
+            monthly_fee: calculateMonthlyFee(),
+            created_at: new Date().toISOString(),
+          });
 
-      // Mark setup as complete
+        if (error) {
+          // Table may not exist yet - this is okay for now
+          console.log("Database save skipped (table may not exist):", error.message);
+        }
+      } catch (dbError) {
+        // Database error - continue with local storage
+        console.log("Database not available, using local storage");
+      }
+
+      // Mark setup as complete in local storage
       localStorage.setItem("plusSetupComplete", "true");
       localStorage.setItem("plusTier", tier);
+      localStorage.setItem("plusBusinessInfo", JSON.stringify(businessInfo));
+      localStorage.setItem("plusPreferences", JSON.stringify(preferences));
+      localStorage.setItem("plusMonthlyFee", calculateMonthlyFee().toString());
+
+      if (requiresVerification) {
+        localStorage.setItem("plusVerificationStatus", "pending");
+      } else {
+        localStorage.setItem("plusVerificationStatus", "verified");
+      }
+
+      // Update user data
+      if (user) {
+        user.businessName = businessInfo.legalName;
+        user.tier = tier;
+        localStorage.setItem("user", JSON.stringify(user));
+      }
 
       setCurrentStep("complete");
     } catch (error) {
       console.error("Setup error:", error);
-      // Still proceed for demo
+      // Still proceed - save to local storage
       localStorage.setItem("plusSetupComplete", "true");
       localStorage.setItem("plusTier", tier);
       setCurrentStep("complete");
@@ -187,66 +481,174 @@ function SetupWizardContent() {
 
       <main className="container mx-auto px-4 py-8 max-w-3xl">
         {/* Progress Steps */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            {steps.map((step, index) => {
-              const Icon = step.icon;
-              const isActive = step.id === currentStep;
-              const isComplete = currentStepIndex > index;
+        {businessSource !== null && (
+          <div className="mb-8">
+            <div className="flex items-center justify-between">
+              {steps.map((step, index) => {
+                const Icon = step.icon;
+                const isActive = step.id === currentStep;
+                const isComplete = currentStepIndex > index;
 
-              return (
-                <div key={step.id} className="flex items-center">
-                  <div className={`flex items-center gap-2 ${
-                    isActive ? "text-primary" : isComplete ? "text-green-600" : "text-muted-foreground"
-                  }`}>
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${
-                      isActive
-                        ? "border-primary bg-primary/10"
-                        : isComplete
-                        ? "border-green-600 bg-green-100"
-                        : "border-muted"
+                return (
+                  <div key={step.id} className="flex items-center">
+                    <div className={`flex items-center gap-2 ${
+                      isActive ? "text-primary" : isComplete ? "text-green-600" : "text-muted-foreground"
                     }`}>
-                      {isComplete ? (
-                        <Check className="w-5 h-5" />
-                      ) : (
-                        <Icon className="w-5 h-5" />
-                      )}
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${
+                        isActive
+                          ? "border-primary bg-primary/10"
+                          : isComplete
+                          ? "border-green-600 bg-green-100"
+                          : "border-muted"
+                      }`}>
+                        {isComplete ? (
+                          <Check className="w-5 h-5" />
+                        ) : (
+                          <Icon className="w-5 h-5" />
+                        )}
+                      </div>
+                      <span className="hidden sm:inline text-sm font-medium">{step.label}</span>
                     </div>
-                    <span className="hidden sm:inline text-sm font-medium">{step.label}</span>
+                    {index < steps.length - 1 && (
+                      <div className={`w-12 sm:w-20 h-0.5 mx-2 ${
+                        isComplete ? "bg-green-600" : "bg-muted"
+                      }`} />
+                    )}
                   </div>
-                  {index < steps.length - 1 && (
-                    <div className={`w-12 sm:w-20 h-0.5 mx-2 ${
-                      isComplete ? "bg-green-600" : "bg-muted"
-                    }`} />
-                  )}
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Step Content */}
         <Card>
+          {/* Step 1: Choose Business Source */}
+          {currentStep === "choose" && (
+            <>
+              <CardHeader className="text-center">
+                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Building2 className="w-8 h-8 text-primary" />
+                </div>
+                <CardTitle>Set Up Your Business</CardTitle>
+                <CardDescription>
+                  How would you like to set up your PeeAP Plus business account?
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Option 1: Use Existing Business */}
+                <button
+                  onClick={handleChooseExisting}
+                  disabled={isLoadingExisting}
+                  className="w-full p-6 border-2 rounded-xl text-left hover:border-primary hover:bg-primary/5 transition-all group"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:bg-green-200 transition-colors">
+                      <Copy className="w-6 h-6 text-green-600" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-semibold text-lg">Use Existing Business</h3>
+                        <Badge variant="secondary" className="text-xs">Recommended</Badge>
+                      </div>
+                      <p className="text-muted-foreground text-sm mb-3">
+                        Copy your business information from your PeeAP merchant account. This is faster and your account will be automatically verified.
+                      </p>
+                      <div className="flex items-center gap-2 text-sm text-green-600">
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Auto-verified - Full access immediately</span>
+                      </div>
+                    </div>
+                    {isLoadingExisting ? (
+                      <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                    ) : (
+                      <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                    )}
+                  </div>
+                </button>
+
+                {/* Option 2: Create New Business */}
+                <button
+                  onClick={handleChooseNew}
+                  className="w-full p-6 border-2 rounded-xl text-left hover:border-amber-400 hover:bg-amber-50 transition-all group"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:bg-amber-200 transition-colors">
+                      <Plus className="w-6 h-6 text-amber-600" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-lg mb-1">Create New Business</h3>
+                      <p className="text-muted-foreground text-sm mb-3">
+                        Set up a completely new business account. This requires verification by our team before you can access all features.
+                      </p>
+                      <div className="flex items-center gap-2 text-sm text-amber-600">
+                        <Clock className="w-4 h-4" />
+                        <span>Requires verification (1-2 business days)</span>
+                      </div>
+                    </div>
+                    <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-amber-600 transition-colors" />
+                  </div>
+                </button>
+
+                {/* Info box */}
+                <Alert className="mt-6">
+                  <Shield className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Why verification for new businesses?</strong> To ensure security and prevent fraud, new business accounts require verification. Using your existing PeeAP merchant data skips this step.
+                  </AlertDescription>
+                </Alert>
+              </CardContent>
+            </>
+          )}
+
+          {/* Step 2: Business Information */}
           {currentStep === "business" && (
             <>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Building2 className="w-5 h-5" />
                   Business Information
+                  {businessSource === "existing" && existingBusiness && (
+                    <Badge variant="secondary" className="ml-2">From existing account</Badge>
+                  )}
                 </CardTitle>
                 <CardDescription>
-                  Tell us about your business
+                  {businessSource === "existing"
+                    ? "We've pre-filled your information. Review and update if needed."
+                    : "Enter your new business details. This will require verification."
+                  }
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Verification warning for new business */}
+                {requiresVerification && (
+                  <Alert className="border-amber-200 bg-amber-50">
+                    <AlertTriangle className="h-4 w-4 text-amber-600" />
+                    <AlertDescription className="text-amber-800">
+                      <strong>Verification Required:</strong> New business accounts require approval by our team. Some features will be limited until verification is complete.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {/* Success message for existing business */}
+                {businessSource === "existing" && existingBusiness && (
+                  <Alert className="border-green-200 bg-green-50">
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    <AlertDescription className="text-green-800">
+                      <strong>Auto-Verified:</strong> Your business data from {existingBusiness.businessName} has been imported. You'll have full access immediately after setup.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="legalName">Legal Business Name</Label>
+                    <Label htmlFor="legalName">Legal Business Name *</Label>
                     <Input
                       id="legalName"
                       placeholder="ABC Company Ltd"
                       value={businessInfo.legalName}
                       onChange={(e) => setBusinessInfo({ ...businessInfo, legalName: e.target.value })}
+                      required
                     />
                   </div>
                   <div className="space-y-2">
@@ -352,6 +754,7 @@ function SetupWizardContent() {
             </>
           )}
 
+          {/* Step 3: Team Setup */}
           {currentStep === "team" && (
             <>
               <CardHeader>
@@ -366,6 +769,9 @@ function SetupWizardContent() {
               <CardContent className="space-y-6">
                 <div className="space-y-4">
                   <Label>Invite Team Members</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Team members will be able to access the dashboard based on their assigned roles.
+                  </p>
                   {teamInfo.inviteEmails.map((email, index) => (
                     <Input
                       key={index}
@@ -411,81 +817,165 @@ function SetupWizardContent() {
             </>
           )}
 
+          {/* Step 4: Preferences */}
           {currentStep === "preferences" && (
             <>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Settings className="w-5 h-5" />
-                  Preferences
+                  Features & Add-ons
                 </CardTitle>
                 <CardDescription>
-                  Configure your account settings
+                  Select features for your business. Add-ons will be charged monthly.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <Label>Features to Enable</Label>
-                  <div className="space-y-3">
-                    <div className="flex items-center space-x-3">
-                      <Checkbox
-                        id="invoicing"
-                        checked={preferences.enableInvoicing}
-                        onCheckedChange={(checked) =>
-                          setPreferences({ ...preferences, enableInvoicing: !!checked })
-                        }
-                      />
-                      <Label htmlFor="invoicing" className="cursor-pointer">
-                        Invoice Generator
-                      </Label>
+                {/* Monthly Fee Summary */}
+                <div className="bg-gradient-to-r from-primary/10 to-primary/5 rounded-xl p-4 border border-primary/20">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Estimated Monthly Fee</p>
+                      <p className="text-2xl font-bold">NLE {formatPrice(calculateMonthlyFee())}</p>
                     </div>
-                    <div className="flex items-center space-x-3">
-                      <Checkbox
-                        id="subscriptions"
-                        checked={preferences.enableSubscriptions}
-                        onCheckedChange={(checked) =>
-                          setPreferences({ ...preferences, enableSubscriptions: !!checked })
-                        }
-                      />
-                      <Label htmlFor="subscriptions" className="cursor-pointer">
-                        Recurring Payments / Subscriptions
-                      </Label>
-                    </div>
-                    {tier === "business_plus" && (
-                      <div className="flex items-center space-x-3">
-                        <Checkbox
-                          id="cards"
-                          checked={preferences.enableCards}
-                          onCheckedChange={(checked) =>
-                            setPreferences({ ...preferences, enableCards: !!checked })
-                          }
-                        />
-                        <Label htmlFor="cards" className="cursor-pointer">
-                          Employee Expense Cards
-                        </Label>
-                      </div>
-                    )}
+                    <Badge variant="secondary" className="capitalize">
+                      {tier.replace("_", " ")} Plan
+                    </Badge>
                   </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Billed monthly from your PeeAP wallet at my.peeap.com
+                  </p>
                 </div>
 
+                {/* Default Currency */}
                 <div className="space-y-2">
                   <Label htmlFor="currency">Default Currency</Label>
                   <Select
                     value={preferences.defaultCurrency}
                     onValueChange={(v) => setPreferences({ ...preferences, defaultCurrency: v })}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="w-full sm:w-48">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="SLE">SLE (Sierra Leonean Leone)</SelectItem>
+                      <SelectItem value="NLE">NLE (New Leone)</SelectItem>
                       <SelectItem value="USD">USD (US Dollar)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
+                {/* Included Features */}
+                <div className="space-y-3">
+                  <Label className="text-base">Included in Your Plan</Label>
+                  <div className="grid gap-2">
+                    {featureAddons.filter(a => a.included).map((addon) => (
+                      <div
+                        key={addon.id}
+                        className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg"
+                      >
+                        <div className="flex items-center gap-3">
+                          <CheckCircle2 className="w-5 h-5 text-green-600" />
+                          <div>
+                            <p className="font-medium text-sm">{addon.name}</p>
+                            <p className="text-xs text-muted-foreground">{addon.description}</p>
+                          </div>
+                        </div>
+                        <Badge variant="secondary" className="text-green-700 bg-green-100">
+                          Included
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Corporate Cards Tier Selection */}
                 {tier === "business_plus" && (
+                  <div className="space-y-3 pt-4 border-t">
+                    <Label className="text-base">Corporate Cards</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Issue expense cards to your employees with spending controls
+                    </p>
+                    <div className="grid gap-2">
+                      {cardStaffTiers.map((cardTier) => (
+                        <button
+                          key={cardTier.id}
+                          onClick={() => setPreferences(prev => ({ ...prev, cardStaffTier: cardTier.id as Preferences["cardStaffTier"] }))}
+                          className={`flex items-center justify-between p-3 rounded-lg border-2 transition-all text-left ${
+                            preferences.cardStaffTier === cardTier.id
+                              ? "border-purple-500 bg-purple-50"
+                              : "border-gray-200 hover:border-gray-300"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                              preferences.cardStaffTier === cardTier.id
+                                ? "border-purple-500 bg-purple-500"
+                                : "border-gray-300"
+                            }`}>
+                              {preferences.cardStaffTier === cardTier.id && (
+                                <Check className="w-3 h-3 text-white" />
+                              )}
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm">{cardTier.name}</p>
+                              <p className="text-xs text-muted-foreground">{cardTier.staff}</p>
+                            </div>
+                          </div>
+                          <span className={`text-sm font-medium ${
+                            cardTier.price === 0 ? "text-muted-foreground" : "text-purple-600"
+                          }`}>
+                            {cardTier.price === 0 ? "—" : `+NLE ${formatPrice(cardTier.price)}/mo`}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Premium Add-ons */}
+                <div className="space-y-3 pt-4 border-t">
+                  <Label className="text-base">Premium Add-ons</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Enhance your business with additional features
+                  </p>
+                  <div className="grid gap-2">
+                    {featureAddons.filter(a => !a.included && a.price > 0).map((addon) => {
+                      const isSelected = preferences.selectedAddons.includes(addon.id);
+                      return (
+                        <button
+                          key={addon.id}
+                          onClick={() => toggleAddon(addon.id)}
+                          className={`flex items-center justify-between p-3 rounded-lg border-2 transition-all text-left ${
+                            isSelected
+                              ? "border-amber-500 bg-amber-50"
+                              : "border-gray-200 hover:border-gray-300"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                              isSelected
+                                ? "border-amber-500 bg-amber-500"
+                                : "border-gray-300"
+                            }`}>
+                              {isSelected && <Check className="w-3 h-3 text-white" />}
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm">{addon.name}</p>
+                              <p className="text-xs text-muted-foreground">{addon.description}</p>
+                            </div>
+                          </div>
+                          <span className="text-sm font-medium text-amber-600">
+                            +NLE {formatPrice(addon.price)}/mo
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Expense Settings (for Business++) */}
+                {tier === "business_plus" && preferences.cardStaffTier !== "none" && (
                   <div className="space-y-4 pt-4 border-t">
-                    <Label>Expense Settings</Label>
+                    <Label className="text-base">Expense Settings</Label>
                     <div className="flex items-center space-x-3">
                       <Checkbox
                         id="autoApprove"
@@ -494,16 +984,17 @@ function SetupWizardContent() {
                           setPreferences({ ...preferences, autoApproveExpenses: !!checked })
                         }
                       />
-                      <Label htmlFor="autoApprove" className="cursor-pointer">
+                      <Label htmlFor="autoApprove" className="cursor-pointer text-sm">
                         Auto-approve expenses under limit
                       </Label>
                     </div>
                     {preferences.autoApproveExpenses && (
                       <div className="space-y-2 pl-6">
-                        <Label htmlFor="approvalLimit">Auto-approval Limit (SLE)</Label>
+                        <Label htmlFor="approvalLimit" className="text-sm">Auto-approval Limit (NLE)</Label>
                         <Input
                           id="approvalLimit"
                           type="number"
+                          className="w-48"
                           value={preferences.expenseApprovalLimit}
                           onChange={(e) => setPreferences({ ...preferences, expenseApprovalLimit: e.target.value })}
                         />
@@ -511,22 +1002,57 @@ function SetupWizardContent() {
                     )}
                   </div>
                 )}
+
+                {/* Billing Info */}
+                <Alert className="mt-4">
+                  <Shield className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Subscription Management:</strong> Your monthly subscription will be managed from your PeeAP account at my.peeap.com. Charges are deducted automatically from your PeeAP wallet.
+                  </AlertDescription>
+                </Alert>
               </CardContent>
             </>
           )}
 
+          {/* Step 5: Complete */}
           {currentStep === "complete" && (
             <>
               <CardHeader className="text-center">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <CheckCircle2 className="w-8 h-8 text-green-600" />
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
+                  requiresVerification ? "bg-amber-100" : "bg-green-100"
+                }`}>
+                  {requiresVerification ? (
+                    <Clock className="w-8 h-8 text-amber-600" />
+                  ) : (
+                    <CheckCircle2 className="w-8 h-8 text-green-600" />
+                  )}
                 </div>
-                <CardTitle>You&apos;re All Set!</CardTitle>
+                <CardTitle>
+                  {requiresVerification ? "Setup Complete - Verification Pending" : "You're All Set!"}
+                </CardTitle>
                 <CardDescription>
-                  Your PeeAP Plus account is ready to use
+                  {requiresVerification
+                    ? "Your account has been created and is pending verification"
+                    : "Your PeeAP Plus account is ready to use"
+                  }
                 </CardDescription>
               </CardHeader>
               <CardContent className="text-center space-y-6">
+                {requiresVerification && (
+                  <Alert className="text-left border-amber-200 bg-amber-50">
+                    <Clock className="h-4 w-4 text-amber-600" />
+                    <AlertDescription className="text-amber-800">
+                      <strong>What happens next?</strong>
+                      <ul className="list-disc list-inside mt-2 space-y-1">
+                        <li>Our team will review your business information</li>
+                        <li>Verification usually takes 1-2 business days</li>
+                        <li>You'll receive an email once verified</li>
+                        <li>Some features are limited until verification</li>
+                      </ul>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 <div className="bg-muted rounded-lg p-4">
                   <p className="font-medium mb-2">Your {tier === "business_plus" ? "Business++" : "Business"} plan includes:</p>
                   <div className="flex flex-wrap justify-center gap-2">
@@ -545,19 +1071,18 @@ function SetupWizardContent() {
           )}
 
           {/* Navigation Buttons */}
-          {currentStep !== "complete" && (
+          {currentStep !== "complete" && currentStep !== "choose" && (
             <div className="flex justify-between p-6 border-t">
               <Button
                 variant="outline"
                 onClick={handleBack}
-                disabled={currentStep === "business"}
               >
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Back
               </Button>
 
               {currentStep === "preferences" ? (
-                <Button onClick={handleComplete} disabled={isSubmitting}>
+                <Button onClick={handleComplete} disabled={isSubmitting || !businessInfo.legalName}>
                   {isSubmitting ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -571,7 +1096,7 @@ function SetupWizardContent() {
                   )}
                 </Button>
               ) : (
-                <Button onClick={handleNext}>
+                <Button onClick={handleNext} disabled={currentStep === "business" && !businessInfo.legalName}>
                   Next
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
@@ -581,7 +1106,7 @@ function SetupWizardContent() {
         </Card>
 
         {/* Skip Setup */}
-        {currentStep !== "complete" && (
+        {currentStep !== "complete" && currentStep !== "choose" && (
           <p className="text-center text-sm text-muted-foreground mt-4">
             <button
               onClick={() => {

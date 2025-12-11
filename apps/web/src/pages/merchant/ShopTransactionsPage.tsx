@@ -85,11 +85,19 @@ export function ShopTransactionsPage() {
       if (businessError) throw businessError;
       setBusiness(businessData);
 
-      // Fetch transactions for this business
+      // Fetch the merchant's wallet to get transactions
+      const { data: merchantWallet } = await supabase
+        .from('wallets')
+        .select('id')
+        .eq('user_id', businessData.merchant_id)
+        .eq('wallet_type', 'primary')
+        .single();
+
+      // Fetch transactions for this merchant's wallet
       const { data: transactionData, error: transactionError } = await supabase
         .from('transactions')
         .select('*')
-        .eq('business_id', businessId)
+        .eq('wallet_id', merchantWallet?.id || '')
         .order('created_at', { ascending: false });
 
       if (transactionError) throw transactionError;

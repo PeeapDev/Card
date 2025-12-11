@@ -24,6 +24,8 @@ import { supabase } from '@/lib/supabase';
 import { currencyService, Currency } from '@/services/currency.service';
 import { adminNotificationService, AdminNotification } from '@/services/adminNotification.service';
 import { useAuth } from '@/context/AuthContext';
+import { SystemFloatSidebar } from '@/components/admin/SystemFloatSidebar';
+import { FloatManagementModal } from '@/components/admin/FloatManagementModal';
 
 interface DashboardStats {
   totalAccounts: number;
@@ -90,6 +92,12 @@ export function AdminDashboard() {
 
   // Currency state
   const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
+
+  // System Float Modal state
+  const [floatModalOpen, setFloatModalOpen] = useState(false);
+  const [floatModalMode, setFloatModalMode] = useState<'open' | 'replenish' | 'close' | 'history'>('open');
+  const [floatModalCurrency, setFloatModalCurrency] = useState<string | undefined>();
+  const [floatSidebarKey, setFloatSidebarKey] = useState(0); // Force refresh sidebar
 
   useEffect(() => {
     currencyService.getDefaultCurrency().then(setDefaultCurrency);
@@ -294,23 +302,59 @@ export function AdminDashboard() {
     return `${Math.floor(hours / 24)} days ago`;
   };
 
+  // Float management handlers
+  const handleOpenFloat = () => {
+    setFloatModalMode('open');
+    setFloatModalCurrency(undefined);
+    setFloatModalOpen(true);
+  };
+
+  const handleReplenishFloat = (currency: string) => {
+    setFloatModalMode('replenish');
+    setFloatModalCurrency(currency);
+    setFloatModalOpen(true);
+  };
+
+  const handleCloseFloat = (currency: string) => {
+    setFloatModalMode('close');
+    setFloatModalCurrency(currency);
+    setFloatModalOpen(true);
+  };
+
+  const handleViewHistory = (currency: string) => {
+    setFloatModalMode('history');
+    setFloatModalCurrency(currency);
+    setFloatModalOpen(true);
+  };
+
+  const handleFloatModalClose = () => {
+    setFloatModalOpen(false);
+    setFloatModalCurrency(undefined);
+  };
+
+  const handleFloatSuccess = () => {
+    setFloatSidebarKey(prev => prev + 1); // Force sidebar refresh
+  };
+
   return (
     <AdminLayout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
-            <p className="text-gray-500 dark:text-gray-400">Overview of your card issuing platform</p>
+      <div className="flex gap-6">
+        {/* Main Content */}
+        <div className="flex-1 space-y-6">
+          {/* Header */}
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
+              <p className="text-gray-500 dark:text-gray-400">Overview of your card issuing platform</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-500 dark:text-gray-400">Last updated: Just now</span>
+              <button className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2">
+                <Activity className="w-4 h-4" />
+                View Analytics
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-500 dark:text-gray-400">Last updated: Just now</span>
-            <button className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2">
-              <Activity className="w-4 h-4" />
-              View Analytics
-            </button>
-          </div>
-        </div>
 
         {/* Main Stats Grid */}
         <motion.div
@@ -600,7 +644,28 @@ export function AdminDashboard() {
             </p>
           </MotionCard>
         </div>
+        </div>
+
+        {/* System Float Sidebar */}
+        <div className="hidden xl:block flex-shrink-0">
+          <SystemFloatSidebar
+            key={floatSidebarKey}
+            onOpenFloat={handleOpenFloat}
+            onReplenishFloat={handleReplenishFloat}
+            onCloseFloat={handleCloseFloat}
+            onViewHistory={handleViewHistory}
+          />
+        </div>
       </div>
+
+      {/* Float Management Modal */}
+      <FloatManagementModal
+        isOpen={floatModalOpen}
+        onClose={handleFloatModalClose}
+        mode={floatModalMode}
+        currency={floatModalCurrency}
+        onSuccess={handleFloatSuccess}
+      />
     </AdminLayout>
   );
 }

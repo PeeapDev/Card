@@ -37,21 +37,41 @@ const API_BASE = import.meta.env.VITE_API_URL || 'https://peeap.vercel.app/api';
 
 // Known provider mappings
 const PROVIDER_DISPLAY: Record<string, { name: string; color: string; icon: string; bgColor: string }> = {
-  'm17': { name: 'Orange Money', color: 'text-orange-600', icon: '🍊', bgColor: 'bg-orange-100' },
-  'm18': { name: 'Africell Money', color: 'text-purple-600', icon: '📱', bgColor: 'bg-purple-100' },
+  'm17': { name: 'Orange Money', color: 'text-orange-600', icon: 'OM', bgColor: 'bg-orange-100' },
+  'm18': { name: 'Africell Money', color: 'text-blue-600', icon: 'AF', bgColor: 'bg-blue-100' },
 };
+
+// Phone number prefixes for provider detection (Sierra Leone)
+// Orange: 72-76, 78-79
+// Africell: 30, 33, 77, 80, 88, 90, 99
+const ORANGE_PREFIXES = ['72', '73', '74', '75', '76', '78', '79'];
+const AFRICELL_PREFIXES = ['30', '33', '77', '80', '88', '90', '99'];
+
+// Auto-detect provider from phone number
+function detectProvider(phone: string): string | null {
+  const normalized = phone.replace(/\s+/g, '').replace(/^(\+232|232|0)/, '');
+  if (normalized.length < 2) return null;
+
+  const prefix = normalized.substring(0, 2);
+
+  if (ORANGE_PREFIXES.includes(prefix)) {
+    return 'm17'; // Orange Money
+  }
+  if (AFRICELL_PREFIXES.includes(prefix)) {
+    return 'm18'; // Africell Money
+  }
+  return null;
+}
 
 export function PayoutPage() {
   const { user } = useAuth();
   const { data: wallets, isLoading: walletsLoading, refetch: refetchWallets } = useWallets();
 
   const [step, setStep] = useState<Step>('form');
-  const [providers, setProviders] = useState<MobileMoneyProvider[]>([]);
-  const [providersLoading, setProvidersLoading] = useState(true);
 
   // Form state
   const [selectedWalletId, setSelectedWalletId] = useState<string>('');
-  const [selectedProviderId, setSelectedProviderId] = useState<string>('');
+  const [detectedProviderId, setDetectedProviderId] = useState<string | null>(null);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -79,7 +99,6 @@ export function PayoutPage() {
 
   useEffect(() => {
     currencyService.getCurrencies().then(setCurrencies);
-    loadProviders();
   }, []);
 
   // Set default wallet when wallets load - prioritize SLE wallet for mobile money
@@ -93,13 +112,18 @@ export function PayoutPage() {
     }
   }, [wallets, selectedWalletId]);
 
+  // Auto-detect provider when phone number changes
+  useEffect(() => {
+    const detected = detectProvider(phoneNumber);
+    setDetectedProviderId(detected);
+  }, [phoneNumber]);
+
   // Calculate fee when amount changes
   useEffect(() => {
     const amountNum = parseFloat(amount) || 0;
     if (amountNum > 0) {
-      // 2% fee, min 500 SLE, max 5000 SLE
-      let calculatedFee = Math.round(amountNum * 0.02);
-      calculatedFee = Math.max(500, Math.min(5000, calculatedFee));
+      // 2% fee only - new Leone (Le) after redenomination
+      let calculatedFee = Math.round(amountNum * 0.02 * 100) / 100;
       setFee(calculatedFee);
       setTotalDeduction(amountNum + calculatedFee);
     } else {
@@ -108,40 +132,13 @@ export function PayoutPage() {
     }
   }, [amount]);
 
-  const loadProviders = async () => {
-    setProvidersLoading(true);
-    try {
-      const response = await fetch(`${API_BASE}/router/mobile-money/providers`);
-      const data = await response.json();
-      if (data.success && data.providers) {
-        setProviders(data.providers);
-        // Auto-select first provider if available
-        if (data.providers.length > 0 && !selectedProviderId) {
-          setSelectedProviderId(data.providers[0].providerId);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to load providers:', err);
-      // Fallback to known providers
-      setProviders([
-        { providerId: 'm17', name: 'Orange Money', country: 'SL', canPayout: true },
-        { providerId: 'm18', name: 'Africell Money', country: 'SL', canPayout: true },
-      ]);
-      if (!selectedProviderId) {
-        setSelectedProviderId('m17');
-      }
-    } finally {
-      setProvidersLoading(false);
-    }
-  };
-
   const getCurrencySymbol = (code: string): string => {
     return currencies.find(c => c.code === code)?.symbol || code;
   };
 
   const formatCurrency = (amt: number, currencyCode: string): string => {
     const symbol = getCurrencySymbol(currencyCode);
-    return `${symbol} ${amt.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    return `${symbol} ${amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const validatePhoneNumber = (phone: string): boolean => {
@@ -159,13 +156,13 @@ export function PayoutPage() {
       return;
     }
 
-    if (!selectedProviderId) {
-      setError('Please select a mobile money provider');
+    if (!phoneNumber || !validatePhoneNumber(phoneNumber)) {
+      setError('Please enter a valid phone number (8 digits)');
       return;
     }
 
-    if (!phoneNumber || !validatePhoneNumber(phoneNumber)) {
-      setError('Please enter a valid phone number (8 digits)');
+    if (!detectedProviderId) {
+      setError('Unable to detect network. Please enter a valid Orange or Africell number.');
       return;
     }
 
@@ -175,8 +172,8 @@ export function PayoutPage() {
       return;
     }
 
-    if (amountNum < 1000) {
-      setError('Minimum amount is SLE 1,000');
+    if (amountNum < 1) {
+      setError('Minimum amount is Le 1');
       return;
     }
 
@@ -190,7 +187,7 @@ export function PayoutPage() {
   };
 
   const handleSend = async () => {
-    if (!user) return;
+    if (!user || !detectedProviderId) return;
 
     setStep('processing');
     setError('');
@@ -203,7 +200,7 @@ export function PayoutPage() {
           amount: parseFloat(amount),
           currency: 'SLE',
           phoneNumber,
-          providerId: selectedProviderId,
+          providerId: detectedProviderId,
           userId: user.id,
           walletId: selectedWalletId,
           description: description || undefined,
@@ -238,8 +235,9 @@ export function PayoutPage() {
   };
 
   const selectedWallet = wallets?.find(w => w.id === selectedWalletId);
-  const selectedProvider = providers.find(p => p.providerId === selectedProviderId);
-  const providerDisplay = PROVIDER_DISPLAY[selectedProviderId] || { name: selectedProvider?.name || 'Mobile Money', color: 'text-gray-600', icon: '📱', bgColor: 'bg-gray-100' };
+  const providerDisplay = detectedProviderId
+    ? PROVIDER_DISPLAY[detectedProviderId]
+    : { name: 'Mobile Money', color: 'text-gray-600', icon: '?', bgColor: 'bg-gray-100' };
 
   return (
     <MainLayout>
@@ -281,44 +279,7 @@ export function PayoutPage() {
         {/* Form Step */}
         {step === 'form' && (
           <Card className="p-6 space-y-6">
-            {/* Provider Selection */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                Select Provider
-              </label>
-              {providersLoading ? (
-                <div className="flex items-center justify-center py-4">
-                  <Loader2 className="w-5 h-5 animate-spin text-primary-600" />
-                  <span className="ml-2 text-sm text-gray-500">Loading providers...</span>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  {providers.map((provider) => {
-                    const display = PROVIDER_DISPLAY[provider.providerId] || { name: provider.name, color: 'text-gray-600', icon: '📱', bgColor: 'bg-gray-100' };
-                    const isSelected = selectedProviderId === provider.providerId;
-                    return (
-                      <button
-                        key={provider.providerId}
-                        type="button"
-                        onClick={() => setSelectedProviderId(provider.providerId)}
-                        className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${
-                          isSelected
-                            ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20'
-                            : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
-                        }`}
-                      >
-                        <span className="text-3xl">{display.icon}</span>
-                        <span className={`font-medium ${isSelected ? display.color : 'text-gray-700 dark:text-gray-300'}`}>
-                          {display.name}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Phone Number */}
+            {/* Phone Number with Auto-Detection */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Recipient Phone Number
@@ -335,7 +296,28 @@ export function PayoutPage() {
                   className="w-full pl-16 pr-4 py-4 text-lg border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                 />
               </div>
-              <p className="mt-2 text-sm text-gray-500">Enter 8-digit phone number without country code</p>
+
+              {/* Detected Provider Badge */}
+              {phoneNumber.length >= 2 && (
+                <div className="mt-3">
+                  {detectedProviderId ? (
+                    <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg ${providerDisplay.bgColor}`}>
+                      <span className={`font-bold text-sm ${providerDisplay.color}`}>{providerDisplay.icon}</span>
+                      <span className={`font-medium text-sm ${providerDisplay.color}`}>{providerDisplay.name}</span>
+                      <span className="text-xs text-gray-500">detected</span>
+                    </div>
+                  ) : (
+                    <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-900/20">
+                      <AlertCircle className="w-4 h-4 text-red-500" />
+                      <span className="text-sm text-red-600 dark:text-red-400">Unknown network. Enter Orange or Africell number.</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <p className="mt-2 text-sm text-gray-500">
+                Orange: 72-76, 78-79 | Africell: 30, 33, 77, 80, 88, 90, 99
+              </p>
             </div>
 
             {/* Amount */}
@@ -345,29 +327,29 @@ export function PayoutPage() {
               </label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500 font-medium">
-                  SLE
+                  Le
                 </span>
                 <input
                   type="number"
-                  min="1000"
-                  step="100"
+                  min="1"
+                  step="0.01"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  placeholder="10,000"
-                  className="w-full pl-14 pr-4 py-4 text-2xl font-bold border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  placeholder="10"
+                  className="w-full pl-12 pr-4 py-4 text-2xl font-bold border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                 />
               </div>
 
               {/* Quick amount buttons */}
               <div className="flex gap-2 mt-3">
-                {[5000, 10000, 25000, 50000].map((quickAmount) => (
+                {[5, 10, 25, 50].map((quickAmount) => (
                   <button
                     key={quickAmount}
                     onClick={() => setAmount(quickAmount.toString())}
-                    disabled={selectedWallet && quickAmount + 500 > selectedWallet.balance}
+                    disabled={selectedWallet && quickAmount * 1.02 > selectedWallet.balance}
                     className="flex-1 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 font-medium text-sm"
                   >
-                    {(quickAmount / 1000).toFixed(0)}K
+                    Le {quickAmount}
                   </button>
                 ))}
               </div>
@@ -462,8 +444,8 @@ export function PayoutPage() {
                 <p className="font-medium">Transfer Information</p>
                 <ul className="mt-1 space-y-1 text-blue-600 dark:text-blue-400">
                   <li>• Transfers complete within minutes</li>
-                  <li>• 2% fee applies (min SLE 500, max SLE 5,000)</li>
-                  <li>• Minimum transfer: SLE 1,000</li>
+                  <li>• 2% fee applies</li>
+                  <li>• Minimum transfer: Le 1</li>
                 </ul>
               </div>
             </div>
@@ -471,7 +453,7 @@ export function PayoutPage() {
             {/* Continue Button */}
             <Button
               onClick={handleProceedToConfirm}
-              disabled={!amount || !phoneNumber || !selectedProviderId}
+              disabled={!amount || !phoneNumber || !detectedProviderId}
               className="w-full py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-xl flex items-center justify-center gap-2"
             >
               Continue

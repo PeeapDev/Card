@@ -48,7 +48,7 @@ export function MerchantUpgradePage() {
       id: 'basic',
       name: 'Basic',
       price: 0,
-      currency: 'SLE',
+      currency: 'NLE',
       period: 'forever',
       description: 'For small businesses getting started',
       highlight: 'Current Plan',
@@ -64,8 +64,8 @@ export function MerchantUpgradePage() {
     {
       id: 'business',
       name: 'Business',
-      price: 150000,
-      currency: 'SLE',
+      price: 150,
+      currency: 'NLE',
       period: 'month',
       description: 'For growing businesses that need more tools',
       popular: true,
@@ -84,8 +84,8 @@ export function MerchantUpgradePage() {
     {
       id: 'business_plus',
       name: 'Business++',
-      price: 500000,
-      currency: 'SLE',
+      price: 500,
+      currency: 'NLE',
       period: 'month',
       description: 'For enterprises needing full control',
       highlight: 'Corporate',
@@ -118,17 +118,18 @@ export function MerchantUpgradePage() {
     const token = localStorage.getItem('token');
 
     if (plan.redirectToPlus) {
-      // Redirect to plus.peeap.com with upgrade intent
-      const upgradeUrl = new URL('https://plus.peeap.com/upgrade');
-      upgradeUrl.searchParams.set('tier', plan.id);
-      upgradeUrl.searchParams.set('from', 'merchant');
+      // Redirect to plus.peeap.com/auth/callback for instant login
+      // This bypasses the Plus homepage and logs user in directly
+      const callbackUrl = new URL('https://plus.peeap.com/auth/callback');
+      callbackUrl.searchParams.set('tier', plan.id);
+      callbackUrl.searchParams.set('redirect', `/setup?tier=${plan.id}`);
       if (token) {
-        upgradeUrl.searchParams.set('token', token);
+        callbackUrl.searchParams.set('token', token);
       }
 
       // Small delay for UX
       setTimeout(() => {
-        window.location.href = upgradeUrl.toString();
+        window.location.href = callbackUrl.toString();
       }, 500);
     }
   };
@@ -272,7 +273,7 @@ export function MerchantUpgradePage() {
               </div>
               <div>
                 <h3 className="font-bold text-gray-900">Business Features</h3>
-                <p className="text-sm text-gray-600">SLE 150,000/month</p>
+                <p className="text-sm text-gray-600">NLE 150/month</p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -303,7 +304,7 @@ export function MerchantUpgradePage() {
               </div>
               <div>
                 <h3 className="font-bold text-gray-900">Business++ (Corporate)</h3>
-                <p className="text-sm text-gray-600">SLE 500,000/month</p>
+                <p className="text-sm text-gray-600">NLE 500/month</p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">

@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { authService } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -24,24 +25,26 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
+      const { user, tokens } = await authService.login(formData);
 
-      const data = await response.json();
+      // Store tokens and user
+      authService.setTokens(tokens);
+      localStorage.setItem("user", JSON.stringify(user));
 
-      if (!response.ok) {
-        throw new Error(data.message || "Login failed");
+      // Store tier for Plus dashboard
+      if (user.tier) {
+        localStorage.setItem("plusTier", user.tier);
       }
 
-      // Store token
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
-
       toast.success("Welcome back!");
-      router.push("/dashboard");
+
+      // Check if setup is needed for business tiers
+      const setupComplete = localStorage.getItem("plusSetupComplete");
+      if ((user.tier === "business" || user.tier === "business_plus") && !setupComplete) {
+        router.push(`/setup?tier=${user.tier}`);
+      } else {
+        router.push("/dashboard");
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Login failed");
     } finally {

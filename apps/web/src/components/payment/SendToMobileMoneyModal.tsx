@@ -27,34 +27,47 @@ interface SendToMobileMoneyModalProps {
   onSuccess?: () => void;
 }
 
-interface MobileMoneyProvider {
-  providerId: string;
-  name: string;
-  country: string;
-  canPayout: boolean;
-}
-
 type Step = 'form' | 'confirm' | 'processing' | 'success' | 'error';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'https://peeap.vercel.app/api';
 
 // Known provider mappings
-const PROVIDER_DISPLAY: Record<string, { name: string; color: string; icon: string }> = {
-  'm17': { name: 'Orange Money', color: 'orange', icon: '🍊' },
-  'm18': { name: 'Africell Money', color: 'purple', icon: '📱' },
+const PROVIDER_DISPLAY: Record<string, { name: string; color: string; icon: string; bgColor: string }> = {
+  'm17': { name: 'Orange Money', color: 'text-orange-600', icon: 'OM', bgColor: 'bg-orange-100' },
+  'm18': { name: 'Africell Money', color: 'text-blue-600', icon: 'AF', bgColor: 'bg-blue-100' },
 };
+
+// Phone number prefixes for provider detection (Sierra Leone)
+// Orange: 72-76, 78-79
+// Africell: 30, 33, 77, 80, 88, 90, 99
+const ORANGE_PREFIXES = ['72', '73', '74', '75', '76', '78', '79'];
+const AFRICELL_PREFIXES = ['30', '33', '77', '80', '88', '90', '99'];
+
+// Auto-detect provider from phone number
+function detectProvider(phone: string): string | null {
+  const normalized = phone.replace(/\s+/g, '').replace(/^(\+232|232|0)/, '');
+  if (normalized.length < 2) return null;
+
+  const prefix = normalized.substring(0, 2);
+
+  if (ORANGE_PREFIXES.includes(prefix)) {
+    return 'm17'; // Orange Money
+  }
+  if (AFRICELL_PREFIXES.includes(prefix)) {
+    return 'm18'; // Africell Money
+  }
+  return null;
+}
 
 export function SendToMobileMoneyModal({ isOpen, onClose, onSuccess }: SendToMobileMoneyModalProps) {
   const { user } = useAuth();
   const { data: wallets, isLoading: walletsLoading, refetch: refetchWallets } = useWallets();
 
   const [step, setStep] = useState<Step>('form');
-  const [providers, setProviders] = useState<MobileMoneyProvider[]>([]);
-  const [providersLoading, setProvidersLoading] = useState(true);
 
   // Form state
   const [selectedWalletId, setSelectedWalletId] = useState<string>('');
-  const [selectedProviderId, setSelectedProviderId] = useState<string>('');
+  const [detectedProviderId, setDetectedProviderId] = useState<string | null>(null);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -74,12 +87,11 @@ export function SendToMobileMoneyModal({ isOpen, onClose, onSuccess }: SendToMob
     currencyService.getCurrencies().then(setCurrencies);
   }, []);
 
-  // Load providers on mount
+  // Auto-detect provider when phone number changes
   useEffect(() => {
-    if (isOpen) {
-      loadProviders();
-    }
-  }, [isOpen]);
+    const detected = detectProvider(phoneNumber);
+    setDetectedProviderId(detected);
+  }, [phoneNumber]);
 
   // Set default wallet when wallets load - prioritize SLE wallet for mobile money
   useEffect(() => {
@@ -96,9 +108,8 @@ export function SendToMobileMoneyModal({ isOpen, onClose, onSuccess }: SendToMob
   useEffect(() => {
     const amountNum = parseFloat(amount) || 0;
     if (amountNum > 0) {
-      // 2% fee, min 500 SLE, max 5000 SLE
-      let calculatedFee = Math.round(amountNum * 0.02);
-      calculatedFee = Math.max(500, Math.min(5000, calculatedFee));
+      // 2% fee only - new Leone (Le) after redenomination
+      let calculatedFee = Math.round(amountNum * 0.02 * 100) / 100;
       setFee(calculatedFee);
       setTotalDeduction(amountNum + calculatedFee);
     } else {
@@ -117,37 +128,10 @@ export function SendToMobileMoneyModal({ isOpen, onClose, onSuccess }: SendToMob
         setDescription('');
         setError('');
         setTransactionId(null);
-        setSelectedProviderId('');
+        setDetectedProviderId(null);
       }, 300);
     }
   }, [isOpen]);
-
-  const loadProviders = async () => {
-    setProvidersLoading(true);
-    try {
-      const response = await fetch(`${API_BASE}/router/mobile-money/providers`);
-      const data = await response.json();
-      if (data.success && data.providers) {
-        setProviders(data.providers);
-        // Auto-select first provider if available
-        if (data.providers.length > 0 && !selectedProviderId) {
-          setSelectedProviderId(data.providers[0].providerId);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to load providers:', err);
-      // Fallback to known providers
-      setProviders([
-        { providerId: 'm17', name: 'Orange Money', country: 'SL', canPayout: true },
-        { providerId: 'm18', name: 'Africell Money', country: 'SL', canPayout: true },
-      ]);
-      if (!selectedProviderId) {
-        setSelectedProviderId('m17');
-      }
-    } finally {
-      setProvidersLoading(false);
-    }
-  };
 
   const getCurrencySymbol = (code: string): string => {
     return currencies.find(c => c.code === code)?.symbol || code;
@@ -155,7 +139,7 @@ export function SendToMobileMoneyModal({ isOpen, onClose, onSuccess }: SendToMob
 
   const formatCurrency = (amt: number, currencyCode: string): string => {
     const symbol = getCurrencySymbol(currencyCode);
-    return `${symbol} ${amt.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    return `${symbol} ${amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const validatePhoneNumber = (phone: string): boolean => {
@@ -173,13 +157,13 @@ export function SendToMobileMoneyModal({ isOpen, onClose, onSuccess }: SendToMob
       return;
     }
 
-    if (!selectedProviderId) {
-      setError('Please select a mobile money provider');
+    if (!phoneNumber || !validatePhoneNumber(phoneNumber)) {
+      setError('Please enter a valid phone number (8 digits)');
       return;
     }
 
-    if (!phoneNumber || !validatePhoneNumber(phoneNumber)) {
-      setError('Please enter a valid phone number (8 digits)');
+    if (!detectedProviderId) {
+      setError('Unable to detect network. Please enter a valid Orange or Africell number.');
       return;
     }
 
@@ -199,7 +183,7 @@ export function SendToMobileMoneyModal({ isOpen, onClose, onSuccess }: SendToMob
   };
 
   const handleSend = async () => {
-    if (!user) return;
+    if (!user || !detectedProviderId) return;
 
     setStep('processing');
     setError('');
@@ -212,7 +196,7 @@ export function SendToMobileMoneyModal({ isOpen, onClose, onSuccess }: SendToMob
           amount: parseFloat(amount),
           currency: 'SLE',
           phoneNumber,
-          providerId: selectedProviderId,
+          providerId: detectedProviderId,
           userId: user.id,
           walletId: selectedWalletId,
           description: description || undefined,
@@ -249,8 +233,9 @@ export function SendToMobileMoneyModal({ isOpen, onClose, onSuccess }: SendToMob
   if (!isOpen) return null;
 
   const selectedWallet = wallets?.find(w => w.id === selectedWalletId);
-  const selectedProvider = providers.find(p => p.providerId === selectedProviderId);
-  const providerDisplay = PROVIDER_DISPLAY[selectedProviderId] || { name: selectedProvider?.name || 'Mobile Money', color: 'gray', icon: '📱' };
+  const providerDisplay = detectedProviderId
+    ? PROVIDER_DISPLAY[detectedProviderId]
+    : { name: 'Mobile Money', color: 'text-gray-600', icon: '?', bgColor: 'bg-gray-100' };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
@@ -283,47 +268,10 @@ export function SendToMobileMoneyModal({ isOpen, onClose, onSuccess }: SendToMob
         {/* Form Step */}
         {step === 'form' && (
           <div className="space-y-4">
-            {/* Provider Selection */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Select Provider
-              </label>
-              {providersLoading ? (
-                <div className="flex items-center justify-center py-4">
-                  <Loader2 className="w-5 h-5 animate-spin text-primary-600" />
-                  <span className="ml-2 text-sm text-gray-500">Loading providers...</span>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-2">
-                  {providers.map((provider) => {
-                    const display = PROVIDER_DISPLAY[provider.providerId] || { name: provider.name, color: 'gray', icon: '📱' };
-                    const isSelected = selectedProviderId === provider.providerId;
-                    return (
-                      <button
-                        key={provider.providerId}
-                        type="button"
-                        onClick={() => setSelectedProviderId(provider.providerId)}
-                        className={`flex items-center gap-2 p-3 rounded-lg border-2 transition-all ${
-                          isSelected
-                            ? `border-${display.color}-500 bg-${display.color}-50 dark:bg-${display.color}-900/20`
-                            : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
-                        }`}
-                      >
-                        <span className="text-2xl">{display.icon}</span>
-                        <span className={`font-medium text-sm ${isSelected ? `text-${display.color}-700 dark:text-${display.color}-300` : 'text-gray-700 dark:text-gray-300'}`}>
-                          {display.name}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Phone Number */}
+            {/* Phone Number with Auto-Detection */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Phone Number
+                Recipient Phone Number
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">
@@ -337,7 +285,28 @@ export function SendToMobileMoneyModal({ isOpen, onClose, onSuccess }: SendToMob
                   className="w-full pl-14 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                 />
               </div>
-              <p className="mt-1 text-xs text-gray-500">Enter 8-digit phone number</p>
+
+              {/* Detected Provider Badge */}
+              {phoneNumber.length >= 2 && (
+                <div className="mt-2">
+                  {detectedProviderId ? (
+                    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg ${providerDisplay.bgColor}`}>
+                      <span className={`font-bold text-sm ${providerDisplay.color}`}>{providerDisplay.icon}</span>
+                      <span className={`font-medium text-sm ${providerDisplay.color}`}>{providerDisplay.name}</span>
+                      <span className="text-xs text-gray-500">detected</span>
+                    </div>
+                  ) : (
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20">
+                      <AlertCircle className="w-4 h-4 text-red-500" />
+                      <span className="text-sm text-red-600 dark:text-red-400">Unknown network</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <p className="mt-1 text-xs text-gray-500">
+                Orange: 72-76, 78-79 | Africell: 30, 33, 77, 80, 88, 90, 99
+              </p>
             </div>
 
             {/* Amount */}
@@ -347,16 +316,16 @@ export function SendToMobileMoneyModal({ isOpen, onClose, onSuccess }: SendToMob
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">
-                  SLE
+                  Le
                 </span>
                 <input
                   type="number"
-                  min="1000"
-                  step="100"
+                  min="1"
+                  step="0.01"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  placeholder="10000"
-                  className="w-full pl-12 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  placeholder="10"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                 />
               </div>
               {totalDeduction > 0 && (
@@ -445,7 +414,7 @@ export function SendToMobileMoneyModal({ isOpen, onClose, onSuccess }: SendToMob
             <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg flex items-start gap-2 text-blue-700 dark:text-blue-400">
               <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <span className="text-sm">
-                Transfers are typically completed within minutes. A 2% fee applies (min SLE 500, max SLE 5,000).
+                Transfers are typically completed within minutes. A 2% fee applies.
               </span>
             </div>
 
@@ -457,7 +426,7 @@ export function SendToMobileMoneyModal({ isOpen, onClose, onSuccess }: SendToMob
               <Button
                 className="flex-1"
                 onClick={handleProceedToConfirm}
-                disabled={!amount || !phoneNumber || !selectedProviderId}
+                disabled={!amount || !phoneNumber || !detectedProviderId}
               >
                 Continue
                 <ArrowRight className="w-4 h-4 ml-2" />
@@ -474,7 +443,7 @@ export function SendToMobileMoneyModal({ isOpen, onClose, onSuccess }: SendToMob
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-500">Sending to</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-lg">{providerDisplay.icon}</span>
+                  <span className={`font-bold ${providerDisplay.color}`}>{providerDisplay.icon}</span>
                   <span className="font-medium">{providerDisplay.name}</span>
                 </div>
               </div>

@@ -65,7 +65,15 @@ export function MerchantDashboard() {
   });
 
   // Transactions state
-  const [recentTransactions, setRecentTransactions] = useState<{id: string; amount: number; status: string; time: string; cardLast4: string}[]>([]);
+  const [recentTransactions, setRecentTransactions] = useState<{
+    id: string;
+    amount: number;
+    status: string;
+    time: string;
+    cardLast4: string;
+    payerName: string;
+    paymentMethod: string;
+  }[]>([]);
 
   useEffect(() => {
     currencyService.getDefaultCurrency().then(setDefaultCurrency);
@@ -167,6 +175,8 @@ export function MerchantDashboard() {
           status: tx.status?.toLowerCase() || 'pending',
           time: new Date(tx.created_at).toLocaleString(),
           cardLast4: tx.metadata?.card_last4 || '****',
+          payerName: tx.metadata?.payerName || tx.description || 'Customer',
+          paymentMethod: tx.metadata?.paymentMethod || 'unknown',
         }));
 
         setRecentTransactions(recent);
@@ -349,8 +359,8 @@ export function MerchantDashboard() {
                 <table className="w-full">
                   <thead>
                     <tr className="text-left text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-                      <th className="pb-3 font-medium">Transaction ID</th>
-                      <th className="pb-3 font-medium">Card</th>
+                      <th className="pb-3 font-medium">Customer</th>
+                      <th className="pb-3 font-medium">Method</th>
                       <th className="pb-3 font-medium">Amount</th>
                       <th className="pb-3 font-medium">Status</th>
                       <th className="pb-3 font-medium">Time</th>
@@ -365,8 +375,15 @@ export function MerchantDashboard() {
                         transition={{ delay: 0.7 + index * 0.05 }}
                         className="border-b border-gray-100 dark:border-gray-700 last:border-0"
                       >
-                        <td className="py-3 text-sm font-medium text-gray-900 dark:text-white">{txn.id}</td>
-                        <td className="py-3 text-sm text-gray-600 dark:text-gray-400">****{txn.cardLast4}</td>
+                        <td className="py-3 text-sm font-medium text-gray-900 dark:text-white">{txn.payerName}</td>
+                        <td className="py-3 text-sm text-gray-600 dark:text-gray-400">
+                          <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs">
+                            {txn.paymentMethod === 'scan_to_pay' ? 'QR Scan' :
+                             txn.paymentMethod === 'mobile_money' ? 'Mobile Money' :
+                             txn.paymentMethod === 'peeap_card' ? 'Card' :
+                             txn.paymentMethod || 'Unknown'}
+                          </span>
+                        </td>
                         <td className="py-3 text-sm font-medium text-gray-900 dark:text-white">{formatCurrency(txn.amount)}</td>
                         <td className="py-3">
                           <span className={`px-2 py-1 text-xs rounded-full ${

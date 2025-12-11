@@ -32,6 +32,7 @@ import { CashbackRewardsPage } from '@/pages/CashbackRewardsPage';
 import { BnplPage } from '@/pages/BnplPage';
 import { CashOutPage } from '@/pages/CashOutPage';
 import { SpendingAnalyticsPage } from '@/pages/SpendingAnalyticsPage';
+import { WithdrawPage } from '@/pages/WithdrawPage';
 
 // Admin Pages
 import { AdminDashboard } from '@/pages/admin/AdminDashboard';
@@ -76,6 +77,7 @@ import { DepositCancelPage } from '@/pages/DepositCancelPage';
 import { BusinessCheckoutPage } from '@/pages/BusinessCheckoutPage';
 import { CheckoutPage } from '@/pages/CheckoutPage';
 import { HostedCheckoutPage } from '@/pages/HostedCheckoutPage';
+import { CheckoutSuccessPage } from '@/pages/CheckoutSuccessPage';
 import { ScanPayPage } from '@/pages/ScanPayPage';
 import { TestCheckoutPage } from '@/pages/TestCheckoutPage';
 import { AppPaymentRedirectPage } from '@/pages/AppPaymentRedirectPage';
@@ -174,6 +176,9 @@ function App() {
 
                   {/* Hosted Checkout Page - Universal developer checkout like Stripe/PayPal */}
                   <Route path="/checkout/pay/:sessionId" element={<HostedCheckoutPage />} />
+
+                  {/* Checkout Success Page - Displayed after successful payment */}
+                  <Route path="/checkout/success" element={<CheckoutSuccessPage />} />
 
                   {/* Scan to Pay - For QR code scans from checkout page */}
                   <Route path="/scan-pay/:sessionId" element={<ScanPayPage />} />
@@ -332,6 +337,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <CashOutPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/withdraw"
+                element={
+                  <ProtectedRoute>
+                    <WithdrawPage />
                   </ProtectedRoute>
                 }
               />
@@ -846,6 +859,7 @@ function App() {
                   <Route path="/deposit/cancel" element={<DepositCancelPage />} />
                   <Route path="/checkout/:businessId" element={<BusinessCheckoutPage />} />
                   <Route path="/checkout/pay/:sessionId" element={<HostedCheckoutPage />} />
+                  <Route path="/checkout/success" element={<CheckoutSuccessPage />} />
                   <Route path="/scan-pay/:sessionId" element={<ScanPayPage />} />
                   <Route path="/app/pay/:paymentId" element={<AppPaymentRedirectPage />} />
 
@@ -870,6 +884,7 @@ function App() {
                   <Route path="/cashback" element={<ProtectedRoute><CashbackRewardsPage /></ProtectedRoute>} />
                   <Route path="/bnpl" element={<ProtectedRoute><BnplPage /></ProtectedRoute>} />
                   <Route path="/cashout" element={<ProtectedRoute><CashOutPage /></ProtectedRoute>} />
+                  <Route path="/withdraw" element={<ProtectedRoute><WithdrawPage /></ProtectedRoute>} />
                   <Route path="/analytics" element={<ProtectedRoute><SpendingAnalyticsPage /></ProtectedRoute>} />
 
                   {/* Admin Routes */}
