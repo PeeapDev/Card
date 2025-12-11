@@ -42,7 +42,7 @@ export default function AuthDebugPage() {
         setLoading(false);
         return;
       }
-      setResult(prev => prev + `\n✅ Token not expired. Expires at ${new Date(payload.exp).toISOString()}\n`);
+      setResult(prev => prev + `\n✅ Token not expired. Expires at ${new Date(payload.exp!).toISOString()}\n`);
 
       // Step 3: Check userId
       if (!payload.userId) {
