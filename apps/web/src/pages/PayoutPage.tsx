@@ -78,6 +78,11 @@ export function PayoutPage() {
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
 
+  // Account holder lookup state
+  const [accountName, setAccountName] = useState<string | null>(null);
+  const [isLookingUp, setIsLookingUp] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
+
   // Fee calculation
   const [fee, setFee] = useState(0);
   const [totalDeduction, setTotalDeduction] = useState(0);
@@ -150,6 +155,48 @@ export function PayoutPage() {
     const normalized = phone.replace(/\s+/g, '').replace(/^(\+232|232)/, '');
     // Should be 8 digits
     return /^[0-9]{8}$/.test(normalized);
+  };
+
+  // Lookup account holder name when phone number is valid and provider is detected
+  const lookupAccountHolder = async (phone: string, providerId: string) => {
+    if (!validatePhoneNumber(phone)) return;
+
+    setIsLookingUp(true);
+    setAccountName(null);
+    setLookupError(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/router/mobile-money/lookup?phoneNumber=${encodeURIComponent(phone)}&providerId=${providerId}`);
+      const data = await response.json();
+
+      if (data.success && data.accountName) {
+        setAccountName(data.accountName);
+      } else if (!data.verified) {
+        setLookupError('Account not found');
+      }
+    } catch (err) {
+      console.error('Account lookup failed:', err);
+      // Silently fail - lookup is optional
+    } finally {
+      setIsLookingUp(false);
+    }
+  };
+
+  // Handle phone number change with debounced lookup
+  const handlePhoneChange = (value: string) => {
+    setPhoneNumber(value);
+    setAccountName(null);
+    setLookupError(null);
+
+    // Detect provider from phone prefix
+    const normalized = value.replace(/\s+/g, '').replace(/^(\+232|232|0)/, '');
+    const provider = detectProvider(normalized);
+    setDetectedProviderId(provider);
+
+    // If we have a valid phone and detected provider, lookup account holder
+    if (provider && normalized.length === 8) {
+      lookupAccountHolder(value, provider);
+    }
   };
 
   const handleProceedToConfirm = () => {
@@ -244,6 +291,8 @@ export function PayoutPage() {
     setDescription('');
     setError('');
     setTransactionId(null);
+    setAccountName(null);
+    setLookupError(null);
   };
 
   const selectedWallet = wallets?.find(w => w.id === selectedWalletId);
@@ -303,7 +352,7 @@ export function PayoutPage() {
                 <input
                   type="tel"
                   value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                  onChange={(e) => handlePhoneChange(e.target.value.replace(/\D/g, '').slice(0, 8))}
                   placeholder="76123456"
                   className="w-full pl-16 pr-4 py-4 text-lg border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                 />
@@ -324,6 +373,28 @@ export function PayoutPage() {
                       <span className="text-sm text-red-600 dark:text-red-400">Unknown network. Enter Orange or Africell number.</span>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Account Holder Name Display */}
+              {phoneNumber.length === 8 && detectedProviderId && (
+                <div className="mt-2">
+                  {isLookingUp ? (
+                    <div className="inline-flex items-center gap-2 text-sm text-gray-500">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Verifying account...</span>
+                    </div>
+                  ) : accountName ? (
+                    <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-green-50 dark:bg-green-900/20">
+                      <CheckCircle className="w-4 h-4 text-green-600" />
+                      <span className="text-sm font-medium text-green-700 dark:text-green-400">{accountName}</span>
+                    </div>
+                  ) : lookupError ? (
+                    <div className="inline-flex items-center gap-2 text-sm text-yellow-600 dark:text-yellow-400">
+                      <AlertCircle className="w-4 h-4" />
+                      <span>{lookupError}</span>
+                    </div>
+                  ) : null}
                 </div>
               )}
 
@@ -509,6 +580,12 @@ export function PayoutPage() {
                 <span className="text-sm text-gray-500">Phone Number</span>
                 <span className="font-medium text-gray-900 dark:text-white">+232 {phoneNumber}</span>
               </div>
+              {accountName && (
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-500">Account Name</span>
+                  <span className="font-medium text-green-600 dark:text-green-400">{accountName}</span>
+                </div>
+              )}
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-500">Amount</span>
                 <span className="font-medium text-gray-900 dark:text-white">{formatCurrency(parseFloat(amount), 'SLE')}</span>
