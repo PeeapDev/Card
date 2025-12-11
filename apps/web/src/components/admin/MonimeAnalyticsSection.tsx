@@ -41,7 +41,7 @@ interface MonimeAnalyticsSectionProps {
 }
 
 const MonimeAnalyticsSection: React.FC<MonimeAnalyticsSectionProps> = ({
-  currency = 'SLE',
+  currency: propCurrency = 'SLE',
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isChartsExpanded, setIsChartsExpanded] = useState(false);
@@ -51,6 +51,7 @@ const MonimeAnalyticsSection: React.FC<MonimeAnalyticsSectionProps> = ({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'thisWeek' | 'thisMonth' | 'allTime'>('today');
+  const [currency, setCurrency] = useState<string>(propCurrency);
 
   const getCurrencySymbol = (code: string): string => {
     if (code === 'SLE') return 'Le';
@@ -68,15 +69,27 @@ const MonimeAnalyticsSection: React.FC<MonimeAnalyticsSectionProps> = ({
     return amount.toFixed(0);
   };
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (forceRefresh: boolean = false) => {
     try {
-      const [summaryData, daily, monthly] = await Promise.all([
-        monimeAnalyticsService.getSummary(currency),
-        monimeAnalyticsService.getDailyData(7, currency),
-        monimeAnalyticsService.getMonthlyData(6, currency),
+      // Fetch data from Monime API via backend
+      const analytics = await monimeAnalyticsService.getAnalytics(forceRefresh);
+
+      if (analytics) {
+        // Update currency from API response
+        if (analytics.currency) {
+          // Map SLL to SLE for display
+          const displayCurrency = analytics.currency === 'SLL' ? 'SLE' : analytics.currency;
+          setCurrency(displayCurrency);
+        }
+
+        setSummary(analytics.summary);
+      }
+
+      const [daily, monthly] = await Promise.all([
+        monimeAnalyticsService.getDailyData(7),
+        monimeAnalyticsService.getMonthlyData(6),
       ]);
 
-      setSummary(summaryData);
       setDailyData(daily);
       setMonthlyData(monthly);
     } catch (error) {
@@ -85,24 +98,25 @@ const MonimeAnalyticsSection: React.FC<MonimeAnalyticsSectionProps> = ({
       setLoading(false);
       setRefreshing(false);
     }
-  }, [currency]);
+  }, []);
 
   useEffect(() => {
     loadData();
 
-    // Subscribe to real-time updates
-    const unsubscribe = monimeAnalyticsService.subscribeToTransactions(() => {
+    // Subscribe to polling updates (every 30 seconds)
+    const unsubscribe = monimeAnalyticsService.subscribeToUpdates(() => {
       loadData();
-    });
+    }, 30000);
 
     return () => {
       unsubscribe();
     };
   }, [loadData]);
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setRefreshing(true);
-    loadData();
+    await monimeAnalyticsService.refresh();
+    await loadData(true);
   };
 
   const getCurrentPeriodData = () => {

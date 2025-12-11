@@ -1,17 +1,14 @@
 /**
  * Monime Analytics Service
  *
- * Tracks all Monime payment inflows (deposits) and outflows (withdrawals)
- * Data sources:
- * 1. monime_transactions table - Direct wallet deposits/withdrawals via Monime
- * 2. transactions table - Payments via mobile money that went through Monime
- * 3. checkout_sessions table - Completed checkout sessions with mobile_money payment
+ * Fetches real transaction data directly from Monime API via backend
+ * Tracks all Monime payment inflows (credits) and outflows (debits)
  *
- * Inflows = Money coming INTO the system via Monime (deposits, incoming payments)
- * Outflows = Money going OUT via Monime (withdrawals, cashouts)
+ * Inflows = Money coming INTO the system (deposits, payments received)
+ * Outflows = Money going OUT of the system (withdrawals, payouts)
  */
 
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api';
 
 export interface MonimeSummary {
   totalDeposits: number;
@@ -19,7 +16,6 @@ export interface MonimeSummary {
   depositCount: number;
   withdrawalCount: number;
   netFlow: number;
-  currency: string;
 }
 
 export interface MonimePeriodData {
@@ -33,421 +29,229 @@ export interface MonimePeriodData {
 
 export interface MonimeAnalyticsSummary {
   today: MonimeSummary;
-  yesterday: MonimeSummary;
   thisWeek: MonimeSummary;
   thisMonth: MonimeSummary;
-  thisYear: MonimeSummary;
   allTime: MonimeSummary;
 }
 
-// Helper to get date ranges
-const getDateRange = (period: 'today' | 'yesterday' | 'thisWeek' | 'thisMonth' | 'thisYear') => {
-  const now = new Date();
-  let start: Date;
-  let end: Date;
+export interface MonimeTransaction {
+  id: string;
+  type: 'credit' | 'debit';
+  amount: {
+    currency: string;
+    value: number;
+  };
+  reference?: string;
+  createTime: string;
+  updateTime?: string;
+}
 
-  switch (period) {
-    case 'today':
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-      break;
-    case 'yesterday':
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-      end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999);
-      break;
-    case 'thisWeek':
-      const dayOfWeek = now.getDay();
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
-      end = now;
-      break;
-    case 'thisMonth':
-      start = new Date(now.getFullYear(), now.getMonth(), 1);
-      end = now;
-      break;
-    case 'thisYear':
-      start = new Date(now.getFullYear(), 0, 1);
-      end = now;
-      break;
-    default:
-      start = now;
-      end = now;
-  }
+export interface MonimeAnalyticsResponse {
+  success: boolean;
+  currency: string;
+  summary: MonimeAnalyticsSummary;
+  recentTransactions: MonimeTransaction[];
+}
 
-  return { start, end };
+// Cache for analytics data (5 minute TTL)
+let analyticsCache: {
+  data: MonimeAnalyticsResponse | null;
+  timestamp: number;
+} = {
+  data: null,
+  timestamp: 0,
 };
-
-// Calculate Monime flows for a date range - combines multiple data sources
-const calculateMonimeFlows = async (
-  start?: Date,
-  end?: Date,
-  currency: string = 'SLE'
-): Promise<MonimeSummary> => {
-  try {
-    let totalDeposits = 0;
-    let totalWithdrawals = 0;
-    let depositCount = 0;
-    let withdrawalCount = 0;
-
-    // Source 1: monime_transactions table (direct deposits/withdrawals)
-    try {
-      let monimeQuery = supabase
-        .from('monime_transactions')
-        .select('id, type, amount, currency_code, status, created_at')
-        .eq('status', 'COMPLETED')
-        .eq('currency_code', currency);
-
-      if (start) {
-        monimeQuery = monimeQuery.gte('created_at', start.toISOString());
-      }
-      if (end) {
-        monimeQuery = monimeQuery.lte('created_at', end.toISOString());
-      }
-
-      const { data: monimeTxns, error: monimeError } = await monimeQuery;
-
-      if (!monimeError && monimeTxns) {
-        const deposits = monimeTxns.filter(t => t.type === 'DEPOSIT');
-        const withdrawals = monimeTxns.filter(t => t.type === 'WITHDRAWAL');
-
-        totalDeposits += deposits.reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
-        totalWithdrawals += withdrawals.reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
-        depositCount += deposits.length;
-        withdrawalCount += withdrawals.length;
-      }
-    } catch (e) {
-      console.log('monime_transactions table may not exist:', e);
-    }
-
-    // Source 2: checkout_sessions with mobile_money payment (completed payments via Monime)
-    // These are INFLOWS - money coming into merchant wallets via Monime mobile money
-    try {
-      let checkoutQuery = supabase
-        .from('checkout_sessions')
-        .select('id, amount, currency_code, status, payment_method, completed_at, created_at')
-        .eq('status', 'COMPLETE')
-        .eq('currency_code', currency);
-
-      // Filter by payment_method containing mobile
-      if (start) {
-        checkoutQuery = checkoutQuery.gte('completed_at', start.toISOString());
-      }
-      if (end) {
-        checkoutQuery = checkoutQuery.lte('completed_at', end.toISOString());
-      }
-
-      const { data: checkoutSessions, error: checkoutError } = await checkoutQuery;
-
-      if (!checkoutError && checkoutSessions) {
-        // Filter for mobile money payments (these went through Monime)
-        const mobilePayments = checkoutSessions.filter(s =>
-          s.payment_method === 'mobile_money' ||
-          s.payment_method === 'monime_mobile' ||
-          s.payment_method?.includes('mobile')
-        );
-
-        // These are inflows - money coming INTO the system
-        totalDeposits += mobilePayments.reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0);
-        depositCount += mobilePayments.length;
-      }
-    } catch (e) {
-      console.log('checkout_sessions query error:', e);
-    }
-
-    // Source 3: transactions table with monime/mobile_money metadata
-    // Look for deposit transactions that came through Monime
-    try {
-      let txnQuery = supabase
-        .from('transactions')
-        .select('id, type, amount, currency, status, metadata, created_at')
-        .eq('status', 'completed')
-        .eq('currency', currency);
-
-      if (start) {
-        txnQuery = txnQuery.gte('created_at', start.toISOString());
-      }
-      if (end) {
-        txnQuery = txnQuery.lte('created_at', end.toISOString());
-      }
-
-      const { data: transactions, error: txnError } = await txnQuery;
-
-      if (!txnError && transactions) {
-        // Filter for Monime-related transactions
-        const monimeRelated = transactions.filter(t => {
-          const metadata = t.metadata || {};
-          const paymentMethod = metadata.paymentMethod || metadata.payment_method || '';
-          return (
-            paymentMethod.includes('monime') ||
-            paymentMethod.includes('mobile') ||
-            metadata.monimeReference ||
-            metadata.checkoutSessionId
-          );
-        });
-
-        // Categorize by type
-        for (const txn of monimeRelated) {
-          const amount = parseFloat(txn.amount) || 0;
-          const type = (txn.type || '').toLowerCase();
-
-          // Deposits/credits are inflows
-          if (type === 'deposit' || type === 'credit' || type === 'receive') {
-            // Avoid double counting with checkout_sessions
-            const metadata = txn.metadata || {};
-            if (!metadata.checkoutSessionId) {
-              totalDeposits += amount;
-              depositCount += 1;
-            }
-          }
-          // Withdrawals/cashouts are outflows
-          else if (type === 'withdrawal' || type === 'cashout' || type === 'payout') {
-            totalWithdrawals += amount;
-            withdrawalCount += 1;
-          }
-        }
-      }
-    } catch (e) {
-      console.log('transactions query error:', e);
-    }
-
-    // Source 4: payouts table (money going OUT via Monime)
-    try {
-      let payoutQuery = supabase
-        .from('payouts')
-        .select('id, amount, currency, status, created_at')
-        .eq('status', 'completed')
-        .eq('currency', currency);
-
-      if (start) {
-        payoutQuery = payoutQuery.gte('created_at', start.toISOString());
-      }
-      if (end) {
-        payoutQuery = payoutQuery.lte('created_at', end.toISOString());
-      }
-
-      const { data: payouts, error: payoutError } = await payoutQuery;
-
-      if (!payoutError && payouts) {
-        totalWithdrawals += payouts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
-        withdrawalCount += payouts.length;
-      }
-    } catch (e) {
-      console.log('payouts table may not exist:', e);
-    }
-
-    return {
-      totalDeposits,
-      totalWithdrawals,
-      depositCount,
-      withdrawalCount,
-      netFlow: totalDeposits - totalWithdrawals,
-      currency,
-    };
-  } catch (err) {
-    console.error('Error calculating Monime flows:', err);
-    return {
-      totalDeposits: 0,
-      totalWithdrawals: 0,
-      depositCount: 0,
-      withdrawalCount: 0,
-      netFlow: 0,
-      currency,
-    };
-  }
-};
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 export const monimeAnalyticsService = {
   /**
+   * Get Monime analytics summary - fetches from backend API which calls Monime directly
+   */
+  async getAnalytics(forceRefresh: boolean = false): Promise<MonimeAnalyticsResponse | null> {
+    // Check cache first
+    const now = Date.now();
+    if (!forceRefresh && analyticsCache.data && (now - analyticsCache.timestamp) < CACHE_TTL) {
+      console.log('[MonimeAnalytics] Returning cached data');
+      return analyticsCache.data;
+    }
+
+    try {
+      console.log('[MonimeAnalytics] Fetching from API...');
+      const response = await api.get<MonimeAnalyticsResponse>('/monime/analytics');
+
+      if (response.success) {
+        analyticsCache = {
+          data: response,
+          timestamp: now,
+        };
+        console.log('[MonimeAnalytics] Data received:', response.summary);
+        return response;
+      }
+
+      console.error('[MonimeAnalytics] API returned unsuccessful response');
+      return null;
+    } catch (error) {
+      console.error('[MonimeAnalytics] Error fetching analytics:', error);
+      // Return cached data if available, even if expired
+      if (analyticsCache.data) {
+        console.log('[MonimeAnalytics] Returning stale cached data due to error');
+        return analyticsCache.data;
+      }
+      return null;
+    }
+  },
+
+  /**
    * Get Monime flow summary for all periods
    */
-  async getSummary(currency: string = 'SLE'): Promise<MonimeAnalyticsSummary> {
-    const periods: Array<'today' | 'yesterday' | 'thisWeek' | 'thisMonth' | 'thisYear'> = [
-      'today', 'yesterday', 'thisWeek', 'thisMonth', 'thisYear'
-    ];
+  async getSummary(): Promise<MonimeAnalyticsSummary> {
+    const analytics = await this.getAnalytics();
 
-    const [today, yesterday, thisWeek, thisMonth, thisYear, allTime] = await Promise.all([
-      ...periods.map(period => {
-        const { start, end } = getDateRange(period);
-        return calculateMonimeFlows(start, end, currency);
-      }),
-      calculateMonimeFlows(undefined, undefined, currency), // allTime
-    ]);
+    if (!analytics) {
+      // Return empty summary
+      const emptySummary: MonimeSummary = {
+        totalDeposits: 0,
+        totalWithdrawals: 0,
+        depositCount: 0,
+        withdrawalCount: 0,
+        netFlow: 0,
+      };
 
-    return {
-      today,
-      yesterday,
-      thisWeek,
-      thisMonth,
-      thisYear,
-      allTime,
+      return {
+        today: emptySummary,
+        thisWeek: emptySummary,
+        thisMonth: emptySummary,
+        allTime: emptySummary,
+      };
+    }
+
+    return analytics.summary;
+  },
+
+  /**
+   * Get recent Monime transactions
+   */
+  async getRecentTransactions(limit: number = 20): Promise<MonimeTransaction[]> {
+    const analytics = await this.getAnalytics();
+    if (!analytics) return [];
+    return analytics.recentTransactions.slice(0, limit);
+  },
+
+  /**
+   * Get daily data for charts - derived from recent transactions
+   */
+  async getDailyData(days: number = 7): Promise<MonimePeriodData[]> {
+    const analytics = await this.getAnalytics();
+    if (!analytics) return [];
+
+    const results: MonimePeriodData[] = [];
+    const now = new Date();
+    const transactions = analytics.recentTransactions;
+
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate()).toISOString();
+      const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1).toISOString();
+
+      const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+
+      const dayTxns = transactions.filter(t =>
+        t.createTime >= dayStart && t.createTime < dayEnd
+      );
+
+      const credits = dayTxns.filter(t => t.type === 'credit');
+      const debits = dayTxns.filter(t => t.type === 'debit');
+
+      const deposits = credits.reduce((sum, t) => sum + (t.amount?.value || 0), 0);
+      const withdrawals = debits.reduce((sum, t) => sum + (t.amount?.value || 0), 0);
+
+      results.push({
+        period: dayName,
+        deposits,
+        withdrawals,
+        depositCount: credits.length,
+        withdrawalCount: debits.length,
+        netFlow: deposits - withdrawals,
+      });
+    }
+
+    return results;
+  },
+
+  /**
+   * Get monthly data for charts
+   */
+  async getMonthlyData(months: number = 6): Promise<MonimePeriodData[]> {
+    const analytics = await this.getAnalytics();
+    if (!analytics) return [];
+
+    const results: MonimePeriodData[] = [];
+    const now = new Date();
+    const transactions = analytics.recentTransactions;
+
+    for (let i = months - 1; i >= 0; i--) {
+      const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+
+      const monthName = monthStart.toLocaleDateString('en-US', { month: 'short' });
+
+      const monthTxns = transactions.filter(t =>
+        t.createTime >= monthStart.toISOString() && t.createTime < monthEnd.toISOString()
+      );
+
+      const credits = monthTxns.filter(t => t.type === 'credit');
+      const debits = monthTxns.filter(t => t.type === 'debit');
+
+      const deposits = credits.reduce((sum, t) => sum + (t.amount?.value || 0), 0);
+      const withdrawals = debits.reduce((sum, t) => sum + (t.amount?.value || 0), 0);
+
+      results.push({
+        period: monthName,
+        deposits,
+        withdrawals,
+        depositCount: credits.length,
+        withdrawalCount: debits.length,
+        netFlow: deposits - withdrawals,
+      });
+    }
+
+    return results;
+  },
+
+  /**
+   * Clear the cache - call this when you want fresh data
+   */
+  clearCache(): void {
+    analyticsCache = {
+      data: null,
+      timestamp: 0,
     };
   },
 
   /**
-   * Get daily Monime data for charts
+   * Force refresh data from Monime
    */
-  async getDailyData(days: number = 7, currency: string = 'SLE'): Promise<MonimePeriodData[]> {
-    const results: MonimePeriodData[] = [];
-    const now = new Date();
-
-    for (let i = days - 1; i >= 0; i--) {
-      const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-      const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-      const end = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
-
-      const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
-      const data = await calculateMonimeFlows(start, end, currency);
-
-      results.push({
-        period: dayName,
-        deposits: data.totalDeposits,
-        withdrawals: data.totalWithdrawals,
-        depositCount: data.depositCount,
-        withdrawalCount: data.withdrawalCount,
-        netFlow: data.netFlow,
-      });
-    }
-
-    return results;
+  async refresh(): Promise<MonimeAnalyticsResponse | null> {
+    this.clearCache();
+    return this.getAnalytics(true);
   },
 
   /**
-   * Get monthly Monime data for charts
+   * Subscribe to updates - polls every interval
+   * Returns unsubscribe function
    */
-  async getMonthlyData(months: number = 6, currency: string = 'SLE'): Promise<MonimePeriodData[]> {
-    const results: MonimePeriodData[] = [];
-    const now = new Date();
+  subscribeToUpdates(callback: () => void, intervalMs: number = 30000): () => void {
+    // Initial call
+    callback();
 
-    for (let i = months - 1; i >= 0; i--) {
-      const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59, 999);
-
-      const monthName = monthStart.toLocaleDateString('en-US', { month: 'short' });
-      const data = await calculateMonimeFlows(monthStart, monthEnd, currency);
-
-      results.push({
-        period: monthName,
-        deposits: data.totalDeposits,
-        withdrawals: data.totalWithdrawals,
-        depositCount: data.depositCount,
-        withdrawalCount: data.withdrawalCount,
-        netFlow: data.netFlow,
-      });
-    }
-
-    return results;
-  },
-
-  /**
-   * Get recent Monime-related transactions from all sources
-   */
-  async getRecentTransactions(limit: number = 10, currency?: string): Promise<any[]> {
-    try {
-      // Get from checkout_sessions (mobile payments)
-      let query = supabase
-        .from('checkout_sessions')
-        .select('*')
-        .eq('status', 'COMPLETE')
-        .order('completed_at', { ascending: false })
-        .limit(limit);
-
-      if (currency) {
-        query = query.eq('currency_code', currency);
-      }
-
-      const { data, error } = await query;
-
-      if (error) {
-        console.error('Error fetching recent transactions:', error);
-        return [];
-      }
-
-      // Filter for mobile money payments
-      const mobilePayments = (data || []).filter(s =>
-        s.payment_method === 'mobile_money' ||
-        s.payment_method === 'monime_mobile' ||
-        s.payment_method?.includes('mobile')
-      );
-
-      return mobilePayments;
-    } catch (err) {
-      console.error('Error:', err);
-      return [];
-    }
-  },
-
-  /**
-   * Subscribe to real-time updates from multiple tables
-   */
-  subscribeToTransactions(callback: () => void): () => void {
-    // Subscribe to checkout_sessions (main source for hosted checkout)
-    const checkoutSub = supabase
-      .channel('monime-checkout-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'checkout_sessions',
-        },
-        () => {
-          callback();
-        }
-      )
-      .subscribe();
-
-    // Subscribe to transactions table
-    const txnSub = supabase
-      .channel('monime-txn-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'transactions',
-        },
-        () => {
-          callback();
-        }
-      )
-      .subscribe();
-
-    // Subscribe to monime_transactions if it exists
-    const monimeSub = supabase
-      .channel('monime-direct-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'monime_transactions',
-        },
-        () => {
-          callback();
-        }
-      )
-      .subscribe();
-
-    // Subscribe to payouts
-    const payoutSub = supabase
-      .channel('monime-payout-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'payouts',
-        },
-        () => {
-          callback();
-        }
-      )
-      .subscribe();
+    // Set up polling interval
+    const intervalId = setInterval(async () => {
+      await this.getAnalytics(true); // Force refresh
+      callback();
+    }, intervalMs);
 
     return () => {
-      checkoutSub.unsubscribe();
-      txnSub.unsubscribe();
-      monimeSub.unsubscribe();
-      payoutSub.unsubscribe();
+      clearInterval(intervalId);
     };
   },
 };

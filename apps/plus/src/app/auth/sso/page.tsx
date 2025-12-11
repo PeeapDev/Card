@@ -6,17 +6,16 @@ import { supabase } from "@/lib/supabase";
 import { Loader2, CheckCircle, XCircle } from "lucide-react";
 
 /**
- * SSO Authentication Page
- *
- * Validates one-time SSO tokens stored in the database.
+ * SSO Authentication Page - Database-backed sessions (NO localStorage)
  *
  * Flow:
  * 1. Receive token from URL: /auth/sso?token=xxx
  * 2. Look up token in sso_tokens table
  * 3. Validate token (exists, not expired, not used)
  * 4. Fetch user from users table
- * 5. Mark token as used
- * 6. Create session and redirect to dashboard/setup
+ * 5. Mark SSO token as used
+ * 6. Create session in user_sessions table
+ * 7. Set session cookie and redirect
  */
 
 interface SsoToken {
@@ -42,15 +41,33 @@ interface User {
   business_name?: string;
 }
 
+// Generate a random session token
+function generateSessionToken(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < 64; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
+// Set a cookie
+function setCookie(name: string, value: string, days: number) {
+  const expires = new Date();
+  expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000);
+  document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/;SameSite=Lax`;
+}
+
 async function validateAndConsumeSsoToken(token: string): Promise<{
   success: boolean;
   user?: User;
   tier?: string;
   redirectPath?: string;
+  sessionToken?: string;
   error?: string;
 }> {
   try {
-    // Step 1: Find the token in the database
+    // Step 1: Find the SSO token in the database
     const { data: tokens, error: findError } = await supabase
       .from("sso_tokens")
       .select("*")
@@ -74,18 +91,7 @@ async function validateAndConsumeSsoToken(token: string): Promise<{
       return { success: false, error: "Token has expired" };
     }
 
-    // Step 3: Mark token as used (one-time use)
-    const { error: updateError } = await supabase
-      .from("sso_tokens")
-      .update({ used_at: new Date().toISOString() })
-      .eq("id", ssoToken.id);
-
-    if (updateError) {
-      console.error("SSO: Failed to mark token as used:", updateError);
-      // Continue anyway - token validation was successful
-    }
-
-    // Step 4: Fetch the user from the database
+    // Step 3: Fetch the user from the database
     const { data: users, error: userError } = await supabase
       .from("users")
       .select("id, email, first_name, last_name, phone, roles, tier, business_name")
@@ -99,11 +105,37 @@ async function validateAndConsumeSsoToken(token: string): Promise<{
 
     const user = users[0] as User;
 
+    // Step 4: Mark SSO token as used (one-time use)
+    await supabase
+      .from("sso_tokens")
+      .update({ used_at: new Date().toISOString() })
+      .eq("id", ssoToken.id);
+
+    // Step 5: Create a session in the database
+    const sessionToken = generateSessionToken();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    const { error: sessionError } = await supabase
+      .from("user_sessions")
+      .insert({
+        user_id: ssoToken.user_id,
+        session_token: sessionToken,
+        app: "plus",
+        tier: ssoToken.tier || user.tier || "basic",
+        expires_at: expiresAt.toISOString(),
+      });
+
+    if (sessionError) {
+      console.error("SSO: Failed to create session:", sessionError);
+      return { success: false, error: "Failed to create session" };
+    }
+
     return {
       success: true,
       user,
       tier: ssoToken.tier,
       redirectPath: ssoToken.redirect_path,
+      sessionToken,
     };
   } catch (error) {
     console.error("SSO: Unexpected error:", error);
@@ -131,38 +163,15 @@ function SsoContent() {
       // Validate and consume the SSO token
       const result = await validateAndConsumeSsoToken(token);
 
-      if (!result.success || !result.user) {
+      if (!result.success || !result.user || !result.sessionToken) {
         setStatus("error");
         setErrorMessage(result.error || "Authentication failed");
         setTimeout(() => router.replace("/auth/login"), 2000);
         return;
       }
 
-      // Successfully validated - store user session
-      // Generate a session token for Plus
-      const sessionToken = btoa(JSON.stringify({
-        userId: result.user.id,
-        email: result.user.email,
-        roles: result.user.roles?.split(",") || ["user"],
-        tier: result.tier || result.user.tier || "basic",
-        exp: Date.now() + 3600000, // 1 hour
-      }));
-
-      // Store in Plus's expected format
-      if (typeof window !== "undefined") {
-        localStorage.setItem("token", sessionToken);
-        localStorage.setItem("user", JSON.stringify({
-          id: result.user.id,
-          email: result.user.email,
-          firstName: result.user.first_name,
-          lastName: result.user.last_name,
-          phone: result.user.phone,
-          roles: result.user.roles?.split(",") || ["user"],
-          tier: result.tier || result.user.tier || "basic",
-          businessName: result.user.business_name,
-        }));
-        localStorage.setItem("plusTier", result.tier || result.user.tier || "basic");
-      }
+      // Set session cookie (NOT localStorage)
+      setCookie("plus_session", result.sessionToken, 7);
 
       setStatus("success");
 

@@ -60,7 +60,11 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(port, () => {
   console.log(`\n🚀 API Test Server running at http://localhost:${port}`);
-  console.log('\nAvailable payout endpoints:');
+  console.log('\nAvailable endpoints:');
+  console.log('\n📊 Monime Analytics:');
+  console.log('  GET  /api/monime/analytics             - Get Monime inflows/outflows');
+  console.log('  GET  /api/monime/transactions          - Get raw Monime transactions');
+  console.log('\n💸 Payouts:');
   console.log('  GET  /api/payouts?userId=xxx           - List user payouts');
   console.log('  GET  /api/payouts/:id                  - Get payout by ID');
   console.log('  POST /api/payouts/user/cashout         - User cashout to momo/bank');

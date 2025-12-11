@@ -127,6 +127,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleMobileMoneyProviders(req, res);
     } else if (path === 'mobile-money/send' || path === 'mobile-money/send/') {
       return await handleMobileMoneySend(req, res);
+    } else if (path === 'mobile-money/lookup' || path === 'mobile-money/lookup/') {
+      return await handleMobileMoneyLookup(req, res);
     } else if (path === 'mobile-money/status' || path.match(/^mobile-money\/status\/[^/]+$/)) {
       return await handleMobileMoneyStatus(req, res);
     } else if (path === 'monime/analytics' || path === 'monime/analytics/') {
@@ -3324,6 +3326,56 @@ async function handleMobileMoneyProviders(req: VercelRequest, res: VercelRespons
 }
 
 /**
+ * Lookup mobile money account holder name (KYC verification)
+ * GET /mobile-money/lookup?phoneNumber=XXX&providerId=m17
+ */
+async function handleMobileMoneyLookup(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const phoneNumber = req.query.phoneNumber as string;
+    const providerId = req.query.providerId as string;
+
+    if (!phoneNumber || !providerId) {
+      return res.status(400).json({
+        error: 'Missing required parameters: phoneNumber and providerId'
+      });
+    }
+
+    // Normalize phone number (Sierra Leone format)
+    const normalizedPhone = phoneNumber.replace(/\s+/g, '').replace(/^(\+232|232|0)/, '');
+    if (!/^[0-9]{8}$/.test(normalizedPhone)) {
+      return res.status(400).json({
+        error: 'Invalid phone number format. Expected 8 digits after country code.'
+      });
+    }
+    const fullPhoneNumber = `+232${normalizedPhone}`;
+
+    // Create Monime service
+    const monimeService = await createMonimeService(supabase, SETTINGS_ID);
+
+    // Lookup account holder
+    const result = await monimeService.lookupAccountHolder(providerId, fullPhoneNumber);
+
+    return res.status(200).json({
+      success: true,
+      verified: result.verified,
+      accountName: result.accountName || null,
+      accountNumber: fullPhoneNumber,
+      providerId: result.providerId,
+    });
+  } catch (error: any) {
+    console.error('[MobileMoneyLookup] Error:', error);
+    if (error instanceof MonimeError) {
+      return res.status(error.statusCode).json({ error: error.message, code: error.code });
+    }
+    return res.status(500).json({ error: error.message || 'Failed to lookup account' });
+  }
+}
+
+/**
  * Send money to mobile money number (Orange Money, Africell)
  */
 async function handleMobileMoneySend(req: VercelRequest, res: VercelResponse) {
@@ -3701,7 +3753,10 @@ async function handleMonimeAnalytics(req: VercelRequest, res: VercelResponse) {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
     const filterByDate = (txns: any[], startDate: string) => {
-      return txns.filter(t => t.createTime && t.createTime >= startDate);
+      return txns.filter(t => {
+        const timestamp = t.createTime || t.timestamp;
+        return timestamp && timestamp >= startDate;
+      });
     };
 
     const sumAmount = (txns: any[]) => {
@@ -3767,7 +3822,12 @@ async function handleMonimeAnalytics(req: VercelRequest, res: VercelResponse) {
         },
       },
       recentTransactions: [...credits.slice(0, 10), ...debits.slice(0, 10)]
-        .sort((a, b) => new Date(b.createTime).getTime() - new Date(a.createTime).getTime())
+        .map(t => ({
+          ...t,
+          // Normalize timestamp field
+          timestamp: t.createTime || t.timestamp,
+        }))
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
         .slice(0, 20),
     });
   } catch (error: any) {

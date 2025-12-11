@@ -309,6 +309,52 @@ export class MonimeService {
   }
 
   /**
+   * Lookup mobile money account holder name (KYC verification)
+   * Verifies the phone number and returns the account holder's name
+   * @param providerId - Mobile money provider ID (e.g., 'm17' for Orange Money)
+   * @param accountNumber - Phone number to lookup
+   * @returns Account holder information including name
+   */
+  async lookupAccountHolder(providerId: string, accountNumber: string): Promise<{
+    verified: boolean;
+    accountName?: string;
+    accountNumber?: string;
+    providerId?: string;
+  }> {
+    try {
+      const response = await this.request<{
+        result: {
+          verified: boolean;
+          accountName?: string;
+          name?: string;
+          fullName?: string;
+          accountNumber?: string;
+          providerId?: string;
+        }
+      }>(
+        `/provider-kyc/${providerId}?accountNumber=${encodeURIComponent(accountNumber)}`,
+        'GET'
+      );
+
+      const result = response.result;
+      return {
+        verified: result?.verified || false,
+        accountName: result?.accountName || result?.name || result?.fullName,
+        accountNumber: result?.accountNumber || accountNumber,
+        providerId: result?.providerId || providerId,
+      };
+    } catch (error) {
+      console.error('[Monime] Account lookup failed:', error);
+      // Return unverified result on error
+      return {
+        verified: false,
+        accountNumber,
+        providerId,
+      };
+    }
+  }
+
+  /**
    * Get financial accounts (to get source account ID for payouts)
    */
   async getFinancialAccounts(): Promise<Array<{ id: string; name: string; currency: string; balance: { value: number } }>> {
