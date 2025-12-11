@@ -40,6 +40,8 @@ export function WalletsPage() {
 
   // Get currency symbol by code
   const getCurrencySymbol = (code: string): string => {
+    // SLE is the new Sierra Leone Leone after redenomination - symbol is "Le"
+    if (code === 'SLE') return 'Le';
     return currencies.find(c => c.code === code)?.symbol || code;
   };
 
@@ -59,6 +61,8 @@ export function WalletsPage() {
   const [depositAmount, setDepositAmount] = useState('');
   const [depositLoading, setDepositLoading] = useState(false);
   const [depositError, setDepositError] = useState('');
+  const [newWalletCurrency, setNewWalletCurrency] = useState<'USD' | 'SLE'>('SLE');
+  const [createWalletError, setCreateWalletError] = useState('');
 
   // Transfer state
   const [transferAmount, setTransferAmount] = useState('');
@@ -159,11 +163,14 @@ export function WalletsPage() {
   };
 
   const handleCreateWallet = async () => {
+    setCreateWalletError('');
     try {
-      await createWallet.mutateAsync({ currency: 'USD' });
+      await createWallet.mutateAsync({ currency: newWalletCurrency });
       setShowCreateModal(false);
-    } catch (error) {
+      setNewWalletCurrency('SLE'); // Reset to default
+    } catch (error: any) {
       console.error('Failed to create wallet:', error);
+      setCreateWalletError(error.message || 'Failed to create wallet. Please try again.');
     }
   };
 
@@ -432,18 +439,82 @@ export function WalletsPage() {
 
       {/* Create Wallet Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
           <Card className="w-full max-w-md">
             <CardHeader>
               <CardTitle>Create New Wallet</CardTitle>
             </CardHeader>
-            <p className="text-gray-500 mb-6">A new USD wallet will be created for your account.</p>
+            <p className="text-gray-500 mb-4">Choose the currency for your new wallet.</p>
+
+            {/* Currency Selection */}
+            <div className="mb-6 space-y-3">
+              <button
+                onClick={() => setNewWalletCurrency('SLE')}
+                className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all ${
+                  newWalletCurrency === 'SLE'
+                    ? 'border-primary-500 bg-primary-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                  newWalletCurrency === 'SLE' ? 'bg-primary-100' : 'bg-gray-100'
+                }`}>
+                  <span className="text-xl font-bold text-primary-600">Le</span>
+                </div>
+                <div className="text-left flex-1">
+                  <p className="font-semibold text-gray-900">Leone Wallet (SLE)</p>
+                  <p className="text-sm text-gray-500">For mobile money payouts</p>
+                </div>
+                {newWalletCurrency === 'SLE' && (
+                  <CheckCircle className="w-5 h-5 text-primary-600" />
+                )}
+              </button>
+
+              <button
+                onClick={() => setNewWalletCurrency('USD')}
+                className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all ${
+                  newWalletCurrency === 'USD'
+                    ? 'border-primary-500 bg-primary-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                  newWalletCurrency === 'USD' ? 'bg-primary-100' : 'bg-gray-100'
+                }`}>
+                  <span className="text-xl font-bold text-green-600">$</span>
+                </div>
+                <div className="text-left flex-1">
+                  <p className="font-semibold text-gray-900">US Dollar Wallet (USD)</p>
+                  <p className="text-sm text-gray-500">For international transactions</p>
+                </div>
+                {newWalletCurrency === 'USD' && (
+                  <CheckCircle className="w-5 h-5 text-primary-600" />
+                )}
+              </button>
+            </div>
+
+            {/* Error Message */}
+            {createWalletError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span className="text-sm">{createWalletError}</span>
+              </div>
+            )}
+
             <div className="flex gap-3">
-              <Button variant="outline" className="flex-1" onClick={() => setShowCreateModal(false)}>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setCreateWalletError('');
+                  setNewWalletCurrency('SLE');
+                }}
+              >
                 Cancel
               </Button>
               <Button className="flex-1" onClick={handleCreateWallet} isLoading={createWallet.isPending}>
-                Create Wallet
+                Create {newWalletCurrency} Wallet
               </Button>
             </div>
           </Card>

@@ -74,6 +74,9 @@ export function DashboardPage() {
   };
 
   const totalBalance = wallets?.reduce((sum, w) => sum + (w.balance || 0), 0) || 0;
+  // Get primary wallet currency (first active wallet)
+  const primaryWallet = wallets?.find(w => w.status === 'ACTIVE') || wallets?.[0];
+  const primaryCurrency = primaryWallet?.currency || 'SLE';
   const activeCards = cards?.filter((c) => c.status === 'ACTIVE').length || 0;
 
   // Handle user selection from search - navigate to send money page with pre-selected recipient
@@ -111,7 +114,7 @@ export function DashboardPage() {
                 <div>
                   <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Balance</p>
                   <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                    {walletsLoading ? '...' : formatCurrency(totalBalance)}
+                    {walletsLoading ? '...' : formatCurrency(totalBalance, primaryCurrency)}
                   </p>
                 </div>
                 <div className="w-12 h-12 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center">

@@ -132,10 +132,14 @@ export const walletService = {
    * Create a new wallet for the current user
    */
   async createWallet(userId: string, data: CreateWalletRequest): Promise<Wallet> {
+    // Generate external_id (required by database)
+    const externalId = `WAL-${data.currency || 'SLE'}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+
     const { data: wallet, error } = await supabase
       .from('wallets')
       .insert({
         user_id: userId,
+        external_id: externalId,
         currency: data.currency || 'SLE',
         balance: 0,
         status: 'ACTIVE',

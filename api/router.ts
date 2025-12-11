@@ -2757,17 +2757,42 @@ async function handleCheckoutSessionCardPay(req: VercelRequest, res: VercelRespo
       });
     }
 
-    // 5. Get merchant's wallet to credit
+    // 5. Get the merchant business to find the owner's user_id
+    const { data: merchantBusiness, error: businessError } = await supabase
+      .from('merchant_businesses')
+      .select('id, merchant_id, name')
+      .eq('id', session.merchant_id)
+      .single();
+
+    if (businessError || !merchantBusiness) {
+      console.error('[CardPay] Merchant business not found:', session.merchant_id);
+      return res.status(500).json({ error: 'Merchant business not found' });
+    }
+
+    const merchantOwnerId = merchantBusiness.merchant_id;
+    console.log('[CardPay] Found merchant business:', merchantBusiness.name, 'Owner:', merchantOwnerId);
+
+    // Get merchant owner's primary wallet
     const { data: merchantWallet, error: merchantWalletError } = await supabase
       .from('wallets')
-      .select('id, balance')
-      .eq('user_id', session.merchant_id)
-      .eq('currency', session.currency_code || 'SLE')
+      .select('id, balance, user_id')
+      .eq('user_id', merchantOwnerId)
+      .eq('wallet_type', 'primary')
       .single();
 
     if (merchantWalletError || !merchantWallet) {
-      console.error('[CardPay] Merchant wallet not found:', session.merchant_id);
-      return res.status(500).json({ error: 'Merchant wallet not found' });
+      // Fallback: Try any wallet for this user
+      const { data: anyWallet } = await supabase
+        .from('wallets')
+        .select('id, balance, user_id')
+        .eq('user_id', merchantOwnerId)
+        .limit(1)
+        .single();
+
+      if (!anyWallet) {
+        console.error('[CardPay] Merchant wallet not found for user:', merchantOwnerId);
+        return res.status(500).json({ error: 'Merchant wallet not found' });
+      }
     }
 
     // 6. Process the payment atomically
@@ -2797,11 +2822,16 @@ async function handleCheckoutSessionCardPay(req: VercelRequest, res: VercelRespo
       return res.status(500).json({ error: 'Failed to process payment' });
     }
 
-    // 7. Create transaction records
+    // 7. Create transaction records with external_id (required NOT NULL field)
     const transactionRef = `CARD-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const payerTxExternalId = `tx_payer_${randomUUID().replace(/-/g, '').substring(0, 24)}`;
+    const merchantTxExternalId = `tx_merch_${randomUUID().replace(/-/g, '').substring(0, 24)}`;
+
+    const payerName = card.cardholder_name || 'Card Holder';
 
     // User's outgoing transaction
-    await supabase.from('transactions').insert({
+    const { error: userTxError } = await supabase.from('transactions').insert({
+      external_id: payerTxExternalId,
       wallet_id: walletId,
       type: 'PAYMENT',
       amount: -paymentAmount,
@@ -2815,25 +2845,36 @@ async function handleCheckoutSessionCardPay(req: VercelRequest, res: VercelRespo
         merchantName: session.merchant_name,
         cardId: cardId,
         paymentMethod: 'peeap_card',
+        payerName: payerName,
       },
     });
 
+    if (userTxError) {
+      console.error('[CardPay] Failed to create user transaction:', userTxError);
+    }
+
     // Merchant's incoming transaction
-    await supabase.from('transactions').insert({
+    const { error: merchantTxError } = await supabase.from('transactions').insert({
+      external_id: merchantTxExternalId,
       wallet_id: merchantWallet.id,
       type: 'PAYMENT_RECEIVED',
       amount: paymentAmount,
       currency: session.currency_code || 'SLE',
       status: 'COMPLETED',
-      description: `Payment from ${card.cardholder_name || 'customer'}`,
+      description: `Card payment from ${payerName}`,
       reference: transactionRef,
       metadata: {
         checkoutSessionId: session.external_id,
         customerId: wallet.user_id,
         cardId: cardId,
         paymentMethod: 'peeap_card',
+        payerName: payerName,
       },
     });
+
+    if (merchantTxError) {
+      console.error('[CardPay] Failed to create merchant transaction:', merchantTxError);
+    }
 
     // 8. Mark session as complete
     const { data: updatedSession, error: updateError } = await supabase
