@@ -5,7 +5,7 @@
  * URL format: /checkout/pay/:sessionId
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import QRCode from 'react-qr-code';
 import {
@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { cardService } from '@/services/card.service';
+import { supabase } from '@/lib/supabase';
 
 // Types
 interface CheckoutSession {
@@ -276,6 +277,148 @@ export function HostedCheckoutPage() {
       setStep('error');
     }
   };
+
+  // Handle payment completion
+  const handlePaymentComplete = useCallback((data: any) => {
+    console.log('[Checkout] Payment COMPLETE detected! Showing success...');
+
+    // Update session with completed data
+    const updatedSession: CheckoutSession = {
+      id: data.id,
+      externalId: data.external_id || data.externalId,
+      merchantId: data.merchant_id || data.merchantId,
+      amount: data.amount,
+      currencyCode: data.currency_code || data.currencyCode || 'SLE',
+      description: data.description,
+      status: 'COMPLETE',
+      expiresAt: data.expires_at || data.expiresAt,
+      createdAt: data.created_at || data.createdAt,
+      merchantName: data.merchant_name || data.merchantName,
+      merchantLogoUrl: data.merchant_logo_url || data.merchantLogoUrl,
+      brandColor: data.brand_color || data.brandColor || '#635BFF',
+      successUrl: data.success_url || data.successUrl,
+      cancelUrl: data.cancel_url || data.cancelUrl,
+      paymentMethods: data.payment_methods || { qr: true, card: true, mobile: true },
+      isTestMode: data.metadata?.isTestMode === true,
+    };
+
+    setSession(updatedSession);
+    setPaymentMethodUsed('scan_to_pay');
+    setStep('success');
+
+    // Redirect after showing success animation
+    const successUrl = data.success_url || data.successUrl;
+    if (successUrl) {
+      console.log('[Checkout] Will redirect to:', successUrl, 'in 4 seconds');
+      setTimeout(() => {
+        const redirectUrl = buildSuccessRedirectUrl(successUrl, data, 'scan_to_pay');
+        console.log('[Checkout] Redirecting now to:', redirectUrl);
+        window.location.href = redirectUrl;
+      }, 4000);
+    }
+  }, []);
+
+  // Subscribe to real-time updates AND poll as backup when QR is displayed
+  useEffect(() => {
+    let subscription: any = null;
+    let pollInterval: NodeJS.Timeout | null = null;
+    let isPolling = false;
+    let hasCompleted = false;
+
+    if (step === 'qr_display' && sessionId && session?.id) {
+      console.log('[Checkout] Setting up payment detection for session:', sessionId, '(internal:', session.id, ')');
+
+      // Subscribe to real-time updates on the checkout_sessions table
+      // Try both external_id and id filters
+      subscription = supabase
+        .channel(`checkout_session_${sessionId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'checkout_sessions',
+            filter: `external_id=eq.${sessionId}`,
+          },
+          (payload: any) => {
+            console.log('[Checkout] Real-time update received:', payload);
+            if (!hasCompleted && payload.new && payload.new.status === 'COMPLETE') {
+              hasCompleted = true;
+              handlePaymentComplete(payload.new);
+            }
+          }
+        )
+        .subscribe((status: string) => {
+          console.log('[Checkout] Subscription status:', status);
+        });
+
+      // AGGRESSIVE polling - check every 1.5 seconds via API AND direct Supabase
+      const checkPaymentStatus = async () => {
+        if (isPolling || hasCompleted) return;
+        isPolling = true;
+
+        try {
+          // Method 1: Check via API
+          const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
+          const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;
+          const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}`);
+
+          if (response.ok) {
+            const data = await response.json();
+            console.log('[Checkout] API poll - status:', data.status);
+
+            if (data.status === 'COMPLETE' && !hasCompleted) {
+              hasCompleted = true;
+              if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+              }
+              handlePaymentComplete(data);
+              return;
+            }
+          }
+
+          // Method 2: Direct Supabase query as fallback
+          const { data: directData, error: directError } = await supabase
+            .from('checkout_sessions')
+            .select('*')
+            .eq('external_id', sessionId)
+            .single();
+
+          if (!directError && directData) {
+            console.log('[Checkout] Direct DB poll - status:', directData.status);
+            if (directData.status === 'COMPLETE' && !hasCompleted) {
+              hasCompleted = true;
+              if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+              }
+              handlePaymentComplete(directData);
+            }
+          }
+        } catch (err) {
+          console.error('[Checkout] Error polling payment status:', err);
+        } finally {
+          isPolling = false;
+        }
+      };
+
+      // Poll every 1.5 seconds (more aggressive)
+      checkPaymentStatus();
+      pollInterval = setInterval(checkPaymentStatus, 1500);
+    }
+
+    return () => {
+      if (subscription) {
+        console.log('[Checkout] Cleaning up real-time subscription');
+        supabase.removeChannel(subscription);
+      }
+      if (pollInterval) {
+        console.log('[Checkout] Cleaning up polling interval');
+        clearInterval(pollInterval);
+      }
+    };
+  }, [step, sessionId, session?.id, handlePaymentComplete]);
 
   const handleMethodSelect = async (method: PaymentMethod) => {
     setSelectedMethod(method);
@@ -539,33 +682,106 @@ export function HostedCheckoutPage() {
     );
   }
 
-  // Success state
+  // Success state with celebration animation
   if (step === 'success') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 text-center">
-          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce">
-            <CheckCircle className="w-10 h-10 text-green-600" />
+      <div className="min-h-screen bg-gradient-to-br from-green-400 via-emerald-500 to-teal-600 flex items-center justify-center p-4 relative overflow-hidden">
+        {/* Confetti animation */}
+        <div className="absolute inset-0 pointer-events-none">
+          {[...Array(50)].map((_, i) => (
+            <div
+              key={i}
+              className="absolute animate-confetti"
+              style={{
+                left: `${Math.random() * 100}%`,
+                top: `-10%`,
+                animationDelay: `${Math.random() * 3}s`,
+                animationDuration: `${3 + Math.random() * 2}s`,
+              }}
+            >
+              <div
+                className="w-3 h-3 rounded-sm"
+                style={{
+                  backgroundColor: ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8'][Math.floor(Math.random() * 8)],
+                  transform: `rotate(${Math.random() * 360}deg)`,
+                }}
+              />
+            </div>
+          ))}
+        </div>
+
+        {/* Success card */}
+        <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 text-center relative z-10 animate-success-pop">
+          {/* Animated checkmark */}
+          <div className="relative w-24 h-24 mx-auto mb-6">
+            <div className="absolute inset-0 bg-green-100 rounded-full animate-ping-slow opacity-75"></div>
+            <div className="absolute inset-0 bg-green-100 rounded-full"></div>
+            <div className="absolute inset-2 bg-green-500 rounded-full flex items-center justify-center animate-success-check">
+              <CheckCircle className="w-12 h-12 text-white" />
+            </div>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Payment Successful!</h1>
+
+          <h1 className="text-3xl font-bold text-gray-900 mb-3">Thank You!</h1>
+          <p className="text-gray-600 mb-4">Payment Successful</p>
+
           {session && (
-            <p className="text-3xl font-bold text-green-600 mb-2">
-              {formatAmount(session.amount, session.currencyCode)}
-            </p>
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl p-4 mb-6">
+              <p className="text-4xl font-bold text-green-600 mb-1">
+                {formatAmount(session.amount, session.currencyCode)}
+              </p>
+              {session?.merchantName && (
+                <p className="text-gray-500 text-sm">Paid to {session.merchantName}</p>
+              )}
+            </div>
           )}
-          {session?.merchantName && (
-            <p className="text-gray-500 mb-6">Paid to {session.merchantName}</p>
-          )}
-          <p className="text-sm text-gray-400 mb-6">Redirecting you back...</p>
+
+          <div className="flex items-center justify-center gap-2 text-gray-400 text-sm mb-6">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Redirecting you back...</span>
+          </div>
+
           {session?.successUrl && (
             <button
               onClick={() => window.location.href = buildSuccessRedirectUrl(session.successUrl!, session, paymentMethodUsed || 'unknown')}
-              className="w-full py-3 px-4 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors"
+              className="w-full py-4 px-6 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-semibold hover:from-green-600 hover:to-emerald-700 transition-all transform hover:scale-[1.02] shadow-lg"
             >
-              Continue to {session.merchantName || 'Merchant'}
+              Return to {session.merchantName || 'Merchant'}
             </button>
           )}
+
+          <div className="mt-6 pt-4 border-t border-gray-100">
+            <div className="flex items-center justify-center gap-2 text-gray-400 text-xs">
+              <Shield className="w-3 h-3" />
+              <span>Secured by Peeap</span>
+            </div>
+          </div>
         </div>
+
+        {/* CSS for animations */}
+        <style>{`
+          @keyframes confetti {
+            0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+          }
+          @keyframes success-pop {
+            0% { transform: scale(0.5); opacity: 0; }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); opacity: 1; }
+          }
+          @keyframes success-check {
+            0% { transform: scale(0) rotate(-45deg); }
+            50% { transform: scale(1.2) rotate(0deg); }
+            100% { transform: scale(1) rotate(0deg); }
+          }
+          @keyframes ping-slow {
+            0% { transform: scale(1); opacity: 0.75; }
+            100% { transform: scale(1.5); opacity: 0; }
+          }
+          .animate-confetti { animation: confetti linear forwards; }
+          .animate-success-pop { animation: success-pop 0.5s ease-out forwards; }
+          .animate-success-check { animation: success-check 0.6s ease-out 0.2s forwards; transform: scale(0); }
+          .animate-ping-slow { animation: ping-slow 2s cubic-bezier(0, 0, 0.2, 1) infinite; }
+        `}</style>
       </div>
     );
   }
@@ -798,6 +1014,14 @@ export function HostedCheckoutPage() {
               <p className="text-gray-600 mt-6 text-sm">
                 Scan this QR code with your Peeap app
               </p>
+              <div className="mt-4 flex items-center justify-center gap-2 text-indigo-600">
+                <div className="flex space-x-1">
+                  <div className="w-2 h-2 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                  <div className="w-2 h-2 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                  <div className="w-2 h-2 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                </div>
+                <span className="text-sm font-medium">Waiting for payment</span>
+              </div>
             </div>
 
             <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">

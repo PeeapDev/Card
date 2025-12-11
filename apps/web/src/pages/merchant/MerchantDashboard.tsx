@@ -12,11 +12,15 @@ import {
   RefreshCw,
   Settings,
   QrCode,
+  Building2,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { MotionCard, GradientCard } from '@/components/ui/Card';
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
 import { ScanToPayModal } from '@/components/payment/ScanToPayModal';
 import { currencyService, Currency } from '@/services/currency.service';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
 
 // Animation variants
 const containerVariants = {
@@ -39,22 +43,19 @@ const itemVariants = {
 };
 
 export function MerchantDashboard() {
+  const { user } = useAuth();
+
   // Currency state
   const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
 
   // Scan to Pay modal state
   const [showScanToPay, setShowScanToPay] = useState(false);
 
-  useEffect(() => {
-    currencyService.getDefaultCurrency().then(setDefaultCurrency);
-  }, []);
+  // Loading state
+  const [loading, setLoading] = useState(true);
 
-  const currencySymbol = defaultCurrency?.symbol || 'Le';
-
-  const formatCurrency = (amount: number): string => {
-    return `${currencySymbol} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-  const [stats] = useState({
+  // Stats state
+  const [stats, setStats] = useState({
     todayRevenue: 0,
     monthlyRevenue: 0,
     totalTransactions: 0,
@@ -63,7 +64,141 @@ export function MerchantDashboard() {
     pendingPayouts: 0,
   });
 
-  const [recentTransactions] = useState<{id: string; amount: number; status: string; time: string; cardLast4: string}[]>([]);
+  // Transactions state
+  const [recentTransactions, setRecentTransactions] = useState<{id: string; amount: number; status: string; time: string; cardLast4: string}[]>([]);
+
+  useEffect(() => {
+    currencyService.getDefaultCurrency().then(setDefaultCurrency);
+  }, []);
+
+  // Fetch merchant data from all shops
+  useEffect(() => {
+    async function fetchMerchantData() {
+      if (!user?.id) return;
+
+      try {
+        setLoading(true);
+
+        // 1. Get all businesses owned by this merchant
+        const { data: businesses, error: bizError } = await supabase
+          .from('merchant_businesses')
+          .select('id, name, merchant_id')
+          .eq('merchant_id', user.id);
+
+        if (bizError) {
+          console.error('Error fetching businesses:', bizError);
+          return;
+        }
+
+        if (!businesses || businesses.length === 0) {
+          setLoading(false);
+          return;
+        }
+
+        // 2. Get merchant's primary wallet (all transactions go to merchant's wallet)
+        const { data: merchantWallet, error: walletError } = await supabase
+          .from('wallets')
+          .select('id, balance')
+          .eq('user_id', user.id)
+          .eq('wallet_type', 'primary')
+          .single();
+
+        if (walletError || !merchantWallet) {
+          console.error('Error fetching merchant wallet:', walletError);
+          setLoading(false);
+          return;
+        }
+
+        // 3. Fetch all transactions for merchant's wallet (incoming payments are positive amounts)
+        const { data: allTransactions, error: txError } = await supabase
+          .from('transactions')
+          .select('*')
+          .eq('wallet_id', merchantWallet.id)
+          .gt('amount', 0) // Only incoming payments (positive amounts)
+          .order('created_at', { ascending: false });
+
+        if (txError) {
+          console.error('Error fetching transactions:', txError);
+          setLoading(false);
+          return;
+        }
+
+        const transactions = allTransactions || [];
+
+        // 4. Calculate stats
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        const todayTransactions = transactions.filter(tx => new Date(tx.created_at) >= todayStart);
+        const monthTransactions = transactions.filter(tx => new Date(tx.created_at) >= monthStart);
+        const completedTransactions = transactions.filter(tx => tx.status === 'COMPLETED');
+
+        const todayRevenue = todayTransactions
+          .filter(tx => tx.status === 'COMPLETED')
+          .reduce((sum, tx) => sum + Number(tx.amount), 0);
+
+        const monthlyRevenue = monthTransactions
+          .filter(tx => tx.status === 'COMPLETED')
+          .reduce((sum, tx) => sum + Number(tx.amount), 0);
+
+        const totalCompleted = completedTransactions.length;
+        const avgTicket = totalCompleted > 0
+          ? completedTransactions.reduce((sum, tx) => sum + Number(tx.amount), 0) / totalCompleted
+          : 0;
+
+        const successRate = transactions.length > 0
+          ? Math.round((completedTransactions.length / transactions.length) * 100)
+          : 0;
+
+        setStats({
+          todayRevenue,
+          monthlyRevenue,
+          totalTransactions: transactions.length,
+          avgTicket,
+          successRate,
+          pendingPayouts: Number(merchantWallet.balance) || 0,
+        });
+
+        // 5. Format recent transactions for display
+        const recent = transactions.slice(0, 10).map(tx => ({
+          id: tx.reference || tx.id.substring(0, 8),
+          amount: Number(tx.amount),
+          status: tx.status?.toLowerCase() || 'pending',
+          time: new Date(tx.created_at).toLocaleString(),
+          cardLast4: tx.metadata?.card_last4 || '****',
+        }));
+
+        setRecentTransactions(recent);
+
+      } catch (error) {
+        console.error('Error fetching merchant data:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchMerchantData();
+  }, [user?.id]);
+
+  const currencySymbol = defaultCurrency?.symbol || 'Le';
+
+  const formatCurrency = (amount: number): string => {
+    return `${currencySymbol} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  if (loading) {
+    return (
+      <MerchantLayout>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <RefreshCw className="w-8 h-8 animate-spin text-primary-600 mx-auto mb-4" />
+            <p className="text-gray-500 dark:text-gray-400">Loading dashboard...</p>
+          </div>
+        </div>
+      </MerchantLayout>
+    );
+  }
 
   return (
     <MerchantLayout>
@@ -267,6 +402,19 @@ export function MerchantDashboard() {
                     <p className="text-xs text-gray-500 dark:text-gray-400">Scan customer QR to charge</p>
                   </div>
                 </motion.button>
+                <Link to="/merchant/payouts">
+                  <motion.div
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="w-full p-4 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 rounded-lg text-left transition-colors flex items-center gap-3 border border-emerald-200 dark:border-emerald-800"
+                  >
+                    <Building2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                    <div>
+                      <p className="font-medium text-sm text-gray-900 dark:text-white">Withdraw Funds</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Withdraw to bank or mobile money</p>
+                    </div>
+                  </motion.div>
+                </Link>
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
