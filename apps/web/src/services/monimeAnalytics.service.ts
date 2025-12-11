@@ -42,7 +42,8 @@ export interface MonimeTransaction {
     value: number;
   };
   reference?: string;
-  createTime: string;
+  timestamp?: string;  // Normalized timestamp from backend
+  createTime?: string; // Original Monime field
   updateTime?: string;
 }
 
@@ -155,9 +156,10 @@ export const monimeAnalyticsService = {
 
       const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
 
-      const dayTxns = transactions.filter(t =>
-        t.createTime >= dayStart && t.createTime < dayEnd
-      );
+      const dayTxns = transactions.filter(t => {
+        const ts = t.timestamp || t.createTime;
+        return ts && ts >= dayStart && ts < dayEnd;
+      });
 
       const credits = dayTxns.filter(t => t.type === 'credit');
       const debits = dayTxns.filter(t => t.type === 'debit');
@@ -195,9 +197,10 @@ export const monimeAnalyticsService = {
 
       const monthName = monthStart.toLocaleDateString('en-US', { month: 'short' });
 
-      const monthTxns = transactions.filter(t =>
-        t.createTime >= monthStart.toISOString() && t.createTime < monthEnd.toISOString()
-      );
+      const monthTxns = transactions.filter(t => {
+        const ts = t.timestamp || t.createTime;
+        return ts && ts >= monthStart.toISOString() && ts < monthEnd.toISOString();
+      });
 
       const credits = monthTxns.filter(t => t.type === 'credit');
       const debits = monthTxns.filter(t => t.type === 'debit');

@@ -555,6 +555,12 @@ export function PayoutPage() {
               </div>
               <h2 className="text-xl font-bold text-gray-900 dark:text-white">Confirm Transfer</h2>
               <p className="text-gray-500 dark:text-gray-400">to {providerDisplay.name}</p>
+              {accountName && (
+                <div className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-green-100 dark:bg-green-900/30 rounded-full">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <span className="text-lg font-semibold text-green-700 dark:text-green-400">{accountName}</span>
+                </div>
+              )}
             </div>
 
             {/* Amount Display */}
@@ -638,7 +644,7 @@ export function PayoutPage() {
               </div>
               <h3 className="text-xl font-semibold text-gray-900 dark:text-white mt-6">Processing Transfer</h3>
               <p className="text-gray-500 dark:text-gray-400 mt-2 text-center">
-                Sending {formatCurrency(parseFloat(amount), 'SLE')} to {providerDisplay.name}
+                Sending {formatCurrency(parseFloat(amount), 'SLE')} to {accountName || providerDisplay.name}
               </p>
               <p className="text-sm text-gray-400 mt-4">Please wait, do not close this page.</p>
             </div>
@@ -656,6 +662,11 @@ export function PayoutPage() {
               <p className="text-gray-500 dark:text-gray-400 text-center mb-2">
                 {formatCurrency(parseFloat(amount), 'SLE')} sent to {providerDisplay.name}
               </p>
+              {accountName && (
+                <p className="text-lg font-semibold text-green-600 dark:text-green-400 mb-1">
+                  {accountName}
+                </p>
+              )}
               <p className="text-gray-500 dark:text-gray-400 mb-1">
                 +232 {phoneNumber}
               </p>
