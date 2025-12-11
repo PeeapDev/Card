@@ -2866,9 +2866,10 @@ async function handleCheckoutScanPay(req: VercelRequest, res: VercelResponse, se
     }
 
     // 3. Get the merchant business to find the owner
+    // Note: merchant_businesses.merchant_id is the user_id of the business owner
     const { data: merchantBusiness, error: businessError } = await supabase
       .from('merchant_businesses')
-      .select('id, user_id, name')
+      .select('id, merchant_id, name')
       .eq('id', session.merchant_id)
       .single();
 
@@ -2877,7 +2878,9 @@ async function handleCheckoutScanPay(req: VercelRequest, res: VercelResponse, se
       return res.status(500).json({ error: 'Merchant business not found' });
     }
 
-    console.log('[ScanPay] Found merchant business:', merchantBusiness.name, 'Owner:', merchantBusiness.user_id);
+    // merchant_id in merchant_businesses is the user_id of the owner
+    const merchantOwnerId = merchantBusiness.merchant_id;
+    console.log('[ScanPay] Found merchant business:', merchantBusiness.name, 'Owner:', merchantOwnerId);
 
     // 4. Get merchant owner's wallet to credit
     let merchantWallet: { id: string; balance: number; user_id: string } | null = null;
@@ -2886,7 +2889,7 @@ async function handleCheckoutScanPay(req: VercelRequest, res: VercelResponse, se
     const { data: primaryWallet } = await supabase
       .from('wallets')
       .select('id, balance, user_id')
-      .eq('user_id', merchantBusiness.user_id)
+      .eq('user_id', merchantOwnerId)
       .eq('wallet_type', 'primary')
       .single();
 
@@ -2897,7 +2900,7 @@ async function handleCheckoutScanPay(req: VercelRequest, res: VercelResponse, se
       const { data: anyWallet } = await supabase
         .from('wallets')
         .select('id, balance, user_id')
-        .eq('user_id', merchantBusiness.user_id)
+        .eq('user_id', merchantOwnerId)
         .limit(1)
         .single();
 
@@ -2905,7 +2908,7 @@ async function handleCheckoutScanPay(req: VercelRequest, res: VercelResponse, se
     }
 
     if (!merchantWallet) {
-      console.error('[ScanPay] Merchant wallet not found for user:', merchantBusiness.user_id);
+      console.error('[ScanPay] Merchant wallet not found for user:', merchantOwnerId);
       return res.status(500).json({ error: 'Merchant wallet not found' });
     }
 
