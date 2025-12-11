@@ -2511,7 +2511,7 @@ async function handleCheckoutSessionComplete(req: VercelRequest, res: VercelResp
   }
 
   try {
-    const { cardToken } = req.body;
+    const { paymentMethod, payerName, payerEmail, payerPhone } = req.body;
 
     const { data: session, error: fetchError } = await supabase
       .from('checkout_sessions')
@@ -2535,50 +2535,95 @@ async function handleCheckoutSessionComplete(req: VercelRequest, res: VercelResp
       return res.status(400).json({ error: 'Session expired' });
     }
 
-    const { paymentMethod } = req.body;
     const paymentAmount = parseFloat(session.amount);
-    let transactionRef = '';
+    let transactionRef = `MOMO-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-    // Credit merchant's wallet
-    const { data: merchantWallet, error: merchantWalletError } = await supabase
-      .from('wallets')
-      .select('id, balance')
-      .eq('user_id', session.merchant_id)
-      .eq('currency', session.currency_code || 'SLE')
+    // Get the merchant business to find the owner's user_id
+    const { data: merchantBusiness, error: businessError } = await supabase
+      .from('merchant_businesses')
+      .select('id, merchant_id, name')
+      .eq('id', session.merchant_id)
       .single();
 
-    if (merchantWallet) {
-      const newMerchantBalance = Number(merchantWallet.balance) + paymentAmount;
+    if (businessError || !merchantBusiness) {
+      console.error('[CheckoutComplete] Merchant business not found:', session.merchant_id);
+      return res.status(500).json({ error: 'Merchant business not found' });
+    }
+
+    const merchantOwnerId = merchantBusiness.merchant_id;
+    console.log('[CheckoutComplete] Found merchant business:', merchantBusiness.name, 'Owner:', merchantOwnerId);
+
+    // Get merchant owner's primary wallet
+    const { data: merchantWallet, error: merchantWalletError } = await supabase
+      .from('wallets')
+      .select('id, balance, user_id')
+      .eq('user_id', merchantOwnerId)
+      .eq('wallet_type', 'primary')
+      .single();
+
+    if (!merchantWallet) {
+      // Fallback: Try any wallet for this user
+      const { data: anyWallet } = await supabase
+        .from('wallets')
+        .select('id, balance, user_id')
+        .eq('user_id', merchantOwnerId)
+        .limit(1)
+        .single();
+
+      if (!anyWallet) {
+        console.error('[CheckoutComplete] Merchant wallet not found for user:', merchantOwnerId);
+        return res.status(500).json({ error: 'Merchant wallet not found' });
+      }
+    }
+
+    const targetWallet = merchantWallet;
+    if (targetWallet) {
+      const newMerchantBalance = Number(targetWallet.balance) + paymentAmount;
 
       const { error: creditError } = await supabase
         .from('wallets')
         .update({ balance: newMerchantBalance, updated_at: new Date().toISOString() })
-        .eq('id', merchantWallet.id);
+        .eq('id', targetWallet.id);
 
       if (!creditError) {
-        // Create merchant's incoming transaction record
-        transactionRef = `QR-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        await supabase.from('transactions').insert({
-          wallet_id: merchantWallet.id,
+        // Create merchant's incoming transaction record - MUST include external_id
+        const merchantTxExternalId = `tx_merch_${randomUUID().replace(/-/g, '').substring(0, 24)}`;
+
+        // Determine payer name from various sources
+        const resolvedPayerName = payerName ||
+          session.metadata?.payerName ||
+          payerEmail ||
+          payerPhone ||
+          'Mobile Money Customer';
+
+        const { error: txError } = await supabase.from('transactions').insert({
+          external_id: merchantTxExternalId,
+          wallet_id: targetWallet.id,
           type: 'PAYMENT_RECEIVED',
           amount: paymentAmount,
           currency: session.currency_code || 'SLE',
           status: 'COMPLETED',
-          description: session.description || `QR/App payment received`,
+          description: `Payment from ${resolvedPayerName} (${paymentMethod || 'Mobile Money'})`,
           reference: transactionRef,
           metadata: {
             checkoutSessionId: session.external_id,
             merchantId: session.merchant_id,
             merchantName: session.merchant_name,
-            paymentMethod: paymentMethod || 'qr_code',
+            paymentMethod: paymentMethod || 'mobile_money',
+            payerName: resolvedPayerName,
+            payerEmail: payerEmail || session.metadata?.payerEmail,
+            payerPhone: payerPhone,
           },
         });
-        console.log('[CheckoutComplete] Merchant wallet credited:', { merchantId: session.merchant_id, amount: paymentAmount, ref: transactionRef });
+
+        if (txError) {
+          console.error('[CheckoutComplete] Failed to create transaction:', txError);
+        } else {
+          console.log('[CheckoutComplete] Merchant wallet credited:', { merchantId: merchantOwnerId, amount: paymentAmount, ref: transactionRef });
+        }
       } else {
         console.error('[CheckoutComplete] Failed to credit merchant wallet:', creditError);
       }
-    } else {
-      console.error('[CheckoutComplete] Merchant wallet not found:', session.merchant_id, merchantWalletError);
     }
 
     // Mark session as complete
@@ -2589,8 +2634,10 @@ async function handleCheckoutSessionComplete(req: VercelRequest, res: VercelResp
         completed_at: new Date().toISOString(),
         metadata: {
           ...(session.metadata || {}),
-          paymentMethod: paymentMethod || 'qr_code',
+          paymentMethod: paymentMethod || 'mobile_money',
           transactionRef: transactionRef,
+          payerName: payerName || session.metadata?.payerName,
+          payerEmail: payerEmail || session.metadata?.payerEmail,
         },
       })
       .eq('id', session.id)

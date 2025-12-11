@@ -133,6 +133,8 @@ export function PayoutPage() {
   }, [amount]);
 
   const getCurrencySymbol = (code: string): string => {
+    // SLE is the new Sierra Leone Leone after redenomination - symbol is "Le"
+    if (code === 'SLE') return 'Le';
     return currencies.find(c => c.code === code)?.symbol || code;
   };
 

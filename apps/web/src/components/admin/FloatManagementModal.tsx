@@ -157,8 +157,13 @@ export function FloatManagementModal({
   };
 
   const getCurrencySymbol = (code: string): string => {
+    if (!code) return 'Le'; // Default to Leone
     const curr = currencies.find(c => c.code === code);
-    return curr?.symbol || code;
+    if (curr?.symbol) return curr.symbol;
+    // Fallback symbols
+    if (code === 'SLE') return 'Le';
+    if (code === 'USD') return '$';
+    return code;
   };
 
   const formatAmount = (amt: number, curr: string): string => {

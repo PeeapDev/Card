@@ -48,7 +48,7 @@
 (function(window) {
   'use strict';
 
-  var VERSION = '1.1.0';
+  var VERSION = '1.2.0';
   var API_URL = 'https://api.peeap.com';
   var CHECKOUT_URL = 'https://checkout.peeap.com';
 
@@ -128,8 +128,13 @@
   function checkForPaymentCallback() {
     try {
       var params = new URLSearchParams(window.location.search);
-      var reference = params.get('peeap_ref') || params.get('reference') || params.get('ref');
+
+      // Support multiple callback parameter formats
+      var reference = params.get('peeap_ref') || params.get('reference') || params.get('ref') || params.get('session_id');
       var status = params.get('peeap_status') || params.get('status');
+      var paymentMethod = params.get('payment_method');
+      var amount = params.get('amount');
+      var currency = params.get('currency');
 
       if (reference && status) {
         var paymentState = getPaymentState(reference);
@@ -138,6 +143,9 @@
           callbacks.onSuccess({
             reference: reference,
             status: 'completed',
+            paymentMethod: paymentMethod || 'unknown',
+            amount: amount ? parseFloat(amount) : null,
+            currency: currency || 'SLE',
             ...paymentState
           });
         } else if (status === 'cancelled' || status === 'canceled') {
