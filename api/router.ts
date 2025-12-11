@@ -3699,140 +3699,236 @@ async function handleMonimeAnalytics(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Get Monime credentials from settings
-    const { data: settings, error: settingsError } = await supabase
-      .from('payment_settings')
-      .select('monime_access_token, monime_space_id, monime_source_account_id')
-      .eq('id', SETTINGS_ID)
-      .single();
-
-    if (settingsError || !settings?.monime_access_token || !settings?.monime_space_id) {
-      return res.status(400).json({ error: 'Monime credentials not configured' });
-    }
-
-    const { monime_access_token, monime_space_id, monime_source_account_id } = settings;
-
-    // Fetch financial transactions from Monime API
-    // Get both credits (inflows) and debits (outflows)
-    const [creditsResponse, debitsResponse] = await Promise.all([
-      fetch(`https://api.monime.io/v1/financial-transactions?type=credit&limit=50${monime_source_account_id ? `&financialAccountId=${monime_source_account_id}` : ''}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${monime_access_token}`,
-          'Monime-Space-Id': monime_space_id,
-          'Content-Type': 'application/json',
-        },
-      }),
-      fetch(`https://api.monime.io/v1/financial-transactions?type=debit&limit=50${monime_source_account_id ? `&financialAccountId=${monime_source_account_id}` : ''}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${monime_access_token}`,
-          'Monime-Space-Id': monime_space_id,
-          'Content-Type': 'application/json',
-        },
-      }),
-    ]);
-
-    const creditsData = await creditsResponse.json() as any;
-    const debitsData = await debitsResponse.json() as any;
-
-    if (!creditsResponse.ok) {
-      console.error('[MonimeAnalytics] Credits fetch error:', creditsData);
-    }
-    if (!debitsResponse.ok) {
-      console.error('[MonimeAnalytics] Debits fetch error:', debitsData);
-    }
-
-    const credits = creditsData.result || [];
-    const debits = debitsData.result || [];
-
-    // Calculate totals
+    // Calculate date ranges
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
     const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay()).toISOString();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-    const filterByDate = (txns: any[], startDate: string) => {
+    // =========================================================================
+    // PART 1: Fetch Monime gateway transactions (Mobile Money)
+    // =========================================================================
+    let monimeCredits: any[] = [];
+    let monimeDebits: any[] = [];
+
+    const { data: settings } = await supabase
+      .from('payment_settings')
+      .select('monime_access_token, monime_space_id, monime_source_account_id')
+      .eq('id', SETTINGS_ID)
+      .single();
+
+    if (settings?.monime_access_token && settings?.monime_space_id) {
+      const { monime_access_token, monime_space_id, monime_source_account_id } = settings;
+
+      try {
+        const [creditsResponse, debitsResponse] = await Promise.all([
+          fetch(`https://api.monime.io/v1/financial-transactions?type=credit&limit=50${monime_source_account_id ? `&financialAccountId=${monime_source_account_id}` : ''}`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${monime_access_token}`,
+              'Monime-Space-Id': monime_space_id,
+              'Content-Type': 'application/json',
+            },
+          }),
+          fetch(`https://api.monime.io/v1/financial-transactions?type=debit&limit=50${monime_source_account_id ? `&financialAccountId=${monime_source_account_id}` : ''}`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${monime_access_token}`,
+              'Monime-Space-Id': monime_space_id,
+              'Content-Type': 'application/json',
+            },
+          }),
+        ]);
+
+        if (creditsResponse.ok) {
+          const creditsData = await creditsResponse.json() as any;
+          monimeCredits = creditsData.result || [];
+        }
+        if (debitsResponse.ok) {
+          const debitsData = await debitsResponse.json() as any;
+          monimeDebits = debitsData.result || [];
+        }
+      } catch (monimeError) {
+        console.error('[Analytics] Monime fetch error (continuing with local data):', monimeError);
+      }
+    }
+
+    // =========================================================================
+    // PART 2: Fetch local transactions (QR, Card, all Peeap transactions)
+    // =========================================================================
+    const { data: localTransactions, error: txError } = await supabase
+      .from('transactions')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(200);
+
+    if (txError) {
+      console.error('[Analytics] Local transactions fetch error:', txError);
+    }
+
+    const localTxns = localTransactions || [];
+
+    // Categorize local transactions
+    // Inflows: PAYMENT_RECEIVED, DEPOSIT, TRANSFER_IN, TOP_UP
+    // Outflows: PAYMENT_SENT, WITHDRAWAL, TRANSFER_OUT, PAYOUT
+    const inflowTypes = ['PAYMENT_RECEIVED', 'DEPOSIT', 'TRANSFER_IN', 'TOP_UP', 'CREDIT'];
+    const outflowTypes = ['PAYMENT_SENT', 'WITHDRAWAL', 'TRANSFER_OUT', 'PAYOUT', 'DEBIT'];
+
+    const localInflows = localTxns.filter(t =>
+      inflowTypes.includes(t.type) || (t.amount > 0 && t.type === 'PAYMENT')
+    );
+    const localOutflows = localTxns.filter(t =>
+      outflowTypes.includes(t.type) || (t.amount < 0)
+    );
+
+    // =========================================================================
+    // PART 3: Helper functions
+    // =========================================================================
+    const filterByDate = (txns: any[], startDate: string, isLocal: boolean = false) => {
       return txns.filter(t => {
-        const timestamp = t.createTime || t.timestamp;
+        const timestamp = isLocal ? t.created_at : (t.createTime || t.timestamp);
         return timestamp && timestamp >= startDate;
       });
     };
 
-    const sumAmount = (txns: any[]) => {
+    const sumMonimeAmount = (txns: any[]) => {
       return txns.reduce((sum, t) => sum + (t.amount?.value || 0), 0);
     };
 
-    // All time totals
-    const totalInflows = sumAmount(credits);
-    const totalOutflows = sumAmount(debits);
+    const sumLocalAmount = (txns: any[]) => {
+      return txns.reduce((sum, t) => sum + Math.abs(Number(t.amount) || 0), 0);
+    };
 
-    // Today totals
-    const todayCredits = filterByDate(credits, todayStart);
-    const todayDebits = filterByDate(debits, todayStart);
-    const todayInflows = sumAmount(todayCredits);
-    const todayOutflows = sumAmount(todayDebits);
+    // =========================================================================
+    // PART 4: Calculate combined totals
+    // =========================================================================
 
-    // This week totals
-    const weekCredits = filterByDate(credits, weekStart);
-    const weekDebits = filterByDate(debits, weekStart);
-    const weekInflows = sumAmount(weekCredits);
-    const weekOutflows = sumAmount(weekDebits);
+    // Monime totals
+    const monimeTotalInflows = sumMonimeAmount(monimeCredits);
+    const monimeTotalOutflows = sumMonimeAmount(monimeDebits);
+    const monimeTodayInflows = sumMonimeAmount(filterByDate(monimeCredits, todayStart));
+    const monimeTodayOutflows = sumMonimeAmount(filterByDate(monimeDebits, todayStart));
+    const monimeWeekInflows = sumMonimeAmount(filterByDate(monimeCredits, weekStart));
+    const monimeWeekOutflows = sumMonimeAmount(filterByDate(monimeDebits, weekStart));
+    const monimeMonthInflows = sumMonimeAmount(filterByDate(monimeCredits, monthStart));
+    const monimeMonthOutflows = sumMonimeAmount(filterByDate(monimeDebits, monthStart));
 
-    // This month totals
-    const monthCredits = filterByDate(credits, monthStart);
-    const monthDebits = filterByDate(debits, monthStart);
-    const monthInflows = sumAmount(monthCredits);
-    const monthOutflows = sumAmount(monthDebits);
+    // Local totals
+    const localTotalInflows = sumLocalAmount(localInflows);
+    const localTotalOutflows = sumLocalAmount(localOutflows);
+    const localTodayInflows = sumLocalAmount(filterByDate(localInflows, todayStart, true));
+    const localTodayOutflows = sumLocalAmount(filterByDate(localOutflows, todayStart, true));
+    const localWeekInflows = sumLocalAmount(filterByDate(localInflows, weekStart, true));
+    const localWeekOutflows = sumLocalAmount(filterByDate(localOutflows, weekStart, true));
+    const localMonthInflows = sumLocalAmount(filterByDate(localInflows, monthStart, true));
+    const localMonthOutflows = sumLocalAmount(filterByDate(localOutflows, monthStart, true));
 
-    // Get currency from first transaction or default to SLE
-    const currency = credits[0]?.amount?.currency || debits[0]?.amount?.currency || 'SLL';
+    // Combined totals
+    const totalInflows = monimeTotalInflows + localTotalInflows;
+    const totalOutflows = monimeTotalOutflows + localTotalOutflows;
+    const todayInflows = monimeTodayInflows + localTodayInflows;
+    const todayOutflows = monimeTodayOutflows + localTodayOutflows;
+    const weekInflows = monimeWeekInflows + localWeekInflows;
+    const weekOutflows = monimeWeekOutflows + localWeekOutflows;
+    const monthInflows = monimeMonthInflows + localMonthInflows;
+    const monthOutflows = monimeMonthOutflows + localMonthOutflows;
 
+    // Combined counts
+    const todayInflowCount = filterByDate(monimeCredits, todayStart).length + filterByDate(localInflows, todayStart, true).length;
+    const todayOutflowCount = filterByDate(monimeDebits, todayStart).length + filterByDate(localOutflows, todayStart, true).length;
+    const weekInflowCount = filterByDate(monimeCredits, weekStart).length + filterByDate(localInflows, weekStart, true).length;
+    const weekOutflowCount = filterByDate(monimeDebits, weekStart).length + filterByDate(localOutflows, weekStart, true).length;
+    const monthInflowCount = filterByDate(monimeCredits, monthStart).length + filterByDate(localInflows, monthStart, true).length;
+    const monthOutflowCount = filterByDate(monimeDebits, monthStart).length + filterByDate(localOutflows, monthStart, true).length;
+    const totalInflowCount = monimeCredits.length + localInflows.length;
+    const totalOutflowCount = monimeDebits.length + localOutflows.length;
+
+    // =========================================================================
+    // PART 5: Build combined recent transactions list
+    // =========================================================================
+    const normalizedMonimeTxns = [...monimeCredits, ...monimeDebits].map(t => ({
+      id: t.id,
+      type: t.type === 'credit' ? 'credit' : 'debit',
+      amount: t.amount,
+      reference: t.reference,
+      timestamp: t.createTime || t.timestamp,
+      source: 'monime',
+      paymentMethod: 'mobile_money',
+      description: t.description || 'Mobile Money Transaction',
+    }));
+
+    const normalizedLocalTxns = localTxns.slice(0, 50).map(t => ({
+      id: t.id || t.external_id,
+      type: inflowTypes.includes(t.type) || t.amount > 0 ? 'credit' : 'debit',
+      amount: {
+        currency: t.currency || 'SLE',
+        value: Math.abs(Number(t.amount) || 0),
+      },
+      reference: t.reference || t.external_id,
+      timestamp: t.created_at,
+      source: 'peeap',
+      paymentMethod: t.metadata?.paymentMethod || (t.description?.includes('QR') || t.description?.includes('Scan') ? 'qr_scan' : (t.description?.includes('Card') ? 'card' : 'internal')),
+      description: t.description || t.type,
+    }));
+
+    const allRecentTransactions = [...normalizedMonimeTxns, ...normalizedLocalTxns]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 30);
+
+    // =========================================================================
+    // PART 6: Return combined response
+    // =========================================================================
     return res.status(200).json({
       success: true,
-      currency,
+      currency: 'SLE',
       summary: {
         today: {
           totalDeposits: todayInflows,
           totalWithdrawals: todayOutflows,
-          depositCount: todayCredits.length,
-          withdrawalCount: todayDebits.length,
+          depositCount: todayInflowCount,
+          withdrawalCount: todayOutflowCount,
           netFlow: todayInflows - todayOutflows,
         },
         thisWeek: {
           totalDeposits: weekInflows,
           totalWithdrawals: weekOutflows,
-          depositCount: weekCredits.length,
-          withdrawalCount: weekDebits.length,
+          depositCount: weekInflowCount,
+          withdrawalCount: weekOutflowCount,
           netFlow: weekInflows - weekOutflows,
         },
         thisMonth: {
           totalDeposits: monthInflows,
           totalWithdrawals: monthOutflows,
-          depositCount: monthCredits.length,
-          withdrawalCount: monthDebits.length,
+          depositCount: monthInflowCount,
+          withdrawalCount: monthOutflowCount,
           netFlow: monthInflows - monthOutflows,
         },
         allTime: {
           totalDeposits: totalInflows,
           totalWithdrawals: totalOutflows,
-          depositCount: credits.length,
-          withdrawalCount: debits.length,
+          depositCount: totalInflowCount,
+          withdrawalCount: totalOutflowCount,
           netFlow: totalInflows - totalOutflows,
         },
       },
-      recentTransactions: [...credits.slice(0, 10), ...debits.slice(0, 10)]
-        .map(t => ({
-          ...t,
-          // Normalize timestamp field
-          timestamp: t.createTime || t.timestamp,
-        }))
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-        .slice(0, 20),
+      // Breakdown by source
+      breakdown: {
+        monime: {
+          inflows: monimeTotalInflows,
+          outflows: monimeTotalOutflows,
+          count: monimeCredits.length + monimeDebits.length,
+        },
+        peeap: {
+          inflows: localTotalInflows,
+          outflows: localTotalOutflows,
+          count: localTxns.length,
+        },
+      },
+      recentTransactions: allRecentTransactions,
     });
   } catch (error: any) {
-    console.error('[MonimeAnalytics] Error:', error);
-    return res.status(500).json({ error: error.message || 'Failed to fetch Monime analytics' });
+    console.error('[Analytics] Error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to fetch analytics' });
   }
 }
 
