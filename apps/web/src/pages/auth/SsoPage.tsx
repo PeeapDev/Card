@@ -69,15 +69,32 @@ export function SsoPage() {
         }
 
         // Fetch user from database
+        console.log('SSO: Looking up user with ID:', result.userId);
         const { data: users, error: userError } = await supabase
           .from('users')
           .select('*')
           .eq('id', result.userId)
           .limit(1);
 
-        if (userError || !users || users.length === 0) {
+        if (userError) {
+          console.error('SSO: Database error:', userError);
           setStatus('error');
-          setErrorMessage('User not found');
+          setErrorMessage('Database error');
+          setTimeout(() => navigate('/login', { replace: true }), 2000);
+          return;
+        }
+
+        if (!users || users.length === 0) {
+          console.error('SSO: User not found for ID:', result.userId);
+          // Try to look up by different methods (in case ID format differs)
+          const { data: usersByEmail } = await supabase
+            .from('users')
+            .select('*')
+            .limit(10);
+          console.log('SSO: Available users in DB:', usersByEmail?.map(u => ({ id: u.id, email: u.email })));
+
+          setStatus('error');
+          setErrorMessage('User not found. Please try logging in again.');
           setTimeout(() => navigate('/login', { replace: true }), 2000);
           return;
         }
