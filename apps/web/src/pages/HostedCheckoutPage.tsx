@@ -120,12 +120,28 @@ export function HostedCheckoutPage() {
   // Build success redirect URL
   const buildSuccessRedirectUrl = (baseUrl: string, sessionData: any, paymentMethod: string): string => {
     const url = new URL(baseUrl);
+    const ref = sessionData.reference || '';
+    const sid = sessionData.external_id || sessionData.externalId || sessionId || '';
     url.searchParams.set('status', 'success');
-    url.searchParams.set('session_id', sessionData.external_id || sessionData.externalId || sessionId || '');
-    url.searchParams.set('reference', sessionData.reference || '');
+    url.searchParams.set('peeap_status', 'success');
+    url.searchParams.set('reference', ref);
+    url.searchParams.set('peeap_ref', ref);
+    url.searchParams.set('session_id', sid);
     url.searchParams.set('amount', String(sessionData.amount || 0));
     url.searchParams.set('currency', sessionData.currency_code || sessionData.currencyCode || 'SLE');
     url.searchParams.set('payment_method', paymentMethod);
+    return url.toString();
+  };
+
+  const buildCancelRedirectUrl = (baseUrl: string, sessionData?: any): string => {
+    const url = new URL(baseUrl);
+    const ref = sessionData?.reference || '';
+    url.searchParams.set('status', 'cancelled');
+    url.searchParams.set('peeap_status', 'cancelled');
+    if (ref) {
+      url.searchParams.set('reference', ref);
+      url.searchParams.set('peeap_ref', ref);
+    }
     return url.toString();
   };
 
@@ -744,7 +760,7 @@ export function HostedCheckoutPage() {
           <p className="text-gray-500 mb-6">Please request a new payment link from the merchant.</p>
           {session?.cancelUrl && (
             <button
-              onClick={() => window.location.href = session.cancelUrl!}
+              onClick={() => window.location.href = buildCancelRedirectUrl(session.cancelUrl!, session)}
               className="w-full py-3 px-4 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
             >
               Return to Merchant
@@ -774,7 +790,7 @@ export function HostedCheckoutPage() {
             </button>
             {session?.cancelUrl && (
               <button
-                onClick={() => window.location.href = session.cancelUrl!}
+                onClick={() => window.location.href = buildCancelRedirectUrl(session.cancelUrl!, session)}
                 className="w-full py-3 px-4 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
               >
                 Return to Merchant
