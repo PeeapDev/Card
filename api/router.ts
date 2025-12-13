@@ -182,6 +182,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleSharedBusiness(req, res);
     } else if (path === 'shared/checkout/create' || path === 'shared/checkout/create/') {
       return await handleSharedCheckoutCreate(req, res);
+    } else if (path === 'shared/users/search' || path === 'shared/users/search/') {
+      return await handleSharedUsersSearch(req, res);
     // ========== ANALYTICS ENDPOINTS ==========
     } else if (path === 'analytics/pageview' || path === 'analytics/pageview/') {
       return await handleAnalyticsPageView(req, res);
@@ -3443,14 +3445,33 @@ async function handleMobileMoneySend(req: VercelRequest, res: VercelResponse) {
 
     const token = authHeader.replace('Bearer ', '');
 
-    // Verify token with Supabase
-    const { data: { user: authUser }, error: authError } = await supabaseAnon.auth.getUser(token);
+    // Verify custom JWT token (base64 encoded JSON with userId and exp)
+    let authenticatedUserId: string;
+    try {
+      const payload = JSON.parse(atob(token));
+      if (!payload.userId || !payload.exp) {
+        return res.status(401).json({ error: 'Invalid token format' });
+      }
+      // Check if token is expired
+      if (payload.exp < Date.now()) {
+        return res.status(401).json({ error: 'Token expired' });
+      }
+      authenticatedUserId = payload.userId;
 
-    if (authError || !authUser) {
-      return res.status(401).json({ error: 'Invalid or expired token' });
+      // Verify user exists in database
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', authenticatedUserId)
+        .single();
+
+      if (userError || !user) {
+        return res.status(401).json({ error: 'User not found' });
+      }
+    } catch (tokenError) {
+      console.error('[MobileMoneySend] Token verification failed:', tokenError);
+      return res.status(401).json({ error: 'Invalid token' });
     }
-
-    const authenticatedUserId = authUser.id;
 
     const {
       amount,
@@ -5766,6 +5787,61 @@ async function handleSharedBusiness(req: VercelRequest, res: VercelResponse) {
   } catch (error: any) {
     console.error('[SharedBusiness] Error:', error);
     return res.status(500).json({ error: 'Failed to fetch business' });
+  }
+}
+
+/**
+ * Search users for team member invitations
+ * GET /api/shared/users/search?q=searchterm
+ * Returns users matching email, phone, or name
+ */
+async function handleSharedUsersSearch(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const auth = await validateSharedApiAuth(req);
+  if (!auth.valid) {
+    return res.status(401).json({ error: auth.error });
+  }
+
+  try {
+    const searchQuery = (req.query.q as string || '').trim().toLowerCase();
+
+    if (!searchQuery || searchQuery.length < 2) {
+      return res.status(400).json({ error: 'Search query must be at least 2 characters' });
+    }
+
+    // Search users by email, phone, or name
+    // Using ilike for case-insensitive search
+    const { data: users, error } = await supabase
+      .from('users')
+      .select('id, email, first_name, last_name, phone, avatar_url, created_at')
+      .or(`email.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%,first_name.ilike.%${searchQuery}%,last_name.ilike.%${searchQuery}%`)
+      .neq('id', auth.userId) // Exclude the current user
+      .limit(20);
+
+    if (error) {
+      console.error('[SharedUsersSearch] Error:', error);
+      return res.status(500).json({ error: 'Search failed' });
+    }
+
+    // Format the results
+    const results = (users || []).map(user => ({
+      id: user.id,
+      email: user.email,
+      firstName: user.first_name,
+      lastName: user.last_name,
+      fullName: [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email,
+      phone: user.phone,
+      avatarUrl: user.avatar_url,
+      createdAt: user.created_at,
+    }));
+
+    return res.status(200).json({ users: results });
+  } catch (error: any) {
+    console.error('[SharedUsersSearch] Error:', error);
+    return res.status(500).json({ error: 'Search failed' });
   }
 }
 

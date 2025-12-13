@@ -288,6 +288,32 @@ class SharedApiService {
       window.location.href = response.data.checkoutUrl;
     }
   }
+
+  // ============================================
+  // USER SEARCH (for team invitations)
+  // ============================================
+
+  /**
+   * Search users by email, phone, or name
+   * Used for inviting team members to Plus businesses
+   */
+  async searchUsers(query: string): Promise<ApiResponse<{
+    users: Array<{
+      id: string;
+      email: string;
+      firstName?: string;
+      lastName?: string;
+      fullName: string;
+      phone?: string;
+      avatarUrl?: string;
+      createdAt: string;
+    }>;
+  }>> {
+    if (!query || query.length < 2) {
+      return { data: { users: [] } };
+    }
+    return this.request(`/shared/users/search?q=${encodeURIComponent(query)}`);
+  }
 }
 
 export const sharedApiService = new SharedApiService();
