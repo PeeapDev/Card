@@ -21,6 +21,7 @@ import {
   Loader2,
   AlertTriangle,
 } from "lucide-react";
+import { authService } from "@/lib/auth";
 
 interface UpgradeOverlayProps {
   currentTier?: string;
@@ -47,9 +48,9 @@ export function UpgradeOverlay({
 
   // Check if this is a returning user who hasn't paid
   useEffect(() => {
-    const setupComplete = localStorage.getItem("plusSetupComplete");
-    const paymentComplete = localStorage.getItem("plusPaymentComplete");
-    const storedTier = localStorage.getItem("plusTier");
+    const setupComplete = authService.getCookie("plus_setup_complete");
+    const paymentComplete = authService.getCookie("plus_payment_complete");
+    const storedTier = authService.getCookie("plus_tier");
 
     if (setupComplete === "true" && paymentComplete !== "true" && storedTier && storedTier !== "basic") {
       setShowActivation(true);
@@ -66,7 +67,7 @@ export function UpgradeOverlay({
     // Simulate payment
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    localStorage.setItem("plusPaymentComplete", "true");
+    authService.setCookie("plus_payment_complete", "true", 31536000);
     setIsProcessing(false);
 
     if (onActivate) {
@@ -111,10 +112,10 @@ export function UpgradeOverlay({
 
   // Get stored fee for activation
   const storedFee = typeof window !== "undefined"
-    ? parseFloat(localStorage.getItem("plusMonthlyFee") || "0")
+    ? parseFloat(authService.getCookie("plus_monthly_fee") || "0")
     : 0;
   const storedTier = typeof window !== "undefined"
-    ? localStorage.getItem("plusTier") || ""
+    ? authService.getCookie("plus_tier") || ""
     : "";
 
   const activationFee = monthlyFee || storedFee;

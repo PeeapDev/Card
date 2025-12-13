@@ -3445,18 +3445,37 @@ async function handleMobileMoneySend(req: VercelRequest, res: VercelResponse) {
 
     const token = authHeader.replace('Bearer ', '');
 
-    // Verify custom JWT token (base64 encoded JSON with userId and exp)
+    // Verify session token from database (or fallback to legacy JWT)
     let authenticatedUserId: string;
     try {
-      const payload = JSON.parse(atob(token));
-      if (!payload.userId || !payload.exp) {
-        return res.status(401).json({ error: 'Invalid token format' });
+      // First try to verify as a session token from sso_tokens table
+      const { data: session, error: sessionError } = await supabase
+        .from('sso_tokens')
+        .select('user_id, expires_at')
+        .eq('token', token)
+        .single();
+
+      if (session && !sessionError) {
+        // Session token found - check if expired
+        if (new Date(session.expires_at) < new Date()) {
+          return res.status(401).json({ error: 'Session expired' });
+        }
+        authenticatedUserId = session.user_id;
+      } else {
+        // Fallback: try to verify as legacy base64 JWT token (for backwards compatibility)
+        try {
+          const payload = JSON.parse(atob(token));
+          if (!payload.userId || !payload.exp) {
+            return res.status(401).json({ error: 'Invalid token format' });
+          }
+          if (payload.exp < Date.now()) {
+            return res.status(401).json({ error: 'Token expired' });
+          }
+          authenticatedUserId = payload.userId;
+        } catch {
+          return res.status(401).json({ error: 'Invalid token' });
+        }
       }
-      // Check if token is expired
-      if (payload.exp < Date.now()) {
-        return res.status(401).json({ error: 'Token expired' });
-      }
-      authenticatedUserId = payload.userId;
 
       // Verify user exists in database
       const { data: user, error: userError } = await supabase

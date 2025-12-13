@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase';
 import type { User, AuthTokens, LoginRequest, RegisterRequest, UserRole } from '@/types';
 import { normalizePhoneNumber } from '@/utils/phone';
 import { authenticator } from 'otplib';
+import { sessionService } from './session.service';
 
 export interface MfaRequiredResponse {
   mfaRequired: true;
@@ -117,19 +118,15 @@ export const authService = {
       createdAt: dbUser.created_at,
     };
 
-    // Generate tokens
+    // Create secure database-backed session
+    const sessionToken = await sessionService.createSession(user.id);
+
+    // Generate tokens object for backwards compatibility
+    // The actual session is stored in a secure cookie, not localStorage
     const tokens: AuthTokens = {
-      accessToken: btoa(JSON.stringify({
-        userId: user.id,
-        email: user.email,
-        roles: user.roles,
-        exp: Date.now() + 3600000
-      })),
-      refreshToken: btoa(JSON.stringify({
-        userId: user.id,
-        exp: Date.now() + 604800000
-      })),
-      expiresIn: 3600,
+      accessToken: sessionToken,
+      refreshToken: sessionToken,
+      expiresIn: 604800, // 7 days
     };
 
     // Update last login
@@ -211,150 +208,65 @@ export const authService = {
       createdAt: newUser.created_at,
     };
 
+    // Create secure database-backed session
+    const sessionToken = await sessionService.createSession(user.id);
+
     const tokens: AuthTokens = {
-      accessToken: btoa(JSON.stringify({
-        userId: user.id,
-        email: user.email,
-        roles: user.roles,
-        exp: Date.now() + 3600000
-      })),
-      refreshToken: btoa(JSON.stringify({
-        userId: user.id,
-        exp: Date.now() + 604800000
-      })),
-      expiresIn: 3600,
+      accessToken: sessionToken,
+      refreshToken: sessionToken,
+      expiresIn: 604800, // 7 days
     };
 
     return { user, tokens };
   },
 
   async logout(): Promise<void> {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('user');
+    // Destroy database session and clear cookie
+    await sessionService.logout();
   },
 
   async getProfile(): Promise<User> {
-    const accessToken = this.getAccessToken();
-    if (!accessToken) {
+    // Validate session from cookie and get user
+    const user = await sessionService.validateSession();
+    if (!user) {
       throw new Error('Not authenticated');
     }
-
-    try {
-      const payload = JSON.parse(atob(accessToken));
-      const { data: users, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', payload.userId)
-        .limit(1);
-
-      if (error || !users || users.length === 0) {
-        throw new Error('User not found');
-      }
-
-      const dbUser = users[0];
-
-      // Handle both 'roles' (comma-separated) and 'role' (single value) columns
-      let userRoles: UserRole[] = ['user'];
-      if (dbUser.roles) {
-        userRoles = dbUser.roles.split(',').map((r: string) => r.trim()) as UserRole[];
-      } else if (dbUser.role) {
-        userRoles = [dbUser.role] as UserRole[];
-      }
-
-      return {
-        id: dbUser.id,
-        email: dbUser.email,
-        firstName: dbUser.first_name,
-        lastName: dbUser.last_name,
-        phone: dbUser.phone,
-        roles: userRoles,
-        kycStatus: dbUser.kyc_status,
-        kycTier: dbUser.kyc_tier,
-        emailVerified: dbUser.email_verified,
-        createdAt: dbUser.created_at,
-      };
-    } catch {
-      throw new Error('Invalid token');
-    }
+    return user;
   },
 
-  async refreshToken(refreshToken: string): Promise<AuthTokens> {
-    try {
-      const payload = JSON.parse(atob(refreshToken));
-      if (payload.exp < Date.now()) {
-        throw new Error('Refresh token expired');
-      }
-
-      const { data: users } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', payload.userId)
-        .limit(1);
-
-      if (!users || users.length === 0) {
-        throw new Error('User not found');
-      }
-
-      const dbUser = users[0];
-
-      // Handle both 'roles' (comma-separated) and 'role' (single value) columns
-      let userRoles: string[] = ['user'];
-      if (dbUser.roles) {
-        userRoles = dbUser.roles.split(',').map((r: string) => r.trim());
-      } else if (dbUser.role) {
-        userRoles = [dbUser.role];
-      }
-
-      return {
-        accessToken: btoa(JSON.stringify({
-          userId: dbUser.id,
-          email: dbUser.email,
-          roles: userRoles,
-          exp: Date.now() + 3600000
-        })),
-        refreshToken: btoa(JSON.stringify({
-          userId: dbUser.id,
-          exp: Date.now() + 604800000
-        })),
-        expiresIn: 3600,
-      };
-    } catch {
-      throw new Error('Invalid refresh token');
-    }
+  async refreshToken(_refreshToken: string): Promise<AuthTokens> {
+    // Refresh the database session
+    await sessionService.refreshSession();
+    const token = sessionService.getSessionToken() || '';
+    return {
+      accessToken: token,
+      refreshToken: token,
+      expiresIn: 604800, // 7 days
+    };
   },
 
-  setTokens(tokens: AuthTokens): void {
-    localStorage.setItem('accessToken', tokens.accessToken);
-    localStorage.setItem('refreshToken', tokens.refreshToken);
+  setTokens(_tokens: AuthTokens): void {
+    // Tokens are stored in secure cookies by sessionService, not in localStorage
+    // This method exists for backwards compatibility but does nothing
   },
 
   getTokens(): AuthTokens | null {
-    const accessToken = localStorage.getItem('accessToken');
-    const refreshToken = localStorage.getItem('refreshToken');
-    if (accessToken && refreshToken) {
-      return { accessToken, refreshToken, expiresIn: 0 };
+    const token = sessionService.getSessionToken();
+    if (token) {
+      return { accessToken: token, refreshToken: token, expiresIn: 0 };
     }
     return null;
   },
 
   getAccessToken(): string | null {
-    return localStorage.getItem('accessToken');
+    return sessionService.getSessionToken() || null;
   },
 
   getRefreshToken(): string | null {
-    return localStorage.getItem('refreshToken');
+    return sessionService.getSessionToken() || null;
   },
 
   isAuthenticated(): boolean {
-    const token = this.getAccessToken();
-    if (!token) return false;
-
-    try {
-      const payload = JSON.parse(atob(token));
-      return payload.exp > Date.now();
-    } catch {
-      return false;
-    }
+    return sessionService.hasSession();
   },
 };

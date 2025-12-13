@@ -316,14 +316,14 @@ export default function DashboardLayout({
   // Payment timer - show payment prompt after 5 minutes
   useEffect(() => {
     if (!isLoading && !isPaid && userTier !== "basic") {
-      const paymentStatus = localStorage.getItem("plusPaymentComplete");
+      const paymentStatus = authService.getCookie("plus_payment_complete");
       if (paymentStatus === "true") {
         setIsPaid(true);
         return;
       }
 
       // Check if first visit to dashboard
-      const welcomeComplete = localStorage.getItem("plusWelcomeComplete");
+      const welcomeComplete = authService.getCookie("plus_welcome_complete");
       if (!welcomeComplete) {
         setShowWelcomeWizard(true);
       }
@@ -331,7 +331,7 @@ export default function DashboardLayout({
       // Set timer for payment prompt (5 minutes = 300000ms)
       // For testing, use 30 seconds = 30000ms
       const timer = setTimeout(() => {
-        if (!localStorage.getItem("plusPaymentComplete")) {
+        if (!authService.getCookie("plus_payment_complete")) {
           setShowPaymentPrompt(true);
         }
       }, 300000); // 5 minutes
@@ -342,13 +342,13 @@ export default function DashboardLayout({
 
   const checkAuthAndTier = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const storedUser = localStorage.getItem("user");
-      const plusTier = localStorage.getItem("plusTier");
-      const setupComplete = localStorage.getItem("plusSetupComplete");
-      const storedPreferences = localStorage.getItem("plusPreferences");
-      const storedMonthlyFee = localStorage.getItem("plusMonthlyFee");
-      const paymentComplete = localStorage.getItem("plusPaymentComplete");
+      const token = authService.getAccessToken();
+      const storedUser = authService.getCookie("plus_user");
+      const plusTier = authService.getCookie("plus_tier");
+      const setupComplete = authService.getCookie("plus_setup_complete");
+      const storedPreferences = authService.getCookie("plus_preferences");
+      const storedMonthlyFee = authService.getCookie("plus_monthly_fee");
+      const paymentComplete = authService.getCookie("plus_payment_complete");
 
       if (!token) {
         router.push("/auth/login?redirect=/dashboard");
@@ -358,8 +358,10 @@ export default function DashboardLayout({
       // Load preferences
       let prefs: Preferences | null = null;
       if (storedPreferences) {
-        prefs = JSON.parse(storedPreferences);
-        setPreferences(prefs);
+        try {
+          prefs = JSON.parse(storedPreferences);
+          setPreferences(prefs);
+        } catch {}
       }
 
       if (storedMonthlyFee) {
@@ -371,32 +373,39 @@ export default function DashboardLayout({
       }
 
       if (storedUser) {
-        const user = JSON.parse(storedUser);
-        setUserData(user);
-
-        const effectiveTier = (plusTier || user.tier || "basic") as UserTier;
-        setUserTier(effectiveTier);
-
-        // Build navigation and quick actions
-        const nav = buildNavigation(effectiveTier, prefs);
-        setNavigation(nav);
-        const actions = buildQuickActions(effectiveTier, prefs);
-        setFilteredQuickActions(actions);
-
-        if (effectiveTier === "basic") {
-          setShowUpgradeOverlay(true);
+        let user;
+        try {
+          user = JSON.parse(storedUser);
+        } catch {
+          user = null;
         }
+        if (user) {
+          setUserData(user);
 
-        if ((effectiveTier === "business" || effectiveTier === "business_plus") && !setupComplete) {
-          router.push(`/setup?tier=${effectiveTier}`);
-          return;
+          const effectiveTier = (plusTier || user.tier || "basic") as UserTier;
+          setUserTier(effectiveTier);
+
+          // Build navigation and quick actions
+          const nav = buildNavigation(effectiveTier, prefs);
+          setNavigation(nav);
+          const actions = buildQuickActions(effectiveTier, prefs);
+          setFilteredQuickActions(actions);
+
+          if (effectiveTier === "basic") {
+            setShowUpgradeOverlay(true);
+          }
+
+          if ((effectiveTier === "business" || effectiveTier === "business_plus") && setupComplete !== "true") {
+            router.push(`/setup?tier=${effectiveTier}`);
+            return;
+          }
         }
       } else {
         try {
           const { valid, user } = await authService.validateToken(token);
 
           if (valid && user) {
-            localStorage.setItem("user", JSON.stringify(user));
+            authService.setCookie("plus_user", JSON.stringify(user), 86400);
             setUserData({
               id: user.id,
               email: user.email,
@@ -439,12 +448,12 @@ export default function DashboardLayout({
   };
 
   const handleWelcomeComplete = () => {
-    localStorage.setItem("plusWelcomeComplete", "true");
+    authService.setCookie("plus_welcome_complete", "true", 31536000);
     setShowWelcomeWizard(false);
   };
 
   const handlePaymentComplete = () => {
-    localStorage.setItem("plusPaymentComplete", "true");
+    authService.setCookie("plus_payment_complete", "true", 31536000);
     setIsPaid(true);
     setShowPaymentPrompt(false);
   };

@@ -316,13 +316,23 @@ export const authService = {
   },
 
   setTokens(tokens: AuthTokens): void {
-    localStorage.setItem('token', tokens.accessToken);
-    localStorage.setItem('refreshToken', tokens.refreshToken);
+    // Store tokens in cookies instead of localStorage
+    const secure = window.location.protocol === 'https:';
+    const sameSite = 'Lax';
+    document.cookie = `plus_token=${tokens.accessToken}; path=/; max-age=3600; ${secure ? 'secure;' : ''} samesite=${sameSite}`;
+    document.cookie = `plus_refresh_token=${tokens.refreshToken}; path=/; max-age=604800; ${secure ? 'secure;' : ''} samesite=${sameSite}`;
   },
 
   getAccessToken(): string | null {
     if (typeof window === 'undefined') return null;
-    return localStorage.getItem('token');
+    const match = document.cookie.match(/(?:^|; )plus_token=([^;]*)/);
+    return match ? match[1] : null;
+  },
+
+  getRefreshToken(): string | null {
+    if (typeof window === 'undefined') return null;
+    const match = document.cookie.match(/(?:^|; )plus_refresh_token=([^;]*)/);
+    return match ? match[1] : null;
   },
 
   isAuthenticated(): boolean {
@@ -338,10 +348,28 @@ export const authService = {
   },
 
   logout(): void {
-    localStorage.removeItem('token');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('user');
-    localStorage.removeItem('plusTier');
-    localStorage.removeItem('plusSetupComplete');
+    // Clear all cookies
+    document.cookie = 'plus_token=; path=/; max-age=0';
+    document.cookie = 'plus_refresh_token=; path=/; max-age=0';
+    document.cookie = 'plus_session=; path=/; max-age=0';
+    document.cookie = 'plus_user=; path=/; max-age=0';
+    document.cookie = 'plus_tier=; path=/; max-age=0';
+    document.cookie = 'plus_setup_complete=; path=/; max-age=0';
+  },
+
+  // Cookie helpers
+  setCookie(name: string, value: string, maxAge: number = 86400): void {
+    const secure = typeof window !== 'undefined' && window.location.protocol === 'https:';
+    document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}; ${secure ? 'secure;' : ''} samesite=Lax`;
+  },
+
+  getCookie(name: string): string | null {
+    if (typeof window === 'undefined') return null;
+    const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+    return match ? decodeURIComponent(match[1]) : null;
+  },
+
+  deleteCookie(name: string): void {
+    document.cookie = `${name}=; path=/; max-age=0`;
   },
 };
