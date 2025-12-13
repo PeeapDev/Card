@@ -332,7 +332,7 @@ export class MonimeService {
           providerId?: string;
         }
       }>(
-        `/provider-kyc/${providerId}?accountNumber=${encodeURIComponent(accountNumber)}`,
+        `/provider-kyc/${providerId}?accountId=${encodeURIComponent(accountNumber)}`,
         'GET'
       );
 
