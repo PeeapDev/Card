@@ -296,6 +296,14 @@ function App() {
                 }
               />
               <Route
+                path="/payout"
+                element={
+                  <ProtectedRoute>
+                    <PayoutPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/pots"
                 element={
                   <ProtectedRoute>
