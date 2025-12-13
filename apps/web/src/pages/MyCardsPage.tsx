@@ -721,9 +721,9 @@ function CardItem({
   });
   const [cvv, setCvv] = useState<string | null>(null);
 
-  // Fetch CVV when card details are shown
+  // Fetch CVV when card is flipped or details are shown
   useEffect(() => {
-    if (showDetails && !cvv) {
+    if ((showFlip || showDetails) && !cvv) {
       supabase
         .from('cards')
         .select('cvv')
@@ -735,7 +735,7 @@ function CardItem({
           }
         });
     }
-  }, [showDetails, card.id, cvv]);
+  }, [showFlip, showDetails, card.id, cvv]);
 
   const getCardGradient = (type: string, idx: number) => {
     const gradients = [
@@ -853,7 +853,7 @@ function CardItem({
               <div className="bg-white rounded px-3 py-1 text-center">
                 <p className="text-[8px] text-gray-500 uppercase">CVV</p>
                 <p className="text-sm font-mono font-bold text-gray-800">
-                  {showDetails ? (cvv || '•••') : '•••'}
+                  {cvv || '•••'}
                 </p>
               </div>
             </div>
