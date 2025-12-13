@@ -178,6 +178,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleSharedTransfer(req, res);
     } else if (path === 'shared/user' || path === 'shared/user/') {
       return await handleSharedUser(req, res);
+    } else if (path === 'shared/business' || path === 'shared/business/') {
+      return await handleSharedBusiness(req, res);
     } else if (path === 'shared/checkout/create' || path === 'shared/checkout/create/') {
       return await handleSharedCheckoutCreate(req, res);
     // ========== ANALYTICS ENDPOINTS ==========
@@ -5675,6 +5677,95 @@ async function handleSharedUser(req: VercelRequest, res: VercelResponse) {
   } catch (error: any) {
     console.error('[SharedUser] Error:', error);
     return res.status(500).json({ error: 'Failed to fetch user' });
+  }
+}
+
+/**
+ * Get user's business/merchant data
+ * GET /api/shared/business
+ * Returns merchant data that can be used for Plus setup
+ */
+async function handleSharedBusiness(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const auth = await validateSharedApiAuth(req);
+  if (!auth.valid) {
+    return res.status(401).json({ error: auth.error });
+  }
+
+  try {
+    // First, try to get merchant data
+    const { data: merchant, error: merchantError } = await supabase
+      .from('merchants')
+      .select('*')
+      .eq('user_id', auth.userId)
+      .single();
+
+    if (!merchantError && merchant) {
+      return res.status(200).json({
+        business: {
+          id: merchant.id,
+          userId: merchant.user_id,
+          businessName: merchant.business_name || merchant.name,
+          tradingName: merchant.trading_name,
+          email: merchant.email,
+          phone: merchant.phone,
+          address: merchant.address,
+          city: merchant.city,
+          country: merchant.country || 'SL',
+          industry: merchant.industry || merchant.business_type,
+          registrationNumber: merchant.registration_number,
+          taxId: merchant.tax_id,
+          kycStatus: merchant.kyc_status || 'verified',
+          kycTier: merchant.kyc_tier,
+          isVerified: merchant.is_verified || merchant.kyc_status === 'verified',
+          createdAt: merchant.created_at,
+          // Include business logo if available
+          logoUrl: merchant.logo_url,
+          website: merchant.website,
+        },
+        source: 'merchant',
+      });
+    }
+
+    // Fallback: Try to get business info from users table
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', auth.userId)
+      .single();
+
+    if (!userError && user && user.business_name) {
+      return res.status(200).json({
+        business: {
+          id: user.id,
+          userId: user.id,
+          businessName: user.business_name,
+          email: user.email,
+          phone: user.phone,
+          address: user.address,
+          city: user.city,
+          country: user.country || 'SL',
+          industry: user.business_type,
+          kycStatus: user.kyc_status || 'pending',
+          isVerified: user.kyc_status === 'verified',
+          createdAt: user.created_at,
+        },
+        source: 'user',
+      });
+    }
+
+    // No business found
+    return res.status(200).json({
+      business: null,
+      source: null,
+      message: 'No business found for this user',
+    });
+  } catch (error: any) {
+    console.error('[SharedBusiness] Error:', error);
+    return res.status(500).json({ error: 'Failed to fetch business' });
   }
 }
 

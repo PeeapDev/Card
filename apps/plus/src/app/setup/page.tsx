@@ -39,6 +39,8 @@ interface ExistingBusiness {
   city?: string;
   industry?: string;
   registrationNumber?: string;
+  isVerified?: boolean;
+  kycStatus?: string;
 }
 
 interface BusinessInfo {
@@ -252,58 +254,54 @@ function SetupWizardContent() {
     }
   }, [searchParams]);
 
-  // Fetch existing business data from user's account
+  // Fetch existing business data from my.peeap.com via shared API
   const fetchExistingBusiness = async () => {
     setIsLoadingExisting(true);
     try {
-      const token = localStorage.getItem("token");
-      const userStr = localStorage.getItem("user");
+      const token = localStorage.getItem("accessToken") || localStorage.getItem("token");
 
-      if (!userStr) {
+      if (!token) {
+        console.log("No auth token found");
         setIsLoadingExisting(false);
         return null;
       }
 
-      const user = JSON.parse(userStr);
+      // Call shared API to get business data from my.peeap.com
+      const apiUrl = process.env.NODE_ENV === "development"
+        ? "http://localhost:5173/api/shared/business"
+        : "https://my.peeap.com/api/shared/business";
 
-      // Fetch merchant data from Supabase
-      const { data: merchantData, error } = await supabase
-        .from("merchants")
-        .select("*")
-        .eq("user_id", user.id)
-        .single();
+      const response = await fetch(apiUrl, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
 
-      if (error || !merchantData) {
-        // Try to get from users table
-        const { data: userData } = await supabase
-          .from("users")
-          .select("*")
-          .eq("id", user.id)
-          .single();
-
-        if (userData && userData.business_name) {
-          return {
-            id: userData.id,
-            businessName: userData.business_name,
-            email: userData.email,
-            phone: userData.phone,
-            address: userData.address,
-            city: userData.city,
-            industry: userData.business_type,
-          };
-        }
+      if (!response.ok) {
+        console.error("Failed to fetch business from shared API:", response.status);
         return null;
       }
 
+      const data = await response.json();
+
+      if (!data.business) {
+        console.log("No business found in shared API response");
+        return null;
+      }
+
+      const business = data.business;
       return {
-        id: merchantData.id,
-        businessName: merchantData.business_name || merchantData.name,
-        email: merchantData.email,
-        phone: merchantData.phone,
-        address: merchantData.address,
-        city: merchantData.city,
-        industry: merchantData.industry || merchantData.business_type,
-        registrationNumber: merchantData.registration_number,
+        id: business.id,
+        businessName: business.businessName,
+        email: business.email,
+        phone: business.phone,
+        address: business.address,
+        city: business.city,
+        industry: business.industry,
+        registrationNumber: business.registrationNumber,
+        isVerified: business.isVerified,
+        kycStatus: business.kycStatus,
       };
     } catch (error) {
       console.error("Error fetching existing business:", error);
@@ -330,11 +328,14 @@ function SetupWizardContent() {
         city: existing.city || "",
         country: "SL",
       });
-      setRequiresVerification(false);
+      // If business is already verified, no need for re-verification
+      setRequiresVerification(!existing.isVerified);
       setCurrentStep("business");
     } else {
-      // No existing business found, show message
+      // No existing business found, show message and switch to new business flow
       setExistingBusiness(null);
+      setBusinessSource("new");
+      setRequiresVerification(true);
       setCurrentStep("business");
     }
   };
