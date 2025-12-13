@@ -6,8 +6,29 @@ import { authService } from '@/services/auth.service';
 import { sharedApiService } from '@/services/shared-api.service';
 import { getUserDashboard } from '@/components/RoleBasedRoute';
 import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
 import { Loader2, CheckCircle, XCircle } from 'lucide-react';
 import type { User, UserRole } from '@/types';
+
+// API User type with snake_case properties from database
+interface ApiUser {
+  id: string;
+  email: string;
+  firstName?: string;
+  first_name?: string;
+  lastName?: string;
+  last_name?: string;
+  phone?: string;
+  roles?: UserRole[] | string;
+  kycStatus?: string;
+  kyc_status?: string;
+  kycTier?: number;
+  kyc_tier?: number;
+  emailVerified?: boolean;
+  email_verified?: boolean;
+  createdAt?: string;
+  created_at?: string;
+}
 
 /**
  * SSO Authentication Page for Peeap Pay
@@ -80,7 +101,7 @@ export function SsoPage() {
           return;
         }
 
-        const apiUser = userResponse.data.user;
+        const apiUser = userResponse.data.user as ApiUser;
         console.log('SSO: User fetched from shared API:', { id: apiUser.id, email: apiUser.email });
 
         // Parse roles
@@ -88,21 +109,21 @@ export function SsoPage() {
         if (apiUser.roles && Array.isArray(apiUser.roles)) {
           userRoles = apiUser.roles as UserRole[];
         } else if (typeof apiUser.roles === 'string') {
-          userRoles = apiUser.roles.split(',').map((r: string) => r.trim()) as UserRole[];
+          userRoles = (apiUser.roles as string).split(',').map((r: string) => r.trim()) as UserRole[];
         }
 
         // Create user object
         const user: User = {
           id: apiUser.id,
           email: apiUser.email,
-          firstName: apiUser.firstName || apiUser.first_name,
-          lastName: apiUser.lastName || apiUser.last_name,
+          firstName: apiUser.firstName || apiUser.first_name || '',
+          lastName: apiUser.lastName || apiUser.last_name || '',
           phone: apiUser.phone,
           roles: userRoles,
-          kycStatus: apiUser.kycStatus || apiUser.kyc_status,
+          kycStatus: (apiUser.kycStatus || apiUser.kyc_status || 'PENDING') as User['kycStatus'],
           kycTier: apiUser.kycTier || apiUser.kyc_tier,
           emailVerified: apiUser.emailVerified || apiUser.email_verified,
-          createdAt: apiUser.createdAt || apiUser.created_at,
+          createdAt: apiUser.createdAt || apiUser.created_at || new Date().toISOString(),
         };
 
         // Generate local JWT tokens
@@ -127,7 +148,7 @@ export function SsoPage() {
         await supabase
           .from('users')
           .update({ last_login_at: new Date().toISOString() })
-          .eq('id', dbUser.id);
+          .eq('id', apiUser.id);
 
         // Refresh the auth context to pick up the new session
         try {
