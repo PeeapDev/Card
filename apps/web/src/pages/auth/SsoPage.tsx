@@ -68,11 +68,11 @@ export function SsoPage() {
           return;
         }
 
-        // Fetch user from database
+        // Fetch user from database (only select columns that exist)
         console.log('SSO: Looking up user with ID:', result.userId);
         const { data: users, error: userError } = await supabase
           .from('users')
-          .select('*')
+          .select('id, email, first_name, last_name, phone, roles, role, kyc_status, kyc_tier, email_verified, created_at, last_login_at')
           .eq('id', result.userId)
           .limit(1);
 

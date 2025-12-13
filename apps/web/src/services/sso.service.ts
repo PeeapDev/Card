@@ -191,7 +191,6 @@ export const ssoService = {
       last_name: user.lastName || '',
       phone: user.phone || null,
       roles: user.roles?.join(',') || 'user',
-      tier: 'basic',
       updated_at: new Date().toISOString(),
     };
 
