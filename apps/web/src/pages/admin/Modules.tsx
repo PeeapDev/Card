@@ -29,15 +29,35 @@ import {
 import { AdminLayout } from '@/components/layout/AdminLayout';
 
 // Map module codes to their settings pages
+// These paths must match actual routes defined in App.tsx
 const MODULE_SETTINGS_PATHS: Record<string, string> = {
-  monime: '/admin/settings/payment',
-  paystack: '/admin/settings/payment',
-  stripe: '/admin/settings/payment',
-  deposits: '/admin/settings/payment',
-  withdrawals: '/admin/settings/payment',
-  kyc_advanced: '/admin/settings/kyc',
-  loyalty_rewards: '/admin/settings/loyalty',
-  bill_payments: '/admin/settings/billing',
+  // Payment gateways → Payment Settings page
+  monime: '/admin/payment-settings',
+  paystack: '/admin/payment-settings',
+  stripe: '/admin/payment-settings',
+  // Wallet features → Payment Settings page
+  deposits: '/admin/payment-settings',
+  withdrawals: '/admin/payment-settings',
+  multi_currency: '/admin/payment-settings',
+  // API & Developer features → Developers page
+  rest_api: '/admin/developers',
+  merchant_api: '/admin/developers',
+  // SSO & Authentication → SSO Settings page
+  sso_internal: '/admin/settings/sso',
+  sso_external: '/admin/settings/sso',
+  shared_api: '/admin/settings/sso',
+  // Security & Compliance → Compliance page
+  kyc_advanced: '/admin/compliance',
+  // Card features → Card Programs page
+  card_issuance: '/admin/card-programs',
+  // Subscription features → Subscriptions page
+  recurring_payments: '/admin/subscriptions',
+  // Loyalty & Rewards → Fee Settings (or could create dedicated page)
+  loyalty_rewards: '/admin/fee-settings',
+  // Savings Goals → (no dedicated settings page yet)
+  savings_goals: '/admin/fee-settings',
+  // Bill Payments → (no dedicated settings page yet)
+  bill_payments: '/admin/fee-settings',
 };
 
 interface Module {

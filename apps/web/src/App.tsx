@@ -5,11 +5,14 @@ import { DeveloperModeProvider } from '@/context/DeveloperModeContext';
 import { NotificationProvider } from '@/context/NotificationContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { NotificationWrapper } from '@/components/ui/NotificationWrapper';
+import { AnalyticsTracker } from '@/components/AnalyticsTracker';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { RoleBasedRoute } from '@/components/RoleBasedRoute';
 import { LandingPage } from '@/pages/LandingPage';
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { RegisterPage } from '@/pages/auth/RegisterPage';
+import { SsoPage } from '@/pages/auth/SsoPage';
+import { OAuthAuthorizePage } from '@/pages/auth/OAuthAuthorizePage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { WalletsPage } from '@/pages/WalletsPage';
 import { CardsPage } from '@/pages/CardsPage';
@@ -68,6 +71,8 @@ import { BusinessDetailPage } from '@/pages/admin/BusinessDetailPage';
 import { SupportTicketsPage } from '@/pages/admin/SupportTicketsPage';
 import { AdminNotificationsPage } from '@/pages/admin/AdminNotificationsPage';
 import { SmtpSettingsPage } from '@/pages/admin/SmtpSettingsPage';
+import SsoSettingsPage from '@/pages/admin/SsoSettingsPage';
+import { WebsiteAnalyticsPage } from '@/pages/admin/WebsiteAnalyticsPage';
 import { PaymentCheckoutPage } from '@/pages/PaymentCheckoutPage';
 import { PayPage } from '@/pages/PayPage';
 import { PaymentSuccessPage } from '@/pages/PaymentSuccessPage';
@@ -146,12 +151,17 @@ function App() {
             <NotificationProvider>
               <DeveloperModeProvider>
                 <NotificationWrapper />
+                <AnalyticsTracker />
               <Routes>
               {/* Checkout App - Only show checkout and payment routes */}
               {isCheckoutMode && (
                 <>
                   {/* Redirect root to hosted checkout info page or 404 */}
                   <Route path="/" element={<Navigate to="/checkout/pay/invalid" replace />} />
+
+                  {/* Auth routes for scan-to-pay flow */}
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route path="/register" element={<RegisterPage />} />
 
                   {/* Payment Checkout Routes (NFC/QR) */}
                   <Route path="/t/:token" element={<PaymentCheckoutPage />} />
@@ -198,6 +208,8 @@ function App() {
                   <Route path="/" element={<LandingPage />} />
                   <Route path="/login" element={<LoginPage />} />
                   <Route path="/register" element={<RegisterPage />} />
+                  <Route path="/auth/sso" element={<SsoPage />} />
+                  <Route path="/auth/authorize" element={<OAuthAuthorizePage />} />
                   <Route path="/docs" element={<ApiDocsPage />} />
 
               {/* Onboarding Route */}
@@ -613,6 +625,14 @@ function App() {
                   </RoleBasedRoute>
                 }
               />
+              <Route
+                path="/admin/settings/sso"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <SsoSettingsPage />
+                  </RoleBasedRoute>
+                }
+              />
 
               {/* Merchant Routes */}
               <Route
@@ -846,6 +866,8 @@ function App() {
                   <Route path="/" element={<LandingPage />} />
                   <Route path="/login" element={<LoginPage />} />
                   <Route path="/register" element={<RegisterPage />} />
+                  <Route path="/auth/sso" element={<SsoPage />} />
+                  <Route path="/auth/authorize" element={<OAuthAuthorizePage />} />
                   <Route path="/docs" element={<ApiDocsPage />} />
 
                   {/* Payment Checkout Routes (NFC/QR) */}
@@ -921,6 +943,8 @@ function App() {
                   <Route path="/admin/support" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><SupportTicketsPage /></RoleBasedRoute>} />
                   <Route path="/admin/notifications" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><AdminNotificationsPage /></RoleBasedRoute>} />
                   <Route path="/admin/smtp-settings" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><SmtpSettingsPage /></RoleBasedRoute>} />
+                  <Route path="/admin/settings/sso" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><SsoSettingsPage /></RoleBasedRoute>} />
+                  <Route path="/admin/analytics" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><WebsiteAnalyticsPage /></RoleBasedRoute>} />
 
                   {/* User Notifications Route */}
                   <Route path="/notifications" element={<ProtectedRoute><UserNotificationsPage /></ProtectedRoute>} />
