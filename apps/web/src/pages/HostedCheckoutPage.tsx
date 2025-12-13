@@ -51,6 +51,7 @@ interface CheckoutSession {
   expiresAt: string;
   createdAt: string;
   isTestMode?: boolean;
+  reference?: string;
 }
 
 type PaymentMethod = 'qr' | 'card' | 'mobile';
@@ -59,11 +60,22 @@ type CheckoutStep =
   | 'select_method'
   | 'qr_display'
   | 'card_form'
+  | 'card_pin'
   | 'login_prompt'
   | 'processing'
   | 'success'
   | 'error'
   | 'expired';
+
+// Validated card data (stored after step 1 validation)
+interface ValidatedCard {
+  cardId: string;
+  walletId: string;
+  cardholderName: string;
+  walletBalance: number;
+  currency: string;
+  last4: string;
+}
 
 // Currency definitions
 const CURRENCIES: Record<string, { symbol: string; name: string; decimals: number }> = {
@@ -90,8 +102,11 @@ export function HostedCheckoutPage() {
   const [cardNumber, setCardNumber] = useState('');
   const [cardholderName, setCardholderName] = useState('');
   const [cardExpiry, setCardExpiry] = useState('');
+  const [cardCvv, setCardCvv] = useState('');
   const [cardPin, setCardPin] = useState('');
   const [showPin, setShowPin] = useState(false);
+  const [validatedCard, setValidatedCard] = useState<ValidatedCard | null>(null);
+  const [cardValidating, setCardValidating] = useState(false);
 
   // Login form state
   const [loginMode, setLoginMode] = useState<'login' | 'register'>('login');
@@ -120,7 +135,9 @@ export function HostedCheckoutPage() {
   // Build success redirect URL
   const buildSuccessRedirectUrl = (baseUrl: string, sessionData: any, paymentMethod: string): string => {
     const url = new URL(baseUrl);
-    const ref = sessionData.reference || '';
+    // Get reference from metadata first, then fallback to other fields
+    const metadata = sessionData.metadata || {};
+    const ref = metadata.reference || sessionData.reference || sessionData.external_id || sessionData.externalId || sessionId || '';
     const sid = sessionData.external_id || sessionData.externalId || sessionId || '';
     url.searchParams.set('status', 'success');
     url.searchParams.set('peeap_status', 'success');
@@ -135,7 +152,8 @@ export function HostedCheckoutPage() {
 
   const buildCancelRedirectUrl = (baseUrl: string, sessionData?: any): string => {
     const url = new URL(baseUrl);
-    const ref = sessionData?.reference || '';
+    const metadata = sessionData?.metadata || {};
+    const ref = metadata.reference || sessionData?.reference || sessionData?.external_id || sessionData?.externalId || '';
     url.searchParams.set('status', 'cancelled');
     url.searchParams.set('peeap_status', 'cancelled');
     if (ref) {
@@ -166,10 +184,17 @@ export function HostedCheckoutPage() {
     }
   }, [searchParams, sessionId]);
 
-  // Play payment sound
+  // Play payment sound - using multiple methods for browser compatibility
   const playSound = (type: 'success' | 'error') => {
+    // Method 1: Try Web Audio API
     try {
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+
+      // Resume audio context if suspended (required after user interaction)
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
 
@@ -177,25 +202,29 @@ export function HostedCheckoutPage() {
       gainNode.connect(audioContext.destination);
 
       if (type === 'success') {
-        // Pleasant success chime (two ascending notes)
+        // Pleasant success chime (three ascending notes)
+        oscillator.type = 'sine';
         oscillator.frequency.setValueAtTime(523.25, audioContext.currentTime); // C5
         oscillator.frequency.setValueAtTime(659.25, audioContext.currentTime + 0.15); // E5
         oscillator.frequency.setValueAtTime(783.99, audioContext.currentTime + 0.3); // G5
-        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.setValueAtTime(0.4, audioContext.currentTime);
         gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.8);
         oscillator.start(audioContext.currentTime);
         oscillator.stop(audioContext.currentTime + 0.8);
+        console.log('[Sound] Success chime played');
       } else {
         // Error buzz (two descending notes)
+        oscillator.type = 'sine';
         oscillator.frequency.setValueAtTime(300, audioContext.currentTime);
         oscillator.frequency.setValueAtTime(200, audioContext.currentTime + 0.2);
-        gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
         gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
         oscillator.start(audioContext.currentTime);
         oscillator.stop(audioContext.currentTime + 0.4);
+        console.log('[Sound] Error sound played');
       }
     } catch (e) {
-      console.log('Could not play sound:', e);
+      console.log('[Sound] Web Audio API failed:', e);
     }
   };
 
@@ -325,8 +354,26 @@ export function HostedCheckoutPage() {
     }
   }, [isAuthenticated, user, selectedMethod, step]);
 
+  // Auto-redirect on success after showing thank you page
+  useEffect(() => {
+    if (step === 'success' && session?.successUrl) {
+      // Play sound on success
+      playSound('success');
+
+      // Auto redirect after 4 seconds
+      const redirectTimer = setTimeout(() => {
+        const redirectUrl = buildSuccessRedirectUrl(session.successUrl!, session, paymentMethodUsed || 'unknown');
+        console.log('[Checkout] Auto-redirecting to:', redirectUrl);
+        window.location.href = redirectUrl;
+      }, 4000);
+
+      return () => clearTimeout(redirectTimer);
+    }
+  }, [step, session?.successUrl]);
+
   const loadSession = async () => {
-    if (!sessionId) {
+    // Skip loading for invalid/placeholder sessionIds
+    if (!sessionId || sessionId === 'invalid' || sessionId === 'undefined' || sessionId === 'null') {
       setError('Invalid checkout session');
       setStep('error');
       return;
@@ -344,6 +391,7 @@ export function HostedCheckoutPage() {
       const rawData = await response.json();
       const metadata = rawData.metadata || {};
       const isTestMode = metadata.isTestMode === true;
+      const reference = metadata.reference || rawData.reference || rawData.external_id || rawData.externalId;
 
       const data: CheckoutSession = {
         id: rawData.id,
@@ -362,6 +410,7 @@ export function HostedCheckoutPage() {
         cancelUrl: rawData.cancel_url || rawData.cancelUrl,
         paymentMethods: rawData.payment_methods || rawData.paymentMethods || { qr: true, card: true, mobile: true },
         isTestMode: isTestMode,
+        reference: reference,
       };
 
       if (new Date(data.expiresAt) < new Date()) {
@@ -558,6 +607,7 @@ export function HostedCheckoutPage() {
     setCardNumber('');
     setCardholderName('');
     setCardExpiry('');
+    setCardCvv('');
     setCardPin('');
     setShowPin(false);
   };
@@ -573,44 +623,14 @@ export function HostedCheckoutPage() {
     return `${window.location.origin}/scan-pay/${sessionId}`;
   };
 
-  // Card payment handler
-  const handleCardPayment = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Process card payment (after CVV validation)
+  const processCardPayment = async (cardData: ValidatedCard) => {
     if (!session) return;
 
     setPaymentLoading(true);
     setError(null);
 
     try {
-      const cardResult = await cardService.lookupCardForPayment(cardNumber);
-
-      if (!cardResult) {
-        throw new Error('Card not found. Please check your card number.');
-      }
-
-      const enteredName = cardholderName.trim().toLowerCase();
-      const actualName = cardResult.cardholderName.toLowerCase();
-      if (!actualName.includes(enteredName) && !enteredName.includes(actualName.split(' ')[0])) {
-        throw new Error('Cardholder name does not match.');
-      }
-
-      const [expiryMonth, expiryYear] = cardExpiry.split('/').map(s => parseInt(s.trim(), 10));
-      if (!expiryMonth || !expiryYear || expiryMonth < 1 || expiryMonth > 12) {
-        throw new Error('Invalid expiry date. Use MM/YY.');
-      }
-
-      const currentDate = new Date();
-      const currentYear = currentDate.getFullYear() % 100;
-      const currentMonth = currentDate.getMonth() + 1;
-
-      if (expiryYear < currentYear || (expiryYear === currentYear && expiryMonth < currentMonth)) {
-        throw new Error('This card has expired.');
-      }
-
-      if (cardResult.walletBalance < session.amount) {
-        throw new Error(`Insufficient funds. Available: ${formatAmount(cardResult.walletBalance, cardResult.currency)}`);
-      }
-
       const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
       const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;
 
@@ -618,8 +638,139 @@ export function HostedCheckoutPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          cardId: cardResult.cardId,
-          walletId: cardResult.walletId,
+          cardId: cardData.cardId,
+          walletId: cardData.walletId,
+          cvvVerified: true, // CVV was already validated in step 1
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || errorData.error || 'Payment failed');
+      }
+
+      const result = await response.json();
+
+      if (result.status === 'COMPLETE' || result.success) {
+        playSound('success');
+        setPaymentMethodUsed('peeap_card');
+        setStep('success');
+        if (session.successUrl) {
+          setTimeout(() => {
+            window.location.href = buildSuccessRedirectUrl(session.successUrl!, session, 'peeap_card');
+          }, 3000);
+        }
+      } else {
+        throw new Error('Payment was not successful');
+      }
+    } catch (err: any) {
+      playSound('error');
+      setError(err.message || 'Payment failed. Please try again.');
+      setStep('card_form'); // Go back to card form on error
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
+  // Step 1: Validate card details (number, name, expiry, CVV) - NO PIN
+  const handleCardValidation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!session) return;
+
+    setCardValidating(true);
+    setError(null);
+
+    try {
+      // 0. Validate CVV format
+      if (!cardCvv || cardCvv.length !== 3) {
+        throw new Error('Please enter a valid 3-digit CVV.');
+      }
+
+      // 1. Lookup card by number (includes CVV validation)
+      const cardResult = await cardService.lookupCardForPayment(cardNumber, cardCvv);
+
+      if (!cardResult) {
+        throw new Error('Card not found. Please check your card number.');
+      }
+
+      // 2. Validate cardholder name
+      const enteredName = cardholderName.trim().toLowerCase();
+      const actualName = cardResult.cardholderName.toLowerCase();
+      if (!actualName.includes(enteredName) && !enteredName.includes(actualName.split(' ')[0])) {
+        throw new Error('Cardholder name does not match.');
+      }
+
+      // 3. Validate expiry date
+      const expiryParts = cardExpiry.split('/');
+      const expiryMonth = parseInt(expiryParts[0]?.trim() || '0', 10);
+      const expiryYear = parseInt(expiryParts[1]?.trim() || '0', 10);
+
+      console.log('[Card] Expiry validation:', { cardExpiry, expiryMonth, expiryYear });
+
+      if (!expiryMonth || !expiryYear || expiryMonth < 1 || expiryMonth > 12) {
+        throw new Error('Invalid expiry date. Use MM/YY.');
+      }
+
+      const currentDate = new Date();
+      const currentYear = currentDate.getFullYear() % 100; // e.g., 2025 -> 25
+      const currentMonth = currentDate.getMonth() + 1; // 1-12
+
+      console.log('[Card] Current date:', { currentMonth, currentYear });
+
+      // Card is expired if:
+      // - expiry year is in the past, OR
+      // - expiry year is current year AND expiry month is before current month
+      if (expiryYear < currentYear || (expiryYear === currentYear && expiryMonth < currentMonth)) {
+        console.log('[Card] Card expired check failed:', { expiryYear, currentYear, expiryMonth, currentMonth });
+        throw new Error('This card has expired.');
+      }
+
+      // 4. Check balance
+      if (cardResult.walletBalance < session.amount) {
+        throw new Error(`Insufficient funds. Available: ${formatAmount(cardResult.walletBalance, cardResult.currency)}`);
+      }
+
+      // 5. All validations passed - store card info and process payment directly
+      // Since CVV was already validated, we skip the PIN step
+      const validatedCardData = {
+        cardId: cardResult.cardId,
+        walletId: cardResult.walletId,
+        cardholderName: cardResult.cardholderName,
+        walletBalance: cardResult.walletBalance,
+        currency: cardResult.currency,
+        last4: cardNumber.replace(/\s/g, '').slice(-4),
+      };
+      setValidatedCard(validatedCardData);
+
+      // Process payment directly with cvvVerified flag
+      await processCardPayment(validatedCardData);
+
+    } catch (err: any) {
+      playSound('error');
+      setError(err.message || 'Card validation failed.');
+    } finally {
+      setCardValidating(false);
+    }
+  };
+
+  // Step 2: Submit PIN and complete payment
+  const handleCardPinSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!session || !validatedCard) return;
+
+    setPaymentLoading(true);
+    setError(null);
+
+    try {
+      const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
+      const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;
+
+      const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}/card-pay`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cardId: validatedCard.cardId,
+          walletId: validatedCard.walletId,
           pin: cardPin,
         }),
       });
@@ -639,8 +790,6 @@ export function HostedCheckoutPage() {
           setTimeout(() => {
             window.location.href = buildSuccessRedirectUrl(session.successUrl!, session, 'peeap_card');
           }, 3000);
-        } else {
-          setStep('success');
         }
       } else {
         throw new Error('Payment was not successful');
@@ -802,28 +951,37 @@ export function HostedCheckoutPage() {
     );
   }
 
-  // Success state with celebration animation
   if (step === 'success') {
+    // Generate confetti items once to avoid re-renders
+    const confettiItems = Array.from({ length: 50 }, (_, i) => ({
+      id: i,
+      left: `${Math.random() * 100}%`,
+      delay: `${Math.random() * 3}s`,
+      duration: `${3 + Math.random() * 2}s`,
+      color: ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8'][Math.floor(Math.random() * 8)],
+      rotation: `rotate(${Math.random() * 360}deg)`,
+    }));
+
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-400 via-emerald-500 to-teal-600 flex items-center justify-center p-4 relative overflow-hidden">
         {/* Confetti animation */}
         <div className="absolute inset-0 pointer-events-none">
-          {[...Array(50)].map((_, i) => (
+          {confettiItems.map((item) => (
             <div
-              key={i}
+              key={item.id}
               className="absolute animate-confetti"
               style={{
-                left: `${Math.random() * 100}%`,
+                left: item.left,
                 top: `-10%`,
-                animationDelay: `${Math.random() * 3}s`,
-                animationDuration: `${3 + Math.random() * 2}s`,
+                animationDelay: item.delay,
+                animationDuration: item.duration,
               }}
             >
               <div
                 className="w-3 h-3 rounded-sm"
                 style={{
-                  backgroundColor: ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8'][Math.floor(Math.random() * 8)],
-                  transform: `rotate(${Math.random() * 360}deg)`,
+                  backgroundColor: item.color,
+                  transform: item.rotation,
                 }}
               />
             </div>
@@ -855,18 +1013,22 @@ export function HostedCheckoutPage() {
             </div>
           )}
 
-          <div className="flex items-center justify-center gap-2 text-gray-400 text-sm mb-6">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            <span>Redirecting you back...</span>
-          </div>
+          {session?.successUrl ? (
+            <>
+              <div className="flex items-center justify-center gap-2 text-gray-400 text-sm mb-6">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Redirecting you back in 4 seconds...</span>
+              </div>
 
-          {session?.successUrl && (
-            <button
-              onClick={() => window.location.href = buildSuccessRedirectUrl(session.successUrl!, session, paymentMethodUsed || 'unknown')}
-              className="w-full py-4 px-6 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-semibold hover:from-green-600 hover:to-emerald-700 transition-all transform hover:scale-[1.02] shadow-lg"
-            >
-              Return to {session.merchantName || 'Merchant'}
-            </button>
+              <button
+                onClick={() => window.location.href = buildSuccessRedirectUrl(session.successUrl!, session, paymentMethodUsed || 'unknown')}
+                className="w-full py-4 px-6 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-semibold hover:from-green-600 hover:to-emerald-700 transition-all transform hover:scale-[1.02] shadow-lg"
+              >
+                Return to {session.merchantName || 'Merchant'} Now
+              </button>
+            </>
+          ) : (
+            <p className="text-gray-500 text-sm">You can close this window</p>
           )}
 
           <div className="mt-6 pt-4 border-t border-gray-100">
@@ -1132,7 +1294,10 @@ export function HostedCheckoutPage() {
                 <QRCode value={getQRCodeData()} size={200} level="M" />
               </div>
               <p className="text-gray-600 mt-6 text-sm">
-                Scan this QR code with your Peeap app
+                Scan with your phone camera to pay with Peeap
+              </p>
+              <p className="text-gray-400 mt-1 text-xs">
+                Works with any QR scanner or camera app
               </p>
               <div className="mt-4 flex items-center justify-center gap-2 text-indigo-600">
                 <div className="flex space-x-1">
@@ -1156,7 +1321,7 @@ export function HostedCheckoutPage() {
     );
   }
 
-  // Card Form
+  // Card Form - Step 1: Card details (NO PIN)
   if (step === 'card_form') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -1190,7 +1355,7 @@ export function HostedCheckoutPage() {
               </div>
             )}
 
-            <form onSubmit={handleCardPayment} className="p-6 space-y-4">
+            <form onSubmit={handleCardValidation} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Card Number</label>
                 <input
@@ -1219,44 +1384,131 @@ export function HostedCheckoutPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Expiry</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Expiry Date</label>
                   <input
                     type="text"
                     value={cardExpiry}
                     onChange={(e) => setCardExpiry(formatExpiry(e.target.value))}
                     placeholder="MM/YY"
-                    className="w-full py-3 px-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-center"
+                    className="w-full py-3 px-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono"
                     maxLength={5}
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">PIN</label>
-                  <div className="relative">
-                    <input
-                      type={showPin ? 'text' : 'password'}
-                      value={cardPin}
-                      onChange={(e) => setCardPin(e.target.value.replace(/\D/g, '').substring(0, 4))}
-                      placeholder="****"
-                      className="w-full py-3 px-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-center tracking-widest"
-                      maxLength={4}
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPin(!showPin)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    >
-                      {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">CVV</label>
+                  <input
+                    type="text"
+                    value={cardCvv}
+                    onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, '').substring(0, 3))}
+                    placeholder="123"
+                    className="w-full py-3 px-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono"
+                    maxLength={3}
+                    required
+                  />
                 </div>
               </div>
 
               <button
                 type="submit"
-                disabled={paymentLoading || cardNumber.replace(/\s/g, '').length < 16 || !cardholderName || cardExpiry.length < 5 || cardPin.length !== 4}
+                disabled={cardValidating || paymentLoading || cardNumber.replace(/\s/g, '').length < 16 || !cardholderName || cardExpiry.length < 5 || cardCvv.length !== 3}
                 className="w-full py-3.5 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2 transition-colors"
+              >
+                {(cardValidating || paymentLoading) ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Lock className="w-5 h-5" />
+                )}
+                {cardValidating ? 'Validating...' : paymentLoading ? 'Processing Payment...' : `Pay ${session ? formatAmount(session.amount, session.currencyCode) : ''}`}
+              </button>
+            </form>
+
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
+              <div className="flex items-center justify-center gap-2 text-gray-400 text-sm">
+                <Shield className="w-4 h-4" />
+                <span>Your card details are secure</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Card PIN - Step 2: Enter PIN to confirm payment
+  if (step === 'card_pin' && validatedCard) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full">
+          <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center">
+                <button onClick={() => { setStep('card_form'); setError(null); }} className="p-2 -ml-2 hover:bg-gray-100 rounded-lg transition-colors">
+                  <ArrowLeft className="w-5 h-5 text-gray-500" />
+                </button>
+                <div className="ml-3">
+                  <p className="font-semibold text-gray-900">Enter PIN</p>
+                  <p className="text-sm text-gray-500">Confirm your payment</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Card Summary */}
+            <div className="px-6 py-4 bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-gray-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Card ending in</p>
+                  <p className="text-lg font-bold text-gray-900">•••• {validatedCard.last4}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-gray-600">Amount</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {session ? formatAmount(session.amount, session.currencyCode) : ''}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-2 pt-2 border-t border-indigo-100">
+                <p className="text-xs text-gray-500">
+                  {validatedCard.cardholderName} • Balance: {formatAmount(validatedCard.walletBalance, validatedCard.currency)}
+                </p>
+              </div>
+            </div>
+
+            {error && (
+              <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-100 rounded-lg flex items-center gap-2 text-red-700 text-sm">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                {error}
+              </div>
+            )}
+
+            <form onSubmit={handleCardPinSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5 text-center">Enter your 4-digit PIN</label>
+                <div className="relative">
+                  <input
+                    type={showPin ? 'text' : 'password'}
+                    value={cardPin}
+                    onChange={(e) => setCardPin(e.target.value.replace(/\D/g, '').substring(0, 4))}
+                    placeholder="••••"
+                    className="w-full py-4 px-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-2xl text-center tracking-[1em]"
+                    maxLength={4}
+                    required
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPin(!showPin)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={paymentLoading || cardPin.length !== 4}
+                className="w-full py-3.5 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
               >
                 {paymentLoading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
@@ -1270,7 +1522,7 @@ export function HostedCheckoutPage() {
             <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
               <div className="flex items-center justify-center gap-2 text-gray-400 text-sm">
                 <Shield className="w-4 h-4" />
-                <span>Your payment is secure and encrypted</span>
+                <span>PIN is encrypted and never stored</span>
               </div>
             </div>
           </div>

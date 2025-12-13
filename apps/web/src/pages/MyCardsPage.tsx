@@ -719,6 +719,23 @@ function CardItem({
     international: false,
     atmWithdrawal: true,
   });
+  const [cvv, setCvv] = useState<string | null>(null);
+
+  // Fetch CVV when card details are shown
+  useEffect(() => {
+    if (showDetails && !cvv) {
+      supabase
+        .from('cards')
+        .select('cvv')
+        .eq('id', card.id)
+        .single()
+        .then(({ data }) => {
+          if (data?.cvv) {
+            setCvv(data.cvv);
+          }
+        });
+    }
+  }, [showDetails, card.id, cvv]);
 
   const getCardGradient = (type: string, idx: number) => {
     const gradients = [
@@ -836,7 +853,7 @@ function CardItem({
               <div className="bg-white rounded px-3 py-1 text-center">
                 <p className="text-[8px] text-gray-500 uppercase">CVV</p>
                 <p className="text-sm font-mono font-bold text-gray-800">
-                  {showDetails ? '123' : '•••'}
+                  {showDetails ? (cvv || '•••') : '•••'}
                 </p>
               </div>
             </div>

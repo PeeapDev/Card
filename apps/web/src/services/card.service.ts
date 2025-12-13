@@ -1011,10 +1011,10 @@ export const cardService = {
   // ==========================================
 
   /**
-   * Look up a card by its 16-digit number for payment
+   * Look up a card by its 16-digit number and CVV for payment
    * Returns card info with wallet balance (no sensitive data)
    */
-  async lookupCardForPayment(cardNumber: string): Promise<{
+  async lookupCardForPayment(cardNumber: string, cvv?: string): Promise<{
     cardId: string;
     maskedNumber: string;
     cardholderName: string;
@@ -1026,6 +1026,8 @@ export const cardService = {
     // Clean the card number (remove spaces/dashes)
     const cleanNumber = cardNumber.replace(/[\s-]/g, '');
 
+    console.log('[CardService] Looking up card number:', cleanNumber, 'length:', cleanNumber.length);
+
     const { data, error } = await supabase
       .from('cards')
       .select(`
@@ -1033,6 +1035,7 @@ export const cardService = {
         card_number,
         masked_number,
         cardholder_name,
+        cvv,
         status,
         wallet_id,
         wallets (id, balance, currency)
@@ -1040,13 +1043,22 @@ export const cardService = {
       .eq('card_number', cleanNumber)
       .maybeSingle();
 
+    console.log('[CardService] Lookup result:', { data, error, hasData: !!data });
+
     if (error) {
-      console.error('Error looking up card:', error);
+      console.error('[CardService] Error looking up card:', error);
       throw new Error('Failed to look up card');
     }
 
     if (!data) {
+      console.log('[CardService] No card found for number:', cleanNumber);
       return null;
+    }
+
+    // Validate CVV if provided
+    if (cvv && data.cvv && data.cvv !== cvv) {
+      console.log('[CardService] CVV mismatch');
+      throw new Error('Invalid CVV. Please check your card details.');
     }
 
     // Check if card is active

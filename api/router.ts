@@ -45,6 +45,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log('[Router] Path:', path, 'Method:', req.method);
 
+    // Root path - return API info
+    if (path === '' || path === '/') {
+      return res.status(200).json({
+        name: 'Peeap API',
+        version: '1.0.0',
+        status: 'operational',
+        documentation: 'https://docs.peeap.com',
+        endpoints: {
+          checkout: '/api/checkout/*',
+          payments: '/api/payments/*',
+          webhooks: '/api/webhooks/*'
+        }
+      });
+    }
+
     // Route to appropriate handler based on path
     if (path === 'mobile-auth' || path.startsWith('mobile-auth')) {
       return await handleMobileAuth(req, res);
@@ -146,6 +161,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } else if (path.match(/^payouts\/[^/]+$/) && !path.includes('/user/') && !path.includes('/merchant/') && !path.includes('/banks')) {
       const payoutId = path.split('/')[1];
       return await handlePayoutById(req, res, payoutId);
+    } else if (path === 'oauth/token' || path === 'oauth/token/') {
+      return await handleOAuthToken(req, res);
+    } else if (path === 'oauth/userinfo' || path === 'oauth/userinfo/') {
+      return await handleOAuthUserinfo(req, res);
+    } else if (path === 'oauth/revoke' || path === 'oauth/revoke/') {
+      return await handleOAuthRevoke(req, res);
+    // ========== SHARED API ENDPOINTS (Cross-Domain SSO) ==========
+    } else if (path === 'shared/contacts' || path === 'shared/contacts/') {
+      return await handleSharedContacts(req, res);
+    } else if (path === 'shared/wallet' || path === 'shared/wallet/') {
+      return await handleSharedWallet(req, res);
+    } else if (path === 'shared/wallet/transactions' || path === 'shared/wallet/transactions/') {
+      return await handleSharedWalletTransactions(req, res);
+    } else if (path === 'shared/transfer' || path === 'shared/transfer/') {
+      return await handleSharedTransfer(req, res);
+    } else if (path === 'shared/user' || path === 'shared/user/') {
+      return await handleSharedUser(req, res);
+    } else if (path === 'shared/checkout/create' || path === 'shared/checkout/create/') {
+      return await handleSharedCheckoutCreate(req, res);
+    // ========== ANALYTICS ENDPOINTS ==========
+    } else if (path === 'analytics/pageview' || path === 'analytics/pageview/') {
+      return await handleAnalyticsPageView(req, res);
+    } else if (path === 'analytics/summary' || path === 'analytics/summary/') {
+      return await handleAnalyticsSummary(req, res);
+    } else if (path === 'analytics/pages' || path === 'analytics/pages/') {
+      return await handleAnalyticsPages(req, res);
+    } else if (path === 'analytics/visitors' || path === 'analytics/visitors/') {
+      return await handleAnalyticsVisitors(req, res);
     } else if (path === 'debug/transactions' || path.startsWith('debug/transactions')) {
       // Debug endpoint to check transactions
       const ref = req.query.ref as string;
@@ -852,8 +895,8 @@ async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse
     const status = url.searchParams.get('status');
     const retry = url.searchParams.get('retry');
     const message = url.searchParams.get('message');
-    const host = req.headers.host || 'checkout.peeap.com';
-    const baseUrl = `https://${host}`;
+    // Always redirect to checkout.peeap.com for the hosted checkout UI
+    const checkoutFrontendUrl = process.env.CHECKOUT_URL || 'https://checkout.peeap.com';
 
     console.log('[Checkout Pay Redirect] Session:', sessionId, 'Status:', status, 'Retry:', retry);
 
@@ -882,8 +925,9 @@ async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse
     // If cancelled, redirect back to checkout page to try again (without status param)
     // Do this BEFORE session lookup so redirect works even if session doesn't exist
     if (status === 'cancel') {
-      const checkoutUrl = `${baseUrl}/checkout/pay/${sessionId}?retry=true&message=Payment+cancelled.+Please+try+another+payment+method.`;
-      return res.redirect(302, checkoutUrl);
+      const redirectUrl = `${checkoutFrontendUrl}/checkout/pay/${sessionId}?retry=true&message=Payment+cancelled.+Please+try+another+payment+method.`;
+      console.log('[Checkout Pay Redirect] Redirecting cancelled payment to:', redirectUrl);
+      return res.redirect(302, redirectUrl);
     }
 
     // Look up the checkout session to get return URL and details (only needed for success)
@@ -2730,11 +2774,16 @@ async function handleCheckoutSessionCardPay(req: VercelRequest, res: VercelRespo
   }
 
   try {
-    const { cardId, walletId, pin } = req.body;
+    const { cardId, walletId, pin, cvvVerified } = req.body;
 
     // Validate required fields
-    if (!cardId || !walletId || !pin) {
-      return res.status(400).json({ error: 'cardId, walletId, and pin are required' });
+    if (!cardId || !walletId) {
+      return res.status(400).json({ error: 'cardId and walletId are required' });
+    }
+
+    // Either PIN or cvvVerified flag must be provided
+    if (!pin && !cvvVerified) {
+      return res.status(400).json({ error: 'pin or cvvVerified is required' });
     }
 
     console.log('[CardPay] Processing card payment for session:', sessionId);
@@ -2763,12 +2812,12 @@ async function handleCheckoutSessionCardPay(req: VercelRequest, res: VercelRespo
     // 2. Verify the card exists and belongs to the wallet
     const { data: card, error: cardError } = await supabase
       .from('cards')
-      .select('id, wallet_id, cardholder_name, transaction_pin, status')
+      .select('id, wallet_id, cardholder_name, cvv, status')
       .eq('id', cardId)
       .single();
 
     if (cardError || !card) {
-      console.error('[CardPay] Card not found:', cardId);
+      console.error('[CardPay] Card not found:', cardId, cardError);
       return res.status(404).json({ error: 'Card not found' });
     }
 
@@ -2780,15 +2829,19 @@ async function handleCheckoutSessionCardPay(req: VercelRequest, res: VercelRespo
       return res.status(400).json({ error: `Card is ${card.status.toLowerCase()}. Please use an active card.` });
     }
 
-    // 3. Verify the PIN
-    if (!card.transaction_pin) {
-      return res.status(400).json({ error: 'Transaction PIN not set for this card. Please set a PIN in your Peeap app.' });
-    }
+    // 3. Verify the PIN (skip if CVV was already verified in step 1)
+    if (!cvvVerified) {
+      // If CVV wasn't verified in step 1, verify PIN against CVV
+      if (!card.cvv) {
+        return res.status(400).json({ error: 'Card CVV not set. Please contact support.' });
+      }
 
-    if (card.transaction_pin !== pin) {
-      console.log('[CardPay] Invalid PIN for card:', cardId);
-      return res.status(401).json({ error: 'Invalid transaction PIN' });
+      if (card.cvv !== pin) {
+        console.log('[CardPay] Invalid PIN/CVV for card:', cardId);
+        return res.status(401).json({ error: 'Invalid PIN. Please check and try again.' });
+      }
     }
+    // If cvvVerified is true, we trust that CVV was already validated in the frontend
 
     // 4. Get wallet and check balance
     const { data: wallet, error: walletError } = await supabase
@@ -3487,7 +3540,7 @@ async function handleMobileMoneySend(req: VercelRequest, res: VercelResponse) {
     const { data: transaction, error: txError } = await supabase
       .from('transactions')
       .insert({
-        user_id: userId,
+        user_id: authenticatedUserId,
         wallet_id: walletId,
         type: 'MOBILE_MONEY_SEND',
         amount: -totalDeduction,
@@ -3537,7 +3590,7 @@ async function handleMobileMoneySend(req: VercelRequest, res: VercelResponse) {
         phoneNumber: fullPhoneNumber,
         providerId,
         financialAccountId: sleAccount.id,
-        userId,
+        userId: authenticatedUserId,
         walletId,
         description,
       });
@@ -3560,7 +3613,7 @@ async function handleMobileMoneySend(req: VercelRequest, res: VercelResponse) {
 
       // Create notification
       await supabase.from('user_notifications').insert({
-        user_id: userId,
+        user_id: authenticatedUserId,
         type: 'mobile_money_send',
         title: 'Mobile Money Transfer',
         message: `Your transfer of ${currency} ${amount.toLocaleString()} to ${phoneNumber} is being processed.`,
@@ -4745,5 +4798,1271 @@ async function handlePayoutBanks(req: VercelRequest, res: VercelResponse) {
       return res.status(error.statusCode).json({ error: error.message, code: error.code });
     }
     return res.status(500).json({ error: error.message || 'Failed to get banks' });
+  }
+}
+
+// ============================================================================
+// OAuth 2.0 HANDLERS - For Third-Party SSO Integration
+// ============================================================================
+
+/**
+ * Generate a secure random token
+ */
+function generateSecureToken(length: number = 64): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
+/**
+ * OAuth Token Endpoint
+ * Exchange authorization code for access token, or refresh tokens
+ *
+ * POST /api/oauth/token
+ * Body: { grant_type, code, client_id, client_secret, redirect_uri, refresh_token }
+ */
+async function handleOAuthToken(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'method_not_allowed' });
+  }
+
+  try {
+    const {
+      grant_type,
+      code,
+      client_id,
+      client_secret,
+      redirect_uri,
+      refresh_token,
+    } = req.body;
+
+    if (!client_id || !client_secret) {
+      return res.status(400).json({
+        error: 'invalid_request',
+        error_description: 'client_id and client_secret are required',
+      });
+    }
+
+    // Validate client credentials
+    const { data: clients, error: clientError } = await supabase
+      .from('oauth_clients')
+      .select('*')
+      .eq('client_id', client_id)
+      .eq('client_secret', client_secret)
+      .eq('is_active', true)
+      .limit(1);
+
+    if (clientError || !clients || clients.length === 0) {
+      return res.status(401).json({
+        error: 'invalid_client',
+        error_description: 'Invalid client credentials',
+      });
+    }
+
+    // Handle different grant types
+    if (grant_type === 'authorization_code') {
+      if (!code || !redirect_uri) {
+        return res.status(400).json({
+          error: 'invalid_request',
+          error_description: 'code and redirect_uri are required for authorization_code grant',
+        });
+      }
+
+      // Find and validate the authorization code
+      const { data: codes, error: codeError } = await supabase
+        .from('oauth_authorization_codes')
+        .select('*')
+        .eq('code', code)
+        .eq('client_id', client_id)
+        .eq('redirect_uri', redirect_uri)
+        .is('used_at', null)
+        .limit(1);
+
+      if (codeError || !codes || codes.length === 0) {
+        return res.status(400).json({
+          error: 'invalid_grant',
+          error_description: 'Invalid or expired authorization code',
+        });
+      }
+
+      const authCode = codes[0];
+
+      // Check expiration
+      if (new Date(authCode.expires_at) < new Date()) {
+        return res.status(400).json({
+          error: 'invalid_grant',
+          error_description: 'Authorization code expired',
+        });
+      }
+
+      // Mark code as used
+      await supabase
+        .from('oauth_authorization_codes')
+        .update({ used_at: new Date().toISOString() })
+        .eq('id', authCode.id);
+
+      // Generate access and refresh tokens
+      const accessToken = generateSecureToken(64);
+      const newRefreshToken = generateSecureToken(64);
+      const expiresIn = 3600; // 1 hour
+
+      // Store the access token
+      const { error: tokenError } = await supabase.from('oauth_access_tokens').insert({
+        access_token: accessToken,
+        refresh_token: newRefreshToken,
+        client_id: client_id,
+        user_id: authCode.user_id,
+        scope: authCode.scope,
+        expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
+      });
+
+      if (tokenError) {
+        console.error('[OAuth] Token creation error:', tokenError);
+        return res.status(500).json({
+          error: 'server_error',
+          error_description: 'Failed to create access token',
+        });
+      }
+
+      return res.status(200).json({
+        access_token: accessToken,
+        token_type: 'Bearer',
+        expires_in: expiresIn,
+        refresh_token: newRefreshToken,
+        scope: authCode.scope,
+      });
+
+    } else if (grant_type === 'refresh_token') {
+      if (!refresh_token) {
+        return res.status(400).json({
+          error: 'invalid_request',
+          error_description: 'refresh_token is required',
+        });
+      }
+
+      // Find the refresh token
+      const { data: tokens, error: tokenError } = await supabase
+        .from('oauth_access_tokens')
+        .select('*')
+        .eq('refresh_token', refresh_token)
+        .eq('client_id', client_id)
+        .is('revoked_at', null)
+        .limit(1);
+
+      if (tokenError || !tokens || tokens.length === 0) {
+        return res.status(400).json({
+          error: 'invalid_grant',
+          error_description: 'Invalid refresh token',
+        });
+      }
+
+      const oldToken = tokens[0];
+
+      // Revoke old token
+      await supabase
+        .from('oauth_access_tokens')
+        .update({ revoked_at: new Date().toISOString() })
+        .eq('id', oldToken.id);
+
+      // Generate new tokens
+      const accessToken = generateSecureToken(64);
+      const newRefreshToken = generateSecureToken(64);
+      const expiresIn = 3600;
+
+      // Store new token
+      const { error: newTokenError } = await supabase.from('oauth_access_tokens').insert({
+        access_token: accessToken,
+        refresh_token: newRefreshToken,
+        client_id: client_id,
+        user_id: oldToken.user_id,
+        scope: oldToken.scope,
+        expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
+      });
+
+      if (newTokenError) {
+        return res.status(500).json({
+          error: 'server_error',
+          error_description: 'Failed to refresh token',
+        });
+      }
+
+      return res.status(200).json({
+        access_token: accessToken,
+        token_type: 'Bearer',
+        expires_in: expiresIn,
+        refresh_token: newRefreshToken,
+        scope: oldToken.scope,
+      });
+
+    } else {
+      return res.status(400).json({
+        error: 'unsupported_grant_type',
+        error_description: 'Only authorization_code and refresh_token grants are supported',
+      });
+    }
+  } catch (error: any) {
+    console.error('[OAuth Token] Error:', error);
+    return res.status(500).json({
+      error: 'server_error',
+      error_description: error.message || 'Internal server error',
+    });
+  }
+}
+
+/**
+ * OAuth UserInfo Endpoint
+ * Returns user profile information for the authenticated token
+ *
+ * GET /api/oauth/userinfo
+ * Headers: Authorization: Bearer <access_token>
+ */
+async function handleOAuthUserinfo(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'method_not_allowed' });
+  }
+
+  try {
+    // Extract access token from Authorization header
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        error: 'invalid_token',
+        error_description: 'Missing or invalid authorization header',
+      });
+    }
+
+    const accessToken = authHeader.substring(7);
+
+    // Validate access token
+    const { data: tokens, error: tokenError } = await supabase
+      .from('oauth_access_tokens')
+      .select('*')
+      .eq('access_token', accessToken)
+      .is('revoked_at', null)
+      .limit(1);
+
+    if (tokenError || !tokens || tokens.length === 0) {
+      return res.status(401).json({
+        error: 'invalid_token',
+        error_description: 'Invalid access token',
+      });
+    }
+
+    const token = tokens[0];
+
+    // Check expiration
+    if (new Date(token.expires_at) < new Date()) {
+      return res.status(401).json({
+        error: 'invalid_token',
+        error_description: 'Access token expired',
+      });
+    }
+
+    // Fetch user info
+    const { data: users, error: userError } = await supabase
+      .from('users')
+      .select('id, email, first_name, last_name, phone, roles')
+      .eq('id', token.user_id)
+      .limit(1);
+
+    if (userError || !users || users.length === 0) {
+      return res.status(404).json({
+        error: 'not_found',
+        error_description: 'User not found',
+      });
+    }
+
+    const user = users[0];
+    const scopes = token.scope.split(' ');
+
+    // Build response based on granted scopes
+    const userInfo: Record<string, any> = {
+      sub: user.id, // Subject (user ID) - always included
+    };
+
+    if (scopes.includes('profile')) {
+      userInfo.name = `${user.first_name || ''} ${user.last_name || ''}`.trim();
+      userInfo.given_name = user.first_name;
+      userInfo.family_name = user.last_name;
+    }
+
+    if (scopes.includes('email')) {
+      userInfo.email = user.email;
+    }
+
+    if (scopes.includes('phone')) {
+      userInfo.phone = user.phone;
+    }
+
+    return res.status(200).json(userInfo);
+  } catch (error: any) {
+    console.error('[OAuth UserInfo] Error:', error);
+    return res.status(500).json({
+      error: 'server_error',
+      error_description: error.message || 'Internal server error',
+    });
+  }
+}
+
+/**
+ * OAuth Token Revocation Endpoint
+ * Revoke an access token or refresh token
+ *
+ * POST /api/oauth/revoke
+ * Body: { token, token_type_hint }
+ */
+async function handleOAuthRevoke(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'method_not_allowed' });
+  }
+
+  try {
+    const { token, token_type_hint } = req.body;
+
+    if (!token) {
+      return res.status(400).json({
+        error: 'invalid_request',
+        error_description: 'token is required',
+      });
+    }
+
+    // Try to find and revoke the token
+    // First try as access token
+    let revoked = false;
+
+    if (!token_type_hint || token_type_hint === 'access_token') {
+      const { data: accessTokens } = await supabase
+        .from('oauth_access_tokens')
+        .select('id')
+        .eq('access_token', token)
+        .is('revoked_at', null)
+        .limit(1);
+
+      if (accessTokens && accessTokens.length > 0) {
+        await supabase
+          .from('oauth_access_tokens')
+          .update({ revoked_at: new Date().toISOString() })
+          .eq('id', accessTokens[0].id);
+        revoked = true;
+      }
+    }
+
+    // Try as refresh token if not found
+    if (!revoked && (!token_type_hint || token_type_hint === 'refresh_token')) {
+      const { data: refreshTokens } = await supabase
+        .from('oauth_access_tokens')
+        .select('id')
+        .eq('refresh_token', token)
+        .is('revoked_at', null)
+        .limit(1);
+
+      if (refreshTokens && refreshTokens.length > 0) {
+        await supabase
+          .from('oauth_access_tokens')
+          .update({ revoked_at: new Date().toISOString() })
+          .eq('id', refreshTokens[0].id);
+        revoked = true;
+      }
+    }
+
+    // Per RFC 7009, always return 200 even if token was not found
+    return res.status(200).json({ success: true });
+  } catch (error: any) {
+    console.error('[OAuth Revoke] Error:', error);
+    return res.status(500).json({
+      error: 'server_error',
+      error_description: error.message || 'Internal server error',
+    });
+  }
+}
+
+// ============================================================================
+// SHARED API HANDLERS - Cross-Domain SSO Access
+// These endpoints can be called from any Peeap domain with valid SSO session
+// ============================================================================
+
+/**
+ * Validate SSO session from Authorization header
+ * Supports both SSO session tokens and OAuth access tokens
+ */
+async function validateSharedApiAuth(req: VercelRequest): Promise<{
+  valid: boolean;
+  userId?: string;
+  error?: string;
+}> {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader) {
+    return { valid: false, error: 'Missing authorization header' };
+  }
+
+  // Support both "Bearer <token>" and "SSO <session_token>" formats
+  const [authType, token] = authHeader.split(' ');
+
+  if (!token) {
+    return { valid: false, error: 'Invalid authorization format' };
+  }
+
+  // Try SSO session token first
+  if (authType === 'SSO' || authType === 'Session') {
+    const { data: sessions, error } = await supabase
+      .from('user_sessions')
+      .select('user_id, expires_at')
+      .eq('session_token', token)
+      .limit(1);
+
+    if (!error && sessions && sessions.length > 0) {
+      const session = sessions[0];
+      if (new Date(session.expires_at) > new Date()) {
+        // Update last activity
+        await supabase
+          .from('user_sessions')
+          .update({ last_activity_at: new Date().toISOString() })
+          .eq('session_token', token);
+        return { valid: true, userId: session.user_id };
+      }
+      return { valid: false, error: 'Session expired' };
+    }
+  }
+
+  // Try OAuth access token
+  if (authType === 'Bearer') {
+    const { data: tokens, error } = await supabase
+      .from('oauth_access_tokens')
+      .select('user_id, expires_at')
+      .eq('access_token', token)
+      .is('revoked_at', null)
+      .limit(1);
+
+    if (!error && tokens && tokens.length > 0) {
+      const accessToken = tokens[0];
+      if (new Date(accessToken.expires_at) > new Date()) {
+        return { valid: true, userId: accessToken.user_id };
+      }
+      return { valid: false, error: 'Token expired' };
+    }
+
+    // Also try decoding JWT-style token (base64 encoded payload)
+    try {
+      const payload = JSON.parse(Buffer.from(token, 'base64').toString());
+      if (payload.userId && payload.exp && payload.exp > Date.now()) {
+        return { valid: true, userId: payload.userId };
+      }
+    } catch {
+      // Not a valid JWT-style token
+    }
+  }
+
+  return { valid: false, error: 'Invalid or expired token' };
+}
+
+/**
+ * Get user's contacts
+ * GET /api/shared/contacts
+ */
+async function handleSharedContacts(req: VercelRequest, res: VercelResponse) {
+  const auth = await validateSharedApiAuth(req);
+  if (!auth.valid) {
+    return res.status(401).json({ error: auth.error });
+  }
+
+  if (req.method === 'GET') {
+    try {
+      // Get user's contacts (people they've sent money to)
+      const { data: contacts, error } = await supabase
+        .from('user_contacts')
+        .select(`
+          id,
+          contact_user_id,
+          nickname,
+          is_favorite,
+          last_transaction_at,
+          created_at,
+          contact:users!contact_user_id (
+            id,
+            first_name,
+            last_name,
+            phone,
+            email
+          )
+        `)
+        .eq('user_id', auth.userId)
+        .order('last_transaction_at', { ascending: false, nullsFirst: false });
+
+      if (error) {
+        // Fallback: Get contacts from transaction history
+        const { data: txContacts } = await supabase
+          .from('transactions')
+          .select('recipient_id, recipient_name, recipient_phone')
+          .eq('user_id', auth.userId)
+          .eq('type', 'TRANSFER')
+          .not('recipient_id', 'is', null)
+          .order('created_at', { ascending: false })
+          .limit(50);
+
+        // Deduplicate by recipient_id
+        const uniqueContacts = txContacts?.reduce((acc: any[], tx: any) => {
+          if (!acc.find(c => c.id === tx.recipient_id)) {
+            acc.push({
+              id: tx.recipient_id,
+              name: tx.recipient_name,
+              phone: tx.recipient_phone,
+            });
+          }
+          return acc;
+        }, []) || [];
+
+        return res.status(200).json({ contacts: uniqueContacts });
+      }
+
+      return res.status(200).json({ contacts: contacts || [] });
+    } catch (error: any) {
+      console.error('[SharedContacts] Error:', error);
+      return res.status(500).json({ error: 'Failed to fetch contacts' });
+    }
+  }
+
+  if (req.method === 'POST') {
+    // Add a new contact
+    const { contactUserId, nickname } = req.body;
+
+    if (!contactUserId) {
+      return res.status(400).json({ error: 'contactUserId is required' });
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('user_contacts')
+        .upsert({
+          user_id: auth.userId,
+          contact_user_id: contactUserId,
+          nickname: nickname || null,
+        }, {
+          onConflict: 'user_id,contact_user_id',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return res.status(200).json({ contact: data });
+    } catch (error: any) {
+      console.error('[SharedContacts] Add error:', error);
+      return res.status(500).json({ error: 'Failed to add contact' });
+    }
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Get user's wallet balance
+ * GET /api/shared/wallet
+ */
+async function handleSharedWallet(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const auth = await validateSharedApiAuth(req);
+  if (!auth.valid) {
+    return res.status(401).json({ error: auth.error });
+  }
+
+  try {
+    const { data: wallets, error } = await supabase
+      .from('wallets')
+      .select('id, balance, currency, status, daily_limit, monthly_limit, created_at')
+      .eq('user_id', auth.userId)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+
+    // Return primary wallet (first one) and all wallets
+    const primaryWallet = wallets?.[0] || null;
+
+    return res.status(200).json({
+      wallet: primaryWallet ? {
+        id: primaryWallet.id,
+        balance: parseFloat(primaryWallet.balance) || 0,
+        currency: primaryWallet.currency || 'SLE',
+        status: primaryWallet.status,
+        dailyLimit: parseFloat(primaryWallet.daily_limit) || 5000,
+        monthlyLimit: parseFloat(primaryWallet.monthly_limit) || 50000,
+      } : null,
+      wallets: (wallets || []).map((w: any) => ({
+        id: w.id,
+        balance: parseFloat(w.balance) || 0,
+        currency: w.currency || 'SLE',
+        status: w.status,
+      })),
+    });
+  } catch (error: any) {
+    console.error('[SharedWallet] Error:', error);
+    return res.status(500).json({ error: 'Failed to fetch wallet' });
+  }
+}
+
+/**
+ * Get user's wallet transactions
+ * GET /api/shared/wallet/transactions
+ */
+async function handleSharedWalletTransactions(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const auth = await validateSharedApiAuth(req);
+  if (!auth.valid) {
+    return res.status(401).json({ error: auth.error });
+  }
+
+  try {
+    const url = new URL(req.url || '', `http://${req.headers.host}`);
+    const page = parseInt(url.searchParams.get('page') || '1');
+    const limit = parseInt(url.searchParams.get('limit') || '20');
+    const offset = (page - 1) * limit;
+
+    // Get user's primary wallet
+    const { data: wallet } = await supabase
+      .from('wallets')
+      .select('id')
+      .eq('user_id', auth.userId)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .single();
+
+    if (!wallet) {
+      return res.status(200).json({ transactions: [], total: 0 });
+    }
+
+    // Get transactions
+    const { data: transactions, error, count } = await supabase
+      .from('transactions')
+      .select('*', { count: 'exact' })
+      .eq('wallet_id', wallet.id)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+
+    return res.status(200).json({
+      transactions: (transactions || []).map((tx: any) => ({
+        id: tx.id,
+        type: tx.type,
+        amount: parseFloat(tx.amount) || 0,
+        currency: tx.currency || 'SLE',
+        status: tx.status,
+        description: tx.description,
+        merchantName: tx.merchant_name,
+        reference: tx.reference,
+        createdAt: tx.created_at,
+      })),
+      total: count || 0,
+      page,
+      limit,
+      totalPages: Math.ceil((count || 0) / limit),
+    });
+  } catch (error: any) {
+    console.error('[SharedWalletTransactions] Error:', error);
+    return res.status(500).json({ error: 'Failed to fetch transactions' });
+  }
+}
+
+/**
+ * Transfer money
+ * POST /api/shared/transfer
+ */
+async function handleSharedTransfer(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const auth = await validateSharedApiAuth(req);
+  if (!auth.valid) {
+    return res.status(401).json({ error: auth.error });
+  }
+
+  try {
+    const { recipientId, recipientPhone, recipientEmail, amount, description, pin } = req.body;
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: 'Valid amount is required' });
+    }
+
+    if (!recipientId && !recipientPhone && !recipientEmail) {
+      return res.status(400).json({ error: 'Recipient is required (id, phone, or email)' });
+    }
+
+    // Get sender's wallet
+    const { data: senderWallet, error: walletError } = await supabase
+      .from('wallets')
+      .select('id, balance, status')
+      .eq('user_id', auth.userId)
+      .eq('status', 'ACTIVE')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .single();
+
+    if (walletError || !senderWallet) {
+      return res.status(400).json({ error: 'No active wallet found' });
+    }
+
+    if (parseFloat(senderWallet.balance) < amount) {
+      return res.status(400).json({ error: 'Insufficient balance' });
+    }
+
+    // Find recipient
+    let recipientUserId = recipientId;
+    if (!recipientUserId) {
+      let query = supabase.from('users').select('id');
+
+      if (recipientPhone) {
+        query = query.eq('phone', recipientPhone);
+      } else if (recipientEmail) {
+        query = query.eq('email', recipientEmail);
+      }
+
+      const { data: recipients } = await query.limit(1);
+      if (!recipients || recipients.length === 0) {
+        return res.status(404).json({ error: 'Recipient not found' });
+      }
+      recipientUserId = recipients[0].id;
+    }
+
+    // Get recipient's wallet
+    const { data: recipientWallet, error: recipientWalletError } = await supabase
+      .from('wallets')
+      .select('id, balance')
+      .eq('user_id', recipientUserId)
+      .eq('status', 'ACTIVE')
+      .limit(1)
+      .single();
+
+    if (recipientWalletError || !recipientWallet) {
+      return res.status(400).json({ error: 'Recipient has no active wallet' });
+    }
+
+    // Perform transfer
+    const reference = `TRF-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`;
+
+    // Debit sender
+    await supabase
+      .from('wallets')
+      .update({
+        balance: parseFloat(senderWallet.balance) - amount,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', senderWallet.id);
+
+    // Credit recipient
+    await supabase
+      .from('wallets')
+      .update({
+        balance: parseFloat(recipientWallet.balance) + amount,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', recipientWallet.id);
+
+    // Create transactions
+    await supabase.from('transactions').insert([
+      {
+        wallet_id: senderWallet.id,
+        user_id: auth.userId,
+        type: 'TRANSFER',
+        amount: -amount,
+        currency: 'SLE',
+        status: 'COMPLETED',
+        description: description || 'Transfer sent',
+        reference,
+        recipient_id: recipientUserId,
+      },
+      {
+        wallet_id: recipientWallet.id,
+        user_id: recipientUserId,
+        type: 'TRANSFER',
+        amount: amount,
+        currency: 'SLE',
+        status: 'COMPLETED',
+        description: description || 'Transfer received',
+        reference,
+        sender_id: auth.userId,
+      },
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      transactionId: reference,
+      amount,
+      recipientId: recipientUserId,
+    });
+  } catch (error: any) {
+    console.error('[SharedTransfer] Error:', error);
+    return res.status(500).json({ error: 'Transfer failed' });
+  }
+}
+
+/**
+ * Get current user profile
+ * GET /api/shared/user
+ */
+async function handleSharedUser(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const auth = await validateSharedApiAuth(req);
+  if (!auth.valid) {
+    return res.status(401).json({ error: auth.error });
+  }
+
+  try {
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, email, first_name, last_name, phone, roles, tier, kyc_status, kyc_tier, email_verified, created_at')
+      .eq('id', auth.userId)
+      .single();
+
+    if (error) throw error;
+
+    return res.status(200).json({
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        phone: user.phone,
+        roles: user.roles?.split(',') || ['user'],
+        tier: user.tier || 'basic',
+        kycStatus: user.kyc_status,
+        kycTier: user.kyc_tier,
+        emailVerified: user.email_verified,
+        createdAt: user.created_at,
+      },
+    });
+  } catch (error: any) {
+    console.error('[SharedUser] Error:', error);
+    return res.status(500).json({ error: 'Failed to fetch user' });
+  }
+}
+
+/**
+ * Create a hosted checkout session
+ * POST /api/shared/checkout/create
+ */
+async function handleSharedCheckoutCreate(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const auth = await validateSharedApiAuth(req);
+  if (!auth.valid) {
+    return res.status(401).json({ error: auth.error });
+  }
+
+  try {
+    const {
+      amount,
+      currency = 'SLE',
+      description,
+      successUrl,
+      cancelUrl,
+      metadata,
+    } = req.body;
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: 'Valid amount is required' });
+    }
+
+    // Create checkout session
+    const sessionId = `cs_${Date.now()}_${Math.random().toString(36).substr(2, 12)}`;
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+
+    const { data: session, error } = await supabase
+      .from('checkout_sessions')
+      .insert({
+        session_id: sessionId,
+        user_id: auth.userId,
+        amount,
+        currency,
+        description,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: metadata || {},
+        status: 'pending',
+        expires_at: expiresAt.toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Build checkout URL (use the checkout domain)
+    const checkoutUrl = process.env.NODE_ENV === 'production'
+      ? `https://checkout.peeap.com/checkout/pay/${sessionId}`
+      : `http://localhost:5174/checkout/pay/${sessionId}`;
+
+    return res.status(200).json({
+      sessionId,
+      checkoutUrl,
+      expiresAt: expiresAt.toISOString(),
+    });
+  } catch (error: any) {
+    console.error('[SharedCheckoutCreate] Error:', error);
+    return res.status(500).json({ error: 'Failed to create checkout session' });
+  }
+}
+
+// ============================================================================
+// ANALYTICS HANDLERS
+// ============================================================================
+
+async function ensurePageViewsTable() {
+  // Check if table exists by trying a simple query
+  const { error } = await supabase.from('page_views').select('id').limit(1);
+
+  if (error && error.message.includes('does not exist')) {
+    console.log('[Analytics] page_views table does not exist, creating...');
+    // Table doesn't exist - we can't create it via API, needs to be created in Supabase dashboard
+    return false;
+  }
+  return true;
+}
+
+async function handleAnalyticsPageView(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const {
+      sessionId,
+      userId,
+      pagePath,
+      pageTitle,
+      referrer,
+      userAgent,
+      deviceType,
+      browser,
+      os,
+      screenWidth,
+      screenHeight,
+      durationSeconds,
+      isBounce
+    } = req.body;
+
+    if (!sessionId || !pagePath) {
+      return res.status(400).json({ error: 'sessionId and pagePath are required' });
+    }
+
+    // Get IP and geolocation from headers
+    const ipAddress = req.headers['x-forwarded-for']?.toString().split(',')[0] ||
+                      req.headers['x-real-ip']?.toString() ||
+                      'unknown';
+
+    const { data, error } = await supabase
+      .from('page_views')
+      .insert({
+        session_id: sessionId,
+        user_id: userId || null,
+        page_path: pagePath,
+        page_title: pageTitle || null,
+        referrer: referrer || null,
+        user_agent: userAgent || req.headers['user-agent'] || null,
+        ip_address: ipAddress,
+        device_type: deviceType || null,
+        browser: browser || null,
+        os: os || null,
+        screen_width: screenWidth || null,
+        screen_height: screenHeight || null,
+        duration_seconds: durationSeconds || 0,
+        is_bounce: isBounce !== false,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[Analytics] PageView insert error:', error);
+      return res.status(500).json({ error: 'Failed to record page view' });
+    }
+
+    return res.status(200).json({ success: true, id: data.id });
+  } catch (error: any) {
+    console.error('[Analytics] PageView error:', error);
+    return res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+}
+
+async function handleAnalyticsSummary(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    // Verify admin access
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const token = authHeader.substring(7);
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    // Check if user is admin
+    const { data: userData } = await supabase
+      .from('users')
+      .select('roles')
+      .eq('id', user.id)
+      .single();
+
+    if (!userData || !['admin', 'superadmin'].includes(userData.roles)) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const period = (req.query.period as string) || '7d';
+    let startDate: Date;
+
+    switch (period) {
+      case '24h':
+        startDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        break;
+      case '7d':
+        startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case '30d':
+        startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        break;
+      case '90d':
+        startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+        break;
+      default:
+        startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    }
+
+    // Get total page views
+    const { count: totalViews } = await supabase
+      .from('page_views')
+      .select('*', { count: 'exact', head: true })
+      .gte('created_at', startDate.toISOString());
+
+    // Get unique sessions (visitors)
+    const { data: sessions } = await supabase
+      .from('page_views')
+      .select('session_id')
+      .gte('created_at', startDate.toISOString());
+
+    const uniqueVisitors = new Set(sessions?.map(s => s.session_id)).size;
+
+    // Get bounce rate
+    const { data: bounceData } = await supabase
+      .from('page_views')
+      .select('is_bounce')
+      .gte('created_at', startDate.toISOString());
+
+    const bounceCount = bounceData?.filter(d => d.is_bounce).length || 0;
+    const bounceRate = bounceData?.length ? Math.round((bounceCount / bounceData.length) * 100) : 0;
+
+    // Get average session duration
+    const { data: durationData } = await supabase
+      .from('page_views')
+      .select('duration_seconds')
+      .gte('created_at', startDate.toISOString())
+      .gt('duration_seconds', 0);
+
+    const avgDuration = durationData?.length
+      ? Math.round(durationData.reduce((sum, d) => sum + d.duration_seconds, 0) / durationData.length)
+      : 0;
+
+    // Get views by day for chart
+    const { data: dailyViews } = await supabase
+      .from('page_views')
+      .select('created_at')
+      .gte('created_at', startDate.toISOString())
+      .order('created_at', { ascending: true });
+
+    const viewsByDay: Record<string, number> = {};
+    dailyViews?.forEach(view => {
+      const day = new Date(view.created_at).toISOString().split('T')[0];
+      viewsByDay[day] = (viewsByDay[day] || 0) + 1;
+    });
+
+    return res.status(200).json({
+      totalViews: totalViews || 0,
+      uniqueVisitors,
+      bounceRate,
+      avgDuration,
+      viewsByDay,
+      period
+    });
+  } catch (error: any) {
+    console.error('[Analytics] Summary error:', error);
+    return res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+}
+
+async function handleAnalyticsPages(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    // Verify admin access (same as summary)
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const token = authHeader.substring(7);
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    const { data: userData } = await supabase
+      .from('users')
+      .select('roles')
+      .eq('id', user.id)
+      .single();
+
+    if (!userData || !['admin', 'superadmin'].includes(userData.roles)) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const period = (req.query.period as string) || '7d';
+    let startDate: Date;
+
+    switch (period) {
+      case '24h':
+        startDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        break;
+      case '7d':
+        startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case '30d':
+        startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        break;
+      default:
+        startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    }
+
+    // Get page views grouped by path
+    const { data: pageViews } = await supabase
+      .from('page_views')
+      .select('page_path, page_title')
+      .gte('created_at', startDate.toISOString());
+
+    const pageStats: Record<string, { views: number; title: string }> = {};
+    pageViews?.forEach(view => {
+      if (!pageStats[view.page_path]) {
+        pageStats[view.page_path] = { views: 0, title: view.page_title || view.page_path };
+      }
+      pageStats[view.page_path].views++;
+    });
+
+    const topPages = Object.entries(pageStats)
+      .map(([path, stats]) => ({ path, ...stats }))
+      .sort((a, b) => b.views - a.views)
+      .slice(0, 20);
+
+    return res.status(200).json({ topPages, period });
+  } catch (error: any) {
+    console.error('[Analytics] Pages error:', error);
+    return res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+}
+
+async function handleAnalyticsVisitors(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    // Verify admin access
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const token = authHeader.substring(7);
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    const { data: userData } = await supabase
+      .from('users')
+      .select('roles')
+      .eq('id', user.id)
+      .single();
+
+    if (!userData || !['admin', 'superadmin'].includes(userData.roles)) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const period = (req.query.period as string) || '7d';
+    let startDate: Date;
+
+    switch (period) {
+      case '24h':
+        startDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        break;
+      case '7d':
+        startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case '30d':
+        startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        break;
+      default:
+        startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    }
+
+    // Get visitor data grouped by device, browser, OS
+    const { data: visitors } = await supabase
+      .from('page_views')
+      .select('device_type, browser, os, referrer')
+      .gte('created_at', startDate.toISOString());
+
+    // Aggregate device types
+    const deviceStats: Record<string, number> = {};
+    const browserStats: Record<string, number> = {};
+    const osStats: Record<string, number> = {};
+    const referrerStats: Record<string, number> = {};
+
+    visitors?.forEach(v => {
+      const device = v.device_type || 'Unknown';
+      const browser = v.browser || 'Unknown';
+      const os = v.os || 'Unknown';
+      const referrer = v.referrer ? new URL(v.referrer).hostname : 'Direct';
+
+      deviceStats[device] = (deviceStats[device] || 0) + 1;
+      browserStats[browser] = (browserStats[browser] || 0) + 1;
+      osStats[os] = (osStats[os] || 0) + 1;
+      referrerStats[referrer] = (referrerStats[referrer] || 0) + 1;
+    });
+
+    const sortAndLimit = (obj: Record<string, number>, limit = 10) =>
+      Object.entries(obj)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, limit)
+        .map(([name, count]) => ({ name, count }));
+
+    return res.status(200).json({
+      devices: sortAndLimit(deviceStats),
+      browsers: sortAndLimit(browserStats),
+      operatingSystems: sortAndLimit(osStats),
+      referrers: sortAndLimit(referrerStats),
+      period
+    });
+  } catch (error: any) {
+    console.error('[Analytics] Visitors error:', error);
+    return res.status(500).json({ error: error.message || 'Internal server error' });
   }
 }
