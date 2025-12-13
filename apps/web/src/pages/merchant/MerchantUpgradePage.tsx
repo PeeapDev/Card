@@ -16,6 +16,9 @@ import {
   Users,
   Code2,
   Sparkles,
+  Zap,
+  Shield,
+  BarChart3,
 } from 'lucide-react';
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
 import { Card } from '@/components/ui/Card';
@@ -118,15 +121,19 @@ export function MerchantUpgradePage() {
       try {
         if (!user?.id) {
           // User not logged in - redirect to Plus upgrade page to login there
-          const upgradeUrl = new URL('https://plus.peeap.com/upgrade');
+          const baseUrl = import.meta.env.DEV
+            ? 'http://localhost:3000/upgrade'
+            : 'https://plus.peeap.com/upgrade';
+          const upgradeUrl = new URL(baseUrl);
           upgradeUrl.searchParams.set('tier', plan.id);
           window.location.href = upgradeUrl.toString();
           return;
         }
 
-        // Generate a one-time SSO token stored in the database
+        // Sync user to Supabase and generate SSO token
         const redirectUrl = await ssoService.getRedirectUrl({
-          userId: user.id,
+          user: user,
+          targetApp: 'plus',
           tier: plan.id,
           redirectPath: `/setup?tier=${plan.id}`,
         });

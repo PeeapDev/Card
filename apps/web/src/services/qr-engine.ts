@@ -285,7 +285,7 @@ class QREngineService {
   /**
    * Check if QR data is a URL and extract payment info
    */
-  private parseURLQR(qrData: string): { type: 'checkout' | 'pay' | 'qr' | 'scan-pay'; id: string } | null {
+  private parseURLQR(qrData: string): { type: 'checkout' | 'pay' | 'qr' | 'scan-pay' | 'wallet' | 'user'; id: string; walletId?: string; userId?: string } | null {
     try {
       // Check if it's a URL
       if (!qrData.startsWith('http://') && !qrData.startsWith('https://')) {
@@ -313,10 +313,40 @@ class QREngineService {
         return { type: 'checkout', id: checkoutMatch[1] };
       }
 
-      // Handle ?qr={reference} format
+      // Handle /wallet/{walletId} format (direct wallet payment)
+      const walletMatch = pathname.match(/\/wallet\/([^/]+)$/);
+      if (walletMatch) {
+        return { type: 'wallet', id: walletMatch[1], walletId: walletMatch[1] };
+      }
+
+      // Handle /receive/{userId} or /user/{userId} format (user payment)
+      const userMatch = pathname.match(/\/(receive|user)\/([^/]+)$/);
+      if (userMatch) {
+        return { type: 'user', id: userMatch[2], userId: userMatch[2] };
+      }
+
+      // Handle /send-to/{userId} format
+      const sendToMatch = pathname.match(/\/send-to\/([^/]+)$/);
+      if (sendToMatch) {
+        return { type: 'user', id: sendToMatch[1], userId: sendToMatch[1] };
+      }
+
+      // Handle query parameters
       const qrParam = url.searchParams.get('qr');
       if (qrParam) {
         return { type: 'qr', id: qrParam };
+      }
+
+      // Handle ?wallet={walletId} format
+      const walletParam = url.searchParams.get('wallet');
+      if (walletParam) {
+        return { type: 'wallet', id: walletParam, walletId: walletParam };
+      }
+
+      // Handle ?user={userId} or ?to={userId} format
+      const userParam = url.searchParams.get('user') || url.searchParams.get('to') || url.searchParams.get('recipient');
+      if (userParam) {
+        return { type: 'user', id: userParam, userId: userParam };
       }
 
       return null;
@@ -346,9 +376,35 @@ class QREngineService {
           checkoutSessionId: urlData.id,
         };
       }
+
+      if (urlData.type === 'wallet' && urlData.walletId) {
+        // It's a wallet QR - look up wallet and user
+        return this.validateWalletQR(urlData.walletId);
+      }
+
+      if (urlData.type === 'user' && urlData.userId) {
+        // It's a user QR - look up user and their primary wallet
+        return this.validateUserQR(urlData.userId);
+      }
+
       if (urlData.type === 'qr') {
         // It's a QR reference - validate by reference
         return this.validateQRByReference(urlData.id);
+      }
+    }
+
+    // Check if it looks like a UUID (wallet ID or user ID)
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidPattern.test(qrData.trim())) {
+      // Try as wallet ID first
+      const walletResult = await this.validateWalletQR(qrData.trim());
+      if (walletResult.valid) {
+        return walletResult;
+      }
+      // Then try as user ID
+      const userResult = await this.validateUserQR(qrData.trim());
+      if (userResult.valid) {
+        return userResult;
       }
     }
 
@@ -436,6 +492,121 @@ class QREngineService {
         transaction_id: transactionId,
       })
       .eq('reference', reference);
+  }
+
+  /**
+   * Validate a wallet QR code (direct wallet payment)
+   */
+  async validateWalletQR(walletId: string): Promise<QRValidationResult> {
+    try {
+      // Look up wallet
+      const { data: wallet, error: walletError } = await supabase
+        .from('wallets')
+        .select('id, user_id, currency, wallet_type, balance')
+        .eq('id', walletId)
+        .single();
+
+      if (walletError || !wallet) {
+        return { valid: false, error: 'Wallet not found' };
+      }
+
+      // Get user info
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, email')
+        .eq('id', wallet.user_id)
+        .single();
+
+      if (userError || !user) {
+        return { valid: false, error: 'Wallet owner not found' };
+      }
+
+      const recipientName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email || 'User';
+
+      return {
+        valid: true,
+        data: {
+          type: 'payment',
+          version: this.QR_VERSION,
+          userId: wallet.user_id,
+          walletId: wallet.id,
+          currency: wallet.currency || 'SLE',
+          reference: `WALLET-${wallet.id.substring(0, 8)}`,
+        },
+        recipient: {
+          id: user.id,
+          name: recipientName,
+          walletId: wallet.id,
+        },
+      };
+    } catch (error) {
+      console.error('[QR Engine] Wallet validation error:', error);
+      return { valid: false, error: 'Failed to validate wallet QR' };
+    }
+  }
+
+  /**
+   * Validate a user QR code (payment to user)
+   */
+  async validateUserQR(userId: string): Promise<QRValidationResult> {
+    try {
+      // Get user info
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, email')
+        .eq('id', userId)
+        .single();
+
+      if (userError || !user) {
+        return { valid: false, error: 'User not found' };
+      }
+
+      // Get user's primary wallet
+      const { data: wallet, error: walletError } = await supabase
+        .from('wallets')
+        .select('id, currency')
+        .eq('user_id', userId)
+        .eq('wallet_type', 'primary')
+        .single();
+
+      // If no primary wallet, try to get any wallet
+      let userWallet = wallet;
+      if (!userWallet) {
+        const { data: anyWallet } = await supabase
+          .from('wallets')
+          .select('id, currency')
+          .eq('user_id', userId)
+          .limit(1)
+          .single();
+        userWallet = anyWallet;
+      }
+
+      if (!userWallet) {
+        return { valid: false, error: 'User has no wallet' };
+      }
+
+      const recipientName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email || 'User';
+
+      return {
+        valid: true,
+        data: {
+          type: 'payment',
+          version: this.QR_VERSION,
+          userId: user.id,
+          walletId: userWallet.id,
+          currency: userWallet.currency || 'SLE',
+          reference: `USER-${user.id.substring(0, 8)}`,
+        },
+        recipient: {
+          id: user.id,
+          name: recipientName,
+          walletId: userWallet.id,
+        },
+      };
+    } catch (error) {
+      console.error('[QR Engine] User validation error:', error);
+      return { valid: false, error: 'Failed to validate user QR' };
+    }
   }
 }
 

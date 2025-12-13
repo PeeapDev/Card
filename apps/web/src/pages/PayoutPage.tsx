@@ -23,7 +23,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { useWallets } from '@/hooks/useWallets';
 import { useAuth } from '@/context/AuthContext';
 import { currencyService, Currency } from '@/services/currency.service';
-import { supabase } from '@/lib/supabase';
+import { authService } from '@/services/auth.service';
 
 interface MobileMoneyProvider {
   providerId: string;
@@ -153,8 +153,8 @@ export function PayoutPage() {
   const validatePhoneNumber = (phone: string): boolean => {
     // Remove spaces and country code if present
     const normalized = phone.replace(/\s+/g, '').replace(/^(\+232|232)/, '');
-    // Should be 8 digits
-    return /^[0-9]{8}$/.test(normalized);
+    // Should be 9 digits starting with 0, or 8 digits without leading 0
+    return /^0[0-9]{8}$/.test(normalized) || /^[0-9]{8}$/.test(normalized);
   };
 
   // Lookup account holder name when phone number is valid and provider is detected
@@ -194,7 +194,8 @@ export function PayoutPage() {
     setDetectedProviderId(provider);
 
     // If we have a valid phone and detected provider, lookup account holder
-    if (provider && normalized.length === 8) {
+    // Check for 9 digits (with leading 0) or 8 digits (without leading 0)
+    if (provider && (normalized.length === 8 || (normalized.startsWith('0') && normalized.length === 9))) {
       lookupAccountHolder(value, provider);
     }
   };
@@ -208,7 +209,7 @@ export function PayoutPage() {
     }
 
     if (!phoneNumber || !validatePhoneNumber(phoneNumber)) {
-      setError('Please enter a valid phone number (8 digits)');
+      setError('Please enter a valid phone number (e.g., 077601707)');
       return;
     }
 
@@ -244,22 +245,26 @@ export function PayoutPage() {
     setError('');
 
     try {
-      // Get the current session token for authentication
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
+      // Get the current access token for authentication
+      const accessToken = authService.getAccessToken();
+      if (!accessToken) {
         throw new Error('Please log in to continue');
       }
+
+      // Format phone number for API - remove leading 0 and add country code
+      const normalizedPhone = phoneNumber.replace(/^0/, '');
+      const fullPhoneNumber = `+232${normalizedPhone}`;
 
       const response = await fetch(`${API_BASE}/router/mobile-money/send`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
+          'Authorization': `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
           amount: parseFloat(amount),
           currency: 'SLE',
-          phoneNumber,
+          phoneNumber: fullPhoneNumber,
           providerId: detectedProviderId,
           walletId: selectedWalletId,
           description: description || undefined,
@@ -346,15 +351,24 @@ export function PayoutPage() {
                 Recipient Phone Number
               </label>
               <div className="relative">
-                <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500 font-medium">
-                  +232
-                </span>
                 <input
                   type="tel"
                   value={phoneNumber}
-                  onChange={(e) => handlePhoneChange(e.target.value.replace(/\D/g, '').slice(0, 8))}
-                  placeholder="76123456"
-                  className="w-full pl-16 pr-4 py-4 text-lg border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  onChange={(e) => {
+                    // Remove non-digits, strip +232/232 prefix if pasted, ensure starts with 0
+                    let value = e.target.value.replace(/\D/g, '');
+                    // If user pastes +232 or 232 prefix, strip it and add 0
+                    if (value.startsWith('232')) {
+                      value = '0' + value.slice(3);
+                    }
+                    // Ensure first digit is 0
+                    if (value.length > 0 && !value.startsWith('0')) {
+                      value = '0' + value;
+                    }
+                    handlePhoneChange(value.slice(0, 9));
+                  }}
+                  placeholder="077601707"
+                  className="w-full px-4 py-4 text-lg border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                 />
               </div>
 
@@ -377,7 +391,7 @@ export function PayoutPage() {
               )}
 
               {/* Account Holder Name Display */}
-              {phoneNumber.length === 8 && detectedProviderId && (
+              {phoneNumber.length >= 8 && detectedProviderId && (
                 <div className="mt-2">
                   {isLookingUp ? (
                     <div className="inline-flex items-center gap-2 text-sm text-gray-500">
@@ -399,7 +413,7 @@ export function PayoutPage() {
               )}
 
               <p className="mt-2 text-sm text-gray-500">
-                Orange: 72-76, 78-79 | Africell: 30, 33, 77, 80, 88, 90, 99
+                Orange: 072-076, 078-079 | Africell: 030, 033, 077, 080, 088, 090, 099
               </p>
             </div>
 
@@ -584,7 +598,7 @@ export function PayoutPage() {
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-500">Phone Number</span>
-                <span className="font-medium text-gray-900 dark:text-white">+232 {phoneNumber}</span>
+                <span className="font-medium text-gray-900 dark:text-white">{phoneNumber}</span>
               </div>
               {accountName && (
                 <div className="flex justify-between items-center">
@@ -668,7 +682,7 @@ export function PayoutPage() {
                 </p>
               )}
               <p className="text-gray-500 dark:text-gray-400 mb-1">
-                +232 {phoneNumber}
+                {phoneNumber}
               </p>
               {transactionId && (
                 <p className="text-xs text-gray-400 dark:text-gray-500 mb-6">

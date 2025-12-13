@@ -16,6 +16,8 @@ interface Business {
   logo_url?: string;
   brand_color?: string;
   approval_status: string;
+  live_public_key?: string;
+  test_public_key?: string;
 }
 
 export function BusinessIntegrationPage() {
@@ -36,7 +38,7 @@ export function BusinessIntegrationPage() {
     try {
       const { data, error } = await supabase
         .from('merchant_businesses')
-        .select('id, name, logo_url, brand_color, approval_status')
+        .select('id, name, logo_url, brand_color, approval_status, live_public_key, test_public_key')
         .eq('id', businessId)
         .single();
 
@@ -119,10 +121,12 @@ export function BusinessIntegrationPage() {
 
         {/* Integration Guide */}
         <QuickIntegrationGuide
-          merchantId={business.id}
+          publicKey={business.live_public_key || ''}
+          testPublicKey={business.test_public_key}
           merchantName={business.name}
           merchantLogo={business.logo_url}
           brandColor={business.brand_color}
+          isLive={business.approval_status === 'APPROVED'}
         />
       </div>
     </MerchantLayout>

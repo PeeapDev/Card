@@ -366,11 +366,24 @@ export function ScanPayPage() {
     );
   }
 
-  // Success state - auto redirect to dashboard
+  // Success state - auto redirect to merchant's successUrl or my.peeap.com dashboard
   if (step === 'success') {
     // Auto redirect after 3 seconds
     setTimeout(() => {
-      navigate('/dashboard');
+      if (session?.successUrl) {
+        // Redirect to merchant's success URL with payment info
+        const url = new URL(session.successUrl);
+        url.searchParams.set('status', 'success');
+        url.searchParams.set('peeap_status', 'success');
+        url.searchParams.set('session_id', session.externalId || sessionId || '');
+        url.searchParams.set('amount', String(session.amount));
+        url.searchParams.set('currency', session.currencyCode);
+        url.searchParams.set('payment_method', 'scan_to_pay');
+        window.location.href = url.toString();
+      } else {
+        // No success URL - redirect to my.peeap.com dashboard
+        window.location.href = 'https://my.peeap.com/dashboard';
+      }
     }, 3000);
 
     return (
@@ -390,7 +403,7 @@ export function ScanPayPage() {
           )}
           <div className="flex items-center justify-center gap-2 text-gray-400 text-sm">
             <Loader2 className="w-4 h-4 animate-spin" />
-            <span>Redirecting to dashboard...</span>
+            <span>{session?.successUrl ? 'Redirecting to merchant...' : 'Redirecting to dashboard...'}</span>
           </div>
         </div>
       </div>

@@ -17,16 +17,9 @@ export function DepositSuccessPage() {
   const newBalance = searchParams.get('newBalance');
   const error = searchParams.get('error');
 
-  // Determine redirect URL based on user role
+  // Always redirect to wallets page after deposit, regardless of role
+  // This makes more sense as user just deposited to their wallet
   const getRedirectUrl = () => {
-    const roles = user?.roles || [];
-    if (roles.includes('superadmin') || roles.includes('admin')) {
-      return '/admin/dashboard';
-    } else if (roles.includes('merchant') || roles.includes('developer')) {
-      return '/merchant/dashboard';
-    } else if (roles.includes('agent')) {
-      return '/agent/dashboard';
-    }
     return '/wallets';
   };
 

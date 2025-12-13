@@ -17,6 +17,7 @@ import {
   Bell,
   Package,
   CheckCheck,
+  BarChart3,
 } from 'lucide-react';
 import { MotionCard } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
@@ -44,6 +45,10 @@ interface DashboardStats {
   webhookDeliveries: number;
   avgResponseTime: number;
   activeDevelopers: number;
+  // Website analytics
+  pageViewsToday: number;
+  pageViewsTotal: number;
+  uniqueVisitorsToday: number;
 }
 
 interface Transaction {
@@ -82,6 +87,9 @@ export function AdminDashboard() {
     webhookDeliveries: 0,
     avgResponseTime: 0,
     activeDevelopers: 0,
+    pageViewsToday: 0,
+    pageViewsTotal: 0,
+    uniqueVisitorsToday: 0,
   });
 
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
@@ -219,6 +227,22 @@ export function AdminDashboard() {
       const { data: wallets } = await supabase.from('wallets').select('balance');
       const totalVolume = wallets?.reduce((sum, w) => sum + (w.balance || 0), 0) || 0;
 
+      // Fetch page views analytics
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      const { count: pageViewsTotal } = await supabase
+        .from('page_views')
+        .select('*', { count: 'exact', head: true });
+
+      const { data: todayViews } = await supabase
+        .from('page_views')
+        .select('session_id')
+        .gte('created_at', todayStart.toISOString());
+
+      const pageViewsToday = todayViews?.length || 0;
+      const uniqueVisitorsToday = new Set(todayViews?.map(v => v.session_id)).size;
+
       // Calculate stats
       setStats({
         totalAccounts: allUsers?.length || 0,
@@ -237,6 +261,9 @@ export function AdminDashboard() {
         webhookDeliveries: 0,
         avgResponseTime: 0,
         activeDevelopers: developerIds.size,
+        pageViewsToday,
+        pageViewsTotal: pageViewsTotal || 0,
+        uniqueVisitorsToday,
       });
 
       // Format recent transactions
@@ -407,6 +434,27 @@ export function AdminDashboard() {
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">This month</p>
           </MotionCard>
         </motion.div>
+
+        {/* Website Analytics Card */}
+        <Link to="/admin/analytics">
+          <MotionCard className="p-6 hover:shadow-lg transition-shadow cursor-pointer" delay={0.35}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+                  <BarChart3 className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Website Visits</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.pageViewsToday.toLocaleString()}</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                    {stats.uniqueVisitorsToday} unique visitors today · {stats.pageViewsTotal.toLocaleString()} total views
+                  </p>
+                </div>
+              </div>
+              <ArrowUpRight className="w-5 h-5 text-gray-400" />
+            </div>
+          </MotionCard>
+        </Link>
 
         {/* Action Required Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

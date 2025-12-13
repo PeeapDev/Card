@@ -329,6 +329,15 @@ export const authService = {
     localStorage.setItem('refreshToken', tokens.refreshToken);
   },
 
+  getTokens(): AuthTokens | null {
+    const accessToken = localStorage.getItem('accessToken');
+    const refreshToken = localStorage.getItem('refreshToken');
+    if (accessToken && refreshToken) {
+      return { accessToken, refreshToken, expiresIn: 0 };
+    }
+    return null;
+  },
+
   getAccessToken(): string | null {
     return localStorage.getItem('accessToken');
   },
