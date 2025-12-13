@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { sessionService } from '@/services/session.service';
 
 interface DeveloperModeContextType {
   isDeveloperMode: boolean;
@@ -12,9 +13,9 @@ interface DeveloperModeContextType {
 
 const DeveloperModeContext = createContext<DeveloperModeContextType | undefined>(undefined);
 
-// Get user ID from access token
+// Get user ID from session token (secure cookie)
 const getUserIdFromToken = (): string | null => {
-  const accessToken = localStorage.getItem('accessToken');
+  const accessToken = sessionService.getSessionToken();
   if (!accessToken) return null;
   try {
     const payload = JSON.parse(atob(accessToken));

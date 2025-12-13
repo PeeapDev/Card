@@ -8,13 +8,21 @@ interface RequestOptions extends RequestInit {
   params?: Record<string, string>;
 }
 
+// Get token from secure cookie
+function getSessionToken(): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(/(?:^|; )peeap_session=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 /**
- * Get authentication headers from stored tokens
+ * Get authentication headers from stored tokens (secure cookie)
  */
 function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
 
-  const accessToken = localStorage.getItem('accessToken');
+  // Get token from secure cookie instead of localStorage
+  const accessToken = getSessionToken();
   if (accessToken) {
     headers['Authorization'] = `Bearer ${accessToken}`;
 

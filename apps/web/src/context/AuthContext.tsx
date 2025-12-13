@@ -26,8 +26,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(profile);
     } catch {
       setUser(null);
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
+      // Logout clears secure cookies via sessionService
+      await authService.logout();
     }
   }, []);
 

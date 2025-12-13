@@ -348,13 +348,20 @@ export const authService = {
   },
 
   logout(): void {
-    // Clear all cookies
+    // Clear auth cookies (tokens)
     document.cookie = 'plus_token=; path=/; max-age=0';
     document.cookie = 'plus_refresh_token=; path=/; max-age=0';
     document.cookie = 'plus_session=; path=/; max-age=0';
-    document.cookie = 'plus_user=; path=/; max-age=0';
-    document.cookie = 'plus_tier=; path=/; max-age=0';
-    document.cookie = 'plus_setup_complete=; path=/; max-age=0';
+    // Clear non-sensitive localStorage items
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('plusSetupComplete');
+      localStorage.removeItem('plusTier');
+      localStorage.removeItem('plusPreferences');
+      localStorage.removeItem('plusMonthlyFee');
+      localStorage.removeItem('plusPaymentComplete');
+      localStorage.removeItem('plusWelcomeComplete');
+      localStorage.removeItem('user');
+    }
   },
 
   // Cookie helpers

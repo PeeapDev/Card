@@ -3,6 +3,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { sessionService } from './session.service';
 
 export interface KycDocument {
   type: 'PASSPORT' | 'DRIVERS_LICENSE' | 'NATIONAL_ID' | 'SELFIE' | 'UTILITY_BILL';
@@ -181,7 +182,7 @@ export const kycService = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'Authorization': `Bearer ${sessionService.getSessionToken()}`,
         },
         body: JSON.stringify({
           documentBase64: document.data,

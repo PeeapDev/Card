@@ -16,7 +16,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { captureVideoFrame, fileToBase64 } from '@/services/kyc.service';
-import { supabase } from '@/lib/supabase';
+import { sessionService } from '@/services/session.service';
 import { clsx } from 'clsx';
 
 interface IdCardScannerProps {
@@ -200,7 +200,7 @@ export function IdCardScanner({ onComplete, onCancel, expectedName }: IdCardScan
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'Authorization': `Bearer ${sessionService.getSessionToken()}`,
         },
         body: JSON.stringify({
           documentBase64: imageBase64,

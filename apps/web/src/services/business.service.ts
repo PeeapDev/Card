@@ -4,6 +4,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { sessionService } from './session.service';
 
 export interface MerchantBusiness {
   id: string;
@@ -107,8 +108,8 @@ export const businessService = {
    * Get all businesses for the current merchant
    */
   async getMyBusinesses(): Promise<MerchantBusiness[]> {
-    // Get current user from access token
-    const accessToken = localStorage.getItem('accessToken');
+    // Get current user from session token (secure cookie)
+    const accessToken = sessionService.getSessionToken();
     if (!accessToken) {
       throw new Error('Not authenticated');
     }
@@ -166,8 +167,8 @@ export const businessService = {
    * Create a new business
    */
   async createBusiness(dto: CreateBusinessDto): Promise<MerchantBusiness> {
-    // Get current user from access token
-    const accessToken = localStorage.getItem('accessToken');
+    // Get current user from session token (secure cookie)
+    const accessToken = sessionService.getSessionToken();
     if (!accessToken) {
       throw new Error('Not authenticated');
     }
