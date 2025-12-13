@@ -813,23 +813,19 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // Redirect to frontend success page
-    const redirectUrl = new URL('/deposit/success', frontendUrl);
-    if (sessionId) redirectUrl.searchParams.set('sessionId', String(sessionId));
-    if (walletId) redirectUrl.searchParams.set('walletId', String(walletId));
-    if (orderNumber) redirectUrl.searchParams.set('orderNumber', String(orderNumber));
-    redirectUrl.searchParams.set('status', 'success');
+    // Redirect directly to wallets page with success message
+    const redirectUrl = new URL('/wallets', frontendUrl);
+    redirectUrl.searchParams.set('deposit', 'success');
     if (amount > 0) redirectUrl.searchParams.set('amount', String(amount));
-    if (newBalance > 0) redirectUrl.searchParams.set('newBalance', String(newBalance));
     redirectUrl.searchParams.set('currency', currency);
 
     return res.redirect(302, redirectUrl.toString());
   } catch (error: any) {
     console.error('[Deposit Success] Error:', error);
-    const redirectUrl = new URL('/deposit/success', frontendUrl);
-    if (sessionId) redirectUrl.searchParams.set('sessionId', String(sessionId));
-    if (walletId) redirectUrl.searchParams.set('walletId', String(walletId));
-    redirectUrl.searchParams.set('error', error.message || 'Unknown error');
+    // Redirect to wallets with error message
+    const redirectUrl = new URL('/wallets', frontendUrl);
+    redirectUrl.searchParams.set('deposit', 'error');
+    redirectUrl.searchParams.set('message', error.message || 'Deposit failed');
     return res.redirect(302, redirectUrl.toString());
   }
 }
@@ -865,18 +861,17 @@ async function handleDepositCancel(req: VercelRequest, res: VercelResponse) {
         .eq('status', 'PENDING');
     }
 
-    const redirectUrl = new URL('/deposit/cancel', frontendUrl);
-    if (sessionId) redirectUrl.searchParams.set('sessionId', String(sessionId));
-    if (walletId) redirectUrl.searchParams.set('walletId', String(walletId));
-    redirectUrl.searchParams.set('status', 'cancelled');
-    redirectUrl.searchParams.set('reason', String(reason));
+    // Redirect directly to wallets page with cancelled message
+    const redirectUrl = new URL('/wallets', frontendUrl);
+    redirectUrl.searchParams.set('deposit', 'cancelled');
 
     return res.redirect(302, redirectUrl.toString());
   } catch (error: any) {
     console.error('[Deposit Cancel] Error:', error);
-    const redirectUrl = new URL('/deposit/cancel', frontendUrl);
-    if (sessionId) redirectUrl.searchParams.set('sessionId', String(sessionId));
-    redirectUrl.searchParams.set('error', error.message || 'Unknown error');
+    // Redirect to wallets with error
+    const redirectUrl = new URL('/wallets', frontendUrl);
+    redirectUrl.searchParams.set('deposit', 'error');
+    redirectUrl.searchParams.set('message', error.message || 'Unknown error');
     return res.redirect(302, redirectUrl.toString());
   }
 }
@@ -1607,7 +1602,8 @@ async function handleMonimeDeposit(req: VercelRequest, res: VercelResponse) {
       .eq('id', SETTINGS_ID)
       .single();
 
-    const backendUrl = settings?.backend_url || 'https://my.peeap.com';
+    // API is hosted at api.peeap.com, frontend at my.peeap.com
+    const backendUrl = settings?.backend_url || 'https://api.peeap.com';
     const frontendUrl = settings?.frontend_url || 'https://my.peeap.com';
 
     // Build success/cancel URLs
@@ -5206,8 +5202,30 @@ async function validateSharedApiAuth(req: VercelRequest): Promise<{
     return { valid: false, error: 'Invalid authorization format' };
   }
 
-  // Try SSO session token first
+  // Try SSO token first (from sso_tokens table - one-time use for cross-domain auth)
   if (authType === 'SSO' || authType === 'Session') {
+    // First try sso_tokens table (one-time SSO tokens)
+    const { data: ssoTokens, error: ssoError } = await supabase
+      .from('sso_tokens')
+      .select('id, user_id, expires_at, used_at')
+      .eq('token', token)
+      .limit(1);
+
+    if (!ssoError && ssoTokens && ssoTokens.length > 0) {
+      const ssoToken = ssoTokens[0];
+      // Check if token is not used and not expired
+      if (!ssoToken.used_at && new Date(ssoToken.expires_at) > new Date()) {
+        // DON'T mark as used here - the SsoPage will do that after successful login
+        // This allows the shared API to be called during the SSO flow
+        return { valid: true, userId: ssoToken.user_id };
+      }
+      if (ssoToken.used_at) {
+        return { valid: false, error: 'SSO token already used' };
+      }
+      return { valid: false, error: 'SSO token expired' };
+    }
+
+    // Fallback to user_sessions table
     const { data: sessions, error } = await supabase
       .from('user_sessions')
       .select('user_id, expires_at')
@@ -5619,13 +5637,25 @@ async function handleSharedUser(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // Select only columns that exist in the users table
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, email, first_name, last_name, phone, roles, tier, kyc_status, kyc_tier, email_verified, created_at')
+      .select('id, email, first_name, last_name, phone, roles, role, kyc_status, kyc_tier, email_verified, created_at')
       .eq('id', auth.userId)
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('[SharedUser] Database error:', error);
+      throw error;
+    }
+
+    // Parse roles from string or single role
+    let userRoles = ['user'];
+    if (user.roles) {
+      userRoles = user.roles.split(',').map((r: string) => r.trim());
+    } else if (user.role) {
+      userRoles = [user.role];
+    }
 
     return res.status(200).json({
       user: {
@@ -5634,8 +5664,8 @@ async function handleSharedUser(req: VercelRequest, res: VercelResponse) {
         firstName: user.first_name,
         lastName: user.last_name,
         phone: user.phone,
-        roles: user.roles?.split(',') || ['user'],
-        tier: user.tier || 'basic',
+        roles: userRoles,
+        tier: 'basic', // Default tier since column doesn't exist yet
         kycStatus: user.kyc_status,
         kycTier: user.kyc_tier,
         emailVerified: user.email_verified,

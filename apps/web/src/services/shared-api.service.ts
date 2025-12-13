@@ -135,15 +135,19 @@ class SharedApiService {
 
   /**
    * Make authenticated API request
+   * @param endpoint - API endpoint
+   * @param options - Fetch options
+   * @param ssoToken - Optional SSO token to use instead of stored auth
    */
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
-  ): Promise<ApiResponse<T>> {
-    const authHeader = this.getAuthHeader();
+    options: RequestInit = {},
+    ssoToken?: string
+  ): Promise<ApiResponse<T> & { success: boolean }> {
+    let authHeader = ssoToken ? `SSO ${ssoToken}` : this.getAuthHeader();
 
     if (!authHeader) {
-      return { error: 'Not authenticated' };
+      return { success: false, error: 'Not authenticated' };
     }
 
     try {
@@ -159,13 +163,13 @@ class SharedApiService {
       const data = await response.json();
 
       if (!response.ok) {
-        return { error: data.error || `Request failed: ${response.status}` };
+        return { success: false, error: data.error || `Request failed: ${response.status}` };
       }
 
-      return { data };
+      return { success: true, data };
     } catch (error: any) {
       console.error(`[SharedAPI] ${endpoint} error:`, error);
-      return { error: error.message || 'Request failed' };
+      return { success: false, error: error.message || 'Request failed' };
     }
   }
 
@@ -175,13 +179,10 @@ class SharedApiService {
 
   /**
    * Get current user profile
+   * @param ssoToken - Optional SSO token for authentication during SSO flow
    */
-  async getUser(): Promise<ApiResponse<User>> {
-    const response = await this.request<{ user: User }>('/shared/user');
-    if (response.data) {
-      return { data: response.data.user };
-    }
-    return { error: response.error || 'Failed to get user' };
+  async getUser(ssoToken?: string): Promise<ApiResponse<{ user: User }> & { success: boolean }> {
+    return this.request<{ user: User }>('/shared/user', {}, ssoToken);
   }
 
   // ============================================

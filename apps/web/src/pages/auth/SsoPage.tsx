@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AuthLayout } from '@/components/layout/AuthLayout';
 import { ssoService } from '@/services/sso.service';
 import { authService } from '@/services/auth.service';
-import { supabase } from '@/lib/supabase';
+import { sharedApiService } from '@/services/shared-api.service';
 import { getUserDashboard } from '@/components/RoleBasedRoute';
 import { useAuth } from '@/context/AuthContext';
 import { Loader2, CheckCircle, XCircle } from 'lucide-react';
@@ -68,59 +68,41 @@ export function SsoPage() {
           return;
         }
 
-        // Fetch user from database (only select columns that exist)
-        console.log('SSO: Looking up user with ID:', result.userId);
-        const { data: users, error: userError } = await supabase
-          .from('users')
-          .select('id, email, first_name, last_name, phone, roles, role, kyc_status, kyc_tier, email_verified, created_at, last_login_at')
-          .eq('id', result.userId)
-          .limit(1);
+        // Fetch user data from shared API (my.peeap.com)
+        console.log('SSO: Fetching user from shared API with token');
+        const userResponse = await sharedApiService.getUser(token);
 
-        if (userError) {
-          console.error('SSO: Database error:', userError);
+        if (!userResponse.success || !userResponse.data?.user) {
+          console.error('SSO: Failed to fetch user from shared API:', userResponse.error);
           setStatus('error');
-          setErrorMessage('Database error');
+          setErrorMessage('Failed to fetch user data. Please try again.');
           setTimeout(() => navigate('/login', { replace: true }), 2000);
           return;
         }
 
-        if (!users || users.length === 0) {
-          console.error('SSO: User not found for ID:', result.userId);
-          // Try to look up by different methods (in case ID format differs)
-          const { data: usersByEmail } = await supabase
-            .from('users')
-            .select('*')
-            .limit(10);
-          console.log('SSO: Available users in DB:', usersByEmail?.map(u => ({ id: u.id, email: u.email })));
-
-          setStatus('error');
-          setErrorMessage('User not found. Please try logging in again.');
-          setTimeout(() => navigate('/login', { replace: true }), 2000);
-          return;
-        }
-
-        const dbUser = users[0];
+        const apiUser = userResponse.data.user;
+        console.log('SSO: User fetched from shared API:', { id: apiUser.id, email: apiUser.email });
 
         // Parse roles
         let userRoles: UserRole[] = ['user'];
-        if (dbUser.roles) {
-          userRoles = dbUser.roles.split(',').map((r: string) => r.trim()) as UserRole[];
-        } else if (dbUser.role) {
-          userRoles = [dbUser.role] as UserRole[];
+        if (apiUser.roles && Array.isArray(apiUser.roles)) {
+          userRoles = apiUser.roles as UserRole[];
+        } else if (typeof apiUser.roles === 'string') {
+          userRoles = apiUser.roles.split(',').map((r: string) => r.trim()) as UserRole[];
         }
 
         // Create user object
         const user: User = {
-          id: dbUser.id,
-          email: dbUser.email,
-          firstName: dbUser.first_name,
-          lastName: dbUser.last_name,
-          phone: dbUser.phone,
+          id: apiUser.id,
+          email: apiUser.email,
+          firstName: apiUser.firstName || apiUser.first_name,
+          lastName: apiUser.lastName || apiUser.last_name,
+          phone: apiUser.phone,
           roles: userRoles,
-          kycStatus: dbUser.kyc_status,
-          kycTier: dbUser.kyc_tier,
-          emailVerified: dbUser.email_verified,
-          createdAt: dbUser.created_at,
+          kycStatus: apiUser.kycStatus || apiUser.kyc_status,
+          kycTier: apiUser.kycTier || apiUser.kyc_tier,
+          emailVerified: apiUser.emailVerified || apiUser.email_verified,
+          createdAt: apiUser.createdAt || apiUser.created_at,
         };
 
         // Generate local JWT tokens
