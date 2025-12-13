@@ -39,6 +39,7 @@ import { Card } from '@/components/ui/Card';
 import { supabase } from '@/lib/supabase';
 import { authService } from '@/services/auth.service';
 import { walletService } from '@/services/wallet.service';
+import { createHostedCheckoutSession } from '@/lib/hostedCheckout';
 import QRCode from 'react-qr-code';
 import type { Wallet as WalletType } from '@/types';
 
@@ -50,6 +51,8 @@ interface Business {
   description: string | null;
   is_live_mode: boolean;
   approval_status: string;
+  live_public_key?: string | null;
+  test_public_key?: string | null;
 }
 
 interface PaymentMethod {
@@ -314,7 +317,7 @@ export function BusinessCheckoutPage() {
     try {
       const { data, error } = await supabase
         .from('merchant_businesses')
-        .select('id, name, logo_url, description, is_live_mode, approval_status')
+        .select('id, name, logo_url, description, is_live_mode, approval_status, live_public_key, test_public_key')
         .eq('id', businessId)
         .single();
 
@@ -411,63 +414,54 @@ export function BusinessCheckoutPage() {
         // User enters 50 SLE → send 50 to API → Monime shows Le 50
         const paymentAmount = Math.round(parseFloat(data.amount));
 
-        // Create checkout session via our API
-        // Use production URL for local development (Vite doesn't have API routes)
-        const apiBaseUrl = import.meta.env.DEV ? 'https://my.peeap.com' : '';
-        const response = await fetch(`${apiBaseUrl}/api/checkout/create`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+        const isTestMode = (urlMode || 'live').toLowerCase() === 'test';
+        const publicKey = isTestMode ? business?.test_public_key : business?.live_public_key;
+
+        if (!publicKey) {
+          throw new Error('Business public key not configured');
+        }
+
+        const responseData = await createHostedCheckoutSession({
+          publicKey,
+          amount: paymentAmount,
+          currency: data.currency || currency,
+          reference: data.reference || paymentReference,
+          description: urlDescription || `Payment to ${business?.name}`,
+          customerEmail: data.email || email,
+          customerPhone: data.phone || phone,
+          paymentMethod: data.selectedMethod || selectedMethod,
+          redirectUrl: urlRedirect || undefined,
+          metadata: {
+            businessId: business?.id,
           },
-          body: JSON.stringify({
-            businessId: data.businessId || business?.id,
-            amount: paymentAmount,
-            currency: data.currency || currency,
-            reference: data.reference || paymentReference,
-            description: urlDescription || `Payment to ${business?.name}`,
-            customerEmail: data.email || email,
-            customerPhone: data.phone || phone,
-            paymentMethod: data.selectedMethod || selectedMethod,
-            redirectUrl: urlRedirect,
-          }),
         });
 
-        const responseData = await response.json();
+        // Redirect to hosted checkout
+        console.log('[Checkout] Redirecting to hosted checkout:', responseData.paymentUrl);
 
-        if (!response.ok) {
-          throw new Error(responseData.error || 'Failed to create checkout session');
-        }
+        if (window.parent !== window) {
+          // We're in an iframe (SDK modal) - tell parent to handle redirect
+          window.parent.postMessage({
+            type: 'peeap_payment',
+            status: 'redirect',
+            redirectUrl: responseData.paymentUrl,
+            payment: {
+              id: responseData.paymentId,
+              reference: paymentReference,
+              amount: parseFloat(amount),
+              currency: currency,
+            },
+          }, '*');
 
-        if (responseData.paymentUrl) {
-          // Redirect to Monime checkout
-          console.log('[Checkout] Redirecting to Monime:', responseData.paymentUrl);
-
-          if (window.parent !== window) {
-            // We're in an iframe (SDK modal) - tell parent to handle redirect
-            window.parent.postMessage({
-              type: 'peeap_payment',
-              status: 'redirect',
-              redirectUrl: responseData.paymentUrl,
-              payment: {
-                id: responseData.paymentId,
-                reference: paymentReference,
-                amount: parseFloat(amount),
-                currency: currency,
-              },
-            }, '*');
-
-            // Also try to redirect this iframe to Monime as fallback
-            setTimeout(() => {
-              window.location.href = responseData.paymentUrl;
-            }, 500);
-          } else {
-            // Not in iframe - redirect directly
+          // Also try to redirect this iframe as fallback
+          setTimeout(() => {
             window.location.href = responseData.paymentUrl;
-          }
-          return;
+          }, 500);
         } else {
-          throw new Error('No payment URL returned');
+          // Not in iframe - redirect directly
+          window.location.href = responseData.paymentUrl;
         }
+        return;
       }
 
       // For Peeap Wallet - handle internally
