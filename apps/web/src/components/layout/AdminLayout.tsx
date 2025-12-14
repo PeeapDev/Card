@@ -36,10 +36,12 @@ import {
   Puzzle,
   Mail,
   BarChart3,
+  Wifi,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { AdminNotificationBell } from '@/components/ui/AdminNotificationBell';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { NFCIndicator } from '@/components/nfc';
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -92,6 +94,7 @@ const navSections: NavSection[] = [
       { path: '/admin/authorization', label: 'Authorization', icon: ShieldCheck },
       { path: '/admin/transactions', label: 'Transactions', icon: ArrowLeftRight },
       { path: '/admin/deposits', label: 'Deposits', icon: ArrowDownRight, badge: 'New', badgeColor: 'primary' },
+      { path: '/admin/nfc-payment', label: 'NFC Payment', icon: Wifi, badge: 'New', badgeColor: 'primary' },
       { path: '/admin/disputes', label: 'Disputes', icon: AlertTriangle },
     ],
   },
@@ -355,6 +358,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
               <span className="px-3 py-1 rounded-full text-xs font-medium bg-primary-100 text-primary-700">
                 Admin Portal
               </span>
+              <NFCIndicator />
               <ThemeToggle />
               <AdminNotificationBell />
             </div>

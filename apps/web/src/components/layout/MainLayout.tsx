@@ -20,6 +20,7 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { NotificationBell } from '@/components/ui/NotificationBell';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { NFCIndicator } from '@/components/nfc';
 import { supabase } from '@/lib/supabase';
 import { SkipLink } from '@/components/ui/SkipLink';
 
@@ -216,6 +217,7 @@ export function MainLayout({ children }: MainLayoutProps) {
                   {user?.kycStatus}
                 </span>
               </span>
+              <NFCIndicator />
               <ThemeToggle />
               <NotificationBell />
             </div>

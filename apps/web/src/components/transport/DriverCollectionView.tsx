@@ -12,10 +12,14 @@ import {
   ChevronUp,
   ChevronDown,
   Volume2,
+  Usb,
+  Signal,
 } from 'lucide-react';
 import QRCode from 'react-qr-code';
 import { clsx } from 'clsx';
 import { supabase } from '@/lib/supabase';
+import { useNFC, NFCCardData } from '@/hooks/useNFC';
+import { NFCStatus } from '@/components/nfc/NFCStatus';
 
 type PaymentMode = 'qr' | 'card' | 'mobile';
 type PaymentStatus = 'waiting' | 'success' | 'failed';
@@ -24,6 +28,7 @@ interface DriverCollectionViewProps {
   amount: number;
   sessionId: string;
   paymentUrl: string;
+  driverId: string; // Driver's user ID to receive payment
   onPaymentComplete: () => void;
   onCancel: () => void;
   vehicleType?: string;
@@ -96,20 +101,29 @@ export function DriverCollectionView({
   amount,
   sessionId,
   paymentUrl,
+  driverId,
   onPaymentComplete,
   onCancel,
 }: DriverCollectionViewProps) {
   // Debug: Log the payment URL being used for QR code
-  console.log('[DriverCollectionView] QR Code URL:', paymentUrl, 'Session:', sessionId);
+  console.log('[DriverCollectionView] QR Code URL:', paymentUrl, 'Session:', sessionId, 'Driver:', driverId);
+
+  // Use global NFC context
+  const {
+    status: nfcStatus,
+    error: nfcError,
+    startWebNFC,
+    stopWebNFC,
+    connectUSBReader,
+    startUSBScanning,
+    stopUSBScanning,
+    onCardDetected,
+  } = useNFC();
 
   const [activeMode, setActiveMode] = useState<PaymentMode>('qr');
-  const [isScanning, setIsScanning] = useState(false);
-  const [nfcSupported, setNfcSupported] = useState(false);
-  const [nfcError, setNfcError] = useState<string | null>(null);
   const [cardDetected, setCardDetected] = useState(false);
   const [showMobileCheckout, setShowMobileCheckout] = useState(false);
-  const nfcReaderRef = useRef<NFCReader | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const [processingNFCPayment, setProcessingNFCPayment] = useState(false);
 
   // Payment status state for visual feedback
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('waiting');
@@ -120,17 +134,9 @@ export function DriverCollectionView({
   const y = useMotionValue(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Check NFC support on mount
-  useEffect(() => {
-    const checkNFC = async () => {
-      if ('NDEFReader' in window) {
-        setNfcSupported(true);
-      } else {
-        setNfcError('NFC not supported on this device');
-      }
-    };
-    checkNFC();
-  }, []);
+  // Derived NFC state from context
+  const nfcSupported = nfcStatus.anyReaderAvailable || nfcStatus.webNFC.supported || nfcStatus.usbReader.supported;
+  const isScanning = nfcStatus.isScanning;
 
   // Subscribe to payment status updates via Supabase Realtime
   useEffect(() => {
@@ -215,42 +221,131 @@ export function DriverCollectionView({
     };
   }, [sessionId, paymentStatus, onPaymentComplete]);
 
-  // Handle card payment via NFC
-  const handleCardPayment = useCallback(async (cardData: string) => {
+  // Handle NFC card payment - Direct wallet-to-wallet transfer via Supabase
+  const handleNFCCardPayment = useCallback(async (cardData: NFCCardData) => {
+    if (processingNFCPayment) return;
+
     setCardDetected(true);
+    setProcessingNFCPayment(true);
+    console.log('[DriverCollectionView] NFC card detected:', cardData);
 
     try {
-      const response = await fetch('/api/nfc/process-payment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId,
-          amount,
-          cardData,
-        }),
-      });
+      // The card data contains the payer's wallet ID (UUID format)
+      const payerWalletId = cardData.data;
 
-      if (response.ok) {
-        setPaymentStatus('success');
-        setShowFlash(true);
-        playSuccessSound();
-        setTimeout(() => {
-          onPaymentComplete();
-        }, 2500);
-      } else {
-        setNfcError('Payment failed. Try again.');
-        setCardDetected(false);
-        setPaymentStatus('failed');
-        setShowFlash(true);
-        playErrorSound();
-        setTimeout(() => {
-          setPaymentStatus('waiting');
-          setShowFlash(false);
-        }, 2000);
+      if (!payerWalletId || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(payerWalletId)) {
+        throw new Error('Invalid card - no wallet ID found');
       }
-    } catch (error) {
+
+      // Get payer's wallet and verify balance
+      const { data: payerWallet, error: payerError } = await supabase
+        .from('wallets')
+        .select('id, user_id, balance, currency')
+        .eq('id', payerWalletId)
+        .single();
+
+      if (payerError || !payerWallet) {
+        throw new Error('Wallet not found');
+      }
+
+      if (payerWallet.balance < amount) {
+        throw new Error('Insufficient balance');
+      }
+
+      // Get driver's wallet (create driver wallet if needed)
+      let { data: driverWallet, error: driverWalletError } = await supabase
+        .from('wallets')
+        .select('id, balance')
+        .eq('user_id', driverId)
+        .eq('wallet_type', 'driver')
+        .single();
+
+      if (driverWalletError || !driverWallet) {
+        // Try primary wallet as fallback
+        const { data: primaryWallet } = await supabase
+          .from('wallets')
+          .select('id, balance')
+          .eq('user_id', driverId)
+          .eq('wallet_type', 'primary')
+          .single();
+
+        if (primaryWallet) {
+          driverWallet = primaryWallet;
+        } else {
+          throw new Error('Driver wallet not found');
+        }
+      }
+
+      // Deduct from payer's wallet
+      const { error: deductError } = await supabase
+        .from('wallets')
+        .update({ balance: payerWallet.balance - amount })
+        .eq('id', payerWalletId);
+
+      if (deductError) {
+        throw new Error('Failed to deduct payment');
+      }
+
+      // Credit driver's wallet
+      const { error: creditError } = await supabase
+        .from('wallets')
+        .update({ balance: driverWallet.balance + amount })
+        .eq('id', driverWallet.id);
+
+      if (creditError) {
+        // Rollback payer's deduction
+        await supabase
+          .from('wallets')
+          .update({ balance: payerWallet.balance })
+          .eq('id', payerWalletId);
+        throw new Error('Failed to credit driver');
+      }
+
+      // Create transaction record
+      const transactionRef = `NFC${Date.now()}${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+      await supabase
+        .from('transactions')
+        .insert({
+          reference: transactionRef,
+          type: 'TRANSFER',
+          amount: amount,
+          currency_code: payerWallet.currency || 'SLE',
+          status: 'COMPLETED',
+          description: 'NFC card fare payment',
+          sender_wallet_id: payerWalletId,
+          recipient_wallet_id: driverWallet.id,
+          sender_user_id: payerWallet.user_id,
+          recipient_user_id: driverId,
+          metadata: {
+            paymentMethod: 'nfc_card',
+            cardUid: cardData.uid,
+            sessionId: sessionId,
+          },
+        });
+
+      // Update checkout session if exists
+      if (sessionId) {
+        await supabase
+          .from('checkout_sessions')
+          .update({
+            status: 'COMPLETE',
+            payment_method: 'nfc_card',
+            completed_at: new Date().toISOString(),
+          })
+          .eq('external_id', sessionId);
+      }
+
+      // Success!
+      setPayerName('Card Payment');
+      setPaymentStatus('success');
+      setShowFlash(true);
+      playSuccessSound();
+      setTimeout(() => {
+        onPaymentComplete();
+      }, 2500);
+
+    } catch (error: any) {
       console.error('NFC payment error:', error);
-      setNfcError('Payment error. Try again.');
       setCardDetected(false);
       setPaymentStatus('failed');
       setShowFlash(true);
@@ -258,67 +353,36 @@ export function DriverCollectionView({
       setTimeout(() => {
         setPaymentStatus('waiting');
         setShowFlash(false);
+        setProcessingNFCPayment(false);
       }, 2000);
     }
-  }, [sessionId, amount, onPaymentComplete]);
+  }, [sessionId, amount, driverId, onPaymentComplete, processingNFCPayment]);
 
-  // Start NFC scanning
+  // Subscribe to NFC card detection
+  useEffect(() => {
+    if (activeMode !== 'card') return;
+
+    const unsubscribe = onCardDetected(handleNFCCardPayment);
+    return unsubscribe;
+  }, [activeMode, onCardDetected, handleNFCCardPayment]);
+
+  // Start NFC scanning when entering card mode
   const startNFCScanning = useCallback(async () => {
-    if (!(window as any).NDEFReader) {
-      setNfcError('NFC not available');
-      return;
+    // Try Web NFC first (mobile)
+    if (nfcStatus.webNFC.supported && !nfcStatus.webNFC.scanning) {
+      await startWebNFC();
     }
-
-    try {
-      setIsScanning(true);
-      setNfcError(null);
-
-      const ndef = new (window as any).NDEFReader() as NFCReader;
-      nfcReaderRef.current = ndef;
-      abortControllerRef.current = new AbortController();
-
-      await ndef.scan();
-
-      ndef.addEventListener('reading', (event: any) => {
-        const { message, serialNumber } = event;
-
-        let walletId = serialNumber;
-
-        if (message?.records) {
-          for (const record of message.records) {
-            if (record.recordType === 'text') {
-              const textDecoder = new TextDecoder();
-              walletId = textDecoder.decode(record.data);
-              break;
-            }
-          }
-        }
-
-        handleCardPayment(walletId);
-      });
-
-    } catch (error: any) {
-      console.error('NFC scanning error:', error);
-      setIsScanning(false);
-
-      if (error.name === 'NotAllowedError') {
-        setNfcError('NFC permission denied. Please allow NFC access.');
-      } else if (error.name === 'NotSupportedError') {
-        setNfcError('NFC not supported on this device.');
-      } else {
-        setNfcError('Could not start NFC. Try again.');
-      }
+    // If USB reader is connected, start scanning
+    if (nfcStatus.usbReader.connected && !nfcStatus.usbReader.scanning) {
+      startUSBScanning();
     }
-  }, [handleCardPayment]);
+  }, [nfcStatus, startWebNFC, startUSBScanning]);
 
   // Stop NFC scanning
   const stopNFCScanning = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    setIsScanning(false);
-  }, []);
+    stopWebNFC();
+    stopUSBScanning();
+  }, [stopWebNFC, stopUSBScanning]);
 
   // Start/stop NFC based on active mode
   useEffect(() => {
@@ -329,7 +393,9 @@ export function DriverCollectionView({
     }
 
     return () => {
-      stopNFCScanning();
+      if (activeMode === 'card') {
+        stopNFCScanning();
+      }
     };
   }, [activeMode, nfcSupported, isScanning, startNFCScanning, stopNFCScanning]);
 
@@ -684,9 +750,21 @@ export function DriverCollectionView({
                     </p>
                   </div>
 
+                  {/* NFC Reader Status */}
+                  <div className="mt-4 w-full max-w-xs">
+                    <NFCStatus
+                      variant="inline"
+                      showConnectButton={true}
+                      onReaderReady={() => {
+                        console.log('[DriverCollectionView] NFC reader ready');
+                        startNFCScanning();
+                      }}
+                    />
+                  </div>
+
                   {isScanning && (
                     <motion.div
-                      className="mt-6 flex items-center gap-2 text-blue-400"
+                      className="mt-4 flex items-center gap-2 text-blue-400"
                       animate={{ opacity: [1, 0.5, 1] }}
                       transition={{ repeat: Infinity, duration: 1.5 }}
                     >

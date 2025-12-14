@@ -17,6 +17,10 @@ import {
   Shield,
   Wallet,
   FileCheck,
+  Wifi,
+  Usb,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, Button, Input, MotionCard } from '@/components/ui';
 import { AdminLayout } from '@/components/layout/AdminLayout';
@@ -30,6 +34,8 @@ import {
 import type { CardOrder } from '@/services/card.service';
 import { clsx } from 'clsx';
 import { currencyService, Currency } from '@/services/currency.service';
+import { useNFC } from '@/hooks/useNFC';
+import { supabase } from '@/lib/supabase';
 
 const STATUS_TABS = [
   { value: undefined, label: 'All Orders' },
@@ -62,6 +68,25 @@ export function CardOrdersPage() {
   const [rejectNotes, setRejectNotes] = useState('');
   const [trackingNumber, setTrackingNumber] = useState('');
   const [generateNotes, setGenerateNotes] = useState('');
+
+  // NFC Setup state
+  const [showNFCSetup, setShowNFCSetup] = useState(false);
+  const [nfcWriteStatus, setNfcWriteStatus] = useState<'idle' | 'waiting' | 'writing' | 'success' | 'error'>('idle');
+  const [nfcWriteError, setNfcWriteError] = useState<string | null>(null);
+  const [selectedOrderForNFC, setSelectedOrderForNFC] = useState<CardOrder | null>(null);
+
+  // NFC Hook
+  const {
+    status: nfcStatus,
+    lastCardRead,
+    connectUSBReader,
+    startUSBScanning,
+    stopUSBScanning,
+    writeToCard,
+    error: nfcError,
+  } = useNFC();
+
+  const isNFCReaderConnected = nfcStatus.usbReader.connected || nfcStatus.webNFC.scanning;
 
   const { data: orders, isLoading } = useAllCardOrders(statusFilter);
   const generateCard = useGenerateCard();
@@ -155,6 +180,78 @@ export function CardOrdersPage() {
       setTrackingNumber('');
     } catch (error) {
       console.error('Failed to update shipping:', error);
+    }
+  };
+
+  // NFC Setup handlers
+  const handleOpenNFCSetup = (order: CardOrder) => {
+    setSelectedOrderForNFC(order);
+    setShowNFCSetup(true);
+    setNfcWriteStatus('idle');
+    setNfcWriteError(null);
+  };
+
+  const handleConnectReader = async () => {
+    try {
+      const connected = await connectUSBReader();
+      if (connected) {
+        startUSBScanning();
+      }
+    } catch (err) {
+      console.error('Failed to connect reader:', err);
+    }
+  };
+
+  const handleWriteNFC = async () => {
+    if (!selectedOrderForNFC?.wallet?.id) {
+      setNfcWriteError('No wallet ID found for this order');
+      return;
+    }
+
+    setNfcWriteStatus('waiting');
+    setNfcWriteError(null);
+
+    // Wait for card to be placed
+    const waitForCard = new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Timeout waiting for card'));
+      }, 30000); // 30 second timeout
+
+      const checkCard = setInterval(() => {
+        if (lastCardRead) {
+          clearTimeout(timeout);
+          clearInterval(checkCard);
+          resolve();
+        }
+      }, 500);
+    });
+
+    try {
+      await waitForCard;
+      setNfcWriteStatus('writing');
+
+      // Write wallet ID to card
+      const walletId = selectedOrderForNFC.wallet.id;
+      const success = await writeToCard(walletId);
+
+      if (success) {
+        // Update the card order with NFC data
+        await supabase
+          .from('card_orders')
+          .update({
+            nfc_programmed: true,
+            nfc_programmed_at: new Date().toISOString(),
+            qr_code_data: walletId,
+          })
+          .eq('id', selectedOrderForNFC.id);
+
+        setNfcWriteStatus('success');
+      } else {
+        throw new Error(nfcError || 'Failed to write to card');
+      }
+    } catch (err: any) {
+      setNfcWriteStatus('error');
+      setNfcWriteError(err.message || 'Failed to program NFC card');
     }
   };
 
@@ -351,16 +448,28 @@ export function CardOrdersPage() {
                             <Eye className="w-4 h-4" />
                           </Button>
                           {order.status === 'GENERATED' && order.cardType?.cardType === 'PHYSICAL' && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedOrder(order);
-                                setShowShippingModal(true);
-                              }}
-                            >
-                              <Truck className="w-4 h-4" />
-                            </Button>
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedOrder(order);
+                                  setShowShippingModal(true);
+                                }}
+                                title="Update Shipping"
+                              >
+                                <Truck className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleOpenNFCSetup(order)}
+                                title="Program NFC Card"
+                                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                              >
+                                <Wifi className="w-4 h-4" />
+                              </Button>
+                            </>
                           )}
                         </div>
                       </td>
@@ -655,6 +764,182 @@ export function CardOrdersPage() {
                 <Truck className="w-4 h-4 mr-2" />
                 Update Shipping
               </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* NFC Setup Modal */}
+      {showNFCSetup && selectedOrderForNFC && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <Card className="w-full max-w-lg bg-white dark:bg-gray-800">
+            <CardHeader className="border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
+                  <Wifi className="w-5 h-5" />
+                  Program NFC Card
+                </CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => setShowNFCSetup(false)}>
+                  <XCircle className="w-5 h-5" />
+                </Button>
+              </div>
+            </CardHeader>
+
+            <div className="p-6 space-y-6">
+              {/* Order Info */}
+              <div className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                <div className="w-12 h-12 bg-gray-200 dark:bg-gray-600 rounded-full flex items-center justify-center">
+                  <User className="w-6 h-6 text-gray-500 dark:text-gray-400" />
+                </div>
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-white">
+                    {selectedOrderForNFC.user?.firstName} {selectedOrderForNFC.user?.lastName}
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Card: {selectedOrderForNFC.cardNumber || 'N/A'}
+                  </p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 font-mono">
+                    Wallet: {selectedOrderForNFC.wallet?.id?.slice(0, 8)}...
+                  </p>
+                </div>
+              </div>
+
+              {/* NFC Reader Status */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium text-gray-900 dark:text-white">1. Connect NFC Reader</h4>
+                <div className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                  <div className={clsx(
+                    'w-10 h-10 rounded-full flex items-center justify-center',
+                    isNFCReaderConnected ? 'bg-green-100 dark:bg-green-900/30' : 'bg-gray-200 dark:bg-gray-600'
+                  )}>
+                    <Usb className={clsx(
+                      'w-5 h-5',
+                      isNFCReaderConnected ? 'text-green-600 dark:text-green-400' : 'text-gray-400'
+                    )} />
+                  </div>
+                  <div className="flex-1">
+                    <p className={clsx(
+                      'font-medium',
+                      isNFCReaderConnected ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-300'
+                    )}>
+                      {isNFCReaderConnected ? 'Reader Connected' : 'No Reader Connected'}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {nfcStatus.usbReader.deviceName || 'ACR122U USB NFC Reader'}
+                    </p>
+                  </div>
+                  {!isNFCReaderConnected && (
+                    <Button size="sm" onClick={handleConnectReader}>
+                      Connect
+                    </Button>
+                  )}
+                  {isNFCReaderConnected && (
+                    <span className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
+                  )}
+                </div>
+              </div>
+
+              {/* Card Detection Status */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium text-gray-900 dark:text-white">2. Place Card on Reader</h4>
+                <div className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                  <div className={clsx(
+                    'w-10 h-10 rounded-full flex items-center justify-center',
+                    lastCardRead ? 'bg-green-100 dark:bg-green-900/30' : 'bg-gray-200 dark:bg-gray-600'
+                  )}>
+                    <CreditCard className={clsx(
+                      'w-5 h-5',
+                      lastCardRead ? 'text-green-600 dark:text-green-400' : 'text-gray-400'
+                    )} />
+                  </div>
+                  <div className="flex-1">
+                    <p className={clsx(
+                      'font-medium',
+                      lastCardRead ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-300'
+                    )}>
+                      {lastCardRead ? 'Card Detected' : 'No Card Detected'}
+                    </p>
+                    {lastCardRead && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                        UID: {lastCardRead.uid}
+                      </p>
+                    )}
+                  </div>
+                  {lastCardRead && (
+                    <span className="w-3 h-3 rounded-full bg-green-500" />
+                  )}
+                </div>
+              </div>
+
+              {/* Write Status */}
+              {nfcWriteStatus !== 'idle' && (
+                <div className={clsx(
+                  'p-4 rounded-lg',
+                  nfcWriteStatus === 'success' && 'bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800',
+                  nfcWriteStatus === 'error' && 'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800',
+                  (nfcWriteStatus === 'waiting' || nfcWriteStatus === 'writing') && 'bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800'
+                )}>
+                  <div className="flex items-center gap-3">
+                    {nfcWriteStatus === 'waiting' && (
+                      <>
+                        <Loader2 className="w-5 h-5 text-blue-600 dark:text-blue-400 animate-spin" />
+                        <span className="text-blue-700 dark:text-blue-300">Waiting for card...</span>
+                      </>
+                    )}
+                    {nfcWriteStatus === 'writing' && (
+                      <>
+                        <Loader2 className="w-5 h-5 text-blue-600 dark:text-blue-400 animate-spin" />
+                        <span className="text-blue-700 dark:text-blue-300">Writing wallet ID to card...</span>
+                      </>
+                    )}
+                    {nfcWriteStatus === 'success' && (
+                      <>
+                        <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+                        <span className="text-green-700 dark:text-green-300">NFC card programmed successfully!</span>
+                      </>
+                    )}
+                    {nfcWriteStatus === 'error' && (
+                      <>
+                        <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+                        <span className="text-red-700 dark:text-red-300">{nfcWriteError || 'Failed to program card'}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setShowNFCSetup(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={handleWriteNFC}
+                  disabled={!isNFCReaderConnected || nfcWriteStatus === 'waiting' || nfcWriteStatus === 'writing' || nfcWriteStatus === 'success'}
+                >
+                  {nfcWriteStatus === 'waiting' || nfcWriteStatus === 'writing' ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Programming...
+                    </>
+                  ) : nfcWriteStatus === 'success' ? (
+                    <>
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      Done
+                    </>
+                  ) : (
+                    <>
+                      <Wifi className="w-4 h-4 mr-2" />
+                      Write to Card
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </Card>
         </div>

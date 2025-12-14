@@ -31,6 +31,7 @@ import { useDeveloperMode } from '@/context/DeveloperModeContext';
 import { useApps } from '@/context/AppsContext';
 import { NotificationBell } from '@/components/ui/NotificationBell';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { NFCIndicator } from '@/components/nfc';
 import {
   DndContext,
   closestCenter,
@@ -73,9 +74,9 @@ const baseNavItems: NavItem[] = [
   { id: 'refunds', path: '/merchant/refunds', label: 'Refunds', icon: RefreshCw },
   { id: 'reports', path: '/merchant/reports', label: 'Reports', icon: BarChart3 },
   { id: 'payment-links', path: '/merchant/payment-links', label: 'Payment Links', icon: Link2 },
-  { id: 'subscriptions', path: '/merchant/subscriptions', label: 'Subscriptions', icon: Repeat },
+  { id: 'subscriptions', path: '/merchant/subscriptions', label: 'Subscription Plans', icon: Repeat },
   { id: 'profile', path: '/merchant/profile', label: 'Business Profile', icon: Store },
-  { id: 'subscription', path: '/merchant/subscription', label: 'Subscription', icon: CreditCard },
+  { id: 'subscription', path: '/merchant/subscription', label: 'My Plan', icon: CreditCard },
   { id: 'settings', path: '/merchant/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -472,6 +473,7 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
                   Developer
                 </Link>
               )}
+              <NFCIndicator />
               <ThemeToggle />
               <NotificationBell />
             </div>
