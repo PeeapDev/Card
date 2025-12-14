@@ -1,25 +1,12 @@
 /**
  * Push Notification Service
  *
- * Handles push notifications using Web Push API and Firebase Cloud Messaging
+ * Handles push notifications using Web Push API
  * Supports both foreground and background notifications
+ * Note: Firebase integration disabled - using native browser notifications only
  */
 
-// @ts-ignore - Firebase may not be installed
-import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
-// @ts-ignore - Firebase may not be installed
-import { getMessaging, getToken, onMessage, Messaging } from 'firebase/messaging';
 import { supabase } from '@/lib/supabase';
-
-// Firebase configuration - these should be in environment variables
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
-};
 
 // Notification types
 export type NotificationType =
@@ -171,8 +158,6 @@ const NOTIFICATION_CONFIG: Record<NotificationType, NotificationConfig> = {
 };
 
 class PushNotificationService {
-  private app: FirebaseApp | null = null;
-  private messaging: Messaging | null = null;
   private fcmToken: string | null = null;
   private isSupported: boolean = false;
   private listeners: Map<string, (payload: NotificationPayload) => void> = new Map();
@@ -183,13 +168,14 @@ class PushNotificationService {
 
   private checkSupport() {
     this.isSupported =
+      typeof window !== 'undefined' &&
       'Notification' in window &&
       'serviceWorker' in navigator &&
       'PushManager' in window;
   }
 
   /**
-   * Initialize Firebase and request notification permission
+   * Initialize and request notification permission
    */
   async initialize(): Promise<boolean> {
     if (!this.isSupported) {
@@ -198,31 +184,9 @@ class PushNotificationService {
     }
 
     try {
-      // Check if Firebase config is available
-      if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-        console.warn('[Push] Firebase config not available, using local notifications only');
-        return this.requestPermission();
-      }
-
-      // Initialize Firebase
-      if (!getApps().length) {
-        this.app = initializeApp(firebaseConfig);
-      } else {
-        this.app = getApps()[0];
-      }
-
-      // Get messaging instance
-      this.messaging = getMessaging(this.app);
-
       // Request permission
       const hasPermission = await this.requestPermission();
       if (!hasPermission) return false;
-
-      // Get FCM token
-      await this.getFCMToken();
-
-      // Set up foreground message handler
-      this.setupForegroundHandler();
 
       return true;
     } catch (error) {
@@ -252,93 +216,6 @@ class PushNotificationService {
   getPermissionStatus(): NotificationPermission | 'unsupported' {
     if (!this.isSupported) return 'unsupported';
     return Notification.permission;
-  }
-
-  /**
-   * Get FCM token for this device
-   */
-  private async getFCMToken(): Promise<string | null> {
-    if (!this.messaging) return null;
-
-    try {
-      // Register service worker first
-      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-
-      const token = await getToken(this.messaging, {
-        vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
-        serviceWorkerRegistration: registration,
-      });
-
-      if (token) {
-        this.fcmToken = token;
-        await this.saveTokenToServer(token);
-      }
-
-      return token;
-    } catch (error) {
-      console.error('[Push] Failed to get FCM token:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Save FCM token to server for sending notifications
-   */
-  private async saveTokenToServer(token: string): Promise<void> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Upsert the token
-      await supabase
-        .from('push_tokens')
-        .upsert({
-          user_id: user.id,
-          token: token,
-          device_info: this.getDeviceInfo(),
-          updated_at: new Date().toISOString(),
-        }, {
-          onConflict: 'user_id,token',
-        });
-    } catch (error) {
-      console.error('[Push] Failed to save token to server:', error);
-    }
-  }
-
-  /**
-   * Get device information
-   */
-  private getDeviceInfo(): Record<string, string> {
-    return {
-      userAgent: navigator.userAgent,
-      platform: navigator.platform,
-      language: navigator.language,
-    };
-  }
-
-  /**
-   * Set up foreground message handler
-   */
-  private setupForegroundHandler(): void {
-    if (!this.messaging) return;
-
-    onMessage(this.messaging, (payload: any) => {
-
-      const notificationPayload: NotificationPayload = {
-        type: (payload.data?.type as NotificationType) || 'promotional',
-        title: payload.notification?.title || 'Peeap',
-        body: payload.notification?.body || '',
-        icon: payload.notification?.icon,
-        image: payload.notification?.image,
-        data: payload.data,
-      };
-
-      // Show local notification
-      this.showLocalNotification(notificationPayload);
-
-      // Notify listeners
-      this.notifyListeners(notificationPayload);
-    });
   }
 
   /**
