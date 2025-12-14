@@ -440,6 +440,26 @@ export function ScanPayPage() {
       console.error('Failed to update checkout session:', updateError);
     }
 
+    // Broadcast payment completion to driver's screen for instant feedback
+    // This is faster than polling the database
+    const broadcastChannel = supabase.channel(`driver_payment_${sessionId}`);
+    await broadcastChannel.subscribe();
+    await broadcastChannel.send({
+      type: 'broadcast',
+      event: 'payment_complete',
+      payload: {
+        status: 'success',
+        payerName: payerName,
+        amount: session.amount,
+        transactionId: transactionRef,
+        timestamp: Date.now(),
+      },
+    });
+    // Clean up channel after sending
+    setTimeout(() => {
+      supabase.removeChannel(broadcastChannel);
+    }, 1000);
+
     // Send notification to driver about payment received
     try {
       await notificationService.sendPaymentReceived({

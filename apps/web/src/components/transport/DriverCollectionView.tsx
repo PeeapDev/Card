@@ -139,106 +139,85 @@ export function DriverCollectionView({
   const nfcSupported = nfcStatus.anyReaderAvailable || nfcStatus.webNFC.supported || nfcStatus.usbReader.supported;
   const isScanning = nfcStatus.isScanning;
 
-  // Subscribe to payment status updates via Supabase Realtime
+  // Subscribe to payment notification via Supabase Realtime broadcast channel
+  // This is faster and more reliable than polling the database
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || !driverId) return;
 
-    console.log('[DriverCollectionView] Subscribing to payment status for session:', sessionId);
-    let isCompleted = false; // Prevent duplicate triggers
+    console.log('[DriverCollectionView] Setting up payment notification channel for driver:', driverId);
+    let isCompleted = false;
 
-    // Immediate initial check
-    const checkSessionStatus = async () => {
-      try {
-        const { data } = await supabase
-          .from('checkout_sessions')
-          .select('status, payer_name')
-          .eq('external_id', sessionId)
-          .single();
-
-        console.log('[DriverCollectionView] Status check:', data?.status);
+    // Use a broadcast channel for instant notifications
+    // The payer will send a message when payment completes
+    const channel = supabase
+      .channel(`driver_payment_${sessionId}`)
+      .on('broadcast', { event: 'payment_complete' }, (payload: any) => {
+        console.log('[DriverCollectionView] Received payment notification:', payload);
 
         if (isCompleted) return;
+        isCompleted = true;
 
-        if (data?.status === 'COMPLETE' && paymentStatus !== 'success') {
-          isCompleted = true;
-          console.log('[DriverCollectionView] Payment complete! Showing success');
-          setPayerName(data.payer_name || 'Customer');
+        const { payerName: payer, amount: paidAmount, status } = payload.payload || {};
+
+        if (status === 'success') {
+          setPayerName(payer || 'Customer');
           setPaymentStatus('success');
           setShowFlash(true);
           playSuccessSound();
+
           setTimeout(() => {
             onPaymentComplete();
-          }, 2000); // Reduced to 2 seconds for faster experience
-        } else if ((data?.status === 'EXPIRED' || data?.status === 'CANCELLED' || data?.status === 'FAILED') && paymentStatus === 'waiting') {
-          setPaymentStatus('failed');
-          setShowFlash(true);
-          playErrorSound();
-          setTimeout(() => {
-            setPaymentStatus('waiting');
-            setShowFlash(false);
-          }, 2000);
+          }, 1500); // Fast feedback for transport
         }
-      } catch (err) {
-        console.error('[DriverCollectionView] Status check error:', err);
-      }
-    };
+      })
+      .subscribe((status) => {
+        console.log('[DriverCollectionView] Channel status:', status);
+      });
 
-    // Check immediately on mount
-    checkSessionStatus();
+    // Also check for existing completed payment (in case we missed the broadcast)
+    const checkExistingPayment = async () => {
+      try {
+        // Check transactions table directly for completed payment
+        const { data: txn } = await supabase
+          .from('transactions')
+          .select('id, metadata, created_at')
+          .eq('recipient_user_id', driverId)
+          .eq('amount', amount)
+          .eq('status', 'COMPLETED')
+          .gte('created_at', new Date(Date.now() - 60000).toISOString()) // Last 60 seconds
+          .order('created_at', { ascending: false })
+          .limit(1);
 
-    const channel = supabase
-      .channel(`driver_collection_${sessionId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'checkout_sessions',
-          filter: `external_id=eq.${sessionId}`,
-        },
-        (payload: any) => {
-          console.log('[DriverCollectionView] Received realtime update:', payload);
-
-          if (isCompleted) return;
-
-          if (payload.new.status === 'COMPLETE') {
+        if (txn && txn.length > 0 && !isCompleted) {
+          const metadata = txn[0].metadata as any;
+          if (metadata?.checkoutSessionId === sessionId || metadata?.sessionId === sessionId) {
             isCompleted = true;
-            // Payment successful!
-            setPayerName(payload.new.payer_name || 'Customer');
+            setPayerName(metadata?.payerName || 'Customer');
             setPaymentStatus('success');
             setShowFlash(true);
             playSuccessSound();
-
-            // Auto-navigate to success after showing feedback
             setTimeout(() => {
               onPaymentComplete();
-            }, 2000);
-          } else if (payload.new.status === 'EXPIRED' || payload.new.status === 'CANCELLED' || payload.new.status === 'FAILED') {
-            // Payment failed
-            setPaymentStatus('failed');
-            setShowFlash(true);
-            playErrorSound();
-
-            // Return to QR view after showing error
-            setTimeout(() => {
-              setPaymentStatus('waiting');
-              setShowFlash(false);
-            }, 2000);
+            }, 1500);
           }
         }
-      )
-      .subscribe((status) => {
-        console.log('[DriverCollectionView] Subscription status:', status);
-      });
+      } catch (err) {
+        // Ignore errors on initial check
+      }
+    };
 
-    // Fast polling as backup - every 1 second for transport speed
-    const pollInterval = setInterval(checkSessionStatus, 1000);
+    // Check once on mount after a short delay
+    const initialCheck = setTimeout(checkExistingPayment, 500);
+
+    // Light polling as backup - check every 2 seconds
+    const pollInterval = setInterval(checkExistingPayment, 2000);
 
     return () => {
-      supabase.removeChannel(channel);
+      clearTimeout(initialCheck);
       clearInterval(pollInterval);
+      supabase.removeChannel(channel);
     };
-  }, [sessionId, paymentStatus, onPaymentComplete]);
+  }, [sessionId, driverId, amount, paymentStatus, onPaymentComplete]);
 
   // Handle NFC card payment - Direct wallet-to-wallet transfer via Supabase
   const handleNFCCardPayment = useCallback(async (cardData: NFCCardData) => {

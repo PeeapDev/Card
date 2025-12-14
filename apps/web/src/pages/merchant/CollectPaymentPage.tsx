@@ -141,69 +141,58 @@ export function CollectPaymentPage() {
     fetchRecentCollections();
   }, [user?.id, pageState, collectStep]);
 
-  // Subscribe to payment status when in driving mode
+  // Subscribe to payment notification when in driving mode via broadcast channel
+  // This page just passes through to DriverCollectionView which handles its own notifications
+  // Keep this as a backup in case the view component misses the notification
   useEffect(() => {
-    if (collectStep !== 'driving' || !currentSession?.sessionId) return;
+    if (collectStep !== 'driving' || !currentSession?.sessionId || !user?.id) return;
 
-    let isCompleted = false; // Prevent duplicate triggers
+    let isCompleted = false;
 
-    const checkStatus = async () => {
-      try {
-        const { data } = await supabase
-          .from('checkout_sessions')
-          .select('status')
-          .eq('external_id', currentSession.sessionId)
-          .single();
-
+    // Listen for broadcast notification (same as DriverCollectionView)
+    const channel = supabase
+      .channel(`driver_payment_${currentSession.sessionId}_parent`)
+      .on('broadcast', { event: 'payment_complete' }, (payload: any) => {
         if (isCompleted) return;
+        isCompleted = true;
+        setCollectStep('success');
+      })
+      .subscribe();
 
-        if (data?.status === 'COMPLETE') {
-          isCompleted = true;
-          setCollectStep('success');
-        } else if (data?.status === 'EXPIRED' || data?.status === 'CANCELLED') {
-          setError('Payment was cancelled or expired');
-          setCollectStep('error');
+    // Also check transactions as backup
+    const checkTransaction = async () => {
+      if (isCompleted) return;
+      try {
+        const { data: txn } = await supabase
+          .from('transactions')
+          .select('id, metadata')
+          .eq('recipient_user_id', user.id)
+          .eq('amount', currentSession.amount)
+          .eq('status', 'COMPLETED')
+          .gte('created_at', new Date(Date.now() - 60000).toISOString())
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (txn && txn.length > 0) {
+          const metadata = txn[0].metadata as any;
+          if (metadata?.checkoutSessionId === currentSession.sessionId) {
+            isCompleted = true;
+            setCollectStep('success');
+          }
         }
       } catch (err) {
-        console.error('Poll error:', err);
+        // Ignore
       }
     };
 
-    // Check immediately
-    checkStatus();
-
-    const channel = supabase
-      .channel(`collection_${currentSession.sessionId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'checkout_sessions',
-          filter: `external_id=eq.${currentSession.sessionId}`,
-        },
-        (payload: any) => {
-          if (isCompleted) return;
-
-          if (payload.new.status === 'COMPLETE') {
-            isCompleted = true;
-            setCollectStep('success');
-          } else if (payload.new.status === 'EXPIRED' || payload.new.status === 'CANCELLED') {
-            setError('Payment was cancelled or expired');
-            setCollectStep('error');
-          }
-        }
-      )
-      .subscribe();
-
-    // Fast polling backup - every 1 second for transport speed
-    const pollInterval = setInterval(checkStatus, 1000);
+    // Check every 3 seconds as backup (DriverCollectionView handles faster checks)
+    const pollInterval = setInterval(checkTransaction, 3000);
 
     return () => {
       supabase.removeChannel(channel);
       clearInterval(pollInterval);
     };
-  }, [collectStep, currentSession?.sessionId]);
+  }, [collectStep, currentSession?.sessionId, currentSession?.amount, user?.id]);
 
   // Handle setup wizard completion
   const handleSetupComplete = async (profile: DriverProfile) => {
