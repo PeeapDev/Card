@@ -5,6 +5,20 @@
 import { supabase } from '@/lib/supabase';
 
 // Types
+
+// Product Variant (defined first as it's used by POSProduct)
+export interface POSProductVariant {
+  id?: string;
+  product_id: string;
+  name: string; // e.g., "Small", "Red", "32GB"
+  sku?: string;
+  barcode?: string;
+  price_adjustment: number; // Can be positive or negative
+  stock_quantity: number;
+  is_active: boolean;
+  attributes: Record<string, string>; // e.g., { size: "Small", color: "Red" }
+}
+
 export interface POSCategory {
   id: string;
   merchant_id: string;
@@ -33,7 +47,7 @@ export interface POSProduct {
   stock_quantity: number;
   low_stock_threshold: number;
   has_variants: boolean;
-  variants: any[];
+  variants: POSProductVariant[];
   is_active: boolean;
   is_featured: boolean;
   tax_rate: number;
@@ -56,6 +70,25 @@ export interface POSSaleItem {
   notes?: string;
 }
 
+// Payment details for cash transactions
+export interface PaymentDetails {
+  received?: number;
+  change?: number;
+  payments?: Array<{
+    method: string;
+    amount: number;
+    reference?: string;
+  }>;
+}
+
+// Split Payment
+export interface POSSplitPayment {
+  method: 'cash' | 'mobile_money' | 'card' | 'qr' | 'credit';
+  amount: number;
+  reference?: string;
+  customer_id?: string; // For credit payments
+}
+
 export interface POSSale {
   id?: string;
   merchant_id: string;
@@ -67,8 +100,8 @@ export interface POSSale {
   payment_method: 'cash' | 'mobile_money' | 'card' | 'qr' | 'split';
   payment_status: 'pending' | 'completed' | 'refunded' | 'partial_refund';
   payment_reference?: string;
-  payment_details?: any;
-  payments?: any[];
+  payment_details?: PaymentDetails;
+  payments?: POSSplitPayment[];
   customer_name?: string;
   customer_phone?: string;
   customer_email?: string;
@@ -198,19 +231,6 @@ export interface POSCashSession {
   updated_at?: string;
 }
 
-// Product Variant
-export interface POSProductVariant {
-  id?: string;
-  product_id: string;
-  name: string; // e.g., "Small", "Red", "32GB"
-  sku?: string;
-  barcode?: string;
-  price_adjustment: number; // Can be positive or negative
-  stock_quantity: number;
-  is_active: boolean;
-  attributes: Record<string, string>; // e.g., { size: "Small", color: "Red" }
-}
-
 // Staff Member
 export interface POSStaff {
   id?: string;
@@ -249,18 +269,12 @@ export interface POSLoyaltyPoints {
   merchant_id: string;
   customer_id: string;
   points_balance: number;
+  current_points?: number; // Alias for points_balance (used in offline sync)
+  lifetime_points?: number; // Alias for total_earned (used in offline sync)
   total_earned: number;
   total_redeemed: number;
   created_at?: string;
   updated_at?: string;
-}
-
-// Split Payment
-export interface POSSplitPayment {
-  method: 'cash' | 'mobile_money' | 'card' | 'qr' | 'credit';
-  amount: number;
-  reference?: string;
-  customer_id?: string; // For credit payments
 }
 
 // Inventory Alert
@@ -1492,7 +1506,7 @@ export const generateReceiptText = (
   lines.push(`Paid by: ${sale.payment_method.replace('_', ' ').toUpperCase()}`);
   if (sale.payment_method === 'cash' && sale.payment_details?.received) {
     lines.push(`Received: SLE ${sale.payment_details.received.toLocaleString()}`);
-    lines.push(`Change: SLE ${sale.payment_details.change.toLocaleString()}`);
+    lines.push(`Change: SLE ${(sale.payment_details.change ?? 0).toLocaleString()}`);
   }
 
   // Customer info
@@ -1893,6 +1907,23 @@ export const getStaff = async (merchantId: string): Promise<POSStaff[]> => {
 
   if (error) throw error;
   return data || [];
+};
+
+export const getStaffById = async (staffId: string): Promise<POSStaff | null> => {
+  const { data, error } = await supabase
+    .from('pos_staff')
+    .select('*')
+    .eq('id', staffId)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') {
+      // Record not found
+      return null;
+    }
+    throw error;
+  }
+  return data;
 };
 
 export const createStaff = async (staff: Partial<POSStaff>): Promise<POSStaff> => {
@@ -2348,6 +2379,7 @@ export const posService = {
   assignBarcodeToProduct,
   // Staff Management
   getStaff,
+  getStaffById,
   createStaff,
   updateStaff,
   deleteStaff,

@@ -5,7 +5,9 @@
  * Supports both foreground and background notifications
  */
 
+// @ts-ignore - Firebase may not be installed
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
+// @ts-ignore - Firebase may not be installed
 import { getMessaging, getToken, onMessage, Messaging } from 'firebase/messaging';
 import { supabase } from '@/lib/supabase';
 
@@ -320,7 +322,7 @@ class PushNotificationService {
   private setupForegroundHandler(): void {
     if (!this.messaging) return;
 
-    onMessage(this.messaging, (payload) => {
+    onMessage(this.messaging, (payload: any) => {
 
       const notificationPayload: NotificationPayload = {
         type: (payload.data?.type as NotificationType) || 'promotional',
