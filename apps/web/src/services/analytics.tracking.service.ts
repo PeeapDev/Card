@@ -3,9 +3,11 @@
  * Tracks page views, user sessions, and visitor information
  */
 
-import { ANALYTICS_API_URL } from '@/config/urls';
+import { ANALYTICS_API_URL, isDevelopment } from '@/config/urls';
 
+// In development, skip analytics to avoid CORS issues with production API
 const API_URL = ANALYTICS_API_URL;
+const SKIP_ANALYTICS_IN_DEV = isDevelopment;
 
 interface PageViewData {
   sessionId: string;
@@ -117,6 +119,14 @@ class AnalyticsTrackingService {
    * Track a page view
    */
   async trackPageView(path: string, title?: string, userId?: string) {
+    // Skip analytics in development to avoid CORS issues
+    if (SKIP_ANALYTICS_IN_DEV) {
+      console.log('[Analytics] Skipping in development mode');
+      this.pageStartTime = Date.now();
+      this.currentPath = path;
+      return;
+    }
+
     // Avoid duplicate tracking for same path in same session
     const trackKey = `${this.sessionId}_${path}`;
     if (this.pageViewsSent.has(trackKey)) {
@@ -169,6 +179,9 @@ class AnalyticsTrackingService {
    * Send page duration
    */
   private async sendDuration() {
+    // Skip in development
+    if (SKIP_ANALYTICS_IN_DEV) return;
+
     if (!this.currentPath || !this.pageStartTime) return;
 
     const duration = Math.round((Date.now() - this.pageStartTime) / 1000);
