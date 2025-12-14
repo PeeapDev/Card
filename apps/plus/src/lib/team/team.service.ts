@@ -595,6 +595,7 @@ export const teamService = {
     total_members: 0,
     active_members: 0,
     pending_invites: 0,
+    suspended_members: 0,
     roles_count: 0,
     recent_activity: [],
     members_by_role: [],

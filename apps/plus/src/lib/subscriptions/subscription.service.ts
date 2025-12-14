@@ -579,15 +579,18 @@ export const subscriptionService = {
 
   // Dashboard
   getDashboard: () => withBusinessId(getSubscriptionDashboard, {
-    total_subscribers: 0,
-    active_subscribers: 0,
+    total_subscriptions: 0,
+    active_subscriptions: 0,
+    paused_subscriptions: 0,
+    cancelled_subscriptions: 0,
+    trialing_subscriptions: 0,
     mrr: 0,
     arr: 0,
     churn_rate: 0,
-    total_revenue: 0,
-    plans_count: 0,
-    recent_subscriptions: [],
-    subscriptions_by_plan: [],
-    revenue_trend: [],
+    this_month_revenue: 0,
+    last_month_revenue: 0,
+    revenue_growth: 0,
+    upcoming_renewals: [],
+    past_due_subscriptions: [],
   }),
 };
