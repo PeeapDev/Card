@@ -678,7 +678,7 @@ const formatAmount = (amount, currency) => {
   return \`\${symbols[currency] || currency} \${parseFloat(amount).toFixed(2)}\`;
 };
 
-// Display: "Le 50.00"
+// Display: "Le 50.00"`}</pre>
           </div>
           <button
             onClick={() => copyToClipboard(`// Parse payment details from URL

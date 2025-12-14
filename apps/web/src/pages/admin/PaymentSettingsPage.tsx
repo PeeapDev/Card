@@ -308,13 +308,6 @@ export function PaymentSettingsPage() {
       const successUrl = `${baseUrl}/api/deposit/success`;
       const cancelUrl = `${baseUrl}/api/deposit/cancel`;
 
-        spaceId: monimeConfig.spaceId,
-        tokenPrefix: monimeConfig.accessToken.substring(0, 10) + '...',
-        amount: testAmount,
-        successUrl,
-        cancelUrl,
-      });
-
       // Call Monime API via serverless function
       const response = await fetch('/api/test-monime', {
         method: 'POST',
