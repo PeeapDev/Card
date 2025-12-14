@@ -7,3 +7,5 @@ export { POSStaffPage } from './POSStaffPage';
 export { POSInventoryPage } from './POSInventoryPage';
 export { POSLoyaltyPage } from './POSLoyaltyPage';
 export { POSSettingsPage } from './POSSettingsPage';
+export { POSKitchenDisplayPage } from './POSKitchenDisplayPage';
+export { POSTableManagementPage } from './POSTableManagementPage';

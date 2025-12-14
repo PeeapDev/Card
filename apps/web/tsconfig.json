@@ -21,5 +21,6 @@
     }
   },
   "include": ["src"],
+  "exclude": ["src/__tests__", "src/__mocks__", "src/setupTests.ts", "src/testEnvSetup.js"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

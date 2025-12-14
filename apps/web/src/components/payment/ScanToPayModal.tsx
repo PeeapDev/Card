@@ -84,7 +84,10 @@ export function ScanToPayModal({ isOpen, onClose }: ScanToPayModalProps) {
   };
 
   const handleScanResult = (result: QRValidationResult) => {
+    console.log('[ScanToPayModal] handleScanResult received:', result);
+
     if (!result.valid) {
+      console.log('[ScanToPayModal] Invalid result:', result.error);
       setError(result.error || 'Invalid QR code');
       setStep('error');
       return;
@@ -92,12 +95,15 @@ export function ScanToPayModal({ isOpen, onClose }: ScanToPayModalProps) {
 
     // Check if this is a checkout session QR code
     if (result.checkoutSessionId) {
+      console.log('[ScanToPayModal] Checkout session detected, redirecting to:', `/scan-pay/${result.checkoutSessionId}`);
       // Close modal and redirect to scan-pay page to process payment
       // The scan-pay page handles authentication and wallet-to-wallet transfer
       onClose();
       navigate(`/scan-pay/${result.checkoutSessionId}`);
       return;
     }
+
+    console.log('[ScanToPayModal] Not a checkout session, continuing with recipient:', result.recipient);
 
     setScanResult(result);
 

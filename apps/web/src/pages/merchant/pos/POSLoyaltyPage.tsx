@@ -78,7 +78,7 @@ export function POSLoyaltyPage() {
 
       // Use offline sync - works offline with IndexedDB
       const programData = await offlineSync.getLoyaltyProgram();
-      setProgram(programData);
+      setProgram(programData ?? null);
       if (programData) {
         setProgramForm({
           name: programData.name,

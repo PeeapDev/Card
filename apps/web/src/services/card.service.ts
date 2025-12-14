@@ -974,6 +974,151 @@ export const cardService = {
   },
 
   /**
+   * Top up a card's linked wallet from a source wallet
+   * Transfers funds from the source wallet to the card's linked wallet
+   */
+  async topUpCard(params: {
+    cardId: string;
+    sourceWalletId: string;
+    amount: number;
+  }): Promise<{ success: boolean; transactionId: string; newBalance: number }> {
+    const { cardId, sourceWalletId, amount } = params;
+
+    // Validate amount
+    if (amount <= 0) {
+      throw new Error('Amount must be greater than 0');
+    }
+
+    // Get the card's linked wallet
+    const { data: card, error: cardError } = await supabase
+      .from('cards')
+      .select('wallet_id, status')
+      .eq('id', cardId)
+      .single();
+
+    if (cardError || !card) {
+      throw new Error('Card not found');
+    }
+
+    if (card.status !== 'ACTIVE') {
+      throw new Error('Card must be active to top up');
+    }
+
+    const cardWalletId = card.wallet_id;
+
+    // Verify source wallet has sufficient balance
+    const { data: sourceWallet, error: sourceError } = await supabase
+      .from('wallets')
+      .select('balance, status')
+      .eq('id', sourceWalletId)
+      .single();
+
+    if (sourceError || !sourceWallet) {
+      throw new Error('Source wallet not found');
+    }
+
+    if (sourceWallet.status !== 'ACTIVE') {
+      throw new Error('Source wallet is not active');
+    }
+
+    const sourceBalance = parseFloat(sourceWallet.balance) || 0;
+    if (sourceBalance < amount) {
+      throw new Error('Insufficient balance in source wallet');
+    }
+
+    // Try to use the RPC function for atomic transfer
+    const { data: rpcResult, error: rpcError } = await supabase.rpc('wallet_transfer', {
+      p_from_wallet_id: sourceWalletId,
+      p_to_wallet_id: cardWalletId,
+      p_amount: amount,
+      p_description: `Card top-up`,
+    });
+
+    if (!rpcError && rpcResult) {
+      // RPC succeeded, get the new balance
+      const { data: updatedWallet } = await supabase
+        .from('wallets')
+        .select('balance')
+        .eq('id', cardWalletId)
+        .single();
+
+      return {
+        success: true,
+        transactionId: rpcResult,
+        newBalance: parseFloat(updatedWallet?.balance) || 0,
+      };
+    }
+
+    // Fallback: Manual transfer if RPC doesn't exist
+    // Debit source wallet
+    const { error: debitError } = await supabase
+      .from('wallets')
+      .update({
+        balance: sourceBalance - amount,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', sourceWalletId);
+
+    if (debitError) {
+      throw new Error('Failed to debit source wallet');
+    }
+
+    // Get destination wallet balance
+    const { data: destWallet } = await supabase
+      .from('wallets')
+      .select('balance')
+      .eq('id', cardWalletId)
+      .single();
+
+    const destBalance = parseFloat(destWallet?.balance) || 0;
+    const newBalance = destBalance + amount;
+
+    // Credit card wallet
+    const { error: creditError } = await supabase
+      .from('wallets')
+      .update({
+        balance: newBalance,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', cardWalletId);
+
+    if (creditError) {
+      // Rollback: Credit back the source wallet
+      await supabase
+        .from('wallets')
+        .update({ balance: sourceBalance })
+        .eq('id', sourceWalletId);
+      throw new Error('Failed to credit card wallet');
+    }
+
+    // Create transaction record for the top-up
+    const reference = `TOPUP-${Date.now()}`;
+    const { data: transaction, error: txError } = await supabase
+      .from('transactions')
+      .insert({
+        wallet_id: cardWalletId,
+        type: 'DEPOSIT',
+        amount: amount,
+        currency: 'SLE',
+        status: 'COMPLETED',
+        description: `Card top-up from wallet`,
+        reference: reference,
+      })
+      .select('id')
+      .single();
+
+    if (txError) {
+      console.error('Error creating top-up transaction record:', txError);
+    }
+
+    return {
+      success: true,
+      transactionId: transaction?.id || reference,
+      newBalance,
+    };
+  },
+
+  /**
    * Get card with extended info (including card type)
    */
   async getCardWithType(id: string): Promise<Card & { cardType?: CardType }> {

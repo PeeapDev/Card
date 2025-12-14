@@ -23,6 +23,8 @@ import {
   GripVertical,
   LucideIcon,
   Wallet,
+  CreditCard,
+  Repeat,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useDeveloperMode } from '@/context/DeveloperModeContext';
@@ -71,7 +73,9 @@ const baseNavItems: NavItem[] = [
   { id: 'refunds', path: '/merchant/refunds', label: 'Refunds', icon: RefreshCw },
   { id: 'reports', path: '/merchant/reports', label: 'Reports', icon: BarChart3 },
   { id: 'payment-links', path: '/merchant/payment-links', label: 'Payment Links', icon: Link2 },
+  { id: 'subscriptions', path: '/merchant/subscriptions', label: 'Subscriptions', icon: Repeat },
   { id: 'profile', path: '/merchant/profile', label: 'Business Profile', icon: Store },
+  { id: 'subscription', path: '/merchant/subscription', label: 'Subscription', icon: CreditCard },
   { id: 'settings', path: '/merchant/settings', label: 'Settings', icon: Settings },
 ];
 

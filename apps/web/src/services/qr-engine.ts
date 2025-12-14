@@ -141,7 +141,8 @@ class QREngineService {
     };
 
     const qrData = this.encodeQRData(data);
-    const deepLink = `${window.location.origin}/pay?qr=${reference}`;
+    // Use direct user/wallet URL for universal scanability (works even without qr_codes table)
+    const deepLink = `${window.location.origin}/pay?to=${userId}&wallet=${walletId}`;
 
     // Store QR in database for tracking (optional - table may not exist)
     try {
@@ -199,7 +200,8 @@ class QREngineService {
     };
 
     const qrData = this.encodeQRData(data);
-    const deepLink = `${window.location.origin}/pay?qr=${reference}&amount=${amount}`;
+    // Use direct user/wallet URL for universal scanability (works even without qr_codes table)
+    const deepLink = `${window.location.origin}/pay?to=${userId}&wallet=${walletId}&amount=${amount}${description ? `&note=${encodeURIComponent(description)}` : ''}`;
 
     // Store QR in database (optional - table may not exist)
     try {
@@ -254,7 +256,11 @@ class QREngineService {
     };
 
     const qrData = this.encodeQRData(data);
-    const deepLink = `${window.location.origin}/pay?merchant=${reference}`;
+    // Use direct user/wallet URL for universal scanability (works even without qr_codes table)
+    let deepLink = `${window.location.origin}/pay?to=${userId}&wallet=${walletId}&merchant=${encodeURIComponent(merchantName)}`;
+    if (amount) {
+      deepLink += `&amount=${amount}`;
+    }
 
     try {
       await supabase.from('qr_codes').insert({
@@ -285,17 +291,21 @@ class QREngineService {
    */
   private parseURLQR(qrData: string): { type: 'checkout' | 'pay' | 'qr' | 'scan-pay' | 'wallet' | 'user'; id: string; walletId?: string; userId?: string } | null {
     try {
-      // Check if it's a URL
-      if (!qrData.startsWith('http://') && !qrData.startsWith('https://')) {
+      // Check if it's a URL (case-insensitive)
+      const lowerData = qrData.toLowerCase();
+      if (!lowerData.startsWith('http://') && !lowerData.startsWith('https://')) {
+        console.log('[QR Engine] Not a URL:', qrData.substring(0, 50));
         return null;
       }
 
       const url = new URL(qrData);
       const pathname = url.pathname;
+      console.log('[QR Engine] Parsing URL:', url.href, 'pathname:', pathname);
 
       // Handle /scan-pay/{sessionId} format (QR scan from checkout)
       const scanPayMatch = pathname.match(/\/scan-pay\/([^/]+)$/);
       if (scanPayMatch) {
+        console.log('[QR Engine] Matched scan-pay pattern, sessionId:', scanPayMatch[1]);
         return { type: 'scan-pay', id: scanPayMatch[1] };
       }
 
@@ -335,20 +345,24 @@ class QREngineService {
         return { type: 'qr', id: qrParam };
       }
 
-      // Handle ?wallet={walletId} format
+      // Handle ?to={userId}&wallet={walletId} format (new unified format)
+      const userParam = url.searchParams.get('user') || url.searchParams.get('to') || url.searchParams.get('recipient');
       const walletParam = url.searchParams.get('wallet');
+
+      // If we have both user and wallet, use user type with wallet attached
+      if (userParam) {
+        return { type: 'user', id: userParam, userId: userParam, walletId: walletParam || undefined };
+      }
+
+      // Handle ?wallet={walletId} format (wallet only)
       if (walletParam) {
         return { type: 'wallet', id: walletParam, walletId: walletParam };
       }
 
-      // Handle ?user={userId} or ?to={userId} format
-      const userParam = url.searchParams.get('user') || url.searchParams.get('to') || url.searchParams.get('recipient');
-      if (userParam) {
-        return { type: 'user', id: userParam, userId: userParam };
-      }
-
+      console.log('[QR Engine] No URL pattern matched for:', pathname);
       return null;
-    } catch {
+    } catch (err) {
+      console.error('[QR Engine] URL parsing error:', err);
       return null;
     }
   }
@@ -357,15 +371,20 @@ class QREngineService {
    * Validate and decode a scanned QR code
    */
   async validateQR(qrData: string): Promise<QRValidationResult> {
+    // Clean up the QR data - trim whitespace and handle case
+    const cleanedData = qrData.trim();
+    console.log('[QR Engine] validateQR called with:', cleanedData.substring(0, 100), 'length:', cleanedData.length);
+
     // First, check if it's a URL-based QR code
-    const urlData = this.parseURLQR(qrData);
+    const urlData = this.parseURLQR(cleanedData);
     if (urlData) {
+      console.log('[QR Engine] URL parsed successfully:', urlData);
       if (urlData.type === 'scan-pay' || urlData.type === 'checkout') {
         // It's a checkout session QR - return the session ID for payment processing
-        return {
+        const result = {
           valid: true,
           data: {
-            type: 'merchant',
+            type: 'merchant' as const,
             version: '1.0',
             userId: '',
             currency: 'SLE',
@@ -373,6 +392,8 @@ class QREngineService {
           },
           checkoutSessionId: urlData.id,
         };
+        console.log('[QR Engine] Returning checkout session result:', result);
+        return result;
       }
 
       if (urlData.type === 'wallet' && urlData.walletId) {
@@ -381,8 +402,8 @@ class QREngineService {
       }
 
       if (urlData.type === 'user' && urlData.userId) {
-        // It's a user QR - look up user and their primary wallet
-        return this.validateUserQR(urlData.userId);
+        // It's a user QR - look up user and use provided wallet if available
+        return this.validateUserQR(urlData.userId, urlData.walletId);
       }
 
       if (urlData.type === 'qr') {
@@ -393,21 +414,21 @@ class QREngineService {
 
     // Check if it looks like a UUID (wallet ID or user ID)
     const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (uuidPattern.test(qrData.trim())) {
+    if (uuidPattern.test(cleanedData)) {
       // Try as wallet ID first
-      const walletResult = await this.validateWalletQR(qrData.trim());
+      const walletResult = await this.validateWalletQR(cleanedData);
       if (walletResult.valid) {
         return walletResult;
       }
       // Then try as user ID
-      const userResult = await this.validateUserQR(qrData.trim());
+      const userResult = await this.validateUserQR(cleanedData);
       if (userResult.valid) {
         return userResult;
       }
     }
 
     // Try to decode as base64-encoded PEEAPPAY format
-    const data = this.decodeQRData(qrData);
+    const data = this.decodeQRData(cleanedData);
 
     if (!data) {
       return { valid: false, error: 'Invalid QR code format. Please scan a valid Peeap payment QR code.' };
@@ -546,7 +567,7 @@ class QREngineService {
   /**
    * Validate a user QR code (payment to user)
    */
-  async validateUserQR(userId: string): Promise<QRValidationResult> {
+  async validateUserQR(userId: string, providedWalletId?: string): Promise<QRValidationResult> {
     try {
       // Get user info
       const { data: user, error: userError } = await supabase
@@ -559,16 +580,29 @@ class QREngineService {
         return { valid: false, error: 'User not found' };
       }
 
-      // Get user's primary wallet
-      const { data: wallet, error: walletError } = await supabase
-        .from('wallets')
-        .select('id, currency')
-        .eq('user_id', userId)
-        .eq('wallet_type', 'primary')
-        .single();
+      // Use provided wallet ID if available
+      let userWallet: { id: string; currency: string } | null = null;
+      if (providedWalletId) {
+        const { data: providedWallet } = await supabase
+          .from('wallets')
+          .select('id, currency')
+          .eq('id', providedWalletId)
+          .single();
+        userWallet = providedWallet;
+      }
 
-      // If no primary wallet, try to get any wallet
-      let userWallet = wallet;
+      // If no provided wallet or not found, get user's primary wallet
+      if (!userWallet) {
+        const { data: wallet } = await supabase
+          .from('wallets')
+          .select('id, currency')
+          .eq('user_id', userId)
+          .eq('wallet_type', 'primary')
+          .single();
+        userWallet = wallet;
+      }
+
+      // If still no wallet, try to get any wallet
       if (!userWallet) {
         const { data: anyWallet } = await supabase
           .from('wallets')

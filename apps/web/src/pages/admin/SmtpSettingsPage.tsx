@@ -31,12 +31,7 @@ import {
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
-import { createClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/config/urls';
-
-const supabaseUrl = SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+import { supabase } from '@/lib/supabase';
 
 const SETTINGS_ID = '00000000-0000-0000-0000-000000000001';
 

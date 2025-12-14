@@ -1,22 +1,8 @@
-import { useState } from 'react';
-import { MessageSquare, Search, Filter, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { MessageSquare, Search, Clock, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Card, CardHeader, CardTitle, Button } from '@/components/ui';
-
-interface Ticket {
-  id: string;
-  subject: string;
-  user: string;
-  status: 'open' | 'in_progress' | 'resolved' | 'closed';
-  priority: 'low' | 'medium' | 'high';
-  createdAt: string;
-}
-
-const mockTickets: Ticket[] = [
-  { id: 'TKT-001', subject: 'Cannot access my wallet', user: 'john@example.com', status: 'open', priority: 'high', createdAt: '2024-01-15' },
-  { id: 'TKT-002', subject: 'Transaction failed but money deducted', user: 'mary@example.com', status: 'in_progress', priority: 'high', createdAt: '2024-01-14' },
-  { id: 'TKT-003', subject: 'Card not working at merchant', user: 'peter@example.com', status: 'resolved', priority: 'medium', createdAt: '2024-01-13' },
-];
+import { supportService, SupportTicket } from '@/services/support.service';
 
 const statusColors = {
   open: 'bg-yellow-100 text-yellow-800',
@@ -32,12 +18,65 @@ const priorityColors = {
 };
 
 export function SupportTicketsPage() {
-  const [tickets] = useState<Ticket[]>(mockTickets);
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [priorityFilter, setPriorityFilter] = useState<string>('');
+  const [stats, setStats] = useState({ total: 0, open: 0, in_progress: 0, resolved: 0, closed: 0, high_priority: 0 });
+
+  useEffect(() => {
+    loadTickets();
+    loadStats();
+  }, [statusFilter, priorityFilter]);
+
+  const loadTickets = async () => {
+    try {
+      setLoading(true);
+      const data = await supportService.getAllTickets({
+        status: statusFilter || undefined,
+        priority: priorityFilter || undefined,
+      });
+      setTickets(data);
+    } catch (err) {
+      console.error('Failed to load tickets:', err);
+      setTickets([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadStats = async () => {
+    try {
+      const data = await supportService.getTicketStats();
+      setStats(data);
+    } catch (err) {
+      console.error('Failed to load stats:', err);
+    }
+  };
+
+  const handleStatusChange = async (ticketId: string, newStatus: SupportTicket['status']) => {
+    try {
+      await supportService.updateTicketStatus(ticketId, newStatus);
+      await loadTickets();
+      await loadStats();
+    } catch (err) {
+      console.error('Failed to update status:', err);
+    }
+  };
+
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
 
   const filteredTickets = tickets.filter(
     t => t.subject.toLowerCase().includes(search.toLowerCase()) ||
-         t.user.toLowerCase().includes(search.toLowerCase()) ||
+         (t.user_email || '').toLowerCase().includes(search.toLowerCase()) ||
+         (t.user_name || '').toLowerCase().includes(search.toLowerCase()) ||
          t.id.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -58,7 +97,7 @@ export function SupportTicketsPage() {
                 <AlertCircle className="w-5 h-5 text-yellow-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{tickets.filter(t => t.status === 'open').length}</p>
+                <p className="text-2xl font-bold">{stats.open}</p>
                 <p className="text-sm text-gray-500">Open</p>
               </div>
             </div>
@@ -69,7 +108,7 @@ export function SupportTicketsPage() {
                 <Clock className="w-5 h-5 text-blue-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{tickets.filter(t => t.status === 'in_progress').length}</p>
+                <p className="text-2xl font-bold">{stats.in_progress}</p>
                 <p className="text-sm text-gray-500">In Progress</p>
               </div>
             </div>
@@ -80,7 +119,7 @@ export function SupportTicketsPage() {
                 <CheckCircle className="w-5 h-5 text-green-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{tickets.filter(t => t.status === 'resolved').length}</p>
+                <p className="text-2xl font-bold">{stats.resolved}</p>
                 <p className="text-sm text-gray-500">Resolved</p>
               </div>
             </div>
@@ -91,7 +130,7 @@ export function SupportTicketsPage() {
                 <MessageSquare className="w-5 h-5 text-gray-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{tickets.length}</p>
+                <p className="text-2xl font-bold">{stats.total}</p>
                 <p className="text-sm text-gray-500">Total</p>
               </div>
             </div>
@@ -113,52 +152,93 @@ export function SupportTicketsPage() {
                     className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
-                <Button variant="outline">
-                  <Filter className="w-4 h-4 mr-2" />
-                  Filter
-                </Button>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="">All Status</option>
+                  <option value="open">Open</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="resolved">Resolved</option>
+                  <option value="closed">Closed</option>
+                </select>
+                <select
+                  value={priorityFilter}
+                  onChange={(e) => setPriorityFilter(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="">All Priority</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
               </div>
             </div>
           </CardHeader>
 
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subject</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Priority</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {filteredTickets.map((ticket) => (
-                  <tr key={ticket.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm font-mono text-gray-900">{ticket.id}</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{ticket.subject}</td>
-                    <td className="px-6 py-4 text-sm text-gray-500">{ticket.user}</td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[ticket.status]}`}>
-                        {ticket.status.replace('_', ' ')}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${priorityColors[ticket.priority]}`}>
-                        {ticket.priority}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">{ticket.createdAt}</td>
-                    <td className="px-6 py-4">
-                      <Button variant="ghost" size="sm">View</Button>
-                    </td>
+          {loading ? (
+            <div className="p-8 text-center">
+              <Loader2 className="w-8 h-8 text-primary-500 mx-auto mb-4 animate-spin" />
+              <p className="text-gray-500">Loading tickets...</p>
+            </div>
+          ) : filteredTickets.length === 0 ? (
+            <div className="p-8 text-center">
+              <MessageSquare className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-500">No tickets found</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subject</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Priority</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {filteredTickets.map((ticket) => (
+                    <tr key={ticket.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 text-sm font-mono text-gray-900">{ticket.id.slice(0, 8).toUpperCase()}</td>
+                      <td className="px-6 py-4 text-sm text-gray-900">{ticket.subject}</td>
+                      <td className="px-6 py-4">
+                        <div>
+                          <p className="text-sm text-gray-900">{ticket.user_name || 'Unknown'}</p>
+                          <p className="text-xs text-gray-500">{ticket.user_email || ''}</p>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <select
+                          value={ticket.status}
+                          onChange={(e) => handleStatusChange(ticket.id, e.target.value as SupportTicket['status'])}
+                          className={`px-2 py-1 text-xs font-medium rounded-full border-0 ${statusColors[ticket.status]}`}
+                        >
+                          <option value="open">Open</option>
+                          <option value="in_progress">In Progress</option>
+                          <option value="resolved">Resolved</option>
+                          <option value="closed">Closed</option>
+                        </select>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${priorityColors[ticket.priority]}`}>
+                          {ticket.priority}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-500">{formatDate(ticket.created_at)}</td>
+                      <td className="px-6 py-4">
+                        <Button variant="ghost" size="sm">View</Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Card>
       </div>
     </AdminLayout>

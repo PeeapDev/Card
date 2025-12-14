@@ -27,6 +27,9 @@ import {
   Phone,
   MapPin,
   Building2,
+  Repeat,
+  Link2,
+  FileText,
 } from 'lucide-react';
 import { StandaloneDeveloperLayout } from '@/components/layout/StandaloneDeveloperLayout';
 import { Card } from '@/components/ui/Card';
@@ -191,7 +194,7 @@ function BusinessesList() {
 }
 
 // Integration tab type
-type IntegrationTab = 'standard' | 'v0' | 'server';
+type IntegrationTab = 'standard' | 'v0' | 'server' | 'subscriptions';
 
 // Business Detail Component
 function BusinessDetail() {
@@ -820,6 +823,230 @@ app.post('/webhooks/peeap', express.json(), (req, res) => {
 }`;
   };
 
+  // Subscription Billing SDK Script
+  const getSubscriptionSDKScript = () => {
+    const apiUrl = 'https://api.peeap.com';
+    const checkoutUrl = 'https://checkout.peeap.com';
+    const publicKey = activeKeys.public;
+    const isLive = business.is_live_mode;
+
+    return `/**
+ * ============================================================================
+ * PEEAP SUBSCRIPTION BILLING API
+ * ============================================================================
+ * Business: ${business.name}
+ * Mode: ${isLive ? 'LIVE' : 'SANDBOX (Test Mode)'}
+ *
+ * Stripe-like recurring billing for your customers.
+ * Supports: Cards, Mobile Money, and Peeap Wallet auto-charge.
+ * ============================================================================
+ */
+
+// ============================================================================
+// 1. CREATE SUBSCRIPTION PLAN (Dashboard or API)
+// ============================================================================
+
+// Create a subscription plan via API
+const planResponse = await fetch('${apiUrl}/api/subscriptions/plans', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ${activeKeys.secret}'
+  },
+  body: JSON.stringify({
+    name: 'Premium Monthly',
+    description: 'Full access to all features',
+    amount: 100,                    // Le 100.00 per billing cycle
+    currency: 'SLE',
+    interval: 'monthly',            // 'daily' | 'weekly' | 'monthly' | 'yearly'
+    interval_count: 1,              // Charge every 1 month
+    trial_period_days: 7,           // Optional: 7-day free trial
+    features: [                     // Features to display on checkout
+      'Unlimited access',
+      'Priority support',
+      'Advanced analytics'
+    ]
+  })
+});
+
+const { plan } = await planResponse.json();
+// plan.id = 'plan_abc123...'
+
+
+// ============================================================================
+// 2. SUBSCRIBE CUSTOMER (Redirect to Hosted Checkout)
+// ============================================================================
+
+// Option A: Use Subscription Link (No Code)
+// Share this URL: ${checkoutUrl}/subscribe/{plan_id}
+// Example: ${checkoutUrl}/subscribe/plan_abc123
+
+// Option B: Embed Subscribe Button
+<a href="${checkoutUrl}/subscribe/{plan_id}" class="subscribe-button">
+  Subscribe Now
+</a>
+
+// Option C: Create Subscription via API with Redirect
+const subscribeResponse = await fetch('${apiUrl}/api/subscriptions/subscribe', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ${publicKey}'
+  },
+  body: JSON.stringify({
+    plan_id: 'plan_abc123',
+    customer_email: 'customer@example.com',
+    customer_name: 'John Doe',
+    redirect_url: 'https://yoursite.com/subscription-success'
+  })
+});
+
+const { checkout_url } = await subscribeResponse.json();
+// Redirect customer to: checkout_url
+
+
+// ============================================================================
+// 3. CUSTOMER CHECKOUT FLOW
+// ============================================================================
+
+/**
+ * On the hosted checkout page, customer will:
+ * 1. See plan details and features
+ * 2. Enter payment method (Card, Mobile Money, or use Peeap Wallet)
+ * 3. Accept recurring billing consent with checkboxes
+ * 4. Complete initial payment (or start trial)
+ *
+ * Payment Methods:
+ * - Card: Tokenized and auto-charged on renewal
+ * - Peeap Wallet: Auto-deducted on renewal
+ * - Mobile Money: Payment request sent each billing cycle (user confirms)
+ */
+
+
+// ============================================================================
+// 4. WEBHOOK EVENTS
+// ============================================================================
+
+// Configure webhook at: ${apiUrl}/merchant/developer/business/{id}
+// Events you'll receive:
+
+// subscription.created - New subscription started
+{
+  "event": "subscription.created",
+  "data": {
+    "id": "sub_xyz789",
+    "plan_id": "plan_abc123",
+    "customer_email": "customer@example.com",
+    "status": "active",  // or 'trialing'
+    "current_period_start": "2025-01-01",
+    "current_period_end": "2025-02-01",
+    "trial_end": "2025-01-08"  // if applicable
+  }
+}
+
+// subscription.renewed - Auto-renewal successful
+{
+  "event": "subscription.renewed",
+  "data": {
+    "subscription_id": "sub_xyz789",
+    "invoice_id": "inv_123",
+    "amount": 100,
+    "currency": "SLE",
+    "period_start": "2025-02-01",
+    "period_end": "2025-03-01"
+  }
+}
+
+// subscription.payment_failed - Renewal payment failed
+{
+  "event": "subscription.payment_failed",
+  "data": {
+    "subscription_id": "sub_xyz789",
+    "invoice_id": "inv_123",
+    "failure_reason": "insufficient_funds",
+    "retry_count": 1,
+    "next_retry_at": "2025-02-02T00:00:00Z"
+  }
+}
+
+// subscription.canceled - Customer canceled
+{
+  "event": "subscription.canceled",
+  "data": {
+    "subscription_id": "sub_xyz789",
+    "canceled_at": "2025-01-15T10:00:00Z",
+    "cancel_at_period_end": true,
+    "effective_end_date": "2025-02-01"
+  }
+}
+
+
+// ============================================================================
+// 5. MANAGE SUBSCRIPTIONS (API)
+// ============================================================================
+
+// Cancel subscription
+await fetch('${apiUrl}/api/subscriptions/{subscription_id}/cancel', {
+  method: 'POST',
+  headers: { 'Authorization': 'Bearer ${activeKeys.secret}' },
+  body: JSON.stringify({
+    cancel_at_period_end: true  // false = immediate cancel
+  })
+});
+
+// Pause subscription (skip next billing)
+await fetch('${apiUrl}/api/subscriptions/{subscription_id}/pause', {
+  method: 'POST',
+  headers: { 'Authorization': 'Bearer ${activeKeys.secret}' }
+});
+
+// Resume paused subscription
+await fetch('${apiUrl}/api/subscriptions/{subscription_id}/resume', {
+  method: 'POST',
+  headers: { 'Authorization': 'Bearer ${activeKeys.secret}' }
+});
+
+// Get subscription details
+const sub = await fetch('${apiUrl}/api/subscriptions/{subscription_id}', {
+  headers: { 'Authorization': 'Bearer ${activeKeys.secret}' }
+}).then(r => r.json());
+
+
+// ============================================================================
+// 6. CUSTOMER PORTAL (Let customers manage their subscriptions)
+// ============================================================================
+
+// Redirect customer to self-service portal
+const portalUrl = '${checkoutUrl}/subscriptions?email={customer_email}';
+// Customer can view, cancel, and update payment methods
+
+
+// ============================================================================
+// BILLING CYCLE BEHAVIOR
+// ============================================================================
+
+/**
+ * 3 Days Before Due:
+ *   - "Pending Payment" notification appears in customer's transaction list
+ *   - Mobile Money: Payment request SMS sent
+ *
+ * On Due Date:
+ *   - Card/Wallet: Auto-charged immediately
+ *   - Mobile Money: Another payment request sent
+ *
+ * Payment Failed:
+ *   - Retry 1: After 1 day
+ *   - Retry 2: After 3 days
+ *   - Retry 3: After 7 days
+ *   - After 3 failures: 7-day grace period, then auto-cancel
+ *
+ * Customer Notifications:
+ *   - Email + In-app notification for upcoming payments
+ *   - Email + In-app notification for failed payments
+ *   - Email confirmation for successful renewals
+ */`;
+  };
+
   // Get current script based on selected tab
   const getCurrentScript = () => {
     switch (integrationTab) {
@@ -827,6 +1054,8 @@ app.post('/webhooks/peeap', express.json(), (req, res) => {
         return getV0SDKScript();
       case 'server':
         return getServerSDKScript();
+      case 'subscriptions':
+        return getSubscriptionSDKScript();
       default:
         return getFullSDKScript();
     }
@@ -1021,6 +1250,121 @@ app.post('/webhooks/peeap', express.json(), (req, res) => {
         </Card>
       </div>
 
+      {/* Enabled Features */}
+      <Card className="p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="font-medium text-gray-900">Enabled Features</h3>
+            <p className="text-sm text-gray-500">Additional payment capabilities for your business</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Subscriptions Feature */}
+          <div className={`p-4 rounded-lg border-2 ${
+            business.enabled_features?.includes('subscriptions')
+              ? 'border-green-200 bg-green-50'
+              : 'border-gray-200 bg-gray-50'
+          }`}>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div className={`p-2 rounded-lg ${
+                  business.enabled_features?.includes('subscriptions')
+                    ? 'bg-green-100'
+                    : 'bg-gray-100'
+                }`}>
+                  <Repeat className={`w-5 h-5 ${
+                    business.enabled_features?.includes('subscriptions')
+                      ? 'text-green-600'
+                      : 'text-gray-400'
+                  }`} />
+                </div>
+                <span className="font-medium text-gray-900">Subscriptions</span>
+              </div>
+              {business.enabled_features?.includes('subscriptions') ? (
+                <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">Active</span>
+              ) : (
+                <span className="px-2 py-1 bg-gray-100 text-gray-500 text-xs font-medium rounded-full">Inactive</span>
+              )}
+            </div>
+            <p className="text-sm text-gray-500 mb-3">
+              Create recurring billing plans and auto-charge customers
+            </p>
+            {business.enabled_features?.includes('subscriptions') ? (
+              <a
+                href="/merchant/subscriptions"
+                className="text-sm text-green-600 hover:text-green-700 font-medium"
+              >
+                Manage Plans →
+              </a>
+            ) : (
+              <p className="text-xs text-gray-400">Contact admin to enable</p>
+            )}
+          </div>
+
+          {/* Payment Links Feature */}
+          <div className={`p-4 rounded-lg border-2 ${
+            business.enabled_features?.includes('payment_links')
+              ? 'border-green-200 bg-green-50'
+              : 'border-gray-200 bg-gray-50'
+          }`}>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div className={`p-2 rounded-lg ${
+                  business.enabled_features?.includes('payment_links')
+                    ? 'bg-green-100'
+                    : 'bg-gray-100'
+                }`}>
+                  <Link2 className={`w-5 h-5 ${
+                    business.enabled_features?.includes('payment_links')
+                      ? 'text-green-600'
+                      : 'text-gray-400'
+                  }`} />
+                </div>
+                <span className="font-medium text-gray-900">Payment Links</span>
+              </div>
+              <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">Active</span>
+            </div>
+            <p className="text-sm text-gray-500 mb-3">
+              Create shareable links to collect payments
+            </p>
+            <span className="text-sm text-gray-400">Included by default</span>
+          </div>
+
+          {/* Invoices Feature */}
+          <div className={`p-4 rounded-lg border-2 ${
+            business.enabled_features?.includes('invoices')
+              ? 'border-green-200 bg-green-50'
+              : 'border-gray-200 bg-gray-50'
+          }`}>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div className={`p-2 rounded-lg ${
+                  business.enabled_features?.includes('invoices')
+                    ? 'bg-green-100'
+                    : 'bg-gray-100'
+                }`}>
+                  <FileText className={`w-5 h-5 ${
+                    business.enabled_features?.includes('invoices')
+                      ? 'text-green-600'
+                      : 'text-gray-400'
+                  }`} />
+                </div>
+                <span className="font-medium text-gray-900">Invoices</span>
+              </div>
+              {business.enabled_features?.includes('invoices') ? (
+                <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">Active</span>
+              ) : (
+                <span className="px-2 py-1 bg-gray-100 text-gray-500 text-xs font-medium rounded-full">Coming Soon</span>
+              )}
+            </div>
+            <p className="text-sm text-gray-500 mb-3">
+              Send professional invoices with payment tracking
+            </p>
+            <span className="text-xs text-gray-400">Coming soon</span>
+          </div>
+        </div>
+      </Card>
+
       {/* Integration Section Header */}
       <div className="border-t pt-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-1">Integration</h3>
@@ -1084,6 +1428,20 @@ app.post('/webhooks/peeap', express.json(), (req, res) => {
             </div>
             <p className="text-xs text-gray-500 mt-0.5 hidden sm:block">Node, Python, PHP</p>
           </button>
+          <button
+            onClick={() => setIntegrationTab('subscriptions')}
+            className={`flex-1 min-w-[120px] px-4 py-2.5 rounded-md text-sm font-medium transition-all ${
+              integrationTab === 'subscriptions'
+                ? 'bg-white shadow text-green-700 ring-1 ring-green-200'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+            }`}
+          >
+            <div className="flex items-center justify-center gap-2">
+              <Repeat className="w-4 h-4" />
+              <span>Subscriptions</span>
+            </div>
+            <p className="text-xs text-gray-500 mt-0.5 hidden sm:block">Recurring billing</p>
+          </button>
         </div>
 
         {/* Tab Description */}
@@ -1110,6 +1468,19 @@ app.post('/webhooks/peeap', express.json(), (req, res) => {
               <p className="text-sm text-blue-800">
                 <strong>Server-Side Integration</strong> - For backend-first architectures using Node.js, Python, PHP,
                 Ruby, or Go. Includes webhook verification and secure API patterns.
+              </p>
+            </div>
+          )}
+          {integrationTab === 'subscriptions' && (
+            <div className="p-3 bg-green-50 border border-green-100 rounded-lg">
+              <p className="text-sm text-green-800">
+                <strong>Subscription Billing API</strong> - Create recurring billing plans, collect payment methods with
+                consent, and auto-charge customers on renewal. Supports Cards, Mobile Money, and Peeap Wallet.
+                {!business.enabled_features?.includes('subscriptions') && (
+                  <span className="block mt-1 text-yellow-700">
+                    Note: Contact admin to enable subscriptions for your business.
+                  </span>
+                )}
               </p>
             </div>
           )}

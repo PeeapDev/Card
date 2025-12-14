@@ -95,6 +95,8 @@ export function PayPage() {
   const urlNote = searchParams.get('note');
   const qrReference = searchParams.get('qr');
   const usernameParam = searchParams.get('username');
+  const walletParam = searchParams.get('wallet');
+  const merchantNameParam = searchParams.get('merchant');
 
   // Generate payment URL for QR code
   const paymentUrl = window.location.href;
@@ -106,7 +108,7 @@ export function PayPage() {
     setIsMobile(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent));
 
     initializePayment();
-  }, [toUserId, qrReference, usernameParam]);
+  }, [toUserId, qrReference, usernameParam, walletParam]);
 
   useEffect(() => {
     // If user logs in, fetch their wallet
@@ -125,14 +127,14 @@ export function PayPage() {
         const username = usernameParam.replace('@', '');
         recipientData = await fetchRecipientByUsername(username);
       }
-      // Handle direct user ID
+      // Handle direct user ID (with optional wallet parameter)
       else if (toUserId) {
-        recipientData = await fetchRecipient(toUserId);
+        recipientData = await fetchRecipient(toUserId, walletParam);
       }
       // Handle QR reference
       else if (qrReference) {
         // For now, treat QR reference as user ID
-        recipientData = await fetchRecipient(qrReference);
+        recipientData = await fetchRecipient(qrReference, walletParam);
       }
 
       if (!recipientData) {
@@ -194,7 +196,7 @@ export function PayPage() {
     }
   };
 
-  const fetchRecipient = async (userId: string): Promise<Recipient | null> => {
+  const fetchRecipient = async (userId: string, providedWalletId?: string | null): Promise<Recipient | null> => {
     // Select without username column (might not exist)
     const { data: userData, error } = await supabase
       .from('users')
@@ -207,20 +209,25 @@ export function PayPage() {
       return null;
     }
 
-    const { data: wallet } = await supabase
-      .from('wallets')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('wallet_type', 'primary')
-      .single();
+    // Use provided wallet ID if available, otherwise look up primary wallet
+    let recipientWalletId = providedWalletId || '';
+    if (!recipientWalletId) {
+      const { data: wallet } = await supabase
+        .from('wallets')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('wallet_type', 'primary')
+        .single();
+      recipientWalletId = wallet?.id || '';
+    }
 
     return {
       id: userData.id,
-      name: `${userData.first_name} ${userData.last_name}`,
+      name: merchantNameParam ? decodeURIComponent(merchantNameParam) : `${userData.first_name} ${userData.last_name}`,
       username: undefined, // Username column might not exist
       email: userData.email,
       phone: userData.phone,
-      walletId: wallet?.id || '',
+      walletId: recipientWalletId,
     };
   };
 

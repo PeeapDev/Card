@@ -7,6 +7,7 @@ import { clsx } from 'clsx';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import type { Transaction } from '@/types';
+import { PendingSubscriptionPayments } from '@/components/subscriptions/PendingSubscriptionPayments';
 
 export function TransactionsPage() {
   const { user } = useAuth();
@@ -224,6 +225,9 @@ export function TransactionsPage() {
             </Button>
           </div>
         </Card>
+
+        {/* Pending Subscription Payments */}
+        <PendingSubscriptionPayments />
 
         {/* Transactions list */}
         <Card padding="none">

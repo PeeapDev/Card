@@ -1,20 +1,10 @@
-import { useState } from 'react';
-import { MessageSquare, Send, Plus, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { MessageSquare, Send, Plus, Clock, CheckCircle, AlertCircle, Loader2, WifiOff } from 'lucide-react';
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
 import { Card, CardHeader, CardTitle, Button } from '@/components/ui';
-
-interface Ticket {
-  id: string;
-  subject: string;
-  status: 'open' | 'in_progress' | 'resolved' | 'closed';
-  createdAt: string;
-  lastReply: string;
-}
-
-const mockTickets: Ticket[] = [
-  { id: 'TKT-M001', subject: 'Settlement delay question', status: 'resolved', createdAt: '2024-01-10', lastReply: '2024-01-11' },
-  { id: 'TKT-M002', subject: 'API integration help needed', status: 'in_progress', createdAt: '2024-01-14', lastReply: '2024-01-14' },
-];
+import { supportService, SupportTicket } from '@/services/support.service';
+import { saveSupportTickets, getCachedSupportTickets } from '@/services/indexeddb.service';
+import { useAuth } from '@/context/AuthContext';
 
 const statusColors = {
   open: 'bg-yellow-100 text-yellow-800',
@@ -31,17 +21,84 @@ const statusIcons = {
 };
 
 export function MerchantSupportPage() {
-  const [tickets] = useState<Ticket[]>(mockTickets);
+  const { user } = useAuth();
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [showNewTicket, setShowNewTicket] = useState(false);
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
+  const [category, setCategory] = useState('Payments & Transactions');
+  const [isOffline, setIsOffline] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (user?.id) {
+      loadTickets();
+    }
+  }, [user?.id]);
+
+  const loadTickets = async () => {
+    if (!user?.id) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+      setIsOffline(false);
+      const data = await supportService.getUserTickets(user.id);
+      setTickets(data);
+      // Cache tickets for offline viewing
+      await saveSupportTickets(data, user.id);
+    } catch (err) {
+      // Try to load from cache if offline
+      try {
+        const cachedTickets = await getCachedSupportTickets(user.id);
+        if (cachedTickets.length > 0) {
+          setTickets(cachedTickets);
+          setIsOffline(true);
+        } else {
+          setError('Failed to load tickets');
+          setTickets([]);
+        }
+      } catch {
+        setError('Failed to load tickets');
+        setTickets([]);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle ticket creation
-    setShowNewTicket(false);
-    setSubject('');
-    setMessage('');
+    if (!user?.id || !subject.trim() || !message.trim()) return;
+
+    try {
+      setSubmitting(true);
+      setError(null);
+      await supportService.createTicket(
+        { subject, message, category },
+        user.id
+      );
+      setShowNewTicket(false);
+      setSubject('');
+      setMessage('');
+      setCategory('Payments & Transactions');
+      // Reload tickets
+      await loadTickets();
+    } catch (err) {
+      setError('Failed to create ticket. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
   };
 
   return (
@@ -58,6 +115,19 @@ export function MerchantSupportPage() {
           </Button>
         </div>
 
+        {isOffline && (
+          <div className="p-4 bg-yellow-50 text-yellow-800 rounded-lg flex items-center gap-2">
+            <WifiOff className="w-5 h-5" />
+            <span>You're viewing cached tickets. Some data may be outdated.</span>
+          </div>
+        )}
+
+        {error && (
+          <div className="p-4 bg-red-50 text-red-700 rounded-lg">
+            {error}
+          </div>
+        )}
+
         {showNewTicket && (
           <Card>
             <CardHeader>
@@ -72,11 +142,17 @@ export function MerchantSupportPage() {
                   onChange={(e) => setSubject(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   placeholder="Brief description of your issue"
+                  disabled={submitting}
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  disabled={submitting}
+                >
                   <option>Payments & Transactions</option>
                   <option>Settlements & Payouts</option>
                   <option>API & Integration</option>
@@ -92,15 +168,20 @@ export function MerchantSupportPage() {
                   rows={5}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   placeholder="Describe your issue in detail..."
+                  disabled={submitting}
                 />
               </div>
               <div className="flex gap-3">
-                <Button type="button" variant="outline" onClick={() => setShowNewTicket(false)}>
+                <Button type="button" variant="outline" onClick={() => setShowNewTicket(false)} disabled={submitting}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={!subject.trim() || !message.trim()}>
-                  <Send className="w-4 h-4 mr-2" />
-                  Submit Ticket
+                <Button type="submit" disabled={!subject.trim() || !message.trim() || submitting}>
+                  {submitting ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4 mr-2" />
+                  )}
+                  {submitting ? 'Submitting...' : 'Submit Ticket'}
                 </Button>
               </div>
             </form>
@@ -112,7 +193,12 @@ export function MerchantSupportPage() {
             <CardTitle>Your Tickets</CardTitle>
           </CardHeader>
 
-          {tickets.length === 0 ? (
+          {loading ? (
+            <div className="p-8 text-center">
+              <Loader2 className="w-8 h-8 text-primary-500 mx-auto mb-4 animate-spin" />
+              <p className="text-gray-500">Loading tickets...</p>
+            </div>
+          ) : tickets.length === 0 ? (
             <div className="p-8 text-center">
               <MessageSquare className="w-12 h-12 text-gray-300 mx-auto mb-4" />
               <p className="text-gray-500">No support tickets yet</p>
@@ -133,14 +219,14 @@ export function MerchantSupportPage() {
                         </div>
                         <div>
                           <p className="font-medium text-gray-900">{ticket.subject}</p>
-                          <p className="text-sm text-gray-500">{ticket.id}</p>
+                          <p className="text-sm text-gray-500">{ticket.id.slice(0, 8).toUpperCase()}</p>
                         </div>
                       </div>
                       <div className="text-right">
                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[ticket.status]}`}>
                           {ticket.status.replace('_', ' ')}
                         </span>
-                        <p className="text-xs text-gray-400 mt-1">Last reply: {ticket.lastReply}</p>
+                        <p className="text-xs text-gray-400 mt-1">Created: {formatDate(ticket.created_at)}</p>
                       </div>
                     </div>
                   </div>

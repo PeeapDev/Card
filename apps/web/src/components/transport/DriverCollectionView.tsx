@@ -39,6 +39,9 @@ export function DriverCollectionView({
   onPaymentComplete,
   onCancel,
 }: DriverCollectionViewProps) {
+  // Debug: Log the payment URL being used for QR code
+  console.log('[DriverCollectionView] QR Code URL:', paymentUrl, 'Session:', sessionId);
+
   const [activeMode, setActiveMode] = useState<PaymentMode>('qr');
   const [isScanning, setIsScanning] = useState(false);
   const [nfcSupported, setNfcSupported] = useState(false);

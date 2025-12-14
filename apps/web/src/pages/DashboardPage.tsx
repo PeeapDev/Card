@@ -11,6 +11,7 @@ import { useTransactions } from '@/hooks/useTransactions';
 import { UserSearch, SearchResult } from '@/components/ui/UserSearch';
 import { ScanToPayModal } from '@/components/payment/ScanToPayModal';
 import { SendToMobileMoneyModal } from '@/components/payment/SendToMobileMoneyModal';
+import { PendingSubscriptionPaymentsCompact } from '@/components/subscriptions/PendingSubscriptionPayments';
 import { clsx } from 'clsx';
 import { currencyService, Currency } from '@/services/currency.service';
 
@@ -239,6 +240,9 @@ export function DashboardPage() {
             <span>Phone number</span>
           </div>
         </MotionCard>
+
+        {/* Pending Subscription Payments */}
+        <PendingSubscriptionPaymentsCompact />
 
         {/* Recent activity */}
         <motion.div

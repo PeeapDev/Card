@@ -85,6 +85,7 @@ import { DepositCancelPage } from '@/pages/DepositCancelPage';
 import { BusinessCheckoutPage } from '@/pages/BusinessCheckoutPage';
 import { CheckoutPage } from '@/pages/CheckoutPage';
 import { HostedCheckoutPage } from '@/pages/HostedCheckoutPage';
+import { SubscriptionCheckoutPage } from '@/pages/SubscriptionCheckoutPage';
 import { CheckoutSuccessPage } from '@/pages/CheckoutSuccessPage';
 import { ScanPayPage } from '@/pages/ScanPayPage';
 import { TestCheckoutPage } from '@/pages/TestCheckoutPage';
@@ -102,11 +103,13 @@ import { MerchantPayoutsPage } from '@/pages/merchant/MerchantPayoutsPage';
 import { MerchantRefundsPage } from '@/pages/merchant/MerchantRefundsPage';
 import { MerchantReportsPage } from '@/pages/merchant/MerchantReportsPage';
 import { MerchantPaymentLinksPage } from '@/pages/merchant/MerchantPaymentLinksPage';
+import { MerchantSubscriptionsPage } from '@/pages/merchant/MerchantSubscriptionsPage';
 import { MerchantProfilePage } from '@/pages/merchant/MerchantProfilePage';
 import { CreateBusinessPage } from '@/pages/merchant/CreateBusinessPage';
 import { CreateDeveloperBusinessPage } from '@/pages/merchant/CreateDeveloperBusinessPage';
 import { MerchantShopsPage } from '@/pages/merchant/MerchantShopsPage';
 import { MerchantUpgradePage } from '@/pages/merchant/MerchantUpgradePage';
+import { MerchantSubscriptionPage } from '@/pages/merchant/MerchantSubscriptionPage';
 import { CollectPaymentPage } from '@/pages/merchant/CollectPaymentPage';
 import { DriverWalletPage } from '@/pages/merchant/DriverWalletPage';
 import { ShopDetailPage } from '@/pages/merchant/ShopDetailPage';
@@ -116,7 +119,7 @@ import { ShopSettingsPage } from '@/pages/merchant/ShopSettingsPage';
 import { MerchantSupportPage } from '@/pages/merchant/MerchantSupportPage';
 import { MerchantNotificationsPage } from '@/pages/merchant/MerchantNotificationsPage';
 // POS Pages
-import { POSTerminalPage, POSProductsPage, POSSalesPage, POSSetupWizard, POSReportsPage, POSStaffPage, POSInventoryPage, POSLoyaltyPage, POSSettingsPage } from '@/pages/merchant/pos';
+import { POSTerminalPage, POSProductsPage, POSSalesPage, POSSetupWizard, POSReportsPage, POSStaffPage, POSInventoryPage, POSLoyaltyPage, POSSettingsPage, POSKitchenDisplayPage, POSTableManagementPage } from '@/pages/merchant/pos';
 import { POSAppPage } from '@/pages/merchant/apps/POSAppPage';
 // User Notifications
 import { UserNotificationsPage } from '@/pages/UserNotificationsPage';
@@ -196,6 +199,9 @@ function App() {
 
                   {/* Hosted Checkout Page - Universal developer checkout like Stripe/PayPal */}
                   <Route path="/checkout/pay/:sessionId" element={<HostedCheckoutPage />} />
+
+                  {/* Subscription Checkout Page - For recurring subscriptions */}
+                  <Route path="/subscribe/:planId" element={<SubscriptionCheckoutPage />} />
 
                   {/* Checkout Success Page - Displayed after successful payment */}
                   <Route path="/checkout/success" element={<CheckoutSuccessPage />} />
@@ -904,6 +910,22 @@ function App() {
                 }
               />
               <Route
+                path="/merchant/pos/kitchen"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <POSKitchenDisplayPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/pos/tables"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <POSTableManagementPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
                 path="/merchant/*"
                 element={
                   <RoleBasedRoute allowedRoles={['merchant']}>
@@ -997,6 +1019,7 @@ function App() {
                   <Route path="/deposit/cancel" element={<DepositCancelPage />} />
                   <Route path="/checkout/:businessId" element={<BusinessCheckoutPage />} />
                   <Route path="/checkout/pay/:sessionId" element={<HostedCheckoutPage />} />
+                  <Route path="/subscribe/:planId" element={<SubscriptionCheckoutPage />} />
                   <Route path="/checkout/success" element={<CheckoutSuccessPage />} />
                   <Route path="/scan-pay/:sessionId" element={<ScanPayPage />} />
                   <Route path="/app/pay/:paymentId" element={<AppPaymentRedirectPage />} />
@@ -1075,6 +1098,7 @@ function App() {
                   <Route path="/merchant/refunds" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantRefundsPage /></RoleBasedRoute>} />
                   <Route path="/merchant/reports" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantReportsPage /></RoleBasedRoute>} />
                   <Route path="/merchant/payment-links" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantPaymentLinksPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/subscriptions" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantSubscriptionsPage /></RoleBasedRoute>} />
                   <Route path="/merchant/profile" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantProfilePage /></RoleBasedRoute>} />
                   <Route path="/merchant/create-business" element={<RoleBasedRoute allowedRoles={['merchant']}><CreateBusinessPage /></RoleBasedRoute>} />
                   <Route path="/merchant/settings" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantSettingsPage /></RoleBasedRoute>} />
@@ -1084,6 +1108,7 @@ function App() {
                   <Route path="/merchant/collect-payment" element={<RoleBasedRoute allowedRoles={['merchant']}><CollectPaymentPage /></RoleBasedRoute>} />
                   <Route path="/merchant/driver-wallet" element={<RoleBasedRoute allowedRoles={['merchant']}><DriverWalletPage /></RoleBasedRoute>} />
                   <Route path="/merchant/upgrade" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantUpgradePage /></RoleBasedRoute>} />
+                  <Route path="/merchant/subscription" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantSubscriptionPage /></RoleBasedRoute>} />
                   <Route path="/merchant/shops/:businessId" element={<RoleBasedRoute allowedRoles={['merchant']}><ShopDetailPage /></RoleBasedRoute>} />
                   <Route path="/merchant/shops/:businessId/transactions" element={<RoleBasedRoute allowedRoles={['merchant']}><ShopTransactionsPage /></RoleBasedRoute>} />
                   <Route path="/merchant/shops/:businessId/disputes" element={<RoleBasedRoute allowedRoles={['merchant']}><ShopDisputesPage /></RoleBasedRoute>} />
@@ -1102,6 +1127,8 @@ function App() {
                   <Route path="/merchant/pos/inventory" element={<RoleBasedRoute allowedRoles={['merchant']}><POSInventoryPage /></RoleBasedRoute>} />
                   <Route path="/merchant/pos/loyalty" element={<RoleBasedRoute allowedRoles={['merchant']}><POSLoyaltyPage /></RoleBasedRoute>} />
                   <Route path="/merchant/pos/settings" element={<RoleBasedRoute allowedRoles={['merchant']}><POSSettingsPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/pos/kitchen" element={<RoleBasedRoute allowedRoles={['merchant']}><POSKitchenDisplayPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/pos/tables" element={<RoleBasedRoute allowedRoles={['merchant']}><POSTableManagementPage /></RoleBasedRoute>} />
                   <Route path="/merchant/*" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantDashboard /></RoleBasedRoute>} />
 
                   {/* Agent Routes */}

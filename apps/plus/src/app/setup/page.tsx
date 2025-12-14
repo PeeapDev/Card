@@ -254,54 +254,53 @@ function SetupWizardContent() {
     }
   }, [searchParams]);
 
-  // Fetch existing business data from my.peeap.com via shared API
+  // Fetch existing business data directly from Supabase (shared database)
   const fetchExistingBusiness = async () => {
     setIsLoadingExisting(true);
     try {
-      const token = localStorage.getItem("accessToken") || localStorage.getItem("token");
+      // Get user from localStorage (set by SSO flow)
+      const userStr = localStorage.getItem("user");
+      const user = userStr ? JSON.parse(userStr) : null;
 
-      if (!token) {
-        console.log("No auth token found");
+      if (!user?.id) {
+        console.log("No user ID found in localStorage");
         setIsLoadingExisting(false);
         return null;
       }
 
-      // Call shared API to get business data from my.peeap.com
-      const apiUrl = process.env.NODE_ENV === "development"
-        ? "http://localhost:5173/api/shared/business"
-        : "https://my.peeap.com/api/shared/business";
+      console.log("Fetching business for user:", user.id);
 
-      const response = await fetch(apiUrl, {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
+      // Query merchant_businesses table directly via Supabase
+      const { data: businesses, error } = await supabase
+        .from('merchant_businesses')
+        .select('*')
+        .eq('merchant_id', user.id)
+        .limit(1);
 
-      if (!response.ok) {
-        console.error("Failed to fetch business from shared API:", response.status);
+      if (error) {
+        console.error("Supabase query error:", error);
         return null;
       }
 
-      const data = await response.json();
-
-      if (!data.business) {
-        console.log("No business found in shared API response");
+      if (!businesses || businesses.length === 0) {
+        console.log("No business found for merchant:", user.id);
         return null;
       }
 
-      const business = data.business;
+      const business = businesses[0];
+      console.log("Found existing business:", business.name);
+
       return {
         id: business.id,
-        businessName: business.businessName,
-        email: business.email,
+        businessName: business.name,
+        email: business.email || user.email,
         phone: business.phone,
         address: business.address,
         city: business.city,
         industry: business.industry,
-        registrationNumber: business.registrationNumber,
-        isVerified: business.isVerified,
-        kycStatus: business.kycStatus,
+        registrationNumber: business.registration_number,
+        isVerified: business.approval_status === 'APPROVED',
+        kycStatus: business.kyc_status,
       };
     } catch (error) {
       console.error("Error fetching existing business:", error);
@@ -392,6 +391,62 @@ function SetupWizardContent() {
       const userStr = localStorage.getItem("user");
       const user = userStr ? JSON.parse(userStr) : null;
 
+      // Start 7-day free trial for business_plus tier
+      if (user?.id && (tier === 'business_plus' || tier === 'business')) {
+        try {
+          // Use the start_merchant_trial RPC function
+          const { data: subscription, error: subscriptionError } = await supabase.rpc(
+            'start_merchant_trial',
+            {
+              p_user_id: user.id,
+              p_business_id: existingBusiness?.id || null,
+              p_tier: tier,
+              p_trial_days: 7,
+              p_price_monthly: calculateMonthlyFee()
+            }
+          );
+
+          if (subscriptionError) {
+            console.log("Trial start via RPC failed, trying direct insert:", subscriptionError.message);
+
+            // Fallback: Direct insert if RPC not available
+            const trialEndDate = new Date();
+            trialEndDate.setDate(trialEndDate.getDate() + 7);
+
+            const { error: insertError } = await supabase
+              .from("merchant_subscriptions")
+              .upsert({
+                user_id: user.id,
+                business_id: existingBusiness?.id || null,
+                tier: tier,
+                status: 'trialing',
+                trial_started_at: new Date().toISOString(),
+                trial_ends_at: trialEndDate.toISOString(),
+                price_monthly: calculateMonthlyFee(),
+                currency: 'NLE',
+                selected_addons: preferences.selectedAddons,
+                preferences: preferences,
+              }, { onConflict: 'user_id' });
+
+            if (insertError) {
+              console.log("Direct subscription insert also failed:", insertError.message);
+            } else {
+              console.log("Trial started successfully via direct insert");
+            }
+          } else {
+            console.log("Trial started successfully:", subscription);
+          }
+
+          // Store trial info in localStorage
+          const trialEnd = new Date();
+          trialEnd.setDate(trialEnd.getDate() + 7);
+          localStorage.setItem("plusTrialEndsAt", trialEnd.toISOString());
+          localStorage.setItem("plusSubscriptionStatus", "trialing");
+        } catch (trialError) {
+          console.error("Error starting trial:", trialError);
+        }
+      }
+
       // Try to save business setup to Supabase (table may not exist yet)
       try {
         const { error } = await supabase
@@ -465,7 +520,7 @@ function SetupWizardContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white light">
       {/* Header */}
       <header className="border-b bg-white">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
@@ -523,7 +578,7 @@ function SetupWizardContent() {
         )}
 
         {/* Step Content */}
-        <Card>
+        <Card className="bg-white border-gray-200 shadow-lg">
           {/* Step 1: Choose Business Source */}
           {currentStep === "choose" && (
             <>

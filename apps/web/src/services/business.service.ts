@@ -58,6 +58,9 @@ export interface MerchantBusiness {
   auto_settlement: boolean;
   status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
 
+  // Features
+  enabled_features?: string[];  // e.g., ['subscriptions', 'payment_links', 'invoices']
+
   created_at: string;
   updated_at: string;
 

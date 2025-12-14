@@ -177,7 +177,9 @@ export function useOfflineSync(businessId: string | undefined) {
           );
 
           // Mark as synced
-          await indexedDBService.markSaleAsSynced(sale.local_id, serverSale.id!);
+          if (sale.local_id !== undefined) {
+            await indexedDBService.markSaleAsSynced(sale.local_id, serverSale.id!);
+          }
         } catch (error) {
           console.error(`Failed to sync sale ${sale.local_id}:`, error);
         }
@@ -566,13 +568,15 @@ export function useOfflineSync(businessId: string | undefined) {
 
     // Update locally
     const existingPoints = await indexedDBService.getCustomerLoyaltyPoints(customerId);
-    if (!existingPoints || existingPoints.current_points < points) {
+    const currentPoints = existingPoints?.current_points ?? existingPoints?.points_balance ?? 0;
+    if (!existingPoints || currentPoints < points) {
       throw new Error('Insufficient points');
     }
 
     const newPoints = {
       ...existingPoints,
-      current_points: existingPoints.current_points - points,
+      current_points: currentPoints - points,
+      points_balance: currentPoints - points,
       pending_sync: true,
     };
     await indexedDBService.updateLoyaltyPoints(newPoints);

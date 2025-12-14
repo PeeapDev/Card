@@ -301,3 +301,19 @@ export function useCardWithType(id: string) {
     staleTime: 30000,
   });
 }
+
+export function useTopUpCard() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (params: { cardId: string; sourceWalletId: string; amount: number }) =>
+      cardService.topUpCard(params),
+    onSuccess: (_, { cardId }) => {
+      // Invalidate cards to show updated info
+      queryClient.invalidateQueries({ queryKey: ['cards'] });
+      queryClient.invalidateQueries({ queryKey: ['cards', cardId] });
+      // Invalidate wallets to show updated balances
+      queryClient.invalidateQueries({ queryKey: ['wallets'] });
+    },
+  });
+}

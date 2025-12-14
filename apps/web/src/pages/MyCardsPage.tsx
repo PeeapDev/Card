@@ -42,6 +42,7 @@ import {
   useActivateCardByQR,
   useCardOrders,
   useCardWithType,
+  useTopUpCard,
 } from '@/hooks/useCards';
 import { useWallets } from '@/hooks/useWallets';
 import { clsx } from 'clsx';
@@ -64,6 +65,7 @@ export function MyCardsPage() {
   const unblockCard = useUnblockCard();
   const activateCard = useActivateCard();
   const activateByQR = useActivateCardByQR();
+  const topUpCardMutation = useTopUpCard();
 
   // Currency state
   const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
@@ -90,6 +92,9 @@ export function MyCardsPage() {
   const [showNFCSetup, setShowNFCSetup] = useState(false);
   const [nfcSetupCard, setNfcSetupCard] = useState<CardType | null>(null);
   const [copiedNFCLink, setCopiedNFCLink] = useState<string | null>(null);
+  const [sourceWalletId, setSourceWalletId] = useState<string>('');
+  const [topUpError, setTopUpError] = useState<string>('');
+  const [topUpSuccess, setTopUpSuccess] = useState<boolean>(false);
 
   // Get connected wallet for a card
   const getConnectedWallet = (walletId: string) => {
@@ -100,6 +105,11 @@ export function MyCardsPage() {
   const handleTopUp = (card: CardType) => {
     setTopUpCard(card);
     setTopUpAmount('');
+    setTopUpError('');
+    setTopUpSuccess(false);
+    // Default to first wallet that's not the card's wallet, or the card's wallet if only one exists
+    const availableWallets = wallets?.filter(w => w.id !== card.walletId) || [];
+    setSourceWalletId(availableWallets.length > 0 ? availableWallets[0].id : (wallets?.[0]?.id || ''));
     setShowTopUpModal(true);
   };
 
@@ -144,21 +154,37 @@ export function MyCardsPage() {
   };
 
   const handleTopUpSubmit = async () => {
-    if (!topUpCard || !topUpAmount) return;
+    if (!topUpCard || !topUpAmount || !sourceWalletId) return;
+
+    setTopUpError('');
+    setTopUpSuccess(false);
 
     try {
-      // TODO: Implement actual API call to top up card
       const amount = Number(topUpAmount);
-      const formattedAmount = amount.toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
+
+      if (amount <= 0) {
+        setTopUpError('Please enter a valid amount');
+        return;
+      }
+
+      await topUpCardMutation.mutateAsync({
+        cardId: topUpCard.id,
+        sourceWalletId: sourceWalletId,
+        amount: amount,
       });
-      alert(`Top up of ${currencySymbol} ${formattedAmount} to card successful!`);
-      setShowTopUpModal(false);
-      setTopUpCard(null);
-      setTopUpAmount('');
-    } catch (error) {
-      console.error('Failed to top up card:', error);
+
+      setTopUpSuccess(true);
+
+      // Close modal after short delay to show success
+      setTimeout(() => {
+        setShowTopUpModal(false);
+        setTopUpCard(null);
+        setTopUpAmount('');
+        setTopUpSuccess(false);
+      }, 1500);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to top up card. Please try again.';
+      setTopUpError(errorMessage);
     }
   };
 
@@ -555,98 +581,148 @@ export function MyCardsPage() {
                   <DollarSign className="w-5 h-5 text-green-600" />
                   Top Up Card
                 </CardTitle>
-                <button onClick={() => setShowTopUpModal(false)}>
+                <button onClick={() => setShowTopUpModal(false)} disabled={topUpCardMutation.isPending}>
                   <X className="w-5 h-5 text-gray-400 hover:text-gray-600" />
                 </button>
               </div>
             </CardHeader>
             <div className="p-6 space-y-6">
-              {/* Card Preview */}
-              <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl p-4 text-white">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <p className="text-xs opacity-70">{topUpCard.type} Card</p>
-                    <p className="font-medium">{topUpCard.cardholderName}</p>
+              {/* Success State */}
+              {topUpSuccess && (
+                <div className="text-center py-8">
+                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <CheckCircle className="w-8 h-8 text-green-600" />
                   </div>
-                  <CreditCard className="w-6 h-6 opacity-70" />
-                </div>
-                <p className="text-sm font-mono tracking-wider">
-                  •••• •••• •••• {topUpCard.cardNumber.slice(-4)}
-                </p>
-              </div>
-
-              {/* Connected Wallet Balance */}
-              {getConnectedWallet(topUpCard.walletId) && (
-                <div className="flex items-center justify-between bg-gray-50 rounded-lg p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                      <Wallet className="w-5 h-5 text-indigo-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">From Wallet</p>
-                      <p className="font-semibold">
-                        {currencySymbol}{getConnectedWallet(topUpCard.walletId)?.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </p>
-                    </div>
-                  </div>
-                  <ArrowDownLeft className="w-5 h-5 text-green-500" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Top Up Successful!</h3>
+                  <p className="text-gray-500">
+                    {currencySymbol}{Number(topUpAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })} has been added to your card.
+                  </p>
                 </div>
               )}
 
-              {/* Amount Input */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Amount to Top Up
-                </label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">
-                    {currencySymbol}
-                  </span>
-                  <input
-                    type="number"
-                    value={topUpAmount}
-                    onChange={(e) => setTopUpAmount(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 text-xl font-semibold"
-                  />
-                </div>
-                {/* Quick amounts - New Leone (SLE) after redenomination */}
-                <div className="flex flex-wrap gap-2 mt-3">
-                  {[1, 5, 10, 50, 100].map((amount) => (
-                    <button
-                      key={amount}
-                      onClick={() => setTopUpAmount(String(amount))}
-                      className={clsx(
-                        'px-3 py-1 text-sm rounded-lg border transition-colors',
-                        topUpAmount === String(amount)
-                          ? 'bg-green-100 border-green-300 text-green-700'
-                          : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
-                      )}
-                    >
-                      {currencySymbol}{amount.toLocaleString()}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              {!topUpSuccess && (
+                <>
+                  {/* Card Preview */}
+                  <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl p-4 text-white">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <p className="text-xs opacity-70">{topUpCard.type} Card</p>
+                        <p className="font-medium">{topUpCard.cardholderName}</p>
+                      </div>
+                      <CreditCard className="w-6 h-6 opacity-70" />
+                    </div>
+                    <p className="text-sm font-mono tracking-wider">
+                      •••• •••• •••• {topUpCard.cardNumber.slice(-4)}
+                    </p>
+                  </div>
 
-              {/* Action Buttons */}
-              <div className="flex gap-3">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setShowTopUpModal(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700"
-                  onClick={handleTopUpSubmit}
-                  disabled={!topUpAmount || Number(topUpAmount) <= 0}
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Top Up {topUpAmount && `${currencySymbol} ${Number(topUpAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                </Button>
-              </div>
+                  {/* Source Wallet Selector */}
+                  {wallets && wallets.length > 0 && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        From Wallet
+                      </label>
+                      <select
+                        value={sourceWalletId}
+                        onChange={(e) => setSourceWalletId(e.target.value)}
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                        disabled={topUpCardMutation.isPending}
+                      >
+                        {wallets.map((wallet) => (
+                          <option key={wallet.id} value={wallet.id}>
+                            {wallet.currency} Wallet - {currencySymbol}{wallet.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </option>
+                        ))}
+                      </select>
+                      {sourceWalletId && (
+                        <div className="flex items-center justify-between bg-gray-50 rounded-lg p-3 mt-2">
+                          <div className="flex items-center gap-2">
+                            <Wallet className="w-4 h-4 text-indigo-600" />
+                            <span className="text-sm text-gray-600">Available Balance:</span>
+                          </div>
+                          <span className="font-semibold text-gray-900">
+                            {currencySymbol}{(wallets.find(w => w.id === sourceWalletId)?.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Amount Input */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Amount to Top Up
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">
+                        {currencySymbol}
+                      </span>
+                      <input
+                        type="number"
+                        value={topUpAmount}
+                        onChange={(e) => {
+                          setTopUpAmount(e.target.value);
+                          setTopUpError('');
+                        }}
+                        placeholder="0.00"
+                        className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 text-xl font-semibold"
+                        disabled={topUpCardMutation.isPending}
+                      />
+                    </div>
+                    {/* Quick amounts - New Leone (SLE) after redenomination */}
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {[1, 5, 10, 50, 100].map((amount) => (
+                        <button
+                          key={amount}
+                          onClick={() => {
+                            setTopUpAmount(String(amount));
+                            setTopUpError('');
+                          }}
+                          disabled={topUpCardMutation.isPending}
+                          className={clsx(
+                            'px-3 py-1 text-sm rounded-lg border transition-colors',
+                            topUpAmount === String(amount)
+                              ? 'bg-green-100 border-green-300 text-green-700'
+                              : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100',
+                            topUpCardMutation.isPending && 'opacity-50 cursor-not-allowed'
+                          )}
+                        >
+                          {currencySymbol}{amount.toLocaleString()}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Error Message */}
+                  {topUpError && (
+                    <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+                      <p className="text-sm text-red-600">{topUpError}</p>
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-3">
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => setShowTopUpModal(false)}
+                      disabled={topUpCardMutation.isPending}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700"
+                      onClick={handleTopUpSubmit}
+                      disabled={!topUpAmount || Number(topUpAmount) <= 0 || !sourceWalletId || topUpCardMutation.isPending}
+                      isLoading={topUpCardMutation.isPending}
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Top Up {topUpAmount && `${currencySymbol} ${Number(topUpAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                    </Button>
+                  </div>
+                </>
+              )}
             </div>
           </Card>
         </div>

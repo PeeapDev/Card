@@ -188,14 +188,14 @@ export function PaymentQRCode({
         </div>
       )}
 
-      {/* QR Code */}
+      {/* QR Code - Use deepLink (URL) for universal scanability */}
       <div
         className={`p-4 bg-white rounded-xl shadow-lg ${
           isExpired ? 'opacity-50' : ''
         }`}
       >
         <QRCode
-          value={qrData.qrData}
+          value={qrData.deepLink}
           size={size}
           level="M"
           style={{
