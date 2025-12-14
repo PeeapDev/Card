@@ -157,9 +157,14 @@ export const ssoService = {
    */
   getSsoUrl(targetApp: PeeapApp): string {
     const config = APP_CONFIGS[targetApp];
-    const isDev = import.meta.env.DEV;
 
-    if (isDev) {
+    // Check if we're in production by looking at the actual hostname
+    // This is more reliable than import.meta.env.DEV on Vercel
+    const isProduction = typeof window !== 'undefined' &&
+      (window.location.hostname.includes('peeap.com') ||
+       window.location.hostname.includes('vercel.app'));
+
+    if (!isProduction) {
       return `http://localhost:${config.devPort}${config.ssoPath}`;
     }
 
