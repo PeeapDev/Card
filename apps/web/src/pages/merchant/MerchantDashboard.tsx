@@ -25,6 +25,7 @@ import { currencyService, Currency } from '@/services/currency.service';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { clsx } from 'clsx';
+import { SkeletonDashboard } from '@/components/ui/Skeleton';
 import {
   DndContext,
   closestCenter,
@@ -529,12 +530,7 @@ export function MerchantDashboard() {
   if (loading) {
     return (
       <MerchantLayout>
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center">
-            <RefreshCw className="w-8 h-8 animate-spin text-primary-600 mx-auto mb-4" />
-            <p className="text-gray-500 dark:text-gray-400">Loading dashboard...</p>
-          </div>
-        </div>
+        <SkeletonDashboard />
       </MerchantLayout>
     );
   }

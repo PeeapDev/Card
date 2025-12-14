@@ -26,6 +26,7 @@ import { MotionCard } from '@/components/ui/Card';
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { SkeletonForm, SkeletonCard } from '@/components/ui/Skeleton';
 
 interface BusinessProfile {
   id: string;
@@ -340,8 +341,23 @@ export function MerchantProfilePage() {
   if (loading) {
     return (
       <MerchantLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="w-8 h-8 border-4 border-green-600 dark:border-green-400 border-t-transparent rounded-full animate-spin"></div>
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <div className="space-y-2">
+              <div className="h-8 w-48 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+              <div className="h-4 w-64 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
+              <SkeletonCard />
+              <SkeletonCard />
+            </div>
+            <div className="space-y-6">
+              <SkeletonCard />
+              <SkeletonCard />
+            </div>
+          </div>
         </div>
       </MerchantLayout>
     );

@@ -24,6 +24,7 @@ import { MerchantLayout } from '@/components/layout/MerchantLayout';
 import { Card } from '@/components/ui/Card';
 import { ssoService } from '@/services/sso.service';
 import { useAuth } from '@/context/AuthContext';
+import { UPGRADE_URL, isDevelopment } from '@/config/urls';
 
 interface PricingPlan {
   id: string;
@@ -121,9 +122,7 @@ export function MerchantUpgradePage() {
       try {
         if (!user?.id) {
           // User not logged in - redirect to Plus upgrade page to login there
-          const baseUrl = import.meta.env.DEV
-            ? 'http://localhost:3000/upgrade'
-            : 'https://plus.peeap.com/upgrade';
+          const baseUrl = isDevelopment ? 'http://localhost:3000/upgrade' : UPGRADE_URL;
           const upgradeUrl = new URL(baseUrl);
           upgradeUrl.searchParams.set('tier', plan.id);
           window.location.href = upgradeUrl.toString();

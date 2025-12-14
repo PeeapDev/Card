@@ -3,7 +3,9 @@
  * Tracks page views, user sessions, and visitor information
  */
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://card-schooledusl-8238s-projects.vercel.app/api';
+import { ANALYTICS_API_URL } from '@/config/urls';
+
+const API_URL = ANALYTICS_API_URL;
 
 interface PageViewData {
   sessionId: string;

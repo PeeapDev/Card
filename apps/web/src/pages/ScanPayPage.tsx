@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { API_URL, APP_URL, getApiEndpoint } from '@/config/urls';
 
 interface CheckoutSession {
   id: string;
@@ -123,9 +124,7 @@ export function ScanPayPage() {
       } else {
         // Other Supabase error - try API as fallback (but API may be down)
         try {
-          const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
-          const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;
-          const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}`);
+          const response = await fetch(getApiEndpoint(`/checkout/sessions/${sessionId}`));
 
           if (!response.ok) {
             throw new Error('Payment session not found');
@@ -279,10 +278,7 @@ export function ScanPayPage() {
         await processDriverPayment(checkoutSession);
       } else {
         // Use API endpoint for merchant-created sessions
-        const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
-        const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;
-
-        const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}/scan-pay`, {
+        const response = await fetch(getApiEndpoint(`/checkout/sessions/${sessionId}/scan-pay`), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -553,8 +549,8 @@ export function ScanPayPage() {
         url.searchParams.set('payment_method', 'scan_to_pay');
         window.location.href = url.toString();
       } else {
-        // No success URL - redirect to my.peeap.com dashboard
-        window.location.href = 'https://my.peeap.com/dashboard';
+        // No success URL - redirect to app dashboard
+        window.location.href = `${APP_URL}/dashboard`;
       }
     }, 3000);
 

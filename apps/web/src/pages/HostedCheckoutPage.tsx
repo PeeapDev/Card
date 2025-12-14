@@ -29,6 +29,8 @@ import { useAuth } from '@/context/AuthContext';
 import { cardService } from '@/services/card.service';
 import { supabase } from '@/lib/supabase';
 import { sanitizeForDisplay, safeDecodeURIComponent } from '@/utils/sanitize';
+import { createPollingWithBackoff, PollingController } from '@/utils/polling';
+import { getApiEndpoint } from '@/config/urls';
 
 // Types
 interface CheckoutSession {
@@ -234,11 +236,8 @@ export function HostedCheckoutPage() {
     setStep('processing');
 
     try {
-      const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
-      const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;
-
       // First, check current session status
-      const checkResponse = await fetch(`${apiUrl}/checkout/sessions/${sessionId}`);
+      const checkResponse = await fetch(getApiEndpoint(`/checkout/sessions/${sessionId}`));
       const sessionData = await checkResponse.json();
 
 
@@ -268,7 +267,7 @@ export function HostedCheckoutPage() {
 
       // If session is still OPEN, complete it
       if (sessionData.status === 'OPEN') {
-        const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}/complete`, {
+        const response = await fetch(getApiEndpoint(`/checkout/sessions/${sessionId}/complete`), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ paymentMethod: 'mobile_money' }),
@@ -279,7 +278,7 @@ export function HostedCheckoutPage() {
         if (!response.ok) {
           // If error is "Session is not open", it may have been completed by webhook
           if (data.error?.includes('not open')) {
-            const recheckResponse = await fetch(`${apiUrl}/checkout/sessions/${sessionId}`);
+            const recheckResponse = await fetch(getApiEndpoint(`/checkout/sessions/${sessionId}`));
             const recheckData = await recheckResponse.json();
             if (recheckData.status === 'COMPLETE') {
               const updatedSession = {
@@ -301,7 +300,7 @@ export function HostedCheckoutPage() {
         }
 
         // Successfully completed, fetch updated session
-        const finalResponse = await fetch(`${apiUrl}/checkout/sessions/${sessionId}`);
+        const finalResponse = await fetch(getApiEndpoint(`/checkout/sessions/${sessionId}`));
         const finalData = await finalResponse.json();
 
         const updatedSession = {
@@ -375,9 +374,7 @@ export function HostedCheckoutPage() {
     }
 
     try {
-      const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
-      const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;
-      const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}`);
+      const response = await fetch(getApiEndpoint(`/checkout/sessions/${sessionId}`));
 
       if (!response.ok) {
         throw new Error('Session not found');
@@ -477,8 +474,7 @@ export function HostedCheckoutPage() {
   // Subscribe to real-time updates AND poll as backup when QR is displayed
   useEffect(() => {
     let subscription: any = null;
-    let pollInterval: NodeJS.Timeout | null = null;
-    let isPolling = false;
+    let pollController: PollingController | null = null;
     let hasCompleted = false;
 
     if (step === 'qr_display' && sessionId && session?.id) {
@@ -498,74 +494,69 @@ export function HostedCheckoutPage() {
           (payload: any) => {
             if (!hasCompleted && payload.new && payload.new.status === 'COMPLETE') {
               hasCompleted = true;
+              pollController?.stop();
               handlePaymentComplete(payload.new);
             }
           }
         )
-        .subscribe((status: string) => {
-        });
+        .subscribe();
 
-      // AGGRESSIVE polling - check every 1.5 seconds via API AND direct Supabase
-      const checkPaymentStatus = async () => {
-        if (isPolling || hasCompleted) return;
-        isPolling = true;
+      // Polling with exponential backoff
+      // Start at 2s, increase to max 15s if no changes detected
+      pollController = createPollingWithBackoff(
+        async () => {
+          if (hasCompleted) return false;
 
-        try {
-          // Method 1: Check via API
-          const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
-          const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;
-          const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}`);
+          try {
+            // Method 1: Check via API
+            const response = await fetch(getApiEndpoint(`/checkout/sessions/${sessionId}`));
 
-          if (response.ok) {
-            const data = await response.json();
+            if (response.ok) {
+              const data = await response.json();
 
-            if (data.status === 'COMPLETE' && !hasCompleted) {
-              hasCompleted = true;
-              if (pollInterval) {
-                clearInterval(pollInterval);
-                pollInterval = null;
+              if (data.status === 'COMPLETE' && !hasCompleted) {
+                hasCompleted = true;
+                pollController?.stop();
+                handlePaymentComplete(data);
+                return true; // Signal completion
               }
-              handlePaymentComplete(data);
-              return;
             }
-          }
 
-          // Method 2: Direct Supabase query as fallback
-          const { data: directData, error: directError } = await supabase
-            .from('checkout_sessions')
-            .select('*')
-            .eq('external_id', sessionId)
-            .single();
+            // Method 2: Direct Supabase query as fallback
+            const { data: directData, error: directError } = await supabase
+              .from('checkout_sessions')
+              .select('*')
+              .eq('external_id', sessionId)
+              .single();
 
-          if (!directError && directData) {
-            if (directData.status === 'COMPLETE' && !hasCompleted) {
-              hasCompleted = true;
-              if (pollInterval) {
-                clearInterval(pollInterval);
-                pollInterval = null;
+            if (!directError && directData) {
+              if (directData.status === 'COMPLETE' && !hasCompleted) {
+                hasCompleted = true;
+                pollController?.stop();
+                handlePaymentComplete(directData);
+                return true; // Signal completion
               }
-              handlePaymentComplete(directData);
             }
+
+            return false; // No change, continue with backoff
+          } catch {
+            return false; // Error, continue with backoff
           }
-        } catch (err) {
-          console.error('[Checkout] Error polling payment status:', err);
-        } finally {
-          isPolling = false;
+        },
+        {
+          initialInterval: 2000,  // Start at 2 seconds
+          maxInterval: 15000,     // Max 15 seconds
+          backoffMultiplier: 1.3, // Gradual increase
+          resetOnSuccess: false,  // Don't reset interval unless payment completes
         }
-      };
-
-      // Poll every 1.5 seconds (more aggressive)
-      checkPaymentStatus();
-      pollInterval = setInterval(checkPaymentStatus, 1500);
+      );
     }
 
     return () => {
       if (subscription) {
         supabase.removeChannel(subscription);
       }
-      if (pollInterval) {
-        clearInterval(pollInterval);
-      }
+      pollController?.stop();
     };
   }, [step, sessionId, session?.id, handlePaymentComplete]);
 
@@ -616,10 +607,7 @@ export function HostedCheckoutPage() {
     setError(null);
 
     try {
-      const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
-      const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;
-
-      const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}/card-pay`, {
+      const response = await fetch(getApiEndpoint(`/checkout/sessions/${sessionId}/card-pay`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -744,10 +732,7 @@ export function HostedCheckoutPage() {
     setError(null);
 
     try {
-      const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
-      const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;
-
-      const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}/card-pay`, {
+      const response = await fetch(getApiEndpoint(`/checkout/sessions/${sessionId}/card-pay`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -827,10 +812,7 @@ export function HostedCheckoutPage() {
     setError(null);
 
     try {
-      const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
-      const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;
-
-      const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}/mobile-pay`, {
+      const response = await fetch(getApiEndpoint(`/checkout/sessions/${sessionId}/mobile-pay`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

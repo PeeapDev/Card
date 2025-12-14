@@ -13,13 +13,14 @@
  */
 
 import { authService } from './auth.service';
+import { APP_URL, isDevelopment } from '@/config/urls';
 
 // API base URL - points to my.peeap.com API
 const getApiBaseUrl = () => {
-  if (import.meta.env.DEV) {
+  if (isDevelopment) {
     return 'http://localhost:5173/api';
   }
-  return 'https://my.peeap.com/api';
+  return `${APP_URL}/api`;
 };
 
 interface ApiResponse<T> {

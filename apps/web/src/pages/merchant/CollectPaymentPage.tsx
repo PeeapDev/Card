@@ -19,6 +19,7 @@ import { MerchantLayout } from '@/components/layout/MerchantLayout';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { clsx } from 'clsx';
+import { APP_URL, isDevelopment } from '@/config/urls';
 import { TransportSetupWizard, DriverProfile } from '@/components/transport/TransportSetupWizard';
 import { DriverCollectionView } from '@/components/transport/DriverCollectionView';
 import { PhoneFrame } from '@/components/ui/PhoneFrame';
@@ -276,9 +277,9 @@ export function CollectPaymentPage() {
 
       // Build the payment URL - use /scan-pay/{sessionId} format for Scan to Pay compatibility
       // In dev mode, use local network IP so phone can scan QR codes
-      const baseUrl = import.meta.env.DEV
+      const baseUrl = isDevelopment
         ? `http://${window.location.hostname}:${window.location.port}`
-        : 'https://my.peeap.com';
+        : APP_URL;
 
       setCurrentSession({
         sessionId: sessionId,
