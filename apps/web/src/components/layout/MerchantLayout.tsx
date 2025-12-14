@@ -8,46 +8,213 @@ import {
   LogOut,
   Menu,
   X,
-  Bell,
   Store,
   DollarSign,
   RefreshCw,
   BarChart3,
-  CreditCard,
   HelpCircle,
   Code2,
   ExternalLink,
   Link2,
-  User,
   Building2,
-  Sparkles,
   Crown,
+  Car,
+  ShoppingCart,
+  GripVertical,
+  LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useDeveloperMode } from '@/context/DeveloperModeContext';
+import { useApps } from '@/context/AppsContext';
 import { NotificationBell } from '@/components/ui/NotificationBell';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface MerchantLayoutProps {
   children: ReactNode;
 }
 
-const navItems = [
-  { path: '/merchant', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/merchant/shops', label: 'My Shops', icon: Building2 },
-  { path: '/merchant/transactions', label: 'Transactions', icon: ArrowLeftRight },
-  { path: '/merchant/payouts', label: 'Payouts', icon: DollarSign },
-  { path: '/merchant/refunds', label: 'Refunds', icon: RefreshCw },
-  { path: '/merchant/reports', label: 'Reports', icon: BarChart3 },
-  { path: '/merchant/payment-links', label: 'Payment Links', icon: Link2 },
-  { path: '/merchant/profile', label: 'Business Profile', icon: Store },
-  { path: '/merchant/settings', label: 'Settings', icon: Settings },
+interface NavItem {
+  id: string;
+  path: string;
+  label: string;
+  icon: LucideIcon;
+}
+
+const defaultNavItems: NavItem[] = [
+  { id: 'dashboard', path: '/merchant', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'collect-payment', path: '/merchant/collect-payment', label: 'Collect Payment', icon: Car },
+  { id: 'shops', path: '/merchant/shops', label: 'My Shops', icon: Building2 },
+  { id: 'transactions', path: '/merchant/transactions', label: 'Transactions', icon: ArrowLeftRight },
+  { id: 'payouts', path: '/merchant/payouts', label: 'Payouts', icon: DollarSign },
+  { id: 'refunds', path: '/merchant/refunds', label: 'Refunds', icon: RefreshCw },
+  { id: 'reports', path: '/merchant/reports', label: 'Reports', icon: BarChart3 },
+  { id: 'payment-links', path: '/merchant/payment-links', label: 'Payment Links', icon: Link2 },
+  { id: 'profile', path: '/merchant/profile', label: 'Business Profile', icon: Store },
+  { id: 'settings', path: '/merchant/settings', label: 'Settings', icon: Settings },
 ];
+
+// Sortable nav item component
+function SortableNavItem({
+  item,
+  isActive,
+  isEditMode,
+}: {
+  item: NavItem;
+  isActive: boolean;
+  isEditMode: boolean;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item.id, disabled: !isEditMode });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const Icon = item.icon;
+
+  return (
+    <div ref={setNodeRef} style={style} className="relative group">
+      <Link
+        to={item.path}
+        className={clsx(
+          'flex items-center px-4 py-3 rounded-lg transition-colors',
+          isActive
+            ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+            : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700',
+          isDragging && 'ring-2 ring-green-500 shadow-lg'
+        )}
+      >
+        {isEditMode && (
+          <button
+            {...attributes}
+            {...listeners}
+            className="mr-2 p-1 cursor-grab active:cursor-grabbing hover:bg-gray-200 dark:hover:bg-gray-600 rounded touch-none"
+            onClick={(e) => e.preventDefault()}
+          >
+            <GripVertical className="w-4 h-4 text-gray-400" />
+          </button>
+        )}
+        <Icon className="w-5 h-5 mr-3" />
+        {item.label}
+      </Link>
+    </div>
+  );
+}
+
+// Helper to load/save nav order from localStorage
+const NAV_ORDER_KEY = 'merchant_nav_order';
+
+function loadNavOrder(): string[] | null {
+  try {
+    const stored = localStorage.getItem(NAV_ORDER_KEY);
+    return stored ? JSON.parse(stored) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveNavOrder(order: string[]) {
+  try {
+    localStorage.setItem(NAV_ORDER_KEY, JSON.stringify(order));
+  } catch (e) {
+    console.error('Failed to save nav order:', e);
+  }
+}
 
 export function MerchantLayout({ children }: MerchantLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const { user, logout } = useAuth();
   const { isDeveloperMode, checkBusinesses, hasBusinesses, businessCount } = useDeveloperMode();
+  const { isAppEnabled } = useApps();
+
+  // Nav items with persisted order
+  const [navItems, setNavItems] = useState<NavItem[]>(() => {
+    const savedOrder = loadNavOrder();
+    if (savedOrder) {
+      const orderedItems: NavItem[] = [];
+      const itemMap = new Map(defaultNavItems.map((item) => [item.id, item]));
+      for (const id of savedOrder) {
+        const item = itemMap.get(id);
+        if (item) {
+          orderedItems.push(item);
+          itemMap.delete(id);
+        }
+      }
+      // Add any new items not in saved order
+      for (const item of itemMap.values()) {
+        orderedItems.push(item);
+      }
+      return orderedItems;
+    }
+    return defaultNavItems;
+  });
+
+  // Drag and drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveId(null);
+
+    if (over && active.id !== over.id) {
+      setNavItems((items) => {
+        const oldIndex = items.findIndex((item) => item.id === active.id);
+        const newIndex = items.findIndex((item) => item.id === over.id);
+        const newItems = arrayMove(items, oldIndex, newIndex);
+        saveNavOrder(newItems.map((i) => i.id));
+        return newItems;
+      });
+    }
+  };
+
+  const activeItem = navItems.find((item) => item.id === activeId);
+
+  // Check if any app is enabled to show in sidebar
+  const isPosEnabled = isAppEnabled('pos');
+  const isFuelStationEnabled = isAppEnabled('fuel_station');
+  const isTransportationEnabled = isAppEnabled('transportation');
 
   // Check for businesses when layout mounts
   useEffect(() => {
@@ -95,27 +262,102 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
 
           {/* Navigation */}
           <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto scrollbar-hide">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = location.pathname === item.path ||
-                (item.path !== '/merchant' && location.pathname.startsWith(item.path));
+            {/* Edit mode toggle */}
+            <button
+              onClick={() => setIsEditMode(!isEditMode)}
+              className={clsx(
+                'w-full flex items-center justify-center gap-2 px-3 py-2 mb-3 rounded-lg text-xs font-medium transition-colors',
+                isEditMode
+                  ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+              )}
+            >
+              <GripVertical className="w-3.5 h-3.5" />
+              {isEditMode ? 'Done Reordering' : 'Reorder Menu'}
+            </button>
 
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={clsx(
-                    'flex items-center px-4 py-3 rounded-lg transition-colors',
-                    isActive
-                      ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                      : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                  )}
-                >
-                  <Icon className="w-5 h-5 mr-3" />
-                  {item.label}
-                </Link>
-              );
-            })}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={navItems.map((i) => i.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {navItems.map((item) => {
+                  const isActive = location.pathname === item.path ||
+                    (item.path !== '/merchant' && location.pathname.startsWith(item.path));
+
+                  return (
+                    <SortableNavItem
+                      key={item.id}
+                      item={item}
+                      isActive={isActive}
+                      isEditMode={isEditMode}
+                    />
+                  );
+                })}
+              </SortableContext>
+
+              <DragOverlay>
+                {activeItem && (
+                  <div className="bg-white dark:bg-gray-800 shadow-xl rounded-lg p-3 flex items-center gap-3 opacity-90">
+                    <activeItem.icon className="w-5 h-5 text-green-600" />
+                    <span className="font-medium">{activeItem.label}</span>
+                  </div>
+                )}
+              </DragOverlay>
+            </DndContext>
+
+            {/* POS App - Shows as standalone item when enabled */}
+            {isPosEnabled && (
+              <Link
+                to="/merchant/apps/pos"
+                className={clsx(
+                  'flex items-center px-4 py-3 rounded-lg transition-colors',
+                  location.pathname.includes('/pos') || location.pathname === '/merchant/apps/pos'
+                    ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                )}
+              >
+                <ShoppingCart className="w-5 h-5 mr-3" />
+                Point of Sale
+              </Link>
+            )}
+
+            {/* Fuel Station App - Shows as standalone item when enabled */}
+            {isFuelStationEnabled && (
+              <Link
+                to="/merchant/apps/fuel-station"
+                className={clsx(
+                  'flex items-center px-4 py-3 rounded-lg transition-colors',
+                  location.pathname.includes('/fuel-station')
+                    ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400'
+                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                )}
+              >
+                <Car className="w-5 h-5 mr-3" />
+                Fuel Station
+              </Link>
+            )}
+
+            {/* Transportation App - Shows as standalone item when enabled */}
+            {isTransportationEnabled && (
+              <Link
+                to="/merchant/apps/transportation"
+                className={clsx(
+                  'flex items-center px-4 py-3 rounded-lg transition-colors',
+                  location.pathname.includes('/transportation')
+                    ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                )}
+              >
+                <Car className="w-5 h-5 mr-3" />
+                Transportation
+              </Link>
+            )}
 
             {/* Developer Mode Link */}
             {isDeveloperMode && (

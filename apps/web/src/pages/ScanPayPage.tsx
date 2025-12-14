@@ -105,15 +105,41 @@ export function ScanPayPage() {
     }
 
     try {
-      const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
-      const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;
-      const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}`);
+      let rawData: any = null;
 
-      if (!response.ok) {
+      // Try to fetch from Supabase directly (works for all sessions including driver-created)
+      const { data: supabaseSession, error: supabaseError } = await supabase
+        .from('checkout_sessions')
+        .select('*')
+        .eq('external_id', sessionId)
+        .single();
+
+      console.log('[ScanPay] Supabase lookup result:', { supabaseSession, supabaseError });
+
+      if (supabaseSession && !supabaseError) {
+        rawData = supabaseSession;
+      } else if (supabaseError?.code === 'PGRST116') {
+        // No rows found in Supabase - session doesn't exist
         throw new Error('Payment session not found');
+      } else {
+        // Other Supabase error - try API as fallback (but API may be down)
+        console.log('[ScanPay] Trying API fallback...');
+        try {
+          const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
+          const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;
+          const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}`);
+
+          if (!response.ok) {
+            throw new Error('Payment session not found');
+          }
+
+          rawData = await response.json();
+        } catch (apiErr) {
+          console.error('[ScanPay] API fallback failed:', apiErr);
+          throw new Error('Payment session not found');
+        }
       }
 
-      const rawData = await response.json();
       const metadata = rawData.metadata || {};
 
       const data: CheckoutSession = {
@@ -238,37 +264,146 @@ export function ScanPayPage() {
       }
       // If no card or no PIN set, proceed without PIN verification (for new users)
 
-      // PIN verified, proceed with payment
-      const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
-      const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;
+      // Check if this is a driver collection session (no merchantId or has driverId in metadata)
+      const { data: checkoutSession } = await supabase
+        .from('checkout_sessions')
+        .select('*, metadata')
+        .eq('external_id', sessionId)
+        .single();
 
-      // Call the scan-pay endpoint to process the payment
-      const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}/scan-pay`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          payerUserId: user.id,
-          payerWalletId: walletId,
-          payerName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
-          pin: pin, // Include PIN for additional server-side verification
-        }),
-      });
+      const isDriverCollection = checkoutSession && (
+        !checkoutSession.merchant_id ||
+        checkoutSession.metadata?.collectionType === 'driver'
+      );
 
-      const data = await response.json();
+      if (isDriverCollection && checkoutSession) {
+        // Process driver collection payment directly via Supabase
+        await processDriverPayment(checkoutSession);
+      } else {
+        // Use API endpoint for merchant-created sessions
+        const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
+        const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Payment failed');
+        const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}/scan-pay`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            payerUserId: user.id,
+            payerWalletId: walletId,
+            payerName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+            pin: pin,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Payment failed');
+        }
       }
 
       setStep('success');
 
-      // The original checkout page will be notified via polling
-
     } catch (err: any) {
       setError(err.message || 'Payment failed');
       setStep('error');
+    }
+  };
+
+  // Process driver collection payment directly via Supabase
+  const processDriverPayment = async (checkoutSession: any) => {
+    if (!user?.id || !walletId || !session) {
+      throw new Error('Missing payment information');
+    }
+
+    const driverId = checkoutSession.metadata?.driverId;
+    if (!driverId) {
+      throw new Error('Driver information not found');
+    }
+
+    // Get driver's wallet
+    const { data: driverWallet, error: driverWalletError } = await supabase
+      .from('wallets')
+      .select('id, balance')
+      .eq('user_id', driverId)
+      .eq('wallet_type', 'primary')
+      .single();
+
+    if (driverWalletError || !driverWallet) {
+      throw new Error('Driver wallet not found');
+    }
+
+    // Deduct from payer's wallet
+    const { error: deductError } = await supabase
+      .from('wallets')
+      .update({ balance: walletBalance - session.amount })
+      .eq('id', walletId);
+
+    if (deductError) {
+      throw new Error('Failed to process payment');
+    }
+
+    // Credit driver's wallet
+    const { error: creditError } = await supabase
+      .from('wallets')
+      .update({ balance: driverWallet.balance + session.amount })
+      .eq('id', driverWallet.id);
+
+    if (creditError) {
+      // Rollback payer's deduction
+      await supabase
+        .from('wallets')
+        .update({ balance: walletBalance })
+        .eq('id', walletId);
+      throw new Error('Failed to credit driver wallet');
+    }
+
+    // Create transaction record
+    const transactionRef = `TXN${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const payerName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || 'Payer';
+
+    const { error: txnError } = await supabase
+      .from('transactions')
+      .insert({
+        reference: transactionRef,
+        type: 'TRANSFER',
+        amount: session.amount,
+        currency_code: session.currencyCode,
+        status: 'COMPLETED',
+        description: checkoutSession.description || 'Driver fare payment',
+        sender_wallet_id: walletId,
+        recipient_wallet_id: driverWallet.id,
+        sender_user_id: user.id,
+        recipient_user_id: driverId,
+        metadata: {
+          paymentMethod: 'scan_to_pay',
+          checkoutSessionId: checkoutSession.external_id,
+          collectionType: 'driver',
+          payerName: payerName,
+        },
+      });
+
+    if (txnError) {
+      console.error('Failed to create transaction record:', txnError);
+      // Payment still succeeded, just logging failed
+    }
+
+    // Update checkout session status
+    const { error: updateError } = await supabase
+      .from('checkout_sessions')
+      .update({
+        status: 'COMPLETE',
+        payment_method: 'scan_to_pay',
+        payer_name: payerName,
+        payer_email: user.email,
+        completed_at: new Date().toISOString(),
+      })
+      .eq('external_id', sessionId);
+
+    if (updateError) {
+      console.error('Failed to update checkout session:', updateError);
     }
   };
 
