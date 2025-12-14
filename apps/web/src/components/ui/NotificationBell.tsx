@@ -107,6 +107,7 @@ function NotificationItem({
   onAcceptInvitation,
   onDeclineInvitation,
   userId,
+  staffStatus,
 }: {
   notification: Notification;
   onMarkAsRead: (id: string) => void;
@@ -115,6 +116,7 @@ function NotificationItem({
   onAcceptInvitation?: (staffId: string, notificationId: string) => void;
   onDeclineInvitation?: (staffId: string, notificationId: string) => void;
   userId?: string;
+  staffStatus?: { exists: boolean; invitationStatus?: string };
 }) {
   const [processing, setProcessing] = useState(false);
   const Icon = notificationIcons[notification.type] || Bell;
@@ -123,7 +125,16 @@ function NotificationItem({
   // Check if this is a staff invitation that can be accepted/declined
   const isStaffInvitation = notification.type === 'staff_invitation';
   const staffId = notification.action_data?.staffId;
-  const canRespond = isStaffInvitation && staffId && !notification.action_data?.responded;
+
+  // Staff invitation can be responded to if:
+  // 1. Staff record exists AND invitation is still pending
+  // 2. Or notification hasn't been responded to yet (for backwards compatibility)
+  const staffExists = staffStatus?.exists ?? true;
+  const isPending = staffStatus?.invitationStatus === 'pending';
+  const canRespond = isStaffInvitation && staffId && staffExists && (isPending || !notification.action_data?.responded);
+
+  // Show cancelled status if staff was deleted
+  const wasDeleted = isStaffInvitation && !staffExists && notification.action_data?.responded;
 
   const handleClick = () => {
     if (!notification.is_read) {
@@ -217,15 +228,22 @@ function NotificationItem({
           )}
 
           {/* Show responded status */}
-          {isStaffInvitation && notification.action_data?.responded && (
+          {isStaffInvitation && notification.action_data?.responded && !canRespond && (
             <div className="mt-2">
               <span className={clsx(
                 'inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded-full',
-                notification.action_data.response === 'accepted'
-                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                  : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+                wasDeleted
+                  ? 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+                  : notification.action_data.response === 'accepted'
+                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                    : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
               )}>
-                {notification.action_data.response === 'accepted' ? (
+                {wasDeleted ? (
+                  <>
+                    <XCircle className="w-3 h-3" />
+                    Cancelled
+                  </>
+                ) : notification.action_data.response === 'accepted' ? (
                   <>
                     <CheckCircle className="w-3 h-3" />
                     Accepted
@@ -282,6 +300,7 @@ export function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [markingAllRead, setMarkingAllRead] = useState(false);
+  const [staffStatuses, setStaffStatuses] = useState<Record<string, { exists: boolean; invitationStatus?: string }>>({});
   const [invitationModal, setInvitationModal] = useState<InvitationModalState>({
     isOpen: false,
     staffId: '',
@@ -310,6 +329,29 @@ export function NotificationBell() {
     try {
       const { notifications: notifs } = await notificationService.getForUser(user.id, undefined, 20);
       setNotifications(notifs);
+
+      // Check status of staff invitations
+      const staffInvitations = notifs.filter(n => n.type === 'staff_invitation' && n.action_data?.staffId);
+      if (staffInvitations.length > 0) {
+        const statuses: Record<string, { exists: boolean; invitationStatus?: string }> = {};
+        await Promise.all(
+          staffInvitations.map(async (n) => {
+            const staffId = n.action_data?.staffId;
+            if (staffId) {
+              try {
+                const staff = await posService.getStaffById(staffId);
+                statuses[staffId] = {
+                  exists: !!staff,
+                  invitationStatus: staff?.invitation_status,
+                };
+              } catch {
+                statuses[staffId] = { exists: false };
+              }
+            }
+          })
+        );
+        setStaffStatuses(statuses);
+      }
     } catch (error) {
       console.error('Error fetching notifications:', error);
     } finally {
@@ -438,6 +480,9 @@ export function NotificationBell() {
       )
     );
     setUnreadCount(prev => Math.max(0, prev - 1));
+
+    // Navigate to Staff POS page after successful acceptance
+    navigate('/dashboard/pos');
   };
 
   // Handle declining a staff invitation (from notification item)
@@ -577,6 +622,7 @@ export function NotificationBell() {
                   onAcceptInvitation={handleAcceptInvitation}
                   onDeclineInvitation={handleDeclineInvitation}
                   userId={user?.id}
+                  staffStatus={notification.action_data?.staffId ? staffStatuses[notification.action_data.staffId] : undefined}
                 />
               ))
             )}

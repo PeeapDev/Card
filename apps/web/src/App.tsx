@@ -120,6 +120,8 @@ import { POSTerminalPage, POSProductsPage, POSSalesPage, POSSetupWizard, POSRepo
 import { POSAppPage } from '@/pages/merchant/apps/POSAppPage';
 // User Notifications
 import { UserNotificationsPage } from '@/pages/UserNotificationsPage';
+// Staff POS
+import StaffPOSPage from '@/pages/user/StaffPOSPage';
 // Agent Pages
 import { AgentDashboard } from '@/pages/agent/AgentDashboard';
 import { AgentNotificationsPage } from '@/pages/agent/AgentNotificationsPage';
@@ -381,6 +383,15 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <SpendingAnalyticsPage />
+                  </ProtectedRoute>
+                }
+              />
+              {/* Staff POS Route - For users who are staff at a merchant's POS */}
+              <Route
+                path="/dashboard/pos"
+                element={
+                  <ProtectedRoute>
+                    <StaffPOSPage />
                   </ProtectedRoute>
                 }
               />
@@ -1053,6 +1064,9 @@ function App() {
 
                   {/* User Notifications Route */}
                   <Route path="/notifications" element={<ProtectedRoute><UserNotificationsPage /></ProtectedRoute>} />
+
+                  {/* Staff POS Route - For users who are staff at a merchant's POS */}
+                  <Route path="/dashboard/pos" element={<ProtectedRoute><StaffPOSPage /></ProtectedRoute>} />
 
                   {/* Merchant Routes */}
                   <Route path="/merchant" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantDashboard /></RoleBasedRoute>} />
