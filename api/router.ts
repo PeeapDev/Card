@@ -184,6 +184,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleSharedCheckoutCreate(req, res);
     } else if (path === 'shared/users/search' || path === 'shared/users/search/') {
       return await handleSharedUsersSearch(req, res);
+    // ========== CRON ENDPOINTS ==========
+    } else if (path === 'cron/keepalive' || path === 'cron/keepalive/') {
+      return await handleCronKeepalive(req, res);
     // ========== ANALYTICS ENDPOINTS ==========
     } else if (path === 'analytics/pageview' || path === 'analytics/pageview/') {
       return await handleAnalyticsPageView(req, res);
@@ -225,9 +228,56 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           tokenize: '/checkout/tokenize',
           cards: '/cards/user/:userId',
           settings: '/settings',
+          fuel: '/fuel/*',
         },
         docs: 'https://docs.peeap.com',
       });
+    // ========== FUEL STATION CRM ENDPOINTS ==========
+    } else if (path === 'fuel/stations' || path === 'fuel/stations/') {
+      return await handleFuelStations(req, res);
+    } else if (path.match(/^fuel\/stations\/[^/]+$/)) {
+      const stationId = path.split('/')[2];
+      return await handleFuelStationById(req, res, stationId);
+    } else if (path.match(/^fuel\/stations\/[^/]+\/pumps$/)) {
+      const stationId = path.split('/')[2];
+      return await handleFuelPumps(req, res, stationId);
+    } else if (path.match(/^fuel\/stations\/[^/]+\/tanks$/)) {
+      const stationId = path.split('/')[2];
+      return await handleFuelTanks(req, res, stationId);
+    } else if (path.match(/^fuel\/stations\/[^/]+\/prices$/)) {
+      const stationId = path.split('/')[2];
+      return await handleFuelPrices(req, res, stationId);
+    } else if (path === 'fuel/sales' || path === 'fuel/sales/') {
+      return await handleFuelSales(req, res);
+    } else if (path.match(/^fuel\/sales\/[^/]+$/)) {
+      const saleId = path.split('/')[2];
+      return await handleFuelSaleById(req, res, saleId);
+    } else if (path === 'fuel/cards' || path === 'fuel/cards/') {
+      return await handleFuelCards(req, res);
+    } else if (path.match(/^fuel\/cards\/[^/]+$/)) {
+      const cardId = path.split('/')[2];
+      return await handleFuelCardById(req, res, cardId);
+    } else if (path.match(/^fuel\/cards\/[^/]+\/topup$/)) {
+      const cardId = path.split('/')[2];
+      return await handleFuelCardTopup(req, res, cardId);
+    } else if (path === 'fuel/fleet' || path === 'fuel/fleet/') {
+      return await handleFuelFleetCustomers(req, res);
+    } else if (path.match(/^fuel\/fleet\/[^/]+$/)) {
+      const customerId = path.split('/')[2];
+      return await handleFuelFleetCustomerById(req, res, customerId);
+    } else if (path === 'fuel/shifts' || path === 'fuel/shifts/') {
+      return await handleFuelShifts(req, res);
+    } else if (path === 'fuel/shifts/start' || path === 'fuel/shifts/start/') {
+      return await handleFuelShiftStart(req, res);
+    } else if (path.match(/^fuel\/shifts\/[^/]+\/end$/)) {
+      const shiftId = path.split('/')[2];
+      return await handleFuelShiftEnd(req, res, shiftId);
+    } else if (path === 'fuel/inventory/deliveries' || path === 'fuel/inventory/deliveries/') {
+      return await handleFuelDeliveries(req, res);
+    } else if (path === 'fuel/inventory/dippings' || path === 'fuel/inventory/dippings/') {
+      return await handleFuelDippings(req, res);
+    } else if (path === 'fuel/fuel-types' || path === 'fuel/fuel-types/') {
+      return await handleFuelTypes(req, res);
     } else {
       return res.status(404).json({ error: 'Not found', path });
     }
@@ -5947,6 +5997,59 @@ async function ensurePageViewsTable() {
   return true;
 }
 
+// ========== CRON HANDLERS ==========
+
+/**
+ * Cron job handler to keep Supabase project active
+ * Supabase pauses free-tier projects after 7 days of inactivity
+ * This endpoint is called by Vercel Cron to prevent pausing
+ */
+async function handleCronKeepalive(req: VercelRequest, res: VercelResponse) {
+  // Verify this is a cron request (optional security check)
+  const authHeader = req.headers.authorization;
+  const cronSecret = process.env.CRON_SECRET;
+
+  // If CRON_SECRET is set, verify the request
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    console.log('[Cron] Unauthorized keepalive attempt');
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    console.log('[Cron] Running Supabase keepalive ping...');
+
+    // Perform a simple query to keep the database active
+    const { data, error } = await supabase
+      .from('users')
+      .select('id')
+      .limit(1);
+
+    if (error) {
+      console.error('[Cron] Keepalive query failed:', error.message);
+      return res.status(500).json({
+        success: false,
+        error: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    console.log('[Cron] Keepalive successful');
+    return res.status(200).json({
+      success: true,
+      message: 'Supabase keepalive ping successful',
+      timestamp: new Date().toISOString(),
+      nextRun: 'in 6 hours'
+    });
+  } catch (error: any) {
+    console.error('[Cron] Keepalive error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+}
+
 async function handleAnalyticsPageView(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -6281,4 +6384,999 @@ async function handleAnalyticsVisitors(req: VercelRequest, res: VercelResponse) 
     console.error('[Analytics] Visitors error:', error);
     return res.status(500).json({ error: error.message || 'Internal server error' });
   }
+}
+
+// ============================================================================
+// FUEL STATION CRM HANDLERS
+// ============================================================================
+
+/**
+ * Get business ID from authorization header
+ */
+async function getFuelBusinessId(req: VercelRequest): Promise<string | null> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) return null;
+
+  const token = authHeader.substring(7);
+  try {
+    // Token is base64 encoded JSON with userId
+    const payload = JSON.parse(Buffer.from(token, 'base64').toString());
+    const userId = payload.userId;
+    if (!userId) return null;
+
+    // Get user's business
+    const { data } = await supabase
+      .from('plus_businesses')
+      .select('id')
+      .eq('owner_id', userId)
+      .single();
+
+    return data?.id || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fuel Stations - GET list, POST create
+ */
+async function handleFuelStations(req: VercelRequest, res: VercelResponse) {
+  const businessId = await getFuelBusinessId(req);
+  if (!businessId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (req.method === 'GET') {
+    const { data, error } = await supabase
+      .from('fuel_stations')
+      .select('*, manager:plus_staff(id, first_name, last_name)')
+      .eq('business_id', businessId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+    return res.status(200).json(data);
+  }
+
+  if (req.method === 'POST') {
+    const body = req.body;
+    const { data, error } = await supabase
+      .from('fuel_stations')
+      .insert({
+        business_id: businessId,
+        name: body.name,
+        code: body.code,
+        address: body.address,
+        city: body.city,
+        region: body.region,
+        contact_phone: body.contactPhone,
+        status: body.status || 'active',
+        operating_hours: body.operatingHours,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+    return res.status(201).json(data);
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Fuel Station by ID - GET, PUT, DELETE
+ */
+async function handleFuelStationById(req: VercelRequest, res: VercelResponse, stationId: string) {
+  const businessId = await getFuelBusinessId(req);
+  if (!businessId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (req.method === 'GET') {
+    const { data, error } = await supabase
+      .from('fuel_stations')
+      .select('*, manager:plus_staff(id, first_name, last_name)')
+      .eq('id', stationId)
+      .eq('business_id', businessId)
+      .single();
+
+    if (error) {
+      return res.status(404).json({ error: 'Station not found' });
+    }
+    return res.status(200).json(data);
+  }
+
+  if (req.method === 'PUT') {
+    const body = req.body;
+    const { data, error } = await supabase
+      .from('fuel_stations')
+      .update({
+        name: body.name,
+        code: body.code,
+        address: body.address,
+        city: body.city,
+        region: body.region,
+        contact_phone: body.contactPhone,
+        status: body.status,
+        operating_hours: body.operatingHours,
+        manager_staff_id: body.managerStaffId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', stationId)
+      .eq('business_id', businessId)
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+    return res.status(200).json(data);
+  }
+
+  if (req.method === 'DELETE') {
+    const { error } = await supabase
+      .from('fuel_stations')
+      .delete()
+      .eq('id', stationId)
+      .eq('business_id', businessId);
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+    return res.status(204).end();
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Fuel Pumps for a station
+ */
+async function handleFuelPumps(req: VercelRequest, res: VercelResponse, stationId: string) {
+  const businessId = await getFuelBusinessId(req);
+  if (!businessId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (req.method === 'GET') {
+    const { data, error } = await supabase
+      .from('fuel_pumps')
+      .select('*, fuel_type:fuel_types(id, name, code)')
+      .eq('station_id', stationId)
+      .order('pump_number');
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+    return res.status(200).json(data);
+  }
+
+  if (req.method === 'POST') {
+    const body = req.body;
+    const { data, error } = await supabase
+      .from('fuel_pumps')
+      .insert({
+        station_id: stationId,
+        pump_number: body.pumpNumber,
+        name: body.name,
+        fuel_type_id: body.fuelTypeId,
+        status: body.status || 'active',
+        current_meter_reading: body.currentMeterReading || 0,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+    return res.status(201).json(data);
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Fuel Tanks for a station
+ */
+async function handleFuelTanks(req: VercelRequest, res: VercelResponse, stationId: string) {
+  const businessId = await getFuelBusinessId(req);
+  if (!businessId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (req.method === 'GET') {
+    const { data, error } = await supabase
+      .from('fuel_tanks')
+      .select('*, fuel_type:fuel_types(id, name, code), station:fuel_stations(id, name)')
+      .eq('station_id', stationId)
+      .order('name');
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+    return res.status(200).json(data);
+  }
+
+  if (req.method === 'POST') {
+    const body = req.body;
+    const { data, error } = await supabase
+      .from('fuel_tanks')
+      .insert({
+        station_id: stationId,
+        fuel_type_id: body.fuelTypeId,
+        name: body.name,
+        capacity_liters: body.capacityLiters,
+        current_level_liters: body.currentLevelLiters || 0,
+        minimum_level_liters: body.minimumLevelLiters || 0,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+    return res.status(201).json(data);
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Fuel Prices for a station
+ */
+async function handleFuelPrices(req: VercelRequest, res: VercelResponse, stationId: string) {
+  const businessId = await getFuelBusinessId(req);
+  if (!businessId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (req.method === 'GET') {
+    // Get current prices (effective_to is null or in the future)
+    const { data, error } = await supabase
+      .from('fuel_prices')
+      .select('*, fuel_type:fuel_types(id, name, code)')
+      .eq('station_id', stationId)
+      .or('effective_to.is.null,effective_to.gt.' + new Date().toISOString())
+      .order('effective_from', { ascending: false });
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    // Deduplicate by fuel type (keep most recent)
+    const priceMap = new Map();
+    for (const price of data || []) {
+      if (!priceMap.has(price.fuel_type_id)) {
+        priceMap.set(price.fuel_type_id, price);
+      }
+    }
+
+    return res.status(200).json(Array.from(priceMap.values()));
+  }
+
+  if (req.method === 'POST') {
+    const body = req.body;
+    const { data, error } = await supabase
+      .from('fuel_prices')
+      .insert({
+        station_id: stationId,
+        fuel_type_id: body.fuelTypeId,
+        price_per_unit: body.pricePerUnit,
+        effective_from: body.effectiveFrom || new Date().toISOString(),
+        set_by: body.setBy,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+    return res.status(201).json(data);
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Fuel Sales - GET list, POST create
+ */
+async function handleFuelSales(req: VercelRequest, res: VercelResponse) {
+  const businessId = await getFuelBusinessId(req);
+  if (!businessId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (req.method === 'GET') {
+    const stationId = req.query.station_id as string;
+    let query = supabase
+      .from('fuel_sales')
+      .select(`
+        *,
+        station:fuel_stations(id, name, code),
+        pump:fuel_pumps(id, name, pump_number),
+        fuel_type:fuel_types(id, name, code),
+        attendant:plus_staff(id, first_name, last_name)
+      `)
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (stationId) {
+      query = query.eq('station_id', stationId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+    return res.status(200).json(data);
+  }
+
+  if (req.method === 'POST') {
+    const body = req.body;
+    const subtotal = body.quantityLiters * body.pricePerLiter;
+    const total = subtotal - (body.discount || 0);
+
+    const { data, error } = await supabase
+      .from('fuel_sales')
+      .insert({
+        station_id: body.stationId,
+        pump_id: body.pumpId,
+        fuel_type_id: body.fuelTypeId,
+        quantity_liters: body.quantityLiters,
+        price_per_liter: body.pricePerLiter,
+        subtotal: subtotal,
+        discount: body.discount || 0,
+        total_amount: total,
+        payment_method: body.paymentMethod,
+        payment_reference: body.paymentReference,
+        customer_type: body.customerType || 'walkin',
+        fleet_customer_id: body.fleetCustomerId,
+        fleet_vehicle_id: body.fleetVehicleId,
+        fleet_driver_id: body.fleetDriverId,
+        fuel_card_id: body.fuelCardId,
+        customer_user_id: body.customerUserId,
+        attendant_id: body.attendantId,
+        shift_id: body.shiftId,
+        vehicle_registration: body.vehicleRegistration,
+        odometer_reading: body.odometerReading,
+        notes: body.notes,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+    return res.status(201).json(data);
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Fuel Sale by ID
+ */
+async function handleFuelSaleById(req: VercelRequest, res: VercelResponse, saleId: string) {
+  const businessId = await getFuelBusinessId(req);
+  if (!businessId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (req.method === 'GET') {
+    const { data, error } = await supabase
+      .from('fuel_sales')
+      .select(`
+        *,
+        station:fuel_stations(id, name, code),
+        pump:fuel_pumps(id, name, pump_number),
+        fuel_type:fuel_types(id, name, code),
+        attendant:plus_staff(id, first_name, last_name)
+      `)
+      .eq('id', saleId)
+      .single();
+
+    if (error) {
+      return res.status(404).json({ error: 'Sale not found' });
+    }
+    return res.status(200).json(data);
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Fuel Cards - GET list, POST create
+ */
+async function handleFuelCards(req: VercelRequest, res: VercelResponse) {
+  const businessId = await getFuelBusinessId(req);
+  if (!businessId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (req.method === 'GET') {
+    const { data, error } = await supabase
+      .from('fuel_cards')
+      .select('*')
+      .eq('business_id', businessId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+    return res.status(200).json(data);
+  }
+
+  if (req.method === 'POST') {
+    const body = req.body;
+    // Generate card number
+    const cardNumber = 'FC' + Date.now().toString().slice(-8) + Math.random().toString(36).slice(-4).toUpperCase();
+
+    const { data, error } = await supabase
+      .from('fuel_cards')
+      .insert({
+        business_id: businessId,
+        card_number: cardNumber,
+        card_type: body.cardType,
+        holder_name: body.holderName,
+        holder_type: body.holderType,
+        holder_id: body.holderId,
+        balance: body.initialBalance || 0,
+        credit_limit: body.creditLimit || 0,
+        daily_limit: body.dailyLimit,
+        monthly_limit: body.monthlyLimit,
+        status: 'active',
+        expires_at: body.expiresAt,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+    return res.status(201).json(data);
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Fuel Card by ID
+ */
+async function handleFuelCardById(req: VercelRequest, res: VercelResponse, cardId: string) {
+  const businessId = await getFuelBusinessId(req);
+  if (!businessId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (req.method === 'GET') {
+    const { data, error } = await supabase
+      .from('fuel_cards')
+      .select('*')
+      .eq('id', cardId)
+      .eq('business_id', businessId)
+      .single();
+
+    if (error) {
+      return res.status(404).json({ error: 'Card not found' });
+    }
+    return res.status(200).json(data);
+  }
+
+  if (req.method === 'PUT') {
+    const body = req.body;
+    const { data, error } = await supabase
+      .from('fuel_cards')
+      .update({
+        holder_name: body.holderName,
+        daily_limit: body.dailyLimit,
+        monthly_limit: body.monthlyLimit,
+        status: body.status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', cardId)
+      .eq('business_id', businessId)
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+    return res.status(200).json(data);
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Top up a fuel card
+ */
+async function handleFuelCardTopup(req: VercelRequest, res: VercelResponse, cardId: string) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const businessId = await getFuelBusinessId(req);
+  if (!businessId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const body = req.body;
+  const amount = parseFloat(body.amount);
+
+  if (!amount || amount <= 0) {
+    return res.status(400).json({ error: 'Invalid amount' });
+  }
+
+  // Get current card balance
+  const { data: card, error: cardError } = await supabase
+    .from('fuel_cards')
+    .select('balance')
+    .eq('id', cardId)
+    .eq('business_id', businessId)
+    .single();
+
+  if (cardError || !card) {
+    return res.status(404).json({ error: 'Card not found' });
+  }
+
+  const newBalance = (card.balance || 0) + amount;
+
+  // Update balance
+  const { error: updateError } = await supabase
+    .from('fuel_cards')
+    .update({
+      balance: newBalance,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', cardId);
+
+  if (updateError) {
+    return res.status(500).json({ error: updateError.message });
+  }
+
+  // Record transaction
+  await supabase.from('fuel_card_transactions').insert({
+    card_id: cardId,
+    type: 'topup',
+    amount: amount,
+    balance_before: card.balance,
+    balance_after: newBalance,
+    reference: body.reference,
+    description: body.description || 'Card top-up',
+    created_by: body.createdBy,
+  });
+
+  return res.status(200).json({ success: true, newBalance });
+}
+
+/**
+ * Fleet Customers - GET list, POST create
+ */
+async function handleFuelFleetCustomers(req: VercelRequest, res: VercelResponse) {
+  const businessId = await getFuelBusinessId(req);
+  if (!businessId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (req.method === 'GET') {
+    const { data, error } = await supabase
+      .from('fleet_customers')
+      .select('*')
+      .eq('business_id', businessId)
+      .order('company_name');
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+    return res.status(200).json(data);
+  }
+
+  if (req.method === 'POST') {
+    const body = req.body;
+    const { data, error } = await supabase
+      .from('fleet_customers')
+      .insert({
+        business_id: businessId,
+        company_name: body.companyName,
+        contact_name: body.contactName,
+        email: body.email,
+        phone: body.phone,
+        address: body.address,
+        tax_id: body.taxId,
+        credit_limit: body.creditLimit || 0,
+        payment_terms: body.paymentTerms || 30,
+        status: 'active',
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+    return res.status(201).json(data);
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Fleet Customer by ID
+ */
+async function handleFuelFleetCustomerById(req: VercelRequest, res: VercelResponse, customerId: string) {
+  const businessId = await getFuelBusinessId(req);
+  if (!businessId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (req.method === 'GET') {
+    const { data, error } = await supabase
+      .from('fleet_customers')
+      .select('*')
+      .eq('id', customerId)
+      .eq('business_id', businessId)
+      .single();
+
+    if (error) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    return res.status(200).json(data);
+  }
+
+  if (req.method === 'PUT') {
+    const body = req.body;
+    const { data, error } = await supabase
+      .from('fleet_customers')
+      .update({
+        company_name: body.companyName,
+        contact_name: body.contactName,
+        email: body.email,
+        phone: body.phone,
+        address: body.address,
+        tax_id: body.taxId,
+        credit_limit: body.creditLimit,
+        payment_terms: body.paymentTerms,
+        status: body.status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', customerId)
+      .eq('business_id', businessId)
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+    return res.status(200).json(data);
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Fuel Shifts - GET list
+ */
+async function handleFuelShifts(req: VercelRequest, res: VercelResponse) {
+  const businessId = await getFuelBusinessId(req);
+  if (!businessId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (req.method === 'GET') {
+    const stationId = req.query.station_id as string;
+    let query = supabase
+      .from('staff_shifts')
+      .select(`
+        *,
+        station:fuel_stations(id, name),
+        staff:plus_staff(id, first_name, last_name)
+      `)
+      .order('start_time', { ascending: false })
+      .limit(50);
+
+    if (stationId) {
+      query = query.eq('station_id', stationId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+    return res.status(200).json(data);
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Start a new shift
+ */
+async function handleFuelShiftStart(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const businessId = await getFuelBusinessId(req);
+  if (!businessId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const body = req.body;
+  const { data, error } = await supabase
+    .from('staff_shifts')
+    .insert({
+      station_id: body.stationId,
+      staff_id: body.staffId,
+      shift_type: body.shiftType || 'day',
+      start_time: new Date().toISOString(),
+      opening_cash: body.openingCash || 0,
+      status: 'active',
+    })
+    .select()
+    .single();
+
+  if (error) {
+    return res.status(400).json({ error: error.message });
+  }
+  return res.status(201).json(data);
+}
+
+/**
+ * End a shift
+ */
+async function handleFuelShiftEnd(req: VercelRequest, res: VercelResponse, shiftId: string) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const businessId = await getFuelBusinessId(req);
+  if (!businessId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const body = req.body;
+
+  // Get shift sales totals
+  const { data: salesData } = await supabase
+    .from('fuel_sales')
+    .select('total_amount, quantity_liters, payment_method')
+    .eq('shift_id', shiftId);
+
+  const totalSales = salesData?.reduce((sum, s) => sum + s.total_amount, 0) || 0;
+  const totalLiters = salesData?.reduce((sum, s) => sum + s.quantity_liters, 0) || 0;
+  const cashSales = salesData?.filter(s => s.payment_method === 'cash').reduce((sum, s) => sum + s.total_amount, 0) || 0;
+
+  const { data: shift } = await supabase
+    .from('staff_shifts')
+    .select('opening_cash')
+    .eq('id', shiftId)
+    .single();
+
+  const expectedCash = (shift?.opening_cash || 0) + cashSales;
+  const closingCash = body.closingCash || 0;
+  const cashDifference = closingCash - expectedCash;
+
+  const { data, error } = await supabase
+    .from('staff_shifts')
+    .update({
+      end_time: new Date().toISOString(),
+      closing_cash: closingCash,
+      cash_sales: cashSales,
+      cash_difference: cashDifference,
+      total_sales: totalSales,
+      total_liters: totalLiters,
+      transaction_count: salesData?.length || 0,
+      status: 'closed',
+      notes: body.notes,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', shiftId)
+    .select()
+    .single();
+
+  if (error) {
+    return res.status(400).json({ error: error.message });
+  }
+  return res.status(200).json(data);
+}
+
+/**
+ * Fuel Deliveries - GET list, POST create
+ */
+async function handleFuelDeliveries(req: VercelRequest, res: VercelResponse) {
+  const businessId = await getFuelBusinessId(req);
+  if (!businessId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const stationId = req.query.station_id as string;
+
+  if (req.method === 'GET') {
+    let query = supabase
+      .from('fuel_deliveries')
+      .select(`
+        *,
+        station:fuel_stations(id, name),
+        tank:fuel_tanks(id, name),
+        fuel_type:fuel_types(id, name, code)
+      `)
+      .order('delivered_at', { ascending: false })
+      .limit(50);
+
+    if (stationId) {
+      query = query.eq('station_id', stationId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+    return res.status(200).json(data);
+  }
+
+  if (req.method === 'POST') {
+    const body = req.body;
+    const { data, error } = await supabase
+      .from('fuel_deliveries')
+      .insert({
+        station_id: body.stationId,
+        tank_id: body.tankId,
+        fuel_type_id: body.fuelTypeId,
+        quantity_liters: body.quantityLiters,
+        supplier_name: body.supplierName,
+        delivery_note_number: body.deliveryNoteNumber,
+        unit_cost: body.unitCost,
+        total_cost: body.quantityLiters * body.unitCost,
+        received_by: body.receivedBy,
+        delivered_at: body.deliveredAt || new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    // Update tank level
+    if (body.tankId) {
+      await supabase.rpc('update_tank_level', {
+        p_tank_id: body.tankId,
+        p_quantity: body.quantityLiters,
+      });
+    }
+
+    return res.status(201).json(data);
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Tank Dippings - GET list, POST create
+ */
+async function handleFuelDippings(req: VercelRequest, res: VercelResponse) {
+  const businessId = await getFuelBusinessId(req);
+  if (!businessId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const stationId = req.query.station_id as string;
+
+  if (req.method === 'GET') {
+    let query = supabase
+      .from('tank_dippings')
+      .select(`
+        *,
+        tank:fuel_tanks(id, name, station_id),
+        recorded_by_staff:plus_staff(id, first_name, last_name)
+      `)
+      .order('dipped_at', { ascending: false })
+      .limit(50);
+
+    if (stationId) {
+      query = query.eq('tank.station_id', stationId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+    return res.status(200).json(data);
+  }
+
+  if (req.method === 'POST') {
+    const body = req.body;
+
+    // Get current tank level for variance calculation
+    const { data: tank } = await supabase
+      .from('fuel_tanks')
+      .select('current_level_liters')
+      .eq('id', body.tankId)
+      .single();
+
+    const { data, error } = await supabase
+      .from('tank_dippings')
+      .insert({
+        tank_id: body.tankId,
+        dip_reading_liters: body.dipReadingLiters,
+        expected_level_liters: tank?.current_level_liters || 0,
+        variance_liters: body.dipReadingLiters - (tank?.current_level_liters || 0),
+        recorded_by: body.recordedBy,
+        dipped_at: body.dippedAt || new Date().toISOString(),
+        notes: body.notes,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    // Update tank level
+    await supabase
+      .from('fuel_tanks')
+      .update({
+        current_level_liters: body.dipReadingLiters,
+        last_dip_reading: body.dipReadingLiters,
+        last_dip_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', body.tankId);
+
+    return res.status(201).json(data);
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Fuel Types - GET list, POST create
+ */
+async function handleFuelTypes(req: VercelRequest, res: VercelResponse) {
+  const businessId = await getFuelBusinessId(req);
+  if (!businessId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (req.method === 'GET') {
+    const { data, error } = await supabase
+      .from('fuel_types')
+      .select('*')
+      .eq('business_id', businessId)
+      .eq('is_active', true)
+      .order('name');
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+    return res.status(200).json(data);
+  }
+
+  if (req.method === 'POST') {
+    const body = req.body;
+    const { data, error } = await supabase
+      .from('fuel_types')
+      .insert({
+        business_id: businessId,
+        name: body.name,
+        code: body.code,
+        unit: body.unit || 'liters',
+        is_active: true,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+    return res.status(201).json(data);
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
 }

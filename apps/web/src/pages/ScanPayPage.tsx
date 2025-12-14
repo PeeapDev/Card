@@ -323,15 +323,54 @@ export function ScanPayPage() {
       throw new Error('Driver information not found');
     }
 
-    // Get driver's wallet
-    const { data: driverWallet, error: driverWalletError } = await supabase
+    // Get or create driver's dedicated driver wallet
+    let { data: driverWallet, error: driverWalletError } = await supabase
       .from('wallets')
       .select('id, balance')
       .eq('user_id', driverId)
-      .eq('wallet_type', 'primary')
+      .eq('wallet_type', 'driver')
       .single();
 
+    // If no driver wallet exists, try primary wallet as fallback (or create driver wallet)
     if (driverWalletError || !driverWallet) {
+      // Try to create driver wallet
+      const externalId = `DRV-SLE-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+      const { data: newWallet, error: createError } = await supabase
+        .from('wallets')
+        .insert({
+          user_id: driverId,
+          external_id: externalId,
+          currency: 'SLE',
+          balance: 0,
+          status: 'ACTIVE',
+          daily_limit: 5000,
+          monthly_limit: 50000,
+          wallet_type: 'driver',
+          name: 'Driver Wallet',
+        })
+        .select()
+        .single();
+
+      if (createError || !newWallet) {
+        // Fall back to primary wallet if driver wallet creation fails
+        const { data: primaryWallet, error: primaryError } = await supabase
+          .from('wallets')
+          .select('id, balance')
+          .eq('user_id', driverId)
+          .eq('wallet_type', 'primary')
+          .single();
+
+        if (primaryError || !primaryWallet) {
+          throw new Error('Driver wallet not found');
+        }
+        driverWallet = primaryWallet;
+      } else {
+        driverWallet = newWallet;
+      }
+    }
+
+    // At this point we definitely have a driverWallet
+    if (!driverWallet) {
       throw new Error('Driver wallet not found');
     }
 

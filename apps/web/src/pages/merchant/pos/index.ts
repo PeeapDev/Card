@@ -1,0 +1,9 @@
+export { POSTerminalPage } from './POSTerminalPage';
+export { POSProductsPage } from './POSProductsPage';
+export { POSSalesPage } from './POSSalesPage';
+export { POSSetupWizard } from './POSSetupWizard';
+export { POSReportsPage } from './POSReportsPage';
+export { POSStaffPage } from './POSStaffPage';
+export { POSInventoryPage } from './POSInventoryPage';
+export { POSLoyaltyPage } from './POSLoyaltyPage';
+export { POSSettingsPage } from './POSSettingsPage';

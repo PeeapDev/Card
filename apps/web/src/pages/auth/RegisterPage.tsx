@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthLayout } from '@/components/layout/AuthLayout';
 import { Button } from '@/components/ui';
@@ -20,6 +20,8 @@ import {
   Lock,
   Tag,
   ChevronRight,
+  BadgeCheck,
+  Smartphone,
 } from 'lucide-react';
 
 // Account types with descriptions
@@ -118,6 +120,113 @@ export function RegisterPage() {
   const [categories, setCategories] = useState<BusinessCategory[]>([]);
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<{ id: string; name: string; is_primary: boolean }[]>([]);
+
+  // Mobile Money verification state
+  const [momoVerification, setMomoVerification] = useState<{
+    isVerifying: boolean;
+    isVerified: boolean;
+    accountName: string | null;
+    providerName: string | null;
+    error: string | null;
+  }>({
+    isVerifying: false,
+    isVerified: false,
+    accountName: null,
+    providerName: null,
+    error: null,
+  });
+
+  // Detect mobile money provider from phone number
+  const detectMomoProvider = (phone: string): { providerId: string; providerName: string } | null => {
+    const digits = phone.replace(/\D/g, '').replace(/^232/, '').replace(/^0/, '');
+    if (digits.length < 2) return null;
+
+    const prefix = digits.substring(0, 2);
+    // Orange Money prefixes: 072, 073, 075, 076, 077, 078, 079
+    if (['72', '73', '75', '76', '77', '78', '79'].includes(prefix)) {
+      return { providerId: 'm17', providerName: 'Orange Money' };
+    }
+    // Africell/Afrimoney prefixes: 030, 031, 032, 033, 034, 088, 099
+    if (['30', '31', '32', '33', '34', '88', '99'].includes(prefix)) {
+      return { providerId: 'm18', providerName: 'Africell Money' };
+    }
+    return null;
+  };
+
+  // Verify phone number with mobile money KYC
+  const verifyMobileMoneyAccount = useCallback(async (phone: string) => {
+    const provider = detectMomoProvider(phone);
+    if (!provider) {
+      setMomoVerification(prev => ({ ...prev, isVerified: false, accountName: null, providerName: null, error: null }));
+      return;
+    }
+
+    // Normalize phone number
+    let digits = phone.replace(/\D/g, '').replace(/^232/, '');
+    if (!digits.startsWith('0') && digits.length === 8) {
+      digits = '0' + digits;
+    }
+    if (digits.length < 8) return;
+
+    const fullPhoneNumber = `+232${digits.replace(/^0/, '')}`;
+
+    setMomoVerification(prev => ({ ...prev, isVerifying: true, error: null }));
+
+    try {
+      const response = await fetch(`/api/router/mobile-money/lookup?phoneNumber=${encodeURIComponent(digits)}&providerId=${provider.providerId}`);
+      const data = await response.json();
+
+      if (data.success && data.accountName) {
+        // Parse name into first and last name
+        const nameParts = data.accountName.split(' ');
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+
+        setMomoVerification({
+          isVerifying: false,
+          isVerified: true,
+          accountName: data.accountName,
+          providerName: provider.providerName,
+          error: null,
+        });
+
+        // Auto-fill name if fields are empty
+        if (!formData.firstName && !formData.lastName) {
+          setFormData(prev => ({
+            ...prev,
+            firstName: firstName,
+            lastName: lastName,
+          }));
+        }
+      } else {
+        setMomoVerification({
+          isVerifying: false,
+          isVerified: false,
+          accountName: null,
+          providerName: provider.providerName,
+          error: data.error || 'Account not found on ' + provider.providerName,
+        });
+      }
+    } catch (err) {
+      setMomoVerification({
+        isVerifying: false,
+        isVerified: false,
+        accountName: null,
+        providerName: provider.providerName,
+        error: 'Failed to verify account',
+      });
+    }
+  }, [formData.firstName, formData.lastName]);
+
+  // Debounce phone verification
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (formData.phone && formData.phone.replace(/\D/g, '').length >= 8) {
+        verifyMobileMoneyAccount(formData.phone);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [formData.phone, verifyMobileMoneyAccount]);
 
   useEffect(() => {
     if (selectedType === 'merchant') {
@@ -575,13 +684,45 @@ export function RegisterPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
-                <input
-                  type="tel"
-                  value={formData.phone}
-                  onChange={e => updateFormData('phone', e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                  placeholder="+232 XX XXX XXXX"
-                />
+                <div className="relative">
+                  <input
+                    type="tel"
+                    value={formData.phone}
+                    onChange={e => updateFormData('phone', e.target.value)}
+                    className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 ${
+                      momoVerification.isVerified
+                        ? 'border-green-500 bg-green-50'
+                        : momoVerification.error
+                        ? 'border-yellow-500 bg-yellow-50'
+                        : 'border-gray-300'
+                    }`}
+                    placeholder="077601707"
+                  />
+                  {momoVerification.isVerifying && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+                    </div>
+                  )}
+                  {momoVerification.isVerified && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <BadgeCheck className="w-5 h-5 text-green-500" />
+                    </div>
+                  )}
+                </div>
+                {momoVerification.isVerified && momoVerification.accountName && (
+                  <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex items-center gap-2 text-green-700">
+                      <Smartphone className="w-4 h-4" />
+                      <span className="text-sm font-medium">{momoVerification.providerName} Verified</span>
+                    </div>
+                    <p className="text-sm text-green-600 mt-1">
+                      Account holder: <span className="font-semibold">{momoVerification.accountName}</span>
+                    </p>
+                  </div>
+                )}
+                {momoVerification.error && momoVerification.providerName && (
+                  <p className="mt-1 text-xs text-yellow-600">{momoVerification.error}</p>
+                )}
               </div>
 
               <div>
@@ -910,13 +1051,48 @@ export function RegisterPage() {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
-          <input
-            type="tel"
-            value={formData.phone}
-            onChange={e => updateFormData('phone', e.target.value)}
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            placeholder="+232 XX XXX XXXX"
-          />
+          <div className="relative">
+            <input
+              type="tel"
+              value={formData.phone}
+              onChange={e => updateFormData('phone', e.target.value)}
+              className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
+                momoVerification.isVerified
+                  ? 'border-green-500 bg-green-50'
+                  : momoVerification.error
+                  ? 'border-yellow-500 bg-yellow-50'
+                  : 'border-gray-300'
+              }`}
+              placeholder="077601707"
+            />
+            {momoVerification.isVerifying && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+              </div>
+            )}
+            {momoVerification.isVerified && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <BadgeCheck className="w-5 h-5 text-green-500" />
+              </div>
+            )}
+          </div>
+          {/* Mobile Money verification status */}
+          {momoVerification.isVerified && momoVerification.accountName && (
+            <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg">
+              <div className="flex items-center gap-2 text-green-700">
+                <Smartphone className="w-4 h-4" />
+                <span className="text-sm font-medium">{momoVerification.providerName} Verified</span>
+              </div>
+              <p className="text-sm text-green-600 mt-1">
+                Account holder: <span className="font-semibold">{momoVerification.accountName}</span>
+              </p>
+            </div>
+          )}
+          {momoVerification.error && momoVerification.providerName && (
+            <p className="mt-1 text-xs text-yellow-600">
+              {momoVerification.error}
+            </p>
+          )}
         </div>
 
         <div>

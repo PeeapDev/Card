@@ -1,4 +1,16 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, ReactNode, useRef } from 'react';
+import {
+  pushNotificationService,
+  NotificationPayload,
+  NotificationPreferences,
+  notifyPaymentReceived,
+  notifyDriverPayment,
+  notifyMerchantSale,
+  notifyPayoutCompleted,
+  notifyPaymentFailed,
+} from '@/services/push-notification.service';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from './AuthContext';
 
 export type NotificationType = 'success' | 'error' | 'warning' | 'info';
 
@@ -10,15 +22,16 @@ export interface Notification {
   duration?: number;
   read?: boolean;
   createdAt: Date;
+  deepLink?: string; // Path to navigate to when clicked
   action?: {
     label: string;
-    onClick: () => void;
+    onClick?: () => void;
   };
 }
 
 export interface InAppNotification {
   id: string;
-  type: 'transaction' | 'payment' | 'system' | 'promo' | 'security';
+  type: 'transaction' | 'payment' | 'system' | 'promo' | 'security' | 'driver_payment' | 'merchant_sale';
   title: string;
   message: string;
   read: boolean;
@@ -40,13 +53,44 @@ interface NotificationContextType {
   markAllAsRead: () => void;
   clearNotification: (id: string) => void;
   clearAllNotifications: () => void;
+
+  // Push notification permissions
+  pushPermission: NotificationPermission | 'unsupported';
+  isPushEnabled: boolean;
+  requestPushPermission: () => Promise<boolean>;
+  sendTestPush: () => Promise<void>;
+  pushPreferences: NotificationPreferences;
+  updatePushPreferences: (prefs: Partial<NotificationPreferences>) => Promise<void>;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
+const DEFAULT_PREFERENCES: NotificationPreferences = {
+  payment_received: true,
+  payment_sent: true,
+  payment_failed: true,
+  payout_completed: true,
+  payout_failed: true,
+  low_balance: true,
+  login_alert: true,
+  card_transaction: true,
+  refund_processed: true,
+  kyc_approved: true,
+  kyc_rejected: true,
+  driver_payment: true,
+  merchant_sale: true,
+  promotional: false,
+};
+
 export function NotificationProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [toasts, setToasts] = useState<Notification[]>([]);
   const [notifications, setNotifications] = useState<InAppNotification[]>([]);
+  const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>('default');
+  const [isPushEnabled, setIsPushEnabled] = useState(false);
+  const [pushPreferences, setPushPreferences] = useState<NotificationPreferences>(DEFAULT_PREFERENCES);
+  const subscriptionsRef = useRef<{ unsubscribe: () => void }[]>([]);
+  const processedTransactionsRef = useRef<Set<string>>(new Set());
 
   // Generate unique ID
   const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -61,7 +105,11 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       duration: notification.duration ?? 5000,
     };
 
-    setToasts((prev) => [...prev, newToast]);
+    console.log('[NotificationContext] showToast called:', newToast);
+    setToasts((prev) => {
+      console.log('[NotificationContext] Previous toasts:', prev.length, 'Adding new toast');
+      return [...prev, newToast];
+    });
 
     // Auto dismiss after duration
     if (newToast.duration && newToast.duration > 0) {
@@ -107,6 +155,245 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
+  // Initialize push notifications
+  const initializePush = useCallback(async () => {
+    const permission = pushNotificationService.getPermissionStatus();
+    setPushPermission(permission);
+    setIsPushEnabled(permission === 'granted');
+
+    // Load preferences
+    const prefs = await pushNotificationService.getPreferences();
+    setPushPreferences(prefs);
+  }, []);
+
+  // Request push permission
+  const requestPushPermission = useCallback(async (): Promise<boolean> => {
+    const granted = await pushNotificationService.initialize();
+    setPushPermission(pushNotificationService.getPermissionStatus());
+    setIsPushEnabled(granted);
+    return granted;
+  }, []);
+
+  // Send test push notification
+  const sendTestPush = useCallback(async () => {
+    try {
+      console.log('[NotificationContext] Calling sendTestNotification...');
+
+      // Show in-app toast notification with deep link
+      showToast({
+        type: 'success',
+        title: 'Payment Received!',
+        message: 'You received Le 50,000 from John Doe',
+        duration: 8000,
+        deepLink: '/dashboard/transactions',
+        action: {
+          label: 'View Transaction',
+        },
+      });
+
+      // Also add to bell notifications
+      addNotification({
+        type: 'transaction',
+        title: 'Payment Received',
+        message: 'You received Le 50,000 from John Doe',
+        data: { url: '/dashboard/transactions' },
+      });
+
+      // Try browser notification too (might not show depending on OS settings)
+      await pushNotificationService.sendTestNotification();
+      console.log('[NotificationContext] sendTestNotification completed');
+    } catch (error) {
+      console.error('[NotificationContext] sendTestNotification failed:', error);
+    }
+  }, [addNotification, showToast]);
+
+  // Update push preferences
+  const updatePushPreferences = useCallback(async (prefs: Partial<NotificationPreferences>) => {
+    await pushNotificationService.savePreferences(prefs);
+    setPushPreferences((prev) => ({ ...prev, ...prefs }));
+  }, []);
+
+  // Set up real-time subscriptions for payment events
+  useEffect(() => {
+    if (!user?.id) return;
+
+    initializePush();
+
+    // Subscribe to transactions where user is recipient (payments received)
+    const transactionSubscription = supabase
+      .channel('user-transactions')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'transactions',
+          filter: `recipient_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const tx = payload.new as any;
+
+          // Skip if already processed
+          if (processedTransactionsRef.current.has(tx.id)) return;
+          processedTransactionsRef.current.add(tx.id);
+
+          // Determine notification type based on transaction
+          const isDriverPayment = tx.metadata?.collectionType === 'driver';
+          const isMerchantSale = tx.metadata?.type === 'merchant_sale' || tx.type === 'merchant_payment';
+
+          if (isDriverPayment) {
+            notifyDriverPayment(tx.amount, tx.currency || 'SLE');
+            addNotification({
+              type: 'driver_payment',
+              title: 'Fare Collected!',
+              message: `You received ${tx.currency || 'SLE'} ${tx.amount?.toLocaleString()} for your trip`,
+              data: { ...tx, url: '/merchant/driver-wallet' },
+            });
+            // Show toast with deep link
+            showToast({
+              type: 'success',
+              title: 'Fare Collected!',
+              message: `You received ${tx.currency || 'SLE'} ${tx.amount?.toLocaleString()}`,
+              duration: 8000,
+              deepLink: '/merchant/driver-wallet',
+              action: { label: 'View Driver Wallet' },
+            });
+          } else if (isMerchantSale) {
+            notifyMerchantSale(tx.amount, tx.currency || 'SLE', tx.payment_method || 'QR');
+            addNotification({
+              type: 'merchant_sale',
+              title: 'New Sale!',
+              message: `${tx.currency || 'SLE'} ${tx.amount?.toLocaleString()} received via ${tx.payment_method || 'payment'}`,
+              data: { ...tx, url: '/merchant/transactions' },
+            });
+            // Show toast with deep link
+            showToast({
+              type: 'success',
+              title: 'New Sale!',
+              message: `${tx.currency || 'SLE'} ${tx.amount?.toLocaleString()} received`,
+              duration: 8000,
+              deepLink: '/merchant/transactions',
+              action: { label: 'View Transaction' },
+            });
+          } else {
+            notifyPaymentReceived(tx.amount, tx.currency || 'SLE', tx.sender_name || 'Someone');
+            addNotification({
+              type: 'payment',
+              title: 'Payment Received',
+              message: `You received ${tx.currency || 'SLE'} ${tx.amount?.toLocaleString()}`,
+              data: { ...tx, url: '/dashboard/transactions' },
+            });
+            // Show toast with deep link
+            showToast({
+              type: 'success',
+              title: 'Payment Received!',
+              message: `You received ${tx.currency || 'SLE'} ${tx.amount?.toLocaleString()}`,
+              duration: 8000,
+              deepLink: '/dashboard/transactions',
+              action: { label: 'View Transaction' },
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    subscriptionsRef.current.push(transactionSubscription);
+
+    // Subscribe to checkout sessions (for merchants)
+    const checkoutSubscription = supabase
+      .channel('checkout-sessions')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'checkout_sessions',
+          filter: `merchant_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const session = payload.new as any;
+
+          // Only notify on completed payments
+          if (session.status === 'completed' && payload.old?.status !== 'completed') {
+            const amount = session.amount;
+            const currency = session.currency || 'SLE';
+
+            notifyMerchantSale(amount, currency, session.payment_method || 'QR');
+            addNotification({
+              type: 'merchant_sale',
+              title: 'Payment Received!',
+              message: `${currency} ${amount?.toLocaleString()} checkout completed`,
+              data: session,
+            });
+
+            showToast({
+              type: 'success',
+              title: 'Payment Received!',
+              message: `${currency} ${amount?.toLocaleString()}`,
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    subscriptionsRef.current.push(checkoutSubscription);
+
+    // Subscribe to payouts (for merchants)
+    const payoutSubscription = supabase
+      .channel('user-payouts')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'payouts',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const payout = payload.new as any;
+          const amount = payout.amount;
+          const currency = payout.currency || 'SLE';
+
+          if (payout.status === 'completed' && payload.old?.status !== 'completed') {
+            notifyPayoutCompleted(amount, currency, payout.destination || 'bank');
+            addNotification({
+              type: 'payment',
+              title: 'Payout Completed',
+              message: `${currency} ${amount?.toLocaleString()} sent to ${payout.destination || 'your account'}`,
+              data: payout,
+            });
+            showToast({
+              type: 'success',
+              title: 'Payout Completed',
+              message: `${currency} ${amount?.toLocaleString()} sent`,
+            });
+          } else if (payout.status === 'failed' && payload.old?.status !== 'failed') {
+            notifyPaymentFailed(amount, payout.failure_reason || 'Unknown error');
+            addNotification({
+              type: 'payment',
+              title: 'Payout Failed',
+              message: `${currency} ${amount?.toLocaleString()} payout failed: ${payout.failure_reason || 'Unknown error'}`,
+              data: payout,
+            });
+            showToast({
+              type: 'error',
+              title: 'Payout Failed',
+              message: payout.failure_reason || 'Please try again',
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    subscriptionsRef.current.push(payoutSubscription);
+
+    // Cleanup
+    return () => {
+      subscriptionsRef.current.forEach((sub) => sub.unsubscribe());
+      subscriptionsRef.current = [];
+    };
+  }, [user?.id, initializePush, addNotification, showToast]);
+
   return (
     <NotificationContext.Provider
       value={{
@@ -120,6 +407,12 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         markAllAsRead,
         clearNotification,
         clearAllNotifications,
+        pushPermission,
+        isPushEnabled,
+        requestPushPermission,
+        sendTestPush,
+        pushPreferences,
+        updatePushPreferences,
       }}
     >
       {children}

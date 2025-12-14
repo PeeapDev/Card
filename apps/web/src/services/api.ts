@@ -1,5 +1,6 @@
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import type { AuthTokens, ApiError } from '@/types';
+import { sessionService } from './session.service';
 
 const API_BASE_URL = '/api/v1';
 
@@ -21,7 +22,8 @@ class ApiService {
   private setupInterceptors() {
     this.client.interceptors.request.use(
       (config: InternalAxiosRequestConfig) => {
-        const token = localStorage.getItem('accessToken');
+        // Get session token from secure cookie (NOT localStorage)
+        const token = sessionService.getSessionToken();
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
@@ -39,15 +41,17 @@ class ApiService {
           originalRequest._retry = true;
 
           try {
-            const tokens = await this.refreshAccessToken();
-            localStorage.setItem('accessToken', tokens.accessToken);
-            localStorage.setItem('refreshToken', tokens.refreshToken);
+            // Refresh session in database
+            await sessionService.refreshSession();
+            const token = sessionService.getSessionToken();
 
-            originalRequest.headers.Authorization = `Bearer ${tokens.accessToken}`;
-            return this.client(originalRequest);
+            if (token) {
+              originalRequest.headers.Authorization = `Bearer ${token}`;
+              return this.client(originalRequest);
+            }
           } catch (refreshError) {
-            localStorage.removeItem('accessToken');
-            localStorage.removeItem('refreshToken');
+            // Session refresh failed - logout and redirect
+            await sessionService.logout();
             window.location.href = '/login';
             return Promise.reject(refreshError);
           }
@@ -63,19 +67,15 @@ class ApiService {
       return this.refreshPromise;
     }
 
-    const refreshToken = localStorage.getItem('refreshToken');
-    if (!refreshToken) {
-      throw new Error('No refresh token available');
-    }
+    // Refresh session in database
+    await sessionService.refreshSession();
+    const token = sessionService.getSessionToken() || '';
 
-    this.refreshPromise = axios
-      .post<AuthTokens>(`${API_BASE_URL}/auth/refresh`, { refreshToken })
-      .then((response) => response.data)
-      .finally(() => {
-        this.refreshPromise = null;
-      });
-
-    return this.refreshPromise;
+    return {
+      accessToken: token,
+      refreshToken: token,
+      expiresIn: 604800,
+    };
   }
 
   get instance() {

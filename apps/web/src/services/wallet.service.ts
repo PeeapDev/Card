@@ -8,10 +8,14 @@
 import { supabase } from '@/lib/supabase';
 import type { Wallet, Transaction, PaginatedResponse } from '@/types';
 
+export type WalletType = 'primary' | 'driver' | 'pot' | 'merchant';
+
 export interface CreateWalletRequest {
   currency?: string;
   dailyLimit?: number;
   monthlyLimit?: number;
+  walletType?: WalletType;
+  name?: string;
 }
 
 export interface DepositRequest {
@@ -36,8 +40,15 @@ export interface WithdrawRequest {
   description?: string;
 }
 
+// Extended wallet with additional fields
+export interface ExtendedWallet extends Wallet {
+  walletType: WalletType;
+  name?: string;
+  externalId?: string;
+}
+
 // Map database row to Wallet type
-const mapWallet = (row: any): Wallet => ({
+const mapWallet = (row: any): ExtendedWallet => ({
   id: row.id,
   userId: row.user_id,
   balance: parseFloat(row.balance) || 0,
@@ -47,6 +58,9 @@ const mapWallet = (row: any): Wallet => ({
   monthlyLimit: parseFloat(row.monthly_limit) || 50000,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
+  walletType: row.wallet_type || 'primary',
+  name: row.name,
+  externalId: row.external_id,
 });
 
 // Map database row to Transaction type
@@ -131,9 +145,11 @@ export const walletService = {
   /**
    * Create a new wallet for the current user
    */
-  async createWallet(userId: string, data: CreateWalletRequest): Promise<Wallet> {
+  async createWallet(userId: string, data: CreateWalletRequest): Promise<ExtendedWallet> {
     // Generate external_id (required by database)
-    const externalId = `WAL-${data.currency || 'SLE'}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const walletType = data.walletType || 'primary';
+    const prefix = walletType === 'driver' ? 'DRV' : walletType === 'merchant' ? 'MRC' : 'WAL';
+    const externalId = `${prefix}-${data.currency || 'SLE'}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
     const { data: wallet, error } = await supabase
       .from('wallets')
@@ -145,6 +161,8 @@ export const walletService = {
         status: 'ACTIVE',
         daily_limit: data.dailyLimit || 5000,
         monthly_limit: data.monthlyLimit || 50000,
+        wallet_type: walletType,
+        name: data.name || (walletType === 'driver' ? 'Driver Wallet' : null),
       })
       .select()
       .single();
@@ -155,6 +173,56 @@ export const walletService = {
     }
 
     return mapWallet(wallet);
+  },
+
+  /**
+   * Get wallet by type for a user
+   */
+  async getWalletByType(userId: string, walletType: WalletType): Promise<ExtendedWallet | null> {
+    const { data, error } = await supabase
+      .from('wallets')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('wallet_type', walletType)
+      .eq('status', 'ACTIVE')
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error fetching wallet by type:', error);
+      throw new Error(error.message);
+    }
+
+    return data ? mapWallet(data) : null;
+  },
+
+  /**
+   * Get or create a wallet of a specific type
+   */
+  async getOrCreateWalletByType(userId: string, walletType: WalletType, name?: string): Promise<ExtendedWallet> {
+    // First try to get existing wallet
+    const existing = await this.getWalletByType(userId, walletType);
+    if (existing) return existing;
+
+    // Create new wallet
+    return this.createWallet(userId, { walletType, name });
+  },
+
+  /**
+   * Transfer between user's own wallets (e.g., driver wallet to primary wallet)
+   */
+  async transferBetweenOwnWallets(
+    fromWalletId: string,
+    toWalletId: string,
+    amount: number,
+    description?: string
+  ): Promise<Transaction> {
+    return this.transfer({
+      fromWalletId,
+      toWalletId,
+      amount,
+      description: description || 'Internal transfer',
+    });
   },
 
   /**

@@ -273,10 +273,24 @@ export function UpgradeOverlay({
           <Button
             size="lg"
             className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600"
-            onClick={() => router.push("/upgrade")}
+            onClick={() => {
+              // Redirect to my.peeap.com for upgrade/pricing
+              window.location.href = "https://my.peeap.com/plus/upgrade";
+            }}
           >
             <Sparkles className="mr-2 h-4 w-4" />
             View Plans & Upgrade
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+
+          <Button
+            variant="ghost"
+            className="w-full text-muted-foreground"
+            onClick={() => {
+              window.location.href = "https://my.peeap.com/dashboard";
+            }}
+          >
+            Return to my.peeap.com
             <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
 

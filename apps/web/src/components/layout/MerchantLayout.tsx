@@ -1,4 +1,4 @@
-import { ReactNode, useState, useEffect } from 'react';
+import { ReactNode, useState, useEffect, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import {
@@ -22,6 +22,7 @@ import {
   ShoppingCart,
   GripVertical,
   LucideIcon,
+  Wallet,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useDeveloperMode } from '@/context/DeveloperModeContext';
@@ -59,9 +60,11 @@ interface NavItem {
   icon: LucideIcon;
 }
 
-const defaultNavItems: NavItem[] = [
+// Base nav items (always available)
+const baseNavItems: NavItem[] = [
   { id: 'dashboard', path: '/merchant', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'collect-payment', path: '/merchant/collect-payment', label: 'Collect Payment', icon: Car },
+  { id: 'driver-wallet', path: '/merchant/driver-wallet', label: 'Driver Wallet', icon: Wallet },
   { id: 'shops', path: '/merchant/shops', label: 'My Shops', icon: Building2 },
   { id: 'transactions', path: '/merchant/transactions', label: 'Transactions', icon: ArrowLeftRight },
   { id: 'payouts', path: '/merchant/payouts', label: 'Payouts', icon: DollarSign },
@@ -71,6 +74,13 @@ const defaultNavItems: NavItem[] = [
   { id: 'profile', path: '/merchant/profile', label: 'Business Profile', icon: Store },
   { id: 'settings', path: '/merchant/settings', label: 'Settings', icon: Settings },
 ];
+
+// App nav items (conditionally added based on enabled apps)
+const appNavItems: Record<string, NavItem> = {
+  pos: { id: 'pos', path: '/merchant/apps/pos', label: 'Point of Sale', icon: ShoppingCart },
+  fuel_station: { id: 'fuel-station', path: '/merchant/apps/fuel-station', label: 'Fuel Station', icon: Car },
+  transportation: { id: 'transportation', path: '/merchant/apps/transportation', label: 'Transportation', icon: Car },
+};
 
 // Sortable nav item component
 function SortableNavItem({
@@ -156,12 +166,14 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
   const { isDeveloperMode, checkBusinesses, hasBusinesses, businessCount } = useDeveloperMode();
   const { isAppEnabled } = useApps();
 
-  // Nav items with persisted order
+  // Nav items with persisted order (start with base items, apps will be added via useEffect)
   const [navItems, setNavItems] = useState<NavItem[]>(() => {
     const savedOrder = loadNavOrder();
     if (savedOrder) {
       const orderedItems: NavItem[] = [];
-      const itemMap = new Map(defaultNavItems.map((item) => [item.id, item]));
+      // Include all possible items for initial load
+      const allItems = [...baseNavItems, ...Object.values(appNavItems)];
+      const itemMap = new Map(allItems.map((item) => [item.id, item]));
       for (const id of savedOrder) {
         const item = itemMap.get(id);
         if (item) {
@@ -175,7 +187,7 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
       }
       return orderedItems;
     }
-    return defaultNavItems;
+    return baseNavItems;
   });
 
   // Drag and drop sensors
@@ -215,6 +227,60 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
   const isPosEnabled = isAppEnabled('pos');
   const isFuelStationEnabled = isAppEnabled('fuel_station');
   const isTransportationEnabled = isAppEnabled('transportation');
+
+  // Build the complete list of available nav items (base + enabled apps)
+  const availableNavItems = useMemo(() => {
+    const items = [...baseNavItems];
+    if (isPosEnabled) items.push(appNavItems.pos);
+    if (isFuelStationEnabled) items.push(appNavItems.fuel_station);
+    if (isTransportationEnabled) items.push(appNavItems.transportation);
+    return items;
+  }, [isPosEnabled, isFuelStationEnabled, isTransportationEnabled]);
+
+  // Update nav items when available items change (e.g., app enabled/disabled)
+  useEffect(() => {
+    setNavItems((currentItems) => {
+      const savedOrder = loadNavOrder();
+      const currentIds = new Set(currentItems.map(i => i.id));
+      const availableIds = new Set(availableNavItems.map(i => i.id));
+
+      // Check if we need to add new items or remove disabled ones
+      const hasNewItems = availableNavItems.some(i => !currentIds.has(i.id));
+      const hasRemovedItems = currentItems.some(i => !availableIds.has(i.id));
+
+      if (!hasNewItems && !hasRemovedItems) return currentItems;
+
+      // Build new ordered list
+      const itemMap = new Map(availableNavItems.map(item => [item.id, item]));
+      const orderedItems: NavItem[] = [];
+
+      // First, add items in saved order (if they're still available)
+      if (savedOrder) {
+        for (const id of savedOrder) {
+          const item = itemMap.get(id);
+          if (item) {
+            orderedItems.push(item);
+            itemMap.delete(id);
+          }
+        }
+      } else {
+        // Use current order for existing items
+        for (const item of currentItems) {
+          if (itemMap.has(item.id)) {
+            orderedItems.push(itemMap.get(item.id)!);
+            itemMap.delete(item.id);
+          }
+        }
+      }
+
+      // Add any new items at the end
+      for (const item of itemMap.values()) {
+        orderedItems.push(item);
+      }
+
+      return orderedItems;
+    });
+  }, [availableNavItems]);
 
   // Check for businesses when layout mounts
   useEffect(() => {
@@ -283,22 +349,24 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
               onDragEnd={handleDragEnd}
             >
               <SortableContext
-                items={navItems.map((i) => i.id)}
+                items={navItems.filter(i => availableNavItems.some(a => a.id === i.id)).map((i) => i.id)}
                 strategy={verticalListSortingStrategy}
               >
-                {navItems.map((item) => {
-                  const isActive = location.pathname === item.path ||
-                    (item.path !== '/merchant' && location.pathname.startsWith(item.path));
+                {navItems
+                  .filter(item => availableNavItems.some(a => a.id === item.id))
+                  .map((item) => {
+                    const isActive = location.pathname === item.path ||
+                      (item.path !== '/merchant' && location.pathname.startsWith(item.path));
 
-                  return (
-                    <SortableNavItem
-                      key={item.id}
-                      item={item}
-                      isActive={isActive}
-                      isEditMode={isEditMode}
-                    />
-                  );
-                })}
+                    return (
+                      <SortableNavItem
+                        key={item.id}
+                        item={item}
+                        isActive={isActive}
+                        isEditMode={isEditMode}
+                      />
+                    );
+                  })}
               </SortableContext>
 
               <DragOverlay>
@@ -310,54 +378,6 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
                 )}
               </DragOverlay>
             </DndContext>
-
-            {/* POS App - Shows as standalone item when enabled */}
-            {isPosEnabled && (
-              <Link
-                to="/merchant/apps/pos"
-                className={clsx(
-                  'flex items-center px-4 py-3 rounded-lg transition-colors',
-                  location.pathname.includes('/pos') || location.pathname === '/merchant/apps/pos'
-                    ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                )}
-              >
-                <ShoppingCart className="w-5 h-5 mr-3" />
-                Point of Sale
-              </Link>
-            )}
-
-            {/* Fuel Station App - Shows as standalone item when enabled */}
-            {isFuelStationEnabled && (
-              <Link
-                to="/merchant/apps/fuel-station"
-                className={clsx(
-                  'flex items-center px-4 py-3 rounded-lg transition-colors',
-                  location.pathname.includes('/fuel-station')
-                    ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400'
-                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                )}
-              >
-                <Car className="w-5 h-5 mr-3" />
-                Fuel Station
-              </Link>
-            )}
-
-            {/* Transportation App - Shows as standalone item when enabled */}
-            {isTransportationEnabled && (
-              <Link
-                to="/merchant/apps/transportation"
-                className={clsx(
-                  'flex items-center px-4 py-3 rounded-lg transition-colors',
-                  location.pathname.includes('/transportation')
-                    ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
-                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                )}
-              >
-                <Car className="w-5 h-5 mr-3" />
-                Transportation
-              </Link>
-            )}
 
             {/* Developer Mode Link */}
             {isDeveloperMode && (

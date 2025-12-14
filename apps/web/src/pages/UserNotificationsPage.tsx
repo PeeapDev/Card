@@ -16,6 +16,10 @@ import {
   ArrowUpRight,
   Wallet,
   Gift,
+  ExternalLink,
+  Car,
+  Store,
+  Shield,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { formatDistanceToNow, format } from 'date-fns';
@@ -23,6 +27,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { MotionCard } from '@/components/ui/Card';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 interface UserNotification {
   id: string;
@@ -46,6 +51,36 @@ const notificationIcons: Record<string, typeof Bell> = {
   system: Settings,
   login: Bell,
   security: AlertTriangle,
+  driver_payment: Car,
+  merchant_sale: Store,
+  payout_completed: DollarSign,
+  payout_failed: AlertTriangle,
+  low_balance: Wallet,
+  login_alert: Shield,
+  kyc_approved: CheckCheck,
+  kyc_rejected: AlertTriangle,
+};
+
+// Deep links for each notification type
+const notificationDeepLinks: Record<string, string> = {
+  transaction_received: '/dashboard/transactions',
+  transaction_sent: '/dashboard/transactions',
+  deposit_completed: '/dashboard/wallet',
+  withdrawal_completed: '/dashboard/wallet',
+  payment_failed: '/dashboard/transactions',
+  card_activated: '/dashboard/cards',
+  cashback_earned: '/dashboard/wallet',
+  system: '/dashboard/settings',
+  login: '/dashboard/settings',
+  security: '/dashboard/settings',
+  driver_payment: '/merchant/driver-wallet',
+  merchant_sale: '/merchant/transactions',
+  payout_completed: '/merchant/payouts',
+  payout_failed: '/merchant/payouts',
+  low_balance: '/dashboard/wallet',
+  login_alert: '/dashboard/settings',
+  kyc_approved: '/dashboard/settings',
+  kyc_rejected: '/dashboard/settings',
 };
 
 const typeColors: Record<string, string> = {
@@ -59,10 +94,19 @@ const typeColors: Record<string, string> = {
   system: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400',
   login: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400',
   security: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
+  driver_payment: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400',
+  merchant_sale: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400',
+  payout_completed: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400',
+  payout_failed: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
+  low_balance: 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400',
+  login_alert: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
+  kyc_approved: 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400',
+  kyc_rejected: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
 };
 
 export function UserNotificationsPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<UserNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -434,6 +478,19 @@ export function UserNotificationsPage() {
                           <span className="text-xs text-gray-400 dark:text-gray-500">
                             {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
                           </span>
+                          {notificationDeepLinks[notification.type] && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!notification.read) handleMarkAsRead(notification.id);
+                                navigate(notification.metadata?.url || notificationDeepLinks[notification.type]);
+                              }}
+                              className="p-1 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 rounded"
+                              title="Go to related page"
+                            >
+                              <ExternalLink className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -496,7 +553,7 @@ export function UserNotificationsPage() {
                   {format(new Date(selectedNotification.created_at), 'MMM d, yyyy h:mm a')}
                 </div>
               </div>
-              <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex justify-between gap-2 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
                 <button
                   onClick={() => {
                     handleDelete(selectedNotification.id);
@@ -506,12 +563,26 @@ export function UserNotificationsPage() {
                 >
                   Delete
                 </button>
-                <button
-                  onClick={() => setSelectedNotification(null)}
-                  className="px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg"
-                >
-                  Close
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSelectedNotification(null)}
+                    className="px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg"
+                  >
+                    Close
+                  </button>
+                  {notificationDeepLinks[selectedNotification.type] && (
+                    <button
+                      onClick={() => {
+                        setSelectedNotification(null);
+                        navigate(selectedNotification.metadata?.url || notificationDeepLinks[selectedNotification.type]);
+                      }}
+                      className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      View Details
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>

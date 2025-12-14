@@ -1,4 +1,8 @@
 import { supabase } from './supabase';
+import { authService } from './auth';
+
+// API base URL - use environment variable or default
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://peeap.com/api';
 
 export interface Contact {
   id: string;
@@ -8,6 +12,7 @@ export interface Contact {
   lastName?: string;
   fullName: string;
   avatar?: string;
+  avatarUrl?: string;
   isVerified?: boolean;
 }
 
@@ -24,77 +29,92 @@ export interface BusinessTeam {
   members: TeamMember[];
 }
 
-function normalizePhoneNumber(phone: string): string {
-  if (!phone) return '';
-  let cleaned = phone.replace(/[^\d+]/g, '');
-  if (cleaned.startsWith('+')) cleaned = cleaned.substring(1);
-  if (cleaned.startsWith('232')) cleaned = cleaned.substring(3);
-  if (!cleaned.startsWith('0') && cleaned.length === 8) cleaned = '0' + cleaned;
-  if (cleaned.length === 8) cleaned = '0' + cleaned;
-  return cleaned;
-}
-
 export const contactService = {
   /**
-   * Search for contacts across all PeeAP users
-   * This is the contact engine that searches by email, phone, or name
+   * Get authorization header for API requests
+   * Tries access token first, then SSO session token
    */
-  async searchContacts(query: string, limit: number = 10): Promise<Contact[]> {
+  getAuthHeader(): string | null {
+    if (typeof window === 'undefined') return null;
+
+    // Try access token first
+    const accessToken = authService.getAccessToken();
+    if (accessToken) {
+      return `Bearer ${accessToken}`;
+    }
+
+    // Try SSO session token
+    const sessionCookie = document.cookie
+      .split('; ')
+      .find(row => row.startsWith('plus_session='));
+
+    if (sessionCookie) {
+      const sessionToken = sessionCookie.split('=')[1];
+      if (sessionToken) {
+        return `SSO ${sessionToken}`;
+      }
+    }
+
+    return null;
+  },
+
+  /**
+   * Search for contacts across all PeeAP users
+   * Uses the shared API endpoint for cross-platform user search
+   * Similar to how my.peeap.com searches for users when sending money
+   */
+  async searchContacts(query: string, limit: number = 20): Promise<Contact[]> {
     if (!query || query.length < 2) {
       return [];
     }
 
-    const searchQuery = query.toLowerCase().trim();
-    const isPhone = /^[\d+\s-]+$/.test(searchQuery);
-    const isEmail = searchQuery.includes('@');
-
-    let results: Contact[] = [];
-
     try {
-      if (isPhone) {
-        // Search by phone number
-        const normalizedPhone = normalizePhoneNumber(searchQuery);
-        const { data: users } = await supabase
-          .from('users')
-          .select('id, email, phone, first_name, last_name, email_verified')
-          .or(`phone.ilike.%${normalizedPhone}%,phone.ilike.%${searchQuery}%`)
-          .limit(limit);
-
-        if (users) {
-          results = users.map(mapUserToContact);
-        }
-      } else if (isEmail) {
-        // Search by email
-        const { data: users } = await supabase
-          .from('users')
-          .select('id, email, phone, first_name, last_name, email_verified')
-          .ilike('email', `%${searchQuery}%`)
-          .limit(limit);
-
-        if (users) {
-          results = users.map(mapUserToContact);
-        }
-      } else {
-        // Search by name
-        const { data: users } = await supabase
-          .from('users')
-          .select('id, email, phone, first_name, last_name, email_verified')
-          .or(`first_name.ilike.%${searchQuery}%,last_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`)
-          .limit(limit);
-
-        if (users) {
-          results = users.map(mapUserToContact);
-        }
+      const authHeader = this.getAuthHeader();
+      if (!authHeader) {
+        console.error('No auth token available for search');
+        return [];
       }
+
+      const response = await fetch(`${API_BASE_URL}/shared/users/search?q=${encodeURIComponent(query)}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': authHeader,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        console.error('User search failed:', response.status);
+        return [];
+      }
+
+      const data = await response.json();
+
+      if (!data.users || !Array.isArray(data.users)) {
+        return [];
+      }
+
+      // Map API response to Contact interface
+      return data.users.slice(0, limit).map((user: any) => ({
+        id: user.id,
+        email: user.email,
+        phone: user.phone,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        fullName: user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+        avatar: user.avatarUrl,
+        avatarUrl: user.avatarUrl,
+        isVerified: true, // Users from API are verified
+      }));
     } catch (error) {
       console.error('Contact search error:', error);
+      return [];
     }
-
-    return results;
   },
 
   /**
    * Get a contact by their ID
+   * Uses the search API to find the user
    */
   async getContactById(userId: string): Promise<Contact | null> {
     try {
@@ -108,7 +128,15 @@ export const contactService = {
         return null;
       }
 
-      return mapUserToContact(user);
+      return {
+        id: user.id,
+        email: user.email,
+        phone: user.phone,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        fullName: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email,
+        isVerified: user.email_verified,
+      };
     } catch {
       return null;
     }
@@ -315,15 +343,3 @@ export const contactService = {
     }
   },
 };
-
-function mapUserToContact(user: any): Contact {
-  return {
-    id: user.id,
-    email: user.email,
-    phone: user.phone,
-    firstName: user.first_name,
-    lastName: user.last_name,
-    fullName: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email,
-    isVerified: user.email_verified,
-  };
-}

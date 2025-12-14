@@ -17,34 +17,28 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
+import { formatCurrency } from "@/lib/utils";
 
 // Mock data - will be replaced with real API calls
+// Using New Leone (NLe) amounts - redenominated currency since July 2022
 const stats = {
-  walletBalance: 2500000,
-  monthlyRevenue: 15000000,
+  walletBalance: 2500,      // NLe 2,500
+  monthlyRevenue: 15000,    // NLe 15,000
   revenueChange: 12.5,
   pendingInvoices: 5,
-  pendingAmount: 750000,
+  pendingAmount: 750,       // NLe 750
   activeSubscriptions: 23,
   activeCards: 8,
   employees: 12,
 };
 
 const recentTransactions = [
-  { id: 1, type: "incoming", description: "Payment from Customer A", amount: 500000, date: "Today, 2:30 PM" },
-  { id: 2, type: "outgoing", description: "Payout to Supplier B", amount: 250000, date: "Today, 11:15 AM" },
-  { id: 3, type: "incoming", description: "Invoice #INV-0042 paid", amount: 1200000, date: "Yesterday" },
-  { id: 4, type: "incoming", description: "Subscription payment", amount: 150000, date: "Yesterday" },
-  { id: 5, type: "outgoing", description: "Card purchase - Office Supplies", amount: 45000, date: "Dec 9" },
+  { id: 1, type: "incoming", description: "Payment from Customer A", amount: 500, date: "Today, 2:30 PM" },
+  { id: 2, type: "outgoing", description: "Payout to Supplier B", amount: 250, date: "Today, 11:15 AM" },
+  { id: 3, type: "incoming", description: "Invoice #INV-0042 paid", amount: 1200, date: "Yesterday" },
+  { id: 4, type: "incoming", description: "Subscription payment", amount: 150, date: "Yesterday" },
+  { id: 5, type: "outgoing", description: "Card purchase - Office Supplies", amount: 45, date: "Dec 9" },
 ];
-
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat("en-SL", {
-    style: "currency",
-    currency: "SLE",
-    minimumFractionDigits: 0,
-  }).format(amount);
-}
 
 type UserTier = "basic" | "business" | "business_plus" | "developer";
 
@@ -202,7 +196,7 @@ export default function DashboardPage() {
                     Issue Employee Card
                   </Button>
                 </Link>
-                <Link href="/dashboard/employees/add">
+                <Link href="/dashboard/employees/new">
                   <Button variant="outline" className="w-full justify-start">
                     <Users className="mr-2 h-4 w-4" />
                     Add Employee
