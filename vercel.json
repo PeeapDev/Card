@@ -10,7 +10,8 @@
     }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://api.peeap.com/api/$1" },
+    { "source": "/api/router/(.*)", "destination": "/api/router" },
+    { "source": "/api/(.*)", "destination": "/api/router" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

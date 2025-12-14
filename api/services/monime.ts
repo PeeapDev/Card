@@ -65,7 +65,8 @@ export interface MonimePayoutRequest {
   destination: {
     type: 'momo' | 'bank';
     providerId: string; // e.g., 'm17' for Orange Money
-    accountNumber: string; // Phone number for momo
+    phoneNumber?: string; // For momo type - phone number with country code
+    accountNumber?: string; // For bank type - bank account number
   };
   source: {
     financialAccountId: string; // Monime financial account ID
@@ -491,7 +492,7 @@ export class MonimeService {
       destination: {
         type: 'momo',
         providerId: params.providerId,
-        accountNumber: params.phoneNumber,
+        phoneNumber: params.phoneNumber, // Monime API expects phoneNumber for momo type
       },
       source: {
         financialAccountId: params.financialAccountId,
@@ -552,7 +553,7 @@ export class MonimeService {
       destination: {
         type: 'momo',
         providerId: params.providerId,
-        accountNumber: params.phoneNumber,
+        phoneNumber: params.phoneNumber, // Monime API expects phoneNumber for momo type
       },
       source: {
         financialAccountId: params.financialAccountId,
