@@ -538,11 +538,12 @@ async function withBusinessId<T>(fn: (businessId: string) => Promise<T>, default
 // Default empty summary
 const emptySummary: ReportSummary = {
   total_revenue: 0,
-  total_invoices: 0,
-  total_subscriptions: 0,
-  total_fuel_sales: 0,
-  revenue_by_source: [],
-  revenue_change: 0,
+  total_expenses: 0,
+  net_income: 0,
+  transaction_count: 0,
+  average_transaction: 0,
+  growth_rate: 0,
+  currency: 'NLE',
 };
 
 // =============================================
@@ -562,19 +563,36 @@ export const reportsService = {
   // Specific reports
   getInvoiceReport: (period: TimePeriod, customRange?: DateRange) =>
     withBusinessId((bid) => getInvoiceReport(bid, getDateRange(period, customRange)), {
-      total_invoiced: 0, total_paid: 0, total_outstanding: 0, overdue_amount: 0,
-      invoice_count: 0, paid_count: 0, overdue_count: 0,
-      by_status: [], by_customer: [], by_month: [],
+      total_invoiced: 0,
+      total_collected: 0,
+      outstanding: 0,
+      overdue: 0,
+      by_status: [],
+      by_customer: [],
+      aging: { current: 0, '1_30': 0, '31_60': 0, '61_90': 0, '90_plus': 0 },
     }),
   getSubscriptionReport: (period: TimePeriod, customRange?: DateRange) =>
     withBusinessId((bid) => getSubscriptionReport(bid, getDateRange(period, customRange)), {
-      mrr: 0, arr: 0, total_subscribers: 0, new_subscribers: 0, churned: 0,
-      churn_rate: 0, by_plan: [], by_status: [], mrr_trend: [],
+      mrr: 0,
+      arr: 0,
+      total_subscribers: 0,
+      new_subscribers: 0,
+      churned_subscribers: 0,
+      churn_rate: 0,
+      by_plan: [],
+      trend: [],
     }),
   getFuelReport: (period: TimePeriod, customRange?: DateRange) =>
     withBusinessId((bid) => getFuelReport(bid, getDateRange(period, customRange)), {
-      total_sales: 0, total_liters: 0, total_transactions: 0,
-      by_fuel_type: [], by_station: [], by_payment_method: [], daily_sales: [],
+      total_sales: 0,
+      total_liters: 0,
+      average_price: 0,
+      by_fuel_type: [],
+      by_station: [],
+      by_payment_method: [],
+      fleet_sales: 0,
+      prepaid_sales: 0,
+      cash_sales: 0,
     }),
 
   // Scheduled reports
