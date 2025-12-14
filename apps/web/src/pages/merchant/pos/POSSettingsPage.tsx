@@ -442,16 +442,16 @@ export function POSSettingsPage() {
         });
       } else {
         // Create staff without PIN - they will set it themselves
-        const staffData = {
+        const staffData: Record<string, any> = {
           merchant_id: merchantId,
           name: staffForm.name,
-          pin: undefined, // No PIN yet - staff will set it up
           role: staffForm.role,
-          user_id: staffForm.userId || undefined,
-          phone: staffForm.phone || undefined,
-          email: staffForm.email || undefined,
-          // Note: status column doesn't exist in pos_staff table yet
         };
+
+        // Only include optional fields if they have values
+        if (staffForm.userId) staffData.user_id = staffForm.userId;
+        if (staffForm.phone) staffData.phone = staffForm.phone;
+        if (staffForm.email) staffData.email = staffForm.email;
 
         await posService.createStaff(staffData);
 
