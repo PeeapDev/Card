@@ -109,6 +109,10 @@ export interface CardOrder {
   activatedAt?: string;
   createdAt: string;
   updatedAt: string;
+  // NFC Programming fields
+  nfcProgrammed?: boolean;
+  nfcCardUid?: string;
+  nfcProgrammedAt?: string;
   // Joined data
   cardType?: CardType;
   user?: {
