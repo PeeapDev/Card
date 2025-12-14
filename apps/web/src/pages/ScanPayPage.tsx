@@ -35,6 +35,7 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { API_URL, APP_URL, getApiEndpoint } from '@/config/urls';
+import { notificationService } from '@/services/notification.service';
 
 interface CheckoutSession {
   id: string;
@@ -437,6 +438,20 @@ export function ScanPayPage() {
 
     if (updateError) {
       console.error('Failed to update checkout session:', updateError);
+    }
+
+    // Send notification to driver about payment received
+    try {
+      await notificationService.sendPaymentReceived({
+        userId: driverId,
+        amount: session.amount,
+        currency: session.currencyCode,
+        senderName: payerName,
+        transactionId: transactionRef,
+      });
+    } catch (notifError) {
+      console.error('Failed to send notification:', notifError);
+      // Don't fail the payment if notification fails
     }
   };
 

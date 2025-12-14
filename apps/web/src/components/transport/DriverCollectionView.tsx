@@ -20,6 +20,7 @@ import { clsx } from 'clsx';
 import { supabase } from '@/lib/supabase';
 import { useNFC, NFCCardData } from '@/hooks/useNFC';
 import { NFCStatus } from '@/components/nfc/NFCStatus';
+import { notificationService } from '@/services/notification.service';
 
 type PaymentMode = 'qr' | 'card' | 'mobile';
 type PaymentStatus = 'waiting' | 'success' | 'failed';
@@ -143,6 +144,47 @@ export function DriverCollectionView({
     if (!sessionId) return;
 
     console.log('[DriverCollectionView] Subscribing to payment status for session:', sessionId);
+    let isCompleted = false; // Prevent duplicate triggers
+
+    // Immediate initial check
+    const checkSessionStatus = async () => {
+      try {
+        const { data } = await supabase
+          .from('checkout_sessions')
+          .select('status, payer_name')
+          .eq('external_id', sessionId)
+          .single();
+
+        console.log('[DriverCollectionView] Status check:', data?.status);
+
+        if (isCompleted) return;
+
+        if (data?.status === 'COMPLETE' && paymentStatus !== 'success') {
+          isCompleted = true;
+          console.log('[DriverCollectionView] Payment complete! Showing success');
+          setPayerName(data.payer_name || 'Customer');
+          setPaymentStatus('success');
+          setShowFlash(true);
+          playSuccessSound();
+          setTimeout(() => {
+            onPaymentComplete();
+          }, 2000); // Reduced to 2 seconds for faster experience
+        } else if ((data?.status === 'EXPIRED' || data?.status === 'CANCELLED' || data?.status === 'FAILED') && paymentStatus === 'waiting') {
+          setPaymentStatus('failed');
+          setShowFlash(true);
+          playErrorSound();
+          setTimeout(() => {
+            setPaymentStatus('waiting');
+            setShowFlash(false);
+          }, 2000);
+        }
+      } catch (err) {
+        console.error('[DriverCollectionView] Status check error:', err);
+      }
+    };
+
+    // Check immediately on mount
+    checkSessionStatus();
 
     const channel = supabase
       .channel(`driver_collection_${sessionId}`)
@@ -155,9 +197,12 @@ export function DriverCollectionView({
           filter: `external_id=eq.${sessionId}`,
         },
         (payload: any) => {
-          console.log('[DriverCollectionView] Received payment update:', payload);
+          console.log('[DriverCollectionView] Received realtime update:', payload);
+
+          if (isCompleted) return;
 
           if (payload.new.status === 'COMPLETE') {
+            isCompleted = true;
             // Payment successful!
             setPayerName(payload.new.payer_name || 'Customer');
             setPaymentStatus('success');
@@ -167,7 +212,7 @@ export function DriverCollectionView({
             // Auto-navigate to success after showing feedback
             setTimeout(() => {
               onPaymentComplete();
-            }, 2500);
+            }, 2000);
           } else if (payload.new.status === 'EXPIRED' || payload.new.status === 'CANCELLED' || payload.new.status === 'FAILED') {
             // Payment failed
             setPaymentStatus('failed');
@@ -182,38 +227,12 @@ export function DriverCollectionView({
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[DriverCollectionView] Subscription status:', status);
+      });
 
-    // Also poll as backup every 3 seconds
-    const pollInterval = setInterval(async () => {
-      try {
-        const { data } = await supabase
-          .from('checkout_sessions')
-          .select('status, payer_name')
-          .eq('external_id', sessionId)
-          .single();
-
-        if (data?.status === 'COMPLETE' && paymentStatus !== 'success') {
-          setPayerName(data.payer_name || 'Customer');
-          setPaymentStatus('success');
-          setShowFlash(true);
-          playSuccessSound();
-          setTimeout(() => {
-            onPaymentComplete();
-          }, 2500);
-        } else if ((data?.status === 'EXPIRED' || data?.status === 'CANCELLED' || data?.status === 'FAILED') && paymentStatus === 'waiting') {
-          setPaymentStatus('failed');
-          setShowFlash(true);
-          playErrorSound();
-          setTimeout(() => {
-            setPaymentStatus('waiting');
-            setShowFlash(false);
-          }, 2000);
-        }
-      } catch (err) {
-        console.error('[DriverCollectionView] Poll error:', err);
-      }
-    }, 3000);
+    // Fast polling as backup - every 1 second for transport speed
+    const pollInterval = setInterval(checkSessionStatus, 1000);
 
     return () => {
       supabase.removeChannel(channel);
@@ -335,14 +354,28 @@ export function DriverCollectionView({
           .eq('external_id', sessionId);
       }
 
-      // Success!
+      // Send notification to driver about NFC payment received
+      try {
+        await notificationService.sendPaymentReceived({
+          userId: driverId,
+          amount: amount,
+          currency: payerWallet.currency || 'SLE',
+          senderName: 'NFC Card Payment',
+          transactionId: transactionRef,
+        });
+      } catch (notifError) {
+        console.error('Failed to send notification:', notifError);
+        // Don't fail the payment if notification fails
+      }
+
+      // Success! Instant feedback for transport speed
       setPayerName('Card Payment');
       setPaymentStatus('success');
       setShowFlash(true);
       playSuccessSound();
       setTimeout(() => {
         onPaymentComplete();
-      }, 2500);
+      }, 1500); // Faster for transport business
 
     } catch (error: any) {
       console.error('NFC payment error:', error);

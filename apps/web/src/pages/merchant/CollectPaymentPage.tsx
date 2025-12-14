@@ -145,6 +145,33 @@ export function CollectPaymentPage() {
   useEffect(() => {
     if (collectStep !== 'driving' || !currentSession?.sessionId) return;
 
+    let isCompleted = false; // Prevent duplicate triggers
+
+    const checkStatus = async () => {
+      try {
+        const { data } = await supabase
+          .from('checkout_sessions')
+          .select('status')
+          .eq('external_id', currentSession.sessionId)
+          .single();
+
+        if (isCompleted) return;
+
+        if (data?.status === 'COMPLETE') {
+          isCompleted = true;
+          setCollectStep('success');
+        } else if (data?.status === 'EXPIRED' || data?.status === 'CANCELLED') {
+          setError('Payment was cancelled or expired');
+          setCollectStep('error');
+        }
+      } catch (err) {
+        console.error('Poll error:', err);
+      }
+    };
+
+    // Check immediately
+    checkStatus();
+
     const channel = supabase
       .channel(`collection_${currentSession.sessionId}`)
       .on(
@@ -156,7 +183,10 @@ export function CollectPaymentPage() {
           filter: `external_id=eq.${currentSession.sessionId}`,
         },
         (payload: any) => {
+          if (isCompleted) return;
+
           if (payload.new.status === 'COMPLETE') {
+            isCompleted = true;
             setCollectStep('success');
           } else if (payload.new.status === 'EXPIRED' || payload.new.status === 'CANCELLED') {
             setError('Payment was cancelled or expired');
@@ -166,25 +196,8 @@ export function CollectPaymentPage() {
       )
       .subscribe();
 
-    // Polling backup
-    const pollInterval = setInterval(async () => {
-      try {
-        const { data } = await supabase
-          .from('checkout_sessions')
-          .select('status')
-          .eq('external_id', currentSession.sessionId)
-          .single();
-
-        if (data?.status === 'COMPLETE') {
-          setCollectStep('success');
-        } else if (data?.status === 'EXPIRED' || data?.status === 'CANCELLED') {
-          setError('Payment was cancelled or expired');
-          setCollectStep('error');
-        }
-      } catch (err) {
-        console.error('Poll error:', err);
-      }
-    }, 3000);
+    // Fast polling backup - every 1 second for transport speed
+    const pollInterval = setInterval(checkStatus, 1000);
 
     return () => {
       supabase.removeChannel(channel);
@@ -351,13 +364,14 @@ export function CollectPaymentPage() {
   }
 
   // Driver Collection View (full screen on mobile, phone frame on desktop)
-  if (collectStep === 'driving' && currentSession) {
+  if (collectStep === 'driving' && currentSession && user?.id) {
     return (
       <PhoneFrame>
         <DriverCollectionView
           amount={currentSession.amount}
           sessionId={currentSession.sessionId}
           paymentUrl={currentSession.paymentUrl}
+          driverId={user.id}
           onPaymentComplete={() => setCollectStep('success')}
           onCancel={resetForm}
           vehicleType={driverProfile?.vehicle_type}
