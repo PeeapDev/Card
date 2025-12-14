@@ -88,10 +88,10 @@ export default function RecordDeliveryPage() {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-GH", {
-      style: "currency",
-      currency: "GHS",
-    }).format(amount);
+    return `NLe ${new Intl.NumberFormat("en", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount)}`;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -295,10 +295,10 @@ export default function RecordDeliveryPage() {
                 <h3 className="font-medium mb-4">Cost Information</h3>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="unitCost">Unit Cost (GHS/Liter)</Label>
+                    <Label htmlFor="unitCost">Unit Cost (NLe/Liter)</Label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-                        GHS
+                        NLe
                       </span>
                       <Input
                         id="unitCost"

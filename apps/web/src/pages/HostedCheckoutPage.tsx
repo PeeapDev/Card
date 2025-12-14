@@ -28,6 +28,7 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { cardService } from '@/services/card.service';
 import { supabase } from '@/lib/supabase';
+import { sanitizeForDisplay, safeDecodeURIComponent } from '@/utils/sanitize';
 
 // Types
 interface CheckoutSession {
@@ -173,13 +174,15 @@ export function HostedCheckoutPage() {
     if (status === 'success' && sessionId) {
       completeSessionOnRedirect();
     } else if (retry === 'true' && message) {
-      setRetryMessage(decodeURIComponent(message));
+      // Sanitize message to prevent XSS
+      setRetryMessage(sanitizeForDisplay(safeDecodeURIComponent(message)));
       window.history.replaceState({}, '', `/checkout/pay/${sessionId}`);
     }
 
     const globalMessage = (window as any).__CHECKOUT_MESSAGE__;
     if (globalMessage) {
-      setRetryMessage(globalMessage);
+      // Sanitize global message to prevent XSS
+      setRetryMessage(sanitizeForDisplay(String(globalMessage)));
       delete (window as any).__CHECKOUT_MESSAGE__;
     }
   }, [searchParams, sessionId]);
@@ -211,7 +214,6 @@ export function HostedCheckoutPage() {
         gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.8);
         oscillator.start(audioContext.currentTime);
         oscillator.stop(audioContext.currentTime + 0.8);
-        console.log('[Sound] Success chime played');
       } else {
         // Error buzz (two descending notes)
         oscillator.type = 'sine';
@@ -221,10 +223,8 @@ export function HostedCheckoutPage() {
         gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
         oscillator.start(audioContext.currentTime);
         oscillator.stop(audioContext.currentTime + 0.4);
-        console.log('[Sound] Error sound played');
       }
     } catch (e) {
-      console.log('[Sound] Web Audio API failed:', e);
     }
   };
 
@@ -241,11 +241,9 @@ export function HostedCheckoutPage() {
       const checkResponse = await fetch(`${apiUrl}/checkout/sessions/${sessionId}`);
       const sessionData = await checkResponse.json();
 
-      console.log('[Checkout] Session status on redirect:', sessionData.status);
 
       // If already COMPLETE, just show success
       if (sessionData.status === 'COMPLETE') {
-        console.log('[Checkout] Session already complete, showing success');
         const updatedSession = {
           ...sessionData,
           successUrl: sessionData.success_url || sessionData.successUrl,
@@ -270,7 +268,6 @@ export function HostedCheckoutPage() {
 
       // If session is still OPEN, complete it
       if (sessionData.status === 'OPEN') {
-        console.log('[Checkout] Completing session...');
         const response = await fetch(`${apiUrl}/checkout/sessions/${sessionId}/complete`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -282,7 +279,6 @@ export function HostedCheckoutPage() {
         if (!response.ok) {
           // If error is "Session is not open", it may have been completed by webhook
           if (data.error?.includes('not open')) {
-            console.log('[Checkout] Session may have been completed by webhook, checking again...');
             const recheckResponse = await fetch(`${apiUrl}/checkout/sessions/${sessionId}`);
             const recheckData = await recheckResponse.json();
             if (recheckData.status === 'COMPLETE') {
@@ -363,7 +359,6 @@ export function HostedCheckoutPage() {
       // Auto redirect after 4 seconds
       const redirectTimer = setTimeout(() => {
         const redirectUrl = buildSuccessRedirectUrl(session.successUrl!, session, paymentMethodUsed || 'unknown');
-        console.log('[Checkout] Auto-redirecting to:', redirectUrl);
         window.location.href = redirectUrl;
       }, 4000);
 
@@ -441,7 +436,6 @@ export function HostedCheckoutPage() {
 
   // Handle payment completion (for QR scan payments)
   const handlePaymentComplete = useCallback((data: any) => {
-    console.log('[Checkout] Payment COMPLETE detected! Showing success...');
 
     // Play success sound
     playSound('success');
@@ -473,10 +467,8 @@ export function HostedCheckoutPage() {
     // Redirect after showing success animation
     const successUrl = data.success_url || data.successUrl;
     if (successUrl) {
-      console.log('[Checkout] Will redirect to:', successUrl, 'in 4 seconds');
       setTimeout(() => {
         const redirectUrl = buildSuccessRedirectUrl(successUrl, data, 'scan_to_pay');
-        console.log('[Checkout] Redirecting now to:', redirectUrl);
         window.location.href = redirectUrl;
       }, 4000);
     }
@@ -490,7 +482,6 @@ export function HostedCheckoutPage() {
     let hasCompleted = false;
 
     if (step === 'qr_display' && sessionId && session?.id) {
-      console.log('[Checkout] Setting up payment detection for session:', sessionId, '(internal:', session.id, ')');
 
       // Subscribe to real-time updates on the checkout_sessions table
       // Try both external_id and id filters
@@ -505,7 +496,6 @@ export function HostedCheckoutPage() {
             filter: `external_id=eq.${sessionId}`,
           },
           (payload: any) => {
-            console.log('[Checkout] Real-time update received:', payload);
             if (!hasCompleted && payload.new && payload.new.status === 'COMPLETE') {
               hasCompleted = true;
               handlePaymentComplete(payload.new);
@@ -513,7 +503,6 @@ export function HostedCheckoutPage() {
           }
         )
         .subscribe((status: string) => {
-          console.log('[Checkout] Subscription status:', status);
         });
 
       // AGGRESSIVE polling - check every 1.5 seconds via API AND direct Supabase
@@ -529,7 +518,6 @@ export function HostedCheckoutPage() {
 
           if (response.ok) {
             const data = await response.json();
-            console.log('[Checkout] API poll - status:', data.status);
 
             if (data.status === 'COMPLETE' && !hasCompleted) {
               hasCompleted = true;
@@ -550,7 +538,6 @@ export function HostedCheckoutPage() {
             .single();
 
           if (!directError && directData) {
-            console.log('[Checkout] Direct DB poll - status:', directData.status);
             if (directData.status === 'COMPLETE' && !hasCompleted) {
               hasCompleted = true;
               if (pollInterval) {
@@ -574,11 +561,9 @@ export function HostedCheckoutPage() {
 
     return () => {
       if (subscription) {
-        console.log('[Checkout] Cleaning up real-time subscription');
         supabase.removeChannel(subscription);
       }
       if (pollInterval) {
-        console.log('[Checkout] Cleaning up polling interval');
         clearInterval(pollInterval);
       }
     };
@@ -705,7 +690,6 @@ export function HostedCheckoutPage() {
       const expiryMonth = parseInt(expiryParts[0]?.trim() || '0', 10);
       const expiryYear = parseInt(expiryParts[1]?.trim() || '0', 10);
 
-      console.log('[Card] Expiry validation:', { cardExpiry, expiryMonth, expiryYear });
 
       if (!expiryMonth || !expiryYear || expiryMonth < 1 || expiryMonth > 12) {
         throw new Error('Invalid expiry date. Use MM/YY.');
@@ -715,13 +699,11 @@ export function HostedCheckoutPage() {
       const currentYear = currentDate.getFullYear() % 100; // e.g., 2025 -> 25
       const currentMonth = currentDate.getMonth() + 1; // 1-12
 
-      console.log('[Card] Current date:', { currentMonth, currentYear });
 
       // Card is expired if:
       // - expiry year is in the past, OR
       // - expiry year is current year AND expiry month is before current month
       if (expiryYear < currentYear || (expiryYear === currentYear && expiryMonth < currentMonth)) {
-        console.log('[Card] Card expired check failed:', { expiryYear, currentYear, expiryMonth, currentMonth });
         throw new Error('This card has expired.');
       }
 

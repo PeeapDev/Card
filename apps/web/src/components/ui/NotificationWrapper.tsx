@@ -7,7 +7,6 @@ export function NotificationWrapper() {
 
   useEffect(() => {
     if (toasts.length > 0) {
-      console.log('[NotificationWrapper] Toasts updated:', toasts);
     }
   }, [toasts]);
 

@@ -134,13 +134,18 @@ export function MainLayout({ children }: MainLayoutProps) {
         {/* Top bar */}
         <header className="sticky top-0 z-30 h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between h-full px-4 lg:px-8">
-            <button
-              className="lg:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
-              onClick={() => setSidebarOpen(true)}
-            >
-              <Menu className="w-6 h-6 dark:text-gray-400" />
-            </button>
-            <div className="flex items-center space-x-4">
+            {/* Left side - Menu button (mobile only) */}
+            <div className="flex items-center">
+              <button
+                className="lg:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                onClick={() => setSidebarOpen(true)}
+              >
+                <Menu className="w-6 h-6 dark:text-gray-400" />
+              </button>
+            </div>
+
+            {/* Right side - KYC Status, Theme, Notifications */}
+            <div className="flex items-center space-x-4 ml-auto">
               <span className="text-sm text-gray-500 dark:text-gray-400 hidden sm:inline">
                 KYC Status:{' '}
                 <span

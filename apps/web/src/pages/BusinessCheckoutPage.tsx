@@ -437,7 +437,6 @@ export function BusinessCheckoutPage() {
         });
 
         // Redirect to hosted checkout
-        console.log('[Checkout] Redirecting to hosted checkout:', responseData.paymentUrl);
 
         if (window.parent !== window) {
           // We're in an iframe (SDK modal) - tell parent to handle redirect

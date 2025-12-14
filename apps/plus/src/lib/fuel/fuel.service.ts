@@ -1042,22 +1042,96 @@ function getBusinessId(): string {
   }
   const businessId = localStorage.getItem('plusBusinessId');
   if (!businessId) {
-    // Try to get from user object
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      try {
-        const user = JSON.parse(userStr);
-        if (user.businessId) {
-          localStorage.setItem('plusBusinessId', user.businessId);
-          return user.businessId;
-        }
-      } catch {}
-    }
-    // Return empty string instead of throwing - pages will handle this
-    console.warn('No business ID found in localStorage. Fuel operations may not work correctly.');
+    // Return empty string - will trigger async lookup
     return '';
   }
   return businessId;
+}
+
+// Helper to get or create business ID
+async function ensureBusinessId(): Promise<string> {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  // Check if already cached - but verify it's valid
+  const cachedId = localStorage.getItem('plusBusinessId');
+  if (cachedId) {
+    // Verify the cached ID exists in the database
+    const { data: existingBusiness } = await supabase
+      .from('plus_businesses')
+      .select('id')
+      .eq('id', cachedId)
+      .single();
+
+    if (existingBusiness) {
+      return cachedId;
+    }
+    // Cached ID is invalid, clear it
+    localStorage.removeItem('plusBusinessId');
+    console.warn('Cleared invalid cached business ID');
+  }
+
+  // Get user ID
+  const userStr = localStorage.getItem('user');
+  if (!userStr) {
+    console.warn('No user found in localStorage');
+    return '';
+  }
+
+  let userId: string;
+  let userName: string = 'My Business';
+  try {
+    const user = JSON.parse(userStr);
+    userId = user.id;
+    userName = user.name || user.email || 'My Business';
+    if (!userId) {
+      console.warn('No user ID found');
+      return '';
+    }
+  } catch {
+    return '';
+  }
+
+  // Look up business by user_id (correct column name per schema)
+  const { data: business, error } = await supabase
+    .from('plus_businesses')
+    .select('id')
+    .eq('user_id', userId)
+    .single();
+
+  if (business && !error) {
+    localStorage.setItem('plusBusinessId', business.id);
+    return business.id;
+  }
+
+  // Business doesn't exist - create one
+  // Schema: user_id, tier, source, business_info (JSONB), etc.
+  console.log('Creating new business for user:', userId);
+  const { data: newBusiness, error: createError } = await supabase
+    .from('plus_businesses')
+    .insert({
+      user_id: userId,
+      tier: 'business',
+      source: 'new',
+      business_info: { name: userName },
+    })
+    .select('id')
+    .single();
+
+  if (createError) {
+    console.error('Failed to create business:', createError);
+    return '';
+  }
+
+  if (!newBusiness) {
+    console.error('No business returned after create');
+    return '';
+  }
+
+  console.log('Created new business:', newBusiness.id);
+  localStorage.setItem('plusBusinessId', newBusiness.id);
+  return newBusiness.id;
 }
 
 // Helper to get staff ID from localStorage
@@ -1105,16 +1179,16 @@ async function withBusinessId<T>(fn: (businessId: string) => Promise<T>, default
 export const fuelService = {
   // Fuel Types
   getFuelTypes: () => withBusinessId(getFuelTypes, []),
-  createFuelType: (dto: CreateFuelTypeDto) => {
-    const businessId = getBusinessId();
+  createFuelType: async (dto: CreateFuelTypeDto) => {
+    const businessId = await ensureBusinessId();
     if (!businessId) throw new Error('Business ID required to create fuel type');
     return createFuelType(businessId, dto);
   },
   // Stations
   getStations: () => withBusinessId(getStations, []),
   getStation,
-  createStation: (dto: CreateStationDto) => {
-    const businessId = getBusinessId();
+  createStation: async (dto: CreateStationDto) => {
+    const businessId = await ensureBusinessId();
     if (!businessId) throw new Error('Business ID required to create station');
     return createStation(businessId, dto);
   },
@@ -1177,8 +1251,8 @@ export const fuelService = {
   // Fleet
   getFleetCustomers: () => withBusinessId(getFleetCustomers, []),
   getFleetCustomer,
-  createFleetCustomer: (dto: CreateFleetCustomerDto) => {
-    const businessId = getBusinessId();
+  createFleetCustomer: async (dto: CreateFleetCustomerDto) => {
+    const businessId = await ensureBusinessId();
     if (!businessId) throw new Error('Business ID required to create fleet customer');
     return createFleetCustomer(businessId, dto);
   },
@@ -1186,8 +1260,8 @@ export const fuelService = {
   createFleetDriver,
   // Fuel Cards
   getFuelCards: () => withBusinessId(getFuelCards, []),
-  issueFuelCard: (dto: IssueFuelCardDto) => {
-    const businessId = getBusinessId();
+  issueFuelCard: async (dto: IssueFuelCardDto) => {
+    const businessId = await ensureBusinessId();
     const staffId = getStaffId();
     if (!businessId || !staffId) throw new Error('Business ID and Staff ID required to issue fuel card');
     return issueFuelCard(businessId, staffId, dto);

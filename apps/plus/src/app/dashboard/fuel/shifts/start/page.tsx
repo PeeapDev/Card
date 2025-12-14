@@ -97,10 +97,10 @@ export default function StartShiftPage() {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-GH", {
-      style: "currency",
-      currency: "GHS",
-    }).format(amount);
+    return `NLe ${new Intl.NumberFormat("en", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount)}`;
   };
 
   const selectedStationData = stations.find((s) => s.id === selectedStation);
@@ -201,7 +201,7 @@ export default function StartShiftPage() {
               <Label htmlFor="openingCash">Opening Cash Balance *</Label>
               <div className="relative max-w-xs">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                  GHS
+                  NLe
                 </span>
                 <Input
                   id="openingCash"

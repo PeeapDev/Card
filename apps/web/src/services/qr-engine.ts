@@ -155,7 +155,6 @@ class QREngineService {
       });
     } catch {
       // Table might not exist yet, continue anyway
-      console.log('QR codes table not available, skipping database storage');
     }
 
     return {
@@ -216,7 +215,6 @@ class QREngineService {
         status: 'active',
       });
     } catch {
-      console.log('QR codes table not available, skipping database storage');
     }
 
     return {

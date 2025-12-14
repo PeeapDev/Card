@@ -17,6 +17,7 @@ import { Button } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
 import indexedDBService from '@/services/indexeddb.service';
 import posService, { POSCategory, POSStaff } from '@/services/pos.service';
+import { notificationService } from '@/services/notification.service';
 import { supabase } from '@/lib/supabase';
 import {
   Store,
@@ -446,6 +447,7 @@ export function POSSettingsPage() {
           merchant_id: merchantId,
           name: staffForm.name,
           role: staffForm.role,
+          invitation_status: 'pending',
         };
 
         // Only include optional fields if they have values
@@ -453,19 +455,23 @@ export function POSSettingsPage() {
         if (staffForm.phone) staffData.phone = staffForm.phone;
         if (staffForm.email) staffData.email = staffForm.email;
 
-        await posService.createStaff(staffData);
+        const createdStaff = await posService.createStaff(staffData);
 
-        // TODO: Send notification to staff member's dashboard
-        // They will see a notification inviting them to set up their PIN
-        // await notificationService.sendStaffInvitation({
-        //   userId: staffForm.userId,
-        //   merchantId: merchantId,
-        //   merchantName: settings.businessName,
-        //   role: staffForm.role,
-        //   setupUrl: '/dashboard/staff/setup-pin',
-        // });
-
-        console.log(`[INFO] Staff invitation sent to ${staffForm.name} - they need to set up their PIN`);
+        // Send notification to staff member's dashboard
+        if (staffForm.userId && createdStaff?.id) {
+          try {
+            await notificationService.sendStaffInvitation({
+              userId: staffForm.userId,
+              merchantId: merchantId,
+              merchantName: settings.businessName || 'A business',
+              role: staffForm.role,
+              staffId: createdStaff.id,
+            });
+          } catch (notifError) {
+            console.error('Failed to send notification:', notifError);
+            // Don't fail the whole operation if notification fails
+          }
+        }
       }
 
       setShowStaffModal(false);

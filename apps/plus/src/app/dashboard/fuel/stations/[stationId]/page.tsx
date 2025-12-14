@@ -74,14 +74,14 @@ export default function StationDetailPage() {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-GH", {
-      style: "currency",
-      currency: "GHS",
-    }).format(amount);
+    return `NLe ${new Intl.NumberFormat("en", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount)}`;
   };
 
   const formatNumber = (num: number) => {
-    return new Intl.NumberFormat("en-GH").format(num);
+    return new Intl.NumberFormat("en").format(num);
   };
 
   const getStatusColor = (status: string) => {

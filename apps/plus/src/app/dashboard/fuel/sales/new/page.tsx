@@ -168,10 +168,10 @@ export default function NewSalePage() {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-GH", {
-      style: "currency",
-      currency: "GHS",
-    }).format(amount);
+    return `NLe ${new Intl.NumberFormat("en", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount)}`;
   };
 
   if (isLoading) {
@@ -288,7 +288,7 @@ export default function NewSalePage() {
                     <Label htmlFor="pricePerLiter">Price per Liter</Label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                        GHS
+                        NLe
                       </span>
                       <Input
                         id="pricePerLiter"
@@ -316,7 +316,7 @@ export default function NewSalePage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="discount">Discount (GHS)</Label>
+                    <Label htmlFor="discount">Discount (NLe)</Label>
                     <Input
                       id="discount"
                       type="number"

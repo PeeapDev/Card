@@ -19,11 +19,22 @@ import { ArrowLeft, Loader2, Store } from "lucide-react";
 import { fuelService } from "@/lib/fuel/fuel.service";
 import type { FuelStationStatus } from "@/lib/fuel/types";
 
+// Sierra Leone Regions and Districts
+const SIERRA_LEONE_REGIONS = {
+  "Western Area": ["Western Area Urban", "Western Area Rural"],
+  "North West": ["Kambia", "Karene", "Port Loko"],
+  "Northern": ["Bombali", "Falaba", "Koinadugu", "Tonkolili"],
+  "Southern": ["Bo", "Bonthe", "Moyamba", "Pujehun"],
+  "Eastern": ["Kailahun", "Kenema", "Kono"],
+} as const;
+
+type Region = keyof typeof SIERRA_LEONE_REGIONS;
+
 interface FormData {
   name: string;
   code: string;
   address: string;
-  city: string;
+  district: string;
   region: string;
   contact_phone: string;
   status: FuelStationStatus;
@@ -37,14 +48,26 @@ export default function NewStationPage() {
     name: "",
     code: "",
     address: "",
-    city: "",
+    district: "",
     region: "",
     contact_phone: "",
     status: "active",
   });
 
+  // Get districts for selected region
+  const availableDistricts = formData.region
+    ? SIERRA_LEONE_REGIONS[formData.region as Region] || []
+    : [];
+
   const handleChange = (field: keyof FormData, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormData((prev) => {
+      const newData = { ...prev, [field]: value };
+      // Clear district when region changes
+      if (field === "region") {
+        newData.district = "";
+      }
+      return newData;
+    });
     setError(null);
   };
 
@@ -61,8 +84,12 @@ export default function NewStationPage() {
       setError("Station code is required");
       return;
     }
-    if (!formData.city.trim()) {
-      setError("City is required");
+    if (!formData.region) {
+      setError("Region is required");
+      return;
+    }
+    if (!formData.district) {
+      setError("District is required");
       return;
     }
 
@@ -73,8 +100,8 @@ export default function NewStationPage() {
         name: formData.name.trim(),
         code: formData.code.trim().toUpperCase(),
         address: formData.address.trim() || undefined,
-        city: formData.city.trim(),
-        region: formData.region.trim() || undefined,
+        city: formData.district, // Use district as city
+        region: formData.region,
         contact_phone: formData.contact_phone.trim() || undefined,
       });
 
@@ -190,7 +217,7 @@ export default function NewStationPage() {
                 <Input
                   id="phone"
                   type="tel"
-                  placeholder="e.g., +233 XX XXX XXXX"
+                  placeholder="e.g., +232 XX XXX XXX"
                   value={formData.contact_phone}
                   onChange={(e) => handleChange("contact_phone", e.target.value)}
                 />
@@ -203,40 +230,59 @@ export default function NewStationPage() {
             <CardHeader>
               <CardTitle>Location Details</CardTitle>
               <CardDescription>
-                Where is this station located?
+                Where is this station located in Sierra Leone?
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="region">Region *</Label>
+                  <Select
+                    value={formData.region}
+                    onValueChange={(value) => handleChange("region", value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select region" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.keys(SIERRA_LEONE_REGIONS).map((region) => (
+                        <SelectItem key={region} value={region}>
+                          {region}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="district">District *</Label>
+                  <Select
+                    value={formData.district}
+                    onValueChange={(value) => handleChange("district", value)}
+                    disabled={!formData.region}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={formData.region ? "Select district" : "Select region first"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableDistricts.map((district) => (
+                        <SelectItem key={district} value={district}>
+                          {district}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="address">Street Address</Label>
                 <Textarea
                   id="address"
-                  placeholder="Enter the full street address"
+                  placeholder="Enter the full street address (e.g., 25 Siaka Stevens Street)"
                   value={formData.address}
                   onChange={(e) => handleChange("address", e.target.value)}
                   rows={2}
                 />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="city">City *</Label>
-                  <Input
-                    id="city"
-                    placeholder="e.g., Accra"
-                    value={formData.city}
-                    onChange={(e) => handleChange("city", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="region">Region</Label>
-                  <Input
-                    id="region"
-                    placeholder="e.g., Greater Accra"
-                    value={formData.region}
-                    onChange={(e) => handleChange("region", e.target.value)}
-                  />
-                </div>
               </div>
             </CardContent>
           </Card>

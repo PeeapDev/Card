@@ -141,7 +141,6 @@ export function AdminNotificationBell() {
           table: 'admin_notifications',
         },
         (payload) => {
-          console.log('New notification received:', payload);
           const newNotification = payload.new as AdminNotification;
           setNotifications((prev) => [newNotification, ...prev].slice(0, 20));
           setUnreadCount((prev) => prev + 1);
@@ -172,24 +171,14 @@ export function AdminNotificationBell() {
 
       // Check auth state first
       const { data: sessionData } = await supabase.auth.getSession();
-      console.log('Auth session:', sessionData?.session?.user?.email || 'No session');
 
-      console.log('Fetching admin notifications...');
 
       // Direct Supabase query
-      const { data, error, status, statusText } = await supabase
+      const { data, error } = await supabase
         .from('admin_notifications')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(20);
-
-      console.log('Notifications query result:', {
-        data,
-        error,
-        status,
-        statusText,
-        count: data?.length
-      });
 
       if (error) {
         console.error('Error fetching notifications:', error);

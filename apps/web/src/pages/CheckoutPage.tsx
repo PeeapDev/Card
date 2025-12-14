@@ -246,7 +246,6 @@ export function CheckoutPage() {
         throw new Error('No wallet found. Please contact support.');
       }
 
-      console.log('Initiating Monime payment with wallet:', wallet.id);
 
       // Initiate Monime deposit/payment
       const response = await monimeService.initiateDeposit({
@@ -259,7 +258,6 @@ export function CheckoutPage() {
         description: paymentDetails.description || `Payment ${paymentId}`,
       });
 
-      console.log('Monime response:', response);
 
       setTransactionId(response.id);
       setMonimeReference(response.monimeReference);

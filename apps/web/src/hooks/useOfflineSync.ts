@@ -126,7 +126,6 @@ export function useOfflineSync(businessId: string | undefined) {
 
       await indexedDBService.setLastSyncTime(businessId);
 
-      console.log(`Synced: ${products.length} products, ${categories.length} categories, ${staff.length} staff, ${salesArray.length} sales, ${customers.length} customers`);
 
       setSyncStatus(prev => ({
         ...prev,
@@ -149,11 +148,9 @@ export function useOfflineSync(businessId: string | undefined) {
       const pendingSales = await indexedDBService.getPendingSales(businessId);
 
       if (pendingSales.length === 0) {
-        console.log('No pending sales to sync');
         return;
       }
 
-      console.log(`Syncing ${pendingSales.length} pending sales...`);
 
       for (const sale of pendingSales) {
         try {
@@ -181,7 +178,6 @@ export function useOfflineSync(businessId: string | undefined) {
 
           // Mark as synced
           await indexedDBService.markSaleAsSynced(sale.local_id, serverSale.id!);
-          console.log(`Synced sale ${sale.local_id} -> ${serverSale.id}`);
         } catch (error) {
           console.error(`Failed to sync sale ${sale.local_id}:`, error);
         }
@@ -216,7 +212,6 @@ export function useOfflineSync(businessId: string | undefined) {
       // Then, sync from server (download)
       await syncFromServer();
 
-      console.log('Sync completed successfully');
     } catch (error) {
       console.error('Sync failed:', error);
     } finally {

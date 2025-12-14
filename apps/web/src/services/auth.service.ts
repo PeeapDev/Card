@@ -168,7 +168,6 @@ export const authService = {
 
     // Determine the role to assign
     const assignedRole = data.role || 'user';
-    console.log('Registration - Role received:', data.role, 'Assigned role:', assignedRole);
 
     // Create user
     // Note: In production, hash the password before storing!

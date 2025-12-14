@@ -55,10 +55,10 @@ export default function NewFleetCustomerPage() {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-GH", {
-      style: "currency",
-      currency: "GHS",
-    }).format(amount);
+    return `NLe ${new Intl.NumberFormat("en", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount)}`;
   };
 
   return (
@@ -211,10 +211,10 @@ export default function NewFleetCustomerPage() {
             <CardContent className="space-y-4">
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-2">
-                  <Label htmlFor="creditLimit">Credit Limit (GHS)</Label>
+                  <Label htmlFor="creditLimit">Credit Limit (NLe)</Label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-                      GHS
+                      NLe
                     </span>
                     <Input
                       id="creditLimit"

@@ -67,7 +67,6 @@ export function DriverCollectionView({
   // Handle card payment via NFC
   const handleCardPayment = useCallback(async (cardData: string) => {
     setCardDetected(true);
-    console.log('NFC Card detected:', cardData);
 
     try {
       // Process the NFC card payment

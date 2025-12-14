@@ -266,7 +266,6 @@ export function UsersManagementPage() {
       if (!rpcError && rpcResult) {
         setCreateSuccess(`User ${formData.firstName} created successfully with ${currencySymbol}${formData.initialBalance} balance!`);
       } else {
-        console.log('RPC not available, trying direct insert:', rpcError?.message);
 
         // Direct insert without username column
         const insertData: Record<string, unknown> = {

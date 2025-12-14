@@ -114,7 +114,6 @@ export function ScanPayPage() {
         .eq('external_id', sessionId)
         .single();
 
-      console.log('[ScanPay] Supabase lookup result:', { supabaseSession, supabaseError });
 
       if (supabaseSession && !supabaseError) {
         rawData = supabaseSession;
@@ -123,7 +122,6 @@ export function ScanPayPage() {
         throw new Error('Payment session not found');
       } else {
         // Other Supabase error - try API as fallback (but API may be down)
-        console.log('[ScanPay] Trying API fallback...');
         try {
           const baseApiUrl = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
           const apiUrl = baseApiUrl.endsWith('/api') ? baseApiUrl : `${baseApiUrl}/api`;

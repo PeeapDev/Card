@@ -171,7 +171,6 @@ export const ssoService = {
    * This ensures the user exists in Supabase before SSO redirect
    */
   async syncUserToSupabase(user: User): Promise<void> {
-    console.log('SSO: Syncing user to Supabase:', { id: user.id, email: user.email });
 
     // Check if user exists
     const { data: existingUsers, error: checkError } = await supabase
@@ -196,7 +195,6 @@ export const ssoService = {
 
     if (existingUsers && existingUsers.length > 0) {
       // Update existing user
-      console.log('SSO: User exists, updating...');
       const { error } = await supabase
         .from('users')
         .update(userData)
@@ -205,11 +203,9 @@ export const ssoService = {
       if (error) {
         console.error('SSO: Failed to update user in Supabase:', error);
       } else {
-        console.log('SSO: User updated successfully');
       }
     } else {
       // Insert new user
-      console.log('SSO: User does not exist, inserting...');
       const { error } = await supabase
         .from('users')
         .insert({
@@ -220,7 +216,6 @@ export const ssoService = {
       if (error) {
         console.error('SSO: Failed to insert user in Supabase:', error);
         // Try upsert as fallback
-        console.log('SSO: Trying upsert as fallback...');
         const { error: upsertError } = await supabase
           .from('users')
           .upsert({
@@ -232,9 +227,7 @@ export const ssoService = {
           console.error('SSO: Upsert also failed:', upsertError);
           throw new Error('Failed to sync user data');
         }
-        console.log('SSO: Upsert succeeded');
       } else {
-        console.log('SSO: User inserted successfully');
       }
     }
 
@@ -249,7 +242,6 @@ export const ssoService = {
       console.error('SSO: User verification failed - user not found after sync');
       throw new Error('User sync verification failed');
     }
-    console.log('SSO: User verified in database:', verifyUser[0]);
   },
 
   /**

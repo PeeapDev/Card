@@ -78,7 +78,6 @@ export const adminNotificationService = {
    * Get all admin notifications with optional filters
    */
   async getNotifications(filters: AdminNotificationFilters = {}): Promise<AdminNotification[]> {
-    console.log('Fetching admin notifications with filters:', filters);
 
     let query = supabase
       .from('admin_notifications')
@@ -103,7 +102,6 @@ export const adminNotificationService = {
 
     const { data, error } = await query;
 
-    console.log('Admin notifications query result:', { data, error, count: data?.length });
 
     if (error) {
       console.error('Error fetching admin notifications:', error);

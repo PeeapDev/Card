@@ -223,6 +223,10 @@ export interface POSStaff {
   role: 'admin' | 'manager' | 'cashier';
   permissions: string[];
   is_active: boolean;
+  invitation_status?: 'pending' | 'accepted' | 'declined';
+  invited_at?: string;
+  accepted_at?: string;
+  declined_at?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -1942,6 +1946,90 @@ export const verifyStaffPin = async (
   return data;
 };
 
+// Get pending staff invitations for a user
+export const getPendingInvitations = async (userId: string): Promise<POSStaff[]> => {
+  const { data, error } = await supabase
+    .from('pos_staff')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('invitation_status', 'pending')
+    .eq('is_active', true);
+
+  if (error) throw error;
+  return data || [];
+};
+
+// Accept staff invitation with PIN setup
+export const acceptStaffInvitation = async (staffId: string, userId: string, pin?: string): Promise<POSStaff> => {
+  // Verify the invitation belongs to this user
+  const { data: staff, error: fetchError } = await supabase
+    .from('pos_staff')
+    .select('*')
+    .eq('id', staffId)
+    .eq('user_id', userId)
+    .single();
+
+  if (fetchError || !staff) {
+    throw new Error('Invitation not found');
+  }
+
+  if (staff.invitation_status !== 'pending') {
+    throw new Error('Invitation has already been processed');
+  }
+
+  const updateData: Record<string, any> = {
+    invitation_status: 'accepted',
+    accepted_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  // Add PIN if provided
+  if (pin) {
+    updateData.pin = pin;
+  }
+
+  const { data, error } = await supabase
+    .from('pos_staff')
+    .update(updateData)
+    .eq('id', staffId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+// Decline staff invitation
+export const declineStaffInvitation = async (staffId: string, userId: string): Promise<void> => {
+  // Verify the invitation belongs to this user
+  const { data: staff, error: fetchError } = await supabase
+    .from('pos_staff')
+    .select('*')
+    .eq('id', staffId)
+    .eq('user_id', userId)
+    .single();
+
+  if (fetchError || !staff) {
+    throw new Error('Invitation not found');
+  }
+
+  if (staff.invitation_status !== 'pending') {
+    throw new Error('Invitation has already been processed');
+  }
+
+  const { error } = await supabase
+    .from('pos_staff')
+    .update({
+      invitation_status: 'declined',
+      declined_at: new Date().toISOString(),
+      is_active: false,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', staffId);
+
+  if (error) throw error;
+};
+
 // Default permissions by role
 export const DEFAULT_PERMISSIONS = {
   admin: [
@@ -2264,6 +2352,9 @@ export const posService = {
   updateStaff,
   deleteStaff,
   verifyStaffPin,
+  getPendingInvitations,
+  acceptStaffInvitation,
+  declineStaffInvitation,
   DEFAULT_PERMISSIONS,
   // Product Variants
   getProductVariants,

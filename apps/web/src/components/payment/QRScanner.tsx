@@ -170,7 +170,6 @@ export function QRScanner({ onScan, onClose, autoValidate = true }: QRScannerPro
   const handleScanError = (errorMessage: string) => {
     // Ignore "No QR code found" errors as they happen continuously
     if (!errorMessage.includes('No QR code found')) {
-      console.log('Scan error:', errorMessage);
     }
   };
 

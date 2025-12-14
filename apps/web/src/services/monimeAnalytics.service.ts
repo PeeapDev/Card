@@ -72,12 +72,10 @@ export const monimeAnalyticsService = {
     // Check cache first
     const now = Date.now();
     if (!forceRefresh && analyticsCache.data && (now - analyticsCache.timestamp) < CACHE_TTL) {
-      console.log('[MonimeAnalytics] Returning cached data');
       return analyticsCache.data;
     }
 
     try {
-      console.log('[MonimeAnalytics] Fetching from API...');
       const response = await api.get<MonimeAnalyticsResponse>('/monime/analytics');
 
       if (response.success) {
@@ -85,7 +83,6 @@ export const monimeAnalyticsService = {
           data: response,
           timestamp: now,
         };
-        console.log('[MonimeAnalytics] Data received:', response.summary);
         return response;
       }
 
@@ -95,7 +92,6 @@ export const monimeAnalyticsService = {
       console.error('[MonimeAnalytics] Error fetching analytics:', error);
       // Return cached data if available, even if expired
       if (analyticsCache.data) {
-        console.log('[MonimeAnalytics] Returning stale cached data due to error');
         return analyticsCache.data;
       }
       return null;

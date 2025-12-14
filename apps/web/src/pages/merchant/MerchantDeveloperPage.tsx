@@ -362,8 +362,6 @@ PeeapSDK.init({
 
   // Success callback
   onSuccess: function(payment) {
-    console.log('Payment successful!', payment);
-    console.log('Reference:', payment.reference);
     // TODO: Redirect to your success page
     // window.location.href = '/order-complete?ref=' + payment.reference;
   },
@@ -377,7 +375,6 @@ PeeapSDK.init({
 
   // Cancel callback (optional)
   onCancel: function() {
-    console.log('Payment cancelled by user');
   }
 });
 
@@ -505,8 +502,6 @@ PeeapV0.init({
 
   // Called when payment succeeds (after redirect back)
   onSuccess: function(payment) {
-    console.log('Payment successful!', payment);
-    console.log('Reference:', payment.reference);
     // Update your UI or redirect
   },
 
@@ -518,7 +513,6 @@ PeeapV0.init({
 
   // Called when user cancels
   onCancel: function() {
-    console.log('Payment cancelled by user');
   }
 });
 
@@ -578,7 +572,6 @@ PeeapV0.createPaymentLink({
   currency: 'SLE',
   description: 'Invoice #1234'
 }).then(function(result) {
-  console.log('Payment URL:', result.paymentUrl);
   // Share this URL or open in new tab
 });`;
   };

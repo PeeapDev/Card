@@ -587,7 +587,6 @@ const sdk = new CardPaySDK({
 
 // Get wallet balance
 const balance = await sdk.wallet.getBalance();
-console.log(balance);
 
 // Create virtual card
 const card = await sdk.cards.createVirtual({

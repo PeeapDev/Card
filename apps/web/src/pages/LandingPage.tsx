@@ -989,7 +989,6 @@ PeeapSDK.init({
   publicKey: 'pk_live_YOUR_KEY',
   baseUrl: 'https://api.peeap.com',
   onSuccess: function(payment) {
-    console.log('Payment successful!', payment);
   }
 });
 

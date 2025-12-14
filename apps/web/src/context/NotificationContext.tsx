@@ -105,9 +105,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       duration: notification.duration ?? 5000,
     };
 
-    console.log('[NotificationContext] showToast called:', newToast);
     setToasts((prev) => {
-      console.log('[NotificationContext] Previous toasts:', prev.length, 'Adding new toast');
       return [...prev, newToast];
     });
 
@@ -177,7 +175,6 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   // Send test push notification
   const sendTestPush = useCallback(async () => {
     try {
-      console.log('[NotificationContext] Calling sendTestNotification...');
 
       // Show in-app toast notification with deep link
       showToast({
@@ -201,7 +198,6 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
       // Try browser notification too (might not show depending on OS settings)
       await pushNotificationService.sendTestNotification();
-      console.log('[NotificationContext] sendTestNotification completed');
     } catch (error) {
       console.error('[NotificationContext] sendTestNotification failed:', error);
     }

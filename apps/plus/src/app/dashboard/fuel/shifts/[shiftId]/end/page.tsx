@@ -61,10 +61,10 @@ export default function EndShiftPage() {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-GH", {
-      style: "currency",
-      currency: "GHS",
-    }).format(amount);
+    return `NLe ${new Intl.NumberFormat("en", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount)}`;
   };
 
   const formatTime = (date: string) => {
@@ -293,7 +293,7 @@ export default function EndShiftPage() {
               <Label htmlFor="closingCash">Actual Closing Cash *</Label>
               <div className="relative max-w-xs">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                  GHS
+                  NLe
                 </span>
                 <Input
                   id="closingCash"

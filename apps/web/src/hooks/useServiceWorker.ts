@@ -24,7 +24,6 @@ export function useServiceWorker() {
   // Register service worker
   useEffect(() => {
     if (!state.isSupported) {
-      console.log('[useServiceWorker] Service workers not supported');
       return;
     }
 
@@ -34,7 +33,6 @@ export function useServiceWorker() {
           scope: '/',
         });
 
-        console.log('[useServiceWorker] Service worker registered:', registration.scope);
 
         setState(prev => ({
           ...prev,
@@ -44,13 +42,11 @@ export function useServiceWorker() {
 
         // Check for updates
         registration.addEventListener('updatefound', () => {
-          console.log('[useServiceWorker] Update found');
           setState(prev => ({ ...prev, isUpdating: true }));
         });
 
         // Handle controller change (new SW activated)
         navigator.serviceWorker.addEventListener('controllerchange', () => {
-          console.log('[useServiceWorker] Controller changed');
           setState(prev => ({ ...prev, isUpdating: false }));
         });
 
@@ -67,7 +63,6 @@ export function useServiceWorker() {
     if (!state.isSupported) return;
 
     const handleMessage = (event: MessageEvent) => {
-      console.log('[useServiceWorker] Message from SW:', event.data);
 
       if (event.data.type === 'SYNC_AVAILABLE') {
         // Trigger sync in the main app
@@ -98,7 +93,6 @@ export function useServiceWorker() {
     try {
       // @ts-ignore - Background Sync API
       await state.registration.sync?.register(tag);
-      console.log('[useServiceWorker] Sync registered:', tag);
       return true;
     } catch (error) {
       console.error('[useServiceWorker] Sync registration failed:', error);
@@ -122,7 +116,6 @@ export function useServiceWorker() {
 
     try {
       await state.registration.update();
-      console.log('[useServiceWorker] Update check initiated');
     } catch (error) {
       console.error('[useServiceWorker] Update check failed:', error);
     }

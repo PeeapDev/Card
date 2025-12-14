@@ -9,6 +9,8 @@ import { NotificationWrapper } from '@/components/ui/NotificationWrapper';
 import { AnalyticsTracker } from '@/components/AnalyticsTracker';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { RoleBasedRoute } from '@/components/RoleBasedRoute';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import NotFoundPage from '@/pages/NotFoundPage';
 import { LandingPage } from '@/pages/LandingPage';
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { RegisterPage } from '@/pages/auth/RegisterPage';
@@ -140,8 +142,6 @@ const queryClient = new QueryClient({
 const APP_MODE = import.meta.env.VITE_APP_MODE || 'full'; // 'checkout', 'merchant', or 'full'
 
 // Debug log for troubleshooting
-console.log('App Mode:', APP_MODE);
-console.log('Environment:', import.meta.env);
 
 function App() {
   // Determine which routes to show
@@ -150,16 +150,17 @@ function App() {
   const isFullMode = APP_MODE === 'full' || (!isCheckoutMode && !isMerchantMode); // Fallback to full if mode is invalid
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <BrowserRouter>
-          <AuthProvider>
-            <NotificationProvider>
-              <DeveloperModeProvider>
-                <AppsProvider>
-                <NotificationWrapper />
-                <AnalyticsTracker />
-              <Routes>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <BrowserRouter>
+            <AuthProvider>
+              <NotificationProvider>
+                <DeveloperModeProvider>
+                  <AppsProvider>
+                  <NotificationWrapper />
+                  <AnalyticsTracker />
+                <Routes>
               {/* Checkout App - Only show checkout and payment routes */}
               {isCheckoutMode && (
                 <>
@@ -1099,18 +1100,22 @@ function App() {
                   <Route path="/agent/developer/*" element={<RoleBasedRoute allowedRoles={['agent']}><AgentDeveloperPage /></RoleBasedRoute>} />
                   <Route path="/agent/*" element={<RoleBasedRoute allowedRoles={['agent']}><AgentDashboard /></RoleBasedRoute>} />
 
-                  {/* Catch-all redirect */}
-                  <Route path="*" element={<Navigate to="/" replace />} />
+                  {/* Catch-all - 404 Not Found */}
+                  <Route path="*" element={<NotFoundPage />} />
                 </>
               )}
+
+              {/* Global 404 fallback for all modes */}
+              <Route path="*" element={<NotFoundPage />} />
                 </Routes>
-              </AppsProvider>
-              </DeveloperModeProvider>
-            </NotificationProvider>
-          </AuthProvider>
-        </BrowserRouter>
-      </ThemeProvider>
-    </QueryClientProvider>
+                </AppsProvider>
+                </DeveloperModeProvider>
+              </NotificationProvider>
+            </AuthProvider>
+          </BrowserRouter>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 

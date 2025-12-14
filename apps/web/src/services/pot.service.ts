@@ -267,7 +267,6 @@ export const potService = {
    * Create a new pot
    */
   async createPot(userId: string, request: CreatePotRequest): Promise<Pot> {
-    console.log('Creating pot directly via table insertion');
 
     // First check if pots table exists by trying to query it
     const { error: tableCheckError } = await supabase
@@ -333,7 +332,6 @@ export const potService = {
       throw new Error('Failed to create pot wallet: ' + walletError.message);
     }
 
-    console.log('Pot wallet created:', wallet.id);
 
     // Create pot
     const { data: pot, error: potError } = await supabase
@@ -372,7 +370,6 @@ export const potService = {
       throw new Error('Failed to create pot: ' + potError.message);
     }
 
-    console.log('Pot created successfully:', pot.id);
 
     return {
       ...mapPot(pot),

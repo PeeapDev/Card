@@ -148,10 +148,8 @@ export function NotificationSettings() {
 
   const handleTestNotification = async () => {
     setTestSent(false);
-    console.log('[NotificationSettings] Sending test notification...');
     try {
       await sendTestPush();
-      console.log('[NotificationSettings] Test notification sent!');
       setTestSent(true);
       setTimeout(() => setTestSent(false), 3000);
     } catch (error) {

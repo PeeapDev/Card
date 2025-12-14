@@ -107,7 +107,6 @@ interface ToastContainerProps {
 }
 
 export function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
-  console.log('[ToastContainer] Rendering with', toasts.length, 'toasts');
 
   if (toasts.length === 0) return null;
 

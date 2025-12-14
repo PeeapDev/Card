@@ -308,8 +308,6 @@ export function PaymentSettingsPage() {
       const successUrl = `${baseUrl}/api/deposit/success`;
       const cancelUrl = `${baseUrl}/api/deposit/cancel`;
 
-      console.log('[Monime Test] Starting checkout session creation...');
-      console.log('[Monime Test] Config:', {
         spaceId: monimeConfig.spaceId,
         tokenPrefix: monimeConfig.accessToken.substring(0, 10) + '...',
         amount: testAmount,
@@ -333,10 +331,8 @@ export function PaymentSettingsPage() {
         }),
       });
 
-      console.log('[Monime Test] Response status:', response.status, response.statusText);
 
       const data = await response.json() as any;
-      console.log('[Monime Test] Response data:', JSON.stringify(data, null, 2));
 
       if (!response.ok) {
         // Parse detailed error from Monime
@@ -358,7 +354,6 @@ export function PaymentSettingsPage() {
 
       // Open Monime checkout page in new tab
       if (data?.url) {
-        console.log('[Monime Test] Success! Redirect URL:', data.url);
         window.open(data.url, '_blank');
         setSuccess(`Checkout session created! Order: ${data.orderNumber || 'N/A'}`);
         setTimeout(() => setSuccess(null), 5000);

@@ -100,7 +100,6 @@ export function ShopDisputesPage() {
 
       if (disputeError) {
         // Table might not exist yet, just set empty
-        console.log('Disputes table not available:', disputeError);
         setDisputes([]);
       } else {
         setDisputes(disputeData || []);

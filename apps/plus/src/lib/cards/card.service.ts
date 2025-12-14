@@ -499,9 +499,11 @@ function getBusinessId(): string {
     if (userStr) {
       try {
         const user = JSON.parse(userStr);
-        if (user.businessId) {
-          localStorage.setItem('plusBusinessId', user.businessId);
-          return user.businessId;
+        // Use businessId if available, otherwise use user ID as business ID
+        const id = user.businessId || user.id;
+        if (id) {
+          localStorage.setItem('plusBusinessId', id);
+          return id;
         }
       } catch {}
     }

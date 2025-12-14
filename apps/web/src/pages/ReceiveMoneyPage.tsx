@@ -267,7 +267,6 @@ export function ReceiveMoneyPage() {
               amount={parsedAmount}
               mode="receive"
               onPaymentReceived={(txId) => {
-                console.log('Payment received:', txId);
                 fetchWallet(); // Refresh balance
               }}
             />

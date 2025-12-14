@@ -187,7 +187,6 @@ export function SendMoneyPage() {
     }
 
     const hasPin = !!data?.transaction_pin;
-    console.log('Transaction PIN check:', { hasPin, userId: user.id });
     setHasTransactionPin(hasPin);
   };
 
@@ -281,15 +280,12 @@ export function SendMoneyPage() {
   };
 
   const handleSlideConfirm = () => {
-    console.log('handleSlideConfirm called, hasTransactionPin:', hasTransactionPin);
     // If user doesn't have a PIN set, prompt them to set one
     if (!hasTransactionPin) {
-      console.log('Opening SetupPinModal');
       setShowSetupPinModal(true);
       return;
     }
     // If user has a PIN set, require verification
-    console.log('Opening TransactionPinModal');
     setShowPinModal(true);
   };
 

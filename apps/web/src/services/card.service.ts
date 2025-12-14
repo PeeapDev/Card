@@ -546,7 +546,6 @@ export const cardService = {
       bnpl_interest_rate: data.bnplInterestRate || 0,
     };
 
-    console.log('Creating card type with data:', insertData);
 
     const { data: cardType, error } = await supabase
       .from('card_types')
@@ -653,7 +652,6 @@ export const cardService = {
    * Get all card orders (Admin)
    */
   async getAllCardOrders(status?: string): Promise<CardOrder[]> {
-    console.log('Fetching all card orders, status filter:', status);
 
     let query = supabase
       .from('card_orders')
@@ -669,7 +667,6 @@ export const cardService = {
 
     const { data, error } = await query;
 
-    console.log('Card orders query result:', { data, error, count: data?.length });
 
     if (error) {
       console.error('Error fetching all card orders:', error);
@@ -677,7 +674,6 @@ export const cardService = {
     }
 
     if (!data || data.length === 0) {
-      console.log('No card orders found');
       return [];
     }
 
@@ -713,7 +709,6 @@ export const cardService = {
    * Get a single card order
    */
   async getCardOrder(id: string): Promise<CardOrder> {
-    console.log('Fetching card order:', id);
 
     // Get the basic order without joins to avoid relationship issues
     const { data, error } = await supabase
@@ -722,7 +717,6 @@ export const cardService = {
       .eq('id', id)
       .maybeSingle();  // Use maybeSingle instead of single to avoid error on no rows
 
-    console.log('Card order fetch result:', { data, error });
 
     if (error) {
       console.error('Error fetching card order:', error);
@@ -789,7 +783,6 @@ export const cardService = {
    * Create a card order (purchase a card)
    */
   async createCardOrder(userId: string, data: CreateCardOrderRequest): Promise<CardOrder> {
-    console.log('Creating card order:', { userId, data });
 
     // Use the RPC function for atomic operation
     const { data: orderId, error } = await supabase.rpc('create_card_order', {
@@ -798,7 +791,6 @@ export const cardService = {
       p_wallet_id: data.walletId,
     });
 
-    console.log('RPC result:', { orderId, error });
 
     if (error) {
       console.error('Error creating card order:', error);
@@ -1026,7 +1018,6 @@ export const cardService = {
     // Clean the card number (remove spaces/dashes)
     const cleanNumber = cardNumber.replace(/[\s-]/g, '');
 
-    console.log('[CardService] Looking up card number:', cleanNumber, 'length:', cleanNumber.length);
 
     const { data, error } = await supabase
       .from('cards')
@@ -1043,7 +1034,6 @@ export const cardService = {
       .eq('card_number', cleanNumber)
       .maybeSingle();
 
-    console.log('[CardService] Lookup result:', { data, error, hasData: !!data });
 
     if (error) {
       console.error('[CardService] Error looking up card:', error);
@@ -1051,13 +1041,11 @@ export const cardService = {
     }
 
     if (!data) {
-      console.log('[CardService] No card found for number:', cleanNumber);
       return null;
     }
 
     // Validate CVV if provided
     if (cvv && data.cvv && data.cvv !== cvv) {
-      console.log('[CardService] CVV mismatch');
       throw new Error('Invalid CVV. Please check your card details.');
     }
 

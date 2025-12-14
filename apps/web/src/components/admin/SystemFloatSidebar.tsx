@@ -96,7 +96,6 @@ export function SystemFloatSidebar({
           'postgres_changes',
           { event: '*', schema: 'public', table: 'system_float' },
           () => {
-            console.log('Float changed, refreshing...');
             loadData();
           }
         )
@@ -104,7 +103,6 @@ export function SystemFloatSidebar({
           'postgres_changes',
           { event: '*', schema: 'public', table: 'system_float_history' },
           () => {
-            console.log('Float history changed, refreshing...');
             loadData();
           }
         )
@@ -112,7 +110,6 @@ export function SystemFloatSidebar({
 
       // Subscribe to transaction changes for profit updates
       const unsubscribeTransactions = profitAnalyticsService.subscribeToTransactions(() => {
-        console.log('Transaction changed, refreshing profit...');
         loadProfitData();
       });
 

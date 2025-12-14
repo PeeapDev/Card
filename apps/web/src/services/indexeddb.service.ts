@@ -49,7 +49,6 @@ export const initDB = (): Promise<IDBDatabase> => {
 
     request.onsuccess = () => {
       db = request.result;
-      console.log('IndexedDB initialized');
       resolve(db);
     };
 
@@ -151,7 +150,6 @@ export const initDB = (): Promise<IDBDatabase> => {
         salesStore.createIndex('status', 'status', { unique: false });
       }
 
-      console.log('IndexedDB schema created/upgraded');
     };
   });
 };

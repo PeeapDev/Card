@@ -222,7 +222,6 @@ class PushNotificationService {
       // Set up foreground message handler
       this.setupForegroundHandler();
 
-      console.log('[Push] Push notifications initialized successfully');
       return true;
     } catch (error) {
       console.error('[Push] Failed to initialize:', error);
@@ -271,7 +270,6 @@ class PushNotificationService {
       if (token) {
         this.fcmToken = token;
         await this.saveTokenToServer(token);
-        console.log('[Push] FCM token obtained');
       }
 
       return token;
@@ -323,7 +321,6 @@ class PushNotificationService {
     if (!this.messaging) return;
 
     onMessage(this.messaging, (payload) => {
-      console.log('[Push] Foreground message received:', payload);
 
       const notificationPayload: NotificationPayload = {
         type: (payload.data?.type as NotificationType) || 'promotional',
@@ -354,7 +351,6 @@ class PushNotificationService {
    */
   async showLocalNotification(payload: NotificationPayload): Promise<void> {
     if (Notification.permission !== 'granted') {
-      console.log('[Push] Permission not granted');
       return;
     }
 
@@ -362,7 +358,6 @@ class PushNotificationService {
     const prefs = await this.getPreferences();
     const prefKey = payload.type as keyof NotificationPreferences;
     if (prefs[prefKey] === false && !payload.data?.isTest) {
-      console.log(`[Push] Notification type ${payload.type} is disabled`);
       return;
     }
 
@@ -401,7 +396,6 @@ class PushNotificationService {
         this.playNotificationSound();
       }
 
-      console.log('[Push] Notification shown:', payload.title);
     } catch (error) {
       console.error('[Push] Failed to show notification:', error);
     }
@@ -495,9 +489,6 @@ class PushNotificationService {
    * Send a test notification
    */
   async sendTestNotification(): Promise<void> {
-    console.log('[Push] Sending test notification...');
-    console.log('[Push] Permission:', Notification.permission);
-    console.log('[Push] Supported:', this.isSupported);
 
     // Check if notifications are supported
     if (!this.isSupported) {
@@ -508,15 +499,12 @@ class PushNotificationService {
 
     // Request permission if not already granted
     if (Notification.permission === 'default') {
-      console.log('[Push] Requesting permission...');
       const permission = await Notification.requestPermission();
-      console.log('[Push] Permission result:', permission);
       if (permission !== 'granted') {
         alert('Please allow notifications to receive test notification.');
         return;
       }
     } else if (Notification.permission === 'denied') {
-      console.log('[Push] Permission denied');
       alert('Notifications are blocked. Please enable them in your browser settings.');
       return;
     }
@@ -536,7 +524,6 @@ class PushNotificationService {
         window.location.href = '/dashboard/transactions';
       };
 
-      console.log('[Push] Test notification shown successfully!');
     } catch (error) {
       console.error('[Push] Failed to show test notification:', error);
       alert('Failed to show notification. Check console for details.');

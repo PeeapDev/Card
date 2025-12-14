@@ -212,7 +212,6 @@ export function IdCardScanner({ onComplete, onCancel, expectedName }: IdCardScan
         return await response.json();
       }
     } catch (err) {
-      console.log('Backend OCR not available, using local parsing');
     }
 
     // Fallback: Parse locally using basic text extraction patterns

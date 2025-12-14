@@ -90,7 +90,6 @@ export function SsoPage() {
         }
 
         // Fetch user data from shared API (my.peeap.com)
-        console.log('SSO: Fetching user from shared API with token');
         const userResponse = await sharedApiService.getUser(token);
 
         if (!userResponse.success || !userResponse.data?.user) {
@@ -102,7 +101,6 @@ export function SsoPage() {
         }
 
         const apiUser = userResponse.data.user as ApiUser;
-        console.log('SSO: User fetched from shared API:', { id: apiUser.id, email: apiUser.email });
 
         // Parse roles
         let userRoles: UserRole[] = ['user'];
@@ -155,7 +153,6 @@ export function SsoPage() {
           await refreshUser();
         } catch (e) {
           // refreshUser may fail if getProfile expects API, but tokens are set
-          console.log('SSO: Could not refresh user from API, using local session');
         }
 
         setStatus('success');

@@ -98,7 +98,8 @@ const getTypeStyles = (type: NotificationType) => {
   }
 };
 
-const formatDate = (date: Date) => {
+const formatDate = (dateInput: Date | string) => {
+  const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
   const now = new Date();
   const diff = now.getTime() - date.getTime();
   const days = Math.floor(diff / (1000 * 60 * 60 * 24));
@@ -194,7 +195,7 @@ export default function NotificationsPage() {
   // Group notifications by date
   const groupedNotifications = filteredNotifications.reduce(
     (groups, notification) => {
-      const date = notification.createdAt.toDateString();
+      const date = new Date(notification.createdAt).toDateString();
       if (!groups[date]) {
         groups[date] = [];
       }

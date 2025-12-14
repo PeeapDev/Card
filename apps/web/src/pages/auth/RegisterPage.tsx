@@ -414,7 +414,6 @@ export function RegisterPage() {
         return;
       }
 
-      console.log('User created successfully with role:', role, newUser);
 
       // Save merchant business categories
       if (role === 'merchant' && selectedCategories.length > 0 && newUser?.id) {

@@ -105,7 +105,6 @@ class P2PTransferService {
       return response.data;
     } catch (apiError) {
       // Fallback to direct Supabase call
-      console.log('API unavailable, using direct Supabase...');
       return this.sendMoneyDirect(senderId, senderWalletId, request, userType);
     }
   }

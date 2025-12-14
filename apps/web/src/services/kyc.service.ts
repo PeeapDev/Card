@@ -195,7 +195,6 @@ export const kycService = {
         return await response.json();
       }
     } catch (err) {
-      console.log('Backend OCR not available, using local validation');
     }
 
     // Fallback: Basic validation without OCR

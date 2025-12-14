@@ -72,7 +72,8 @@ const getTypeStyles = (type: NotificationType) => {
   }
 };
 
-const formatTimeAgo = (date: Date) => {
+const formatTimeAgo = (dateInput: Date | string) => {
+  const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
   const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
   if (seconds < 60) return "Just now";
   const minutes = Math.floor(seconds / 60);

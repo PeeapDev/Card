@@ -78,8 +78,6 @@ PeeapV0.init({
 
   // Called when payment succeeds
   onSuccess: function(payment) {
-    console.log('Payment successful!', payment);
-    console.log('Reference:', payment.reference);
     // Payment completed - user was redirected back from Peeap
   },
 
@@ -91,7 +89,6 @@ PeeapV0.init({
 
   // Called when user cancels
   onCancel: function() {
-    console.log('Payment cancelled');
   }
 });
 </script>
@@ -670,10 +667,8 @@ const paymentDetails = {
 
 // Check if payment was successful
 if (paymentDetails.status === 'success') {
-  console.log('Payment successful!', paymentDetails);
   // Show success message, update order status, etc.
 } else {
-  console.log('Payment failed or cancelled');
   // Handle failure case
 }
 
@@ -684,7 +679,6 @@ const formatAmount = (amount, currency) => {
 };
 
 // Display: "Le 50.00"
-console.log(formatAmount(paymentDetails.amount, paymentDetails.currency));`}</pre>
           </div>
           <button
             onClick={() => copyToClipboard(`// Parse payment details from URL
@@ -700,7 +694,6 @@ const paymentDetails = {
 };
 
 if (paymentDetails.status === 'success') {
-  console.log('Payment successful!', paymentDetails);
 }`, 'urlparse')}
             className="absolute top-2 right-2 p-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
           >
