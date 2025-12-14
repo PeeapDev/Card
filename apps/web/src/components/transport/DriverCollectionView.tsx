@@ -11,11 +11,14 @@ import {
   Loader2,
   ChevronUp,
   ChevronDown,
+  Volume2,
 } from 'lucide-react';
 import QRCode from 'react-qr-code';
 import { clsx } from 'clsx';
+import { supabase } from '@/lib/supabase';
 
 type PaymentMode = 'qr' | 'card' | 'mobile';
+type PaymentStatus = 'waiting' | 'success' | 'failed';
 
 interface DriverCollectionViewProps {
   amount: number;
@@ -31,6 +34,63 @@ interface NFCReader {
   scan(): Promise<void>;
   addEventListener(event: string, callback: (event: any) => void): void;
 }
+
+// Sound effects URLs (using Web Audio API beeps)
+const playSuccessSound = () => {
+  try {
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.frequency.value = 800;
+    oscillator.type = 'sine';
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.5);
+
+    // Second beep (higher pitch)
+    setTimeout(() => {
+      const osc2 = audioContext.createOscillator();
+      const gain2 = audioContext.createGain();
+      osc2.connect(gain2);
+      gain2.connect(audioContext.destination);
+      osc2.frequency.value = 1200;
+      osc2.type = 'sine';
+      gain2.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+      osc2.start(audioContext.currentTime);
+      osc2.stop(audioContext.currentTime + 0.3);
+    }, 150);
+  } catch (e) {
+    console.log('Could not play success sound:', e);
+  }
+};
+
+const playErrorSound = () => {
+  try {
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.frequency.value = 200;
+    oscillator.type = 'square';
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
+
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.4);
+  } catch (e) {
+    console.log('Could not play error sound:', e);
+  }
+};
 
 export function DriverCollectionView({
   amount,
@@ -51,6 +111,11 @@ export function DriverCollectionView({
   const nfcReaderRef = useRef<NFCReader | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Payment status state for visual feedback
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('waiting');
+  const [showFlash, setShowFlash] = useState(false);
+  const [payerName, setPayerName] = useState<string>('');
+
   // Swipe gesture
   const y = useMotionValue(0);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -67,15 +132,94 @@ export function DriverCollectionView({
     checkNFC();
   }, []);
 
+  // Subscribe to payment status updates via Supabase Realtime
+  useEffect(() => {
+    if (!sessionId) return;
+
+    console.log('[DriverCollectionView] Subscribing to payment status for session:', sessionId);
+
+    const channel = supabase
+      .channel(`driver_collection_${sessionId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'checkout_sessions',
+          filter: `external_id=eq.${sessionId}`,
+        },
+        (payload: any) => {
+          console.log('[DriverCollectionView] Received payment update:', payload);
+
+          if (payload.new.status === 'COMPLETE') {
+            // Payment successful!
+            setPayerName(payload.new.payer_name || 'Customer');
+            setPaymentStatus('success');
+            setShowFlash(true);
+            playSuccessSound();
+
+            // Auto-navigate to success after showing feedback
+            setTimeout(() => {
+              onPaymentComplete();
+            }, 2500);
+          } else if (payload.new.status === 'EXPIRED' || payload.new.status === 'CANCELLED' || payload.new.status === 'FAILED') {
+            // Payment failed
+            setPaymentStatus('failed');
+            setShowFlash(true);
+            playErrorSound();
+
+            // Return to QR view after showing error
+            setTimeout(() => {
+              setPaymentStatus('waiting');
+              setShowFlash(false);
+            }, 2000);
+          }
+        }
+      )
+      .subscribe();
+
+    // Also poll as backup every 3 seconds
+    const pollInterval = setInterval(async () => {
+      try {
+        const { data } = await supabase
+          .from('checkout_sessions')
+          .select('status, payer_name')
+          .eq('external_id', sessionId)
+          .single();
+
+        if (data?.status === 'COMPLETE' && paymentStatus !== 'success') {
+          setPayerName(data.payer_name || 'Customer');
+          setPaymentStatus('success');
+          setShowFlash(true);
+          playSuccessSound();
+          setTimeout(() => {
+            onPaymentComplete();
+          }, 2500);
+        } else if ((data?.status === 'EXPIRED' || data?.status === 'CANCELLED' || data?.status === 'FAILED') && paymentStatus === 'waiting') {
+          setPaymentStatus('failed');
+          setShowFlash(true);
+          playErrorSound();
+          setTimeout(() => {
+            setPaymentStatus('waiting');
+            setShowFlash(false);
+          }, 2000);
+        }
+      } catch (err) {
+        console.error('[DriverCollectionView] Poll error:', err);
+      }
+    }, 3000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(pollInterval);
+    };
+  }, [sessionId, paymentStatus, onPaymentComplete]);
+
   // Handle card payment via NFC
   const handleCardPayment = useCallback(async (cardData: string) => {
     setCardDetected(true);
 
     try {
-      // Process the NFC card payment
-      // The card data could be:
-      // 1. A Peeap wallet ID stored on an NFC tag
-      // 2. A customer identifier
       const response = await fetch('/api/nfc/process-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -87,15 +231,34 @@ export function DriverCollectionView({
       });
 
       if (response.ok) {
-        onPaymentComplete();
+        setPaymentStatus('success');
+        setShowFlash(true);
+        playSuccessSound();
+        setTimeout(() => {
+          onPaymentComplete();
+        }, 2500);
       } else {
         setNfcError('Payment failed. Try again.');
         setCardDetected(false);
+        setPaymentStatus('failed');
+        setShowFlash(true);
+        playErrorSound();
+        setTimeout(() => {
+          setPaymentStatus('waiting');
+          setShowFlash(false);
+        }, 2000);
       }
     } catch (error) {
       console.error('NFC payment error:', error);
       setNfcError('Payment error. Try again.');
       setCardDetected(false);
+      setPaymentStatus('failed');
+      setShowFlash(true);
+      playErrorSound();
+      setTimeout(() => {
+        setPaymentStatus('waiting');
+        setShowFlash(false);
+      }, 2000);
     }
   }, [sessionId, amount, onPaymentComplete]);
 
@@ -119,8 +282,7 @@ export function DriverCollectionView({
       ndef.addEventListener('reading', (event: any) => {
         const { message, serialNumber } = event;
 
-        // Try to read NDEF records for wallet ID
-        let walletId = serialNumber; // Default to serial number
+        let walletId = serialNumber;
 
         if (message?.records) {
           for (const record of message.records) {
@@ -175,7 +337,6 @@ export function DriverCollectionView({
     const threshold = 80;
 
     if (info.offset.y < -threshold) {
-      // Swipe up - go to mobile money
       if (activeMode === 'qr') {
         setActiveMode('mobile');
         setShowMobileCheckout(true);
@@ -183,7 +344,6 @@ export function DriverCollectionView({
         setActiveMode('qr');
       }
     } else if (info.offset.y > threshold) {
-      // Swipe down - go to card
       if (activeMode === 'qr') {
         setActiveMode('card');
       } else if (activeMode === 'mobile') {
@@ -202,6 +362,111 @@ export function DriverCollectionView({
     }
   };
 
+  // Payment Success Overlay
+  if (paymentStatus === 'success' && showFlash) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="h-full bg-green-500 text-white flex flex-col items-center justify-center p-6 relative overflow-hidden"
+      >
+        {/* Animated background pulse */}
+        <motion.div
+          className="absolute inset-0 bg-green-400"
+          animate={{
+            scale: [1, 1.5, 1],
+            opacity: [0.5, 0, 0.5],
+          }}
+          transition={{
+            duration: 0.8,
+            repeat: 2,
+          }}
+        />
+
+        <motion.div
+          initial={{ scale: 0, rotate: -180 }}
+          animate={{ scale: 1, rotate: 0 }}
+          transition={{ type: 'spring', stiffness: 200, damping: 15 }}
+          className="w-32 h-32 bg-white rounded-full flex items-center justify-center mb-8 z-10 shadow-2xl"
+        >
+          <Check className="w-20 h-20 text-green-500" />
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="text-center z-10"
+        >
+          <h2 className="text-4xl font-bold mb-2">Payment Received!</h2>
+          <p className="text-6xl font-bold mb-4">
+            Le {amount.toLocaleString()}
+          </p>
+          {payerName && (
+            <p className="text-green-100 text-lg">
+              from {payerName}
+            </p>
+          )}
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.6 }}
+          className="absolute bottom-8 flex items-center gap-2 text-green-100"
+        >
+          <Volume2 className="w-5 h-5" />
+          <span>Payment confirmed</span>
+        </motion.div>
+      </motion.div>
+    );
+  }
+
+  // Payment Failed Overlay
+  if (paymentStatus === 'failed' && showFlash) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="h-full bg-red-500 text-white flex flex-col items-center justify-center p-6 relative overflow-hidden"
+      >
+        {/* Animated background pulse */}
+        <motion.div
+          className="absolute inset-0 bg-red-400"
+          animate={{
+            scale: [1, 1.5, 1],
+            opacity: [0.5, 0, 0.5],
+          }}
+          transition={{
+            duration: 0.5,
+            repeat: 2,
+          }}
+        />
+
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: [0, 1.2, 1] }}
+          transition={{ duration: 0.4 }}
+          className="w-32 h-32 bg-white/20 rounded-full flex items-center justify-center mb-8 z-10"
+        >
+          <X className="w-20 h-20 text-white" />
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="text-center z-10"
+        >
+          <h2 className="text-3xl font-bold mb-2">Payment Failed</h2>
+          <p className="text-red-100">
+            Please try again
+          </p>
+        </motion.div>
+      </motion.div>
+    );
+  }
+
   // Mobile Money checkout overlay
   if (showMobileCheckout) {
     return (
@@ -212,7 +477,14 @@ export function DriverCollectionView({
           setShowMobileCheckout(false);
           setActiveMode('qr');
         }}
-        onComplete={onPaymentComplete}
+        onComplete={() => {
+          setPaymentStatus('success');
+          setShowFlash(true);
+          playSuccessSound();
+          setTimeout(() => {
+            onPaymentComplete();
+          }, 2500);
+        }}
       />
     );
   }
@@ -235,6 +507,18 @@ export function DriverCollectionView({
           <p className="text-2xl font-bold">Le {amount.toLocaleString()}</p>
         </div>
         <div className="w-10" /> {/* Spacer */}
+      </div>
+
+      {/* Waiting indicator */}
+      <div className="mx-auto mb-2">
+        <motion.div
+          animate={{ opacity: [0.5, 1, 0.5] }}
+          transition={{ repeat: Infinity, duration: 2 }}
+          className="flex items-center gap-2 text-cyan-400 text-sm"
+        >
+          <Loader2 className="w-4 h-4 animate-spin" />
+          <span>Waiting for payment...</span>
+        </motion.div>
       </div>
 
       {/* Mode indicator - Top (Mobile Money) */}
@@ -281,10 +565,19 @@ export function DriverCollectionView({
                 <span className="text-xs">Swipe for Mobile Money</span>
               </motion.div>
 
-              {/* QR Code */}
-              <div className="bg-white p-6 rounded-3xl shadow-2xl">
-                <QRCode value={paymentUrl} size={240} level="H" />
-              </div>
+              {/* QR Code with pulsing border */}
+              <motion.div
+                className="bg-white p-6 rounded-3xl shadow-2xl relative"
+                animate={{
+                  boxShadow: [
+                    '0 0 0 0 rgba(34, 211, 238, 0.4)',
+                    '0 0 0 15px rgba(34, 211, 238, 0)',
+                  ],
+                }}
+                transition={{ repeat: Infinity, duration: 2 }}
+              >
+                <QRCode value={paymentUrl} size={220} level="H" />
+              </motion.div>
 
               <p className="mt-6 text-gray-400 text-center">
                 Customer scans to pay
@@ -327,7 +620,6 @@ export function DriverCollectionView({
                 <>
                   {/* NFC Card Scanning Animation */}
                   <div className="relative w-64 h-40 mb-8">
-                    {/* Card outline */}
                     <motion.div
                       className="absolute inset-0 border-2 border-blue-400 rounded-2xl"
                       animate={{
@@ -339,7 +631,6 @@ export function DriverCollectionView({
                       transition={{ repeat: Infinity, duration: 1.5 }}
                     />
 
-                    {/* Scanning waves */}
                     {isScanning && (
                       <>
                         <motion.div
@@ -363,7 +654,6 @@ export function DriverCollectionView({
                       </>
                     )}
 
-                    {/* Card icon */}
                     <div className="absolute inset-0 flex items-center justify-center">
                       <motion.div
                         animate={isScanning ? { scale: [1, 1.05, 1] } : {}}
@@ -373,7 +663,6 @@ export function DriverCollectionView({
                       </motion.div>
                     </div>
 
-                    {/* NFC icon */}
                     <div className="absolute top-3 right-3">
                       <motion.div
                         animate={isScanning ? { opacity: [1, 0.5, 1] } : { opacity: 0.5 }}
@@ -395,7 +684,6 @@ export function DriverCollectionView({
                     </p>
                   </div>
 
-                  {/* Scanning indicator */}
                   {isScanning && (
                     <motion.div
                       className="mt-6 flex items-center gap-2 text-blue-400"
@@ -407,7 +695,6 @@ export function DriverCollectionView({
                     </motion.div>
                   )}
 
-                  {/* Retry button if error */}
                   {nfcError && nfcSupported && (
                     <button
                       onClick={startNFCScanning}
@@ -419,7 +706,6 @@ export function DriverCollectionView({
                 </>
               )}
 
-              {/* Swipe up hint */}
               {!cardDetected && (
                 <motion.div
                   animate={{ y: [0, -8, 0] }}
@@ -479,7 +765,6 @@ function MobileMoneyCheckout({
     setStatus('processing');
 
     try {
-      // Call Monime checkout API
       const response = await fetch('/api/monime/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -540,7 +825,6 @@ function MobileMoneyCheckout({
               exit={{ opacity: 0 }}
               className="w-full max-w-sm"
             >
-              {/* Orange Money Logo */}
               <div className="flex justify-center mb-8">
                 <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center shadow-lg">
                   <Smartphone className="w-10 h-10 text-orange-500" />
