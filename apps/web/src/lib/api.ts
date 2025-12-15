@@ -24,17 +24,8 @@ function getAuthHeaders(): Record<string, string> {
   // Get token from secure cookie instead of localStorage
   const accessToken = getSessionToken();
   if (accessToken) {
-    headers['Authorization'] = `Bearer ${accessToken}`;
-
-    // Also extract user ID from token for x-user-id header
-    try {
-      const payload = JSON.parse(atob(accessToken));
-      if (payload.userId) {
-        headers['x-user-id'] = payload.userId;
-      }
-    } catch {
-      // Invalid token format, ignore
-    }
+    // Send the session token - backend validates it against the database
+    headers['Authorization'] = `Session ${accessToken}`;
   }
 
   return headers;

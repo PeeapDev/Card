@@ -13,53 +13,49 @@ interface DeveloperModeContextType {
 
 const DeveloperModeContext = createContext<DeveloperModeContextType | undefined>(undefined);
 
-// Get user ID from session token (secure cookie)
-const getUserIdFromToken = (): string | null => {
-  const accessToken = sessionService.getSessionToken();
-  if (!accessToken) return null;
-  try {
-    const payload = JSON.parse(atob(accessToken));
-    return payload.userId || null;
-  } catch {
-    return null;
-  }
-};
-
 export function DeveloperModeProvider({ children }: { children: ReactNode }) {
   const [isDeveloperMode, setIsDeveloperMode] = useState(false);
   const [hasBusinesses, setHasBusinesses] = useState(false);
   const [businessCount, setBusinessCount] = useState(0);
+  const [userId, setUserId] = useState<string | null>(null);
 
-  // Load developer mode setting per user
+  // Get user ID from session on mount
   useEffect(() => {
-    const userId = getUserIdFromToken();
-    if (userId) {
-      const stored = localStorage.getItem(`developerMode_${userId}`);
-      // Auto-enable if user previously enabled it
-      if (stored === 'true') {
-        setIsDeveloperMode(true);
+    const initUser = async () => {
+      const user = await sessionService.validateSession();
+      if (user) {
+        setUserId(user.id);
+        // Load stored developer mode preference
+        const stored = localStorage.getItem(`developerMode_${user.id}`);
+        if (stored === 'true') {
+          setIsDeveloperMode(true);
+        }
+      } else {
+        setUserId(null);
+        setIsDeveloperMode(false);
+        setHasBusinesses(false);
+        setBusinessCount(0);
       }
-      // Check if user has any businesses (auto-enable developer mode if they do)
-      checkBusinesses();
-    } else {
-      // No user logged in, reset
-      setIsDeveloperMode(false);
-      setHasBusinesses(false);
-      setBusinessCount(0);
-    }
+    };
+    initUser();
   }, []);
+
+  // Check businesses when userId is set
+  useEffect(() => {
+    if (userId) {
+      checkBusinesses();
+    }
+  }, [userId]);
 
   // Save developer mode setting when it changes
   useEffect(() => {
-    const userId = getUserIdFromToken();
     if (userId) {
       localStorage.setItem(`developerMode_${userId}`, String(isDeveloperMode));
     }
-  }, [isDeveloperMode]);
+  }, [isDeveloperMode, userId]);
 
   // Check if user has businesses (and auto-enable developer mode)
   const checkBusinesses = async () => {
-    const userId = getUserIdFromToken();
     if (!userId) return;
 
     try {
