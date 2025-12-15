@@ -372,15 +372,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           // Check database for setup completion if not in localStorage
           if ((effectiveTier === "business" || effectiveTier === "business_plus") && !setupComplete) {
+            console.log("Plus Dashboard: Setup not complete in localStorage, checking database...");
             try {
-              const { data: subscription } = await supabase
+              const { data: subscription, error: subError } = await supabase
                 .from("merchant_subscriptions")
                 .select("id, status, tier")
                 .eq("user_id", user.id)
                 .single();
 
+              if (subError) {
+                console.log("Plus Dashboard: Subscription query error:", subError.message);
+              }
+
               if (subscription) {
                 // User has a subscription, so setup was completed
+                console.log("Plus Dashboard: Found subscription in database:", subscription);
                 setupComplete = true;
                 localStorage.setItem("plusSetupComplete", "true");
                 localStorage.setItem("plusTier", subscription.tier || effectiveTier);
@@ -388,9 +394,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               }
             } catch (e) {
               // No subscription found - re-check localStorage as it may have just been set
+              console.log("Plus Dashboard: Subscription query exception, re-checking localStorage");
               setupComplete = localStorage.getItem("plusSetupComplete") === "true";
               if (!setupComplete) {
-                console.log("No subscription found in database");
+                console.log("Plus Dashboard: No subscription found in database and not in localStorage");
               }
             }
           }
@@ -399,7 +406,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           // Re-check localStorage one more time to avoid race conditions
           if ((effectiveTier === "business" || effectiveTier === "business_plus") && !setupComplete) {
             const finalCheck = localStorage.getItem("plusSetupComplete") === "true";
+            console.log("Plus Dashboard: Final localStorage check for setupComplete:", finalCheck);
             if (!finalCheck) {
+              console.log("Plus Dashboard: Redirecting to setup wizard");
               router.push(`/setup?tier=${effectiveTier}`);
               return;
             }

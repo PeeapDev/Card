@@ -149,10 +149,45 @@ function AuthCallbackContent() {
         setStatus("success");
 
         // Check if setup is needed for business tiers
-        const setupComplete = localStorage.getItem("plusSetupComplete");
+        // Also check the database for setup completion status
+        let setupComplete = localStorage.getItem("plusSetupComplete") === "true";
+        console.log("SSO Callback: Initial setupComplete from localStorage:", setupComplete);
+
+        if (!setupComplete) {
+          // Double-check with database
+          console.log("SSO Callback: Checking database for subscription...");
+          try {
+            const { data: subscription, error: subError } = await supabase
+              .from("merchant_subscriptions")
+              .select("id, status, tier")
+              .eq("user_id", user.id)
+              .single();
+
+            if (subError) {
+              console.log("SSO Callback: Subscription query error:", subError.message);
+            }
+
+            if (subscription) {
+              // User has a subscription, so setup was completed
+              console.log("SSO Callback: Found subscription in database:", subscription);
+              setupComplete = true;
+              localStorage.setItem("plusSetupComplete", "true");
+              localStorage.setItem("plusTier", subscription.tier || userTier);
+              localStorage.setItem("plusSubscriptionStatus", subscription.status || "active");
+            }
+          } catch (e) {
+            // No subscription found, continue with setup check
+            console.log("SSO Callback: No subscription found, checking if setup needed");
+          }
+        }
+
+        console.log("SSO Callback: Final setupComplete:", setupComplete, "userTier:", userTier);
+
         if ((userTier === "business" || userTier === "business_plus") && !setupComplete) {
+          console.log("SSO Callback: Redirecting to setup wizard");
           router.replace(`/setup?tier=${userTier}`);
         } else {
+          console.log("SSO Callback: Redirecting to:", redirectTo);
           router.replace(redirectTo);
         }
       } catch (error) {
