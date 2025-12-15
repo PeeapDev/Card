@@ -22,6 +22,7 @@ import {
   ExternalLink,
   Smartphone,
   Wifi,
+  Puzzle,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
@@ -68,7 +69,7 @@ export function MerchantSettingsPage() {
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'security', label: 'Security', icon: Shield },
     { id: 'apps', label: 'Apps', icon: Boxes },
-    { id: 'nfc', label: 'NFC Agent', icon: Wifi },
+    { id: 'nfc', label: 'NFC Reader', icon: Puzzle },
     { id: 'developer', label: 'Developer Mode', icon: Code2 },
   ];
 

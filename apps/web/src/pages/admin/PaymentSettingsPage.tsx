@@ -433,7 +433,7 @@ export function PaymentSettingsPage() {
               { id: 'monime', label: 'Monime Gateway', icon: CreditCard },
               { id: 'withdrawal', label: 'Withdrawal Settings', icon: ArrowDownToLine },
               { id: 'deposit', label: 'Deposit Settings', icon: ArrowUpFromLine },
-              { id: 'nfc', label: 'NFC Agent', icon: Wifi },
+              { id: 'nfc', label: 'NFC Reader', icon: Wifi },
             ].map((tab) => (
               <button
                 key={tab.id}

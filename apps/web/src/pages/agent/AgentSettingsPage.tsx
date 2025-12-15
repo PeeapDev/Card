@@ -44,7 +44,7 @@ export function AgentSettingsPage() {
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'preferences', label: 'Preferences', icon: Headphones },
-    { id: 'nfc', label: 'NFC Agent', icon: Wifi },
+    { id: 'nfc', label: 'NFC Reader', icon: Wifi },
     { id: 'developer', label: 'Developer Mode', icon: Code2 },
   ];
 

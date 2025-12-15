@@ -2944,14 +2944,18 @@ async function handleCheckoutSessionCardPay(req: VercelRequest, res: VercelRespo
     console.log('[CardPay] Found merchant business:', merchantBusiness.name, 'Owner:', merchantOwnerId);
 
     // Get merchant owner's primary wallet
-    const { data: merchantWallet, error: merchantWalletError } = await supabase
+    let merchantWallet: { id: string; balance: number; user_id: string } | null = null;
+
+    const { data: primaryWallet } = await supabase
       .from('wallets')
       .select('id, balance, user_id')
       .eq('user_id', merchantOwnerId)
       .eq('wallet_type', 'primary')
       .single();
 
-    if (merchantWalletError || !merchantWallet) {
+    if (primaryWallet) {
+      merchantWallet = primaryWallet;
+    } else {
       // Fallback: Try any wallet for this user
       const { data: anyWallet } = await supabase
         .from('wallets')
@@ -2960,11 +2964,15 @@ async function handleCheckoutSessionCardPay(req: VercelRequest, res: VercelRespo
         .limit(1)
         .single();
 
-      if (!anyWallet) {
-        console.error('[CardPay] Merchant wallet not found for user:', merchantOwnerId);
-        return res.status(500).json({ error: 'Merchant wallet not found' });
-      }
+      merchantWallet = anyWallet;
     }
+
+    if (!merchantWallet) {
+      console.error('[CardPay] Merchant wallet not found for user:', merchantOwnerId);
+      return res.status(500).json({ error: 'Merchant wallet not found' });
+    }
+
+    console.log('[CardPay] Found merchant wallet:', merchantWallet.id);
 
     // 6. Process the payment atomically
     // Deduct from user's wallet
