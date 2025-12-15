@@ -326,13 +326,23 @@ export const authService = {
   getAccessToken(): string | null {
     if (typeof window === 'undefined') return null;
     const match = document.cookie.match(/(?:^|; )plus_token=([^;]*)/);
-    return match ? match[1] : null;
+    if (!match) return null;
+    try {
+      return decodeURIComponent(match[1]);
+    } catch {
+      return match[1];
+    }
   },
 
   getRefreshToken(): string | null {
     if (typeof window === 'undefined') return null;
     const match = document.cookie.match(/(?:^|; )plus_refresh_token=([^;]*)/);
-    return match ? match[1] : null;
+    if (!match) return null;
+    try {
+      return decodeURIComponent(match[1]);
+    } catch {
+      return match[1];
+    }
   },
 
   isAuthenticated(): boolean {

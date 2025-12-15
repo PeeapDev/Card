@@ -356,6 +356,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       const sessionToken = getCookie("plus_session"); // Database-backed session from SSO
       const storedUser = localStorage.getItem("user");
 
+      // Debug: Log all cookies
+      console.log("Plus Dashboard: All cookies:", document.cookie);
+
       // Check cookies first, then fall back to localStorage
       const plusTier = getCookie("plusTier") || localStorage.getItem("plusTier");
       let setupComplete = getCookie("plusSetupComplete") === "true" || localStorage.getItem("plusSetupComplete") === "true";
@@ -363,12 +366,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       const storedMonthlyFee = getCookie("plusMonthlyFee") || localStorage.getItem("plusMonthlyFee");
       const paymentComplete = getCookie("plusPaymentComplete") === "true" || localStorage.getItem("plusPaymentComplete") === "true";
 
-      console.log("Plus Dashboard: Auth check - token:", !!token, "sessionToken:", !!sessionToken);
+      console.log("Plus Dashboard: Auth check - token:", !!token, "token value:", token?.substring(0, 20) + "...");
+      console.log("Plus Dashboard: Auth check - sessionToken:", !!sessionToken);
       console.log("Plus Dashboard: Initial check - setupComplete:", setupComplete, "tier:", plusTier);
 
       // Check for either token OR session cookie (from SSO)
       if (!token && !sessionToken) {
         console.log("Plus Dashboard: No auth token or session, redirecting to login");
+        console.log("Plus Dashboard: Cookies present:", document.cookie.length > 0 ? "yes" : "no");
         router.push("/auth/login?redirect=/dashboard");
         return;
       }
