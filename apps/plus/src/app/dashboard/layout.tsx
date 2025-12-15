@@ -53,6 +53,7 @@ import { PaymentPrompt } from "@/components/PaymentPrompt";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationsDropdown } from "@/components/notifications";
 import { authService, type UserTier } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
 
 interface NavItem {
   title: string;
@@ -347,7 +348,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       const token = authService.getAccessToken();
       const storedUser = localStorage.getItem("user");
       const plusTier = localStorage.getItem("plusTier");
-      const setupComplete = localStorage.getItem("plusSetupComplete");
+      let setupComplete = localStorage.getItem("plusSetupComplete") === "true";
       const storedPreferences = localStorage.getItem("plusPreferences");
       const storedMonthlyFee = localStorage.getItem("plusMonthlyFee");
       const paymentComplete = localStorage.getItem("plusPaymentComplete");
@@ -368,9 +369,40 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           setUserTier(effectiveTier);
           setNavigation(buildNavigation(effectiveTier, prefs));
           setFilteredQuickActions(buildQuickActions(effectiveTier, prefs));
-          if ((effectiveTier === "business" || effectiveTier === "business_plus") && setupComplete !== "true") {
-            router.push(`/setup?tier=${effectiveTier}`);
-            return;
+
+          // Check database for setup completion if not in localStorage
+          if ((effectiveTier === "business" || effectiveTier === "business_plus") && !setupComplete) {
+            try {
+              const { data: subscription } = await supabase
+                .from("merchant_subscriptions")
+                .select("id, status, tier")
+                .eq("user_id", user.id)
+                .single();
+
+              if (subscription) {
+                // User has a subscription, so setup was completed
+                setupComplete = true;
+                localStorage.setItem("plusSetupComplete", "true");
+                localStorage.setItem("plusTier", subscription.tier || effectiveTier);
+                localStorage.setItem("plusSubscriptionStatus", subscription.status || "active");
+              }
+            } catch (e) {
+              // No subscription found - re-check localStorage as it may have just been set
+              setupComplete = localStorage.getItem("plusSetupComplete") === "true";
+              if (!setupComplete) {
+                console.log("No subscription found in database");
+              }
+            }
+          }
+
+          // Only redirect to setup if setup is truly not complete
+          // Re-check localStorage one more time to avoid race conditions
+          if ((effectiveTier === "business" || effectiveTier === "business_plus") && !setupComplete) {
+            const finalCheck = localStorage.getItem("plusSetupComplete") === "true";
+            if (!finalCheck) {
+              router.push(`/setup?tier=${effectiveTier}`);
+              return;
+            }
           }
         }
       } else {
@@ -403,7 +435,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const handleLogout = () => { authService.logout(); router.push("/auth/login"); };
   const handleWelcomeComplete = () => { localStorage.setItem("plusWelcomeComplete", "true"); setShowWelcomeWizard(false); };
   const handlePaymentComplete = () => { localStorage.setItem("plusPaymentComplete", "true"); setIsPaid(true); setShowPaymentPrompt(false); };
-  const handlePaymentDecline = () => { window.location.href = "https://my.peeap.com/dashboard"; };
+  const handlePaymentDecline = () => {
+    // Clear Plus session before redirecting to main site
+    authService.logout();
+    window.location.href = "https://my.peeap.com/dashboard";
+  };
   const toggleMenu = (title: string) => { setExpandedMenus(prev => ({ ...prev, [title]: !prev[title] })); };
 
   const businessName = userData?.businessName || "My Business";

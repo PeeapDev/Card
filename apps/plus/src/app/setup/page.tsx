@@ -520,22 +520,29 @@ function SetupWizardContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white light">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 relative overflow-hidden">
+      {/* Animated background elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500/20 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute top-1/2 -left-40 w-80 h-80 bg-blue-500/20 rounded-full blur-3xl animate-pulse delay-1000" />
+        <div className="absolute -bottom-40 right-1/3 w-80 h-80 bg-indigo-500/20 rounded-full blur-3xl animate-pulse delay-500" />
+      </div>
+
       {/* Header */}
-      <header className="border-b bg-white">
+      <header className="relative border-b border-white/10 bg-white/5 backdrop-blur-xl">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">P+</span>
+            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/25">
+              <span className="text-white font-bold text-lg">P+</span>
             </div>
-            <span className="font-bold text-xl">PeeAP Plus</span>
-            <Badge variant="secondary" className="ml-2">Setup</Badge>
+            <span className="font-bold text-xl text-white">PeeAP Plus</span>
+            <Badge variant="secondary" className="ml-2 bg-white/10 text-white border-white/20">Setup</Badge>
           </div>
-          <Badge className="capitalize">{tier.replace("_", " ")} Plan</Badge>
+          <Badge className="capitalize bg-gradient-to-r from-purple-500 to-indigo-500 text-white border-0 shadow-lg shadow-purple-500/25">{tier.replace("_", " ")} Plan</Badge>
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8 max-w-3xl">
+      <main className="relative container mx-auto px-4 py-8 max-w-3xl">
         {/* Progress Steps */}
         {businessSource !== null && (
           <div className="mb-8">
@@ -548,14 +555,14 @@ function SetupWizardContent() {
                 return (
                   <div key={step.id} className="flex items-center">
                     <div className={`flex items-center gap-2 ${
-                      isActive ? "text-primary" : isComplete ? "text-green-600" : "text-muted-foreground"
+                      isActive ? "text-purple-400" : isComplete ? "text-green-400" : "text-white/40"
                     }`}>
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
                         isActive
-                          ? "border-primary bg-primary/10"
+                          ? "border-purple-400 bg-purple-500/20 shadow-lg shadow-purple-500/25"
                           : isComplete
-                          ? "border-green-600 bg-green-100"
-                          : "border-muted"
+                          ? "border-green-400 bg-green-500/20"
+                          : "border-white/20 bg-white/5"
                       }`}>
                         {isComplete ? (
                           <Check className="w-5 h-5" />
@@ -567,7 +574,7 @@ function SetupWizardContent() {
                     </div>
                     {index < steps.length - 1 && (
                       <div className={`w-12 sm:w-20 h-0.5 mx-2 ${
-                        isComplete ? "bg-green-600" : "bg-muted"
+                        isComplete ? "bg-green-400" : "bg-white/20"
                       }`} />
                     )}
                   </div>
@@ -578,16 +585,16 @@ function SetupWizardContent() {
         )}
 
         {/* Step Content */}
-        <Card className="bg-white border-gray-200 shadow-lg">
+        <Card className="bg-white/95 backdrop-blur-xl border-white/20 shadow-2xl shadow-black/20">
           {/* Step 1: Choose Business Source */}
           {currentStep === "choose" && (
             <>
               <CardHeader className="text-center">
-                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Building2 className="w-8 h-8 text-primary" />
+                <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-purple-500/25">
+                  <Building2 className="w-8 h-8 text-white" />
                 </div>
-                <CardTitle>Set Up Your Business</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-2xl">Set Up Your Business</CardTitle>
+                <CardDescription className="text-base">
                   How would you like to set up your PeeAP Plus business account?
                 </CardDescription>
               </CardHeader>
@@ -596,29 +603,29 @@ function SetupWizardContent() {
                 <button
                   onClick={handleChooseExisting}
                   disabled={isLoadingExisting}
-                  className="w-full p-6 border-2 rounded-xl text-left hover:border-primary hover:bg-primary/5 transition-all group"
+                  className="w-full p-6 border-2 border-gray-200 rounded-2xl text-left hover:border-emerald-400 hover:bg-emerald-50 hover:shadow-lg hover:shadow-emerald-100 transition-all duration-200 group"
                 >
                   <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:bg-green-200 transition-colors">
-                      <Copy className="w-6 h-6 text-green-600" />
+                    <div className="w-14 h-14 bg-gradient-to-br from-emerald-400 to-green-500 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-emerald-500/25 group-hover:scale-105 transition-transform">
+                      <Copy className="w-7 h-7 text-white" />
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-semibold text-lg">Use Existing Business</h3>
-                        <Badge variant="secondary" className="text-xs">Recommended</Badge>
+                        <h3 className="font-semibold text-lg text-gray-900">Use Existing Business</h3>
+                        <Badge className="text-xs bg-emerald-100 text-emerald-700 border-emerald-200">Recommended</Badge>
                       </div>
-                      <p className="text-muted-foreground text-sm mb-3">
+                      <p className="text-gray-500 text-sm mb-3">
                         Copy your business information from your PeeAP merchant account. This is faster and your account will be automatically verified.
                       </p>
-                      <div className="flex items-center gap-2 text-sm text-green-600">
+                      <div className="flex items-center gap-2 text-sm text-emerald-600 font-medium">
                         <CheckCircle2 className="w-4 h-4" />
                         <span>Auto-verified - Full access immediately</span>
                       </div>
                     </div>
                     {isLoadingExisting ? (
-                      <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                      <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
                     ) : (
-                      <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                      <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-emerald-500 group-hover:translate-x-1 transition-all" />
                     )}
                   </div>
                 </button>
@@ -626,23 +633,23 @@ function SetupWizardContent() {
                 {/* Option 2: Create New Business */}
                 <button
                   onClick={handleChooseNew}
-                  className="w-full p-6 border-2 rounded-xl text-left hover:border-amber-400 hover:bg-amber-50 transition-all group"
+                  className="w-full p-6 border-2 border-gray-200 rounded-2xl text-left hover:border-amber-400 hover:bg-amber-50 hover:shadow-lg hover:shadow-amber-100 transition-all duration-200 group"
                 >
                   <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:bg-amber-200 transition-colors">
-                      <Plus className="w-6 h-6 text-amber-600" />
+                    <div className="w-14 h-14 bg-gradient-to-br from-amber-400 to-orange-500 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-amber-500/25 group-hover:scale-105 transition-transform">
+                      <Plus className="w-7 h-7 text-white" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-semibold text-lg mb-1">Create New Business</h3>
-                      <p className="text-muted-foreground text-sm mb-3">
+                      <h3 className="font-semibold text-lg text-gray-900 mb-1">Create New Business</h3>
+                      <p className="text-gray-500 text-sm mb-3">
                         Set up a completely new business account. This requires verification by our team before you can access all features.
                       </p>
-                      <div className="flex items-center gap-2 text-sm text-amber-600">
+                      <div className="flex items-center gap-2 text-sm text-amber-600 font-medium">
                         <Clock className="w-4 h-4" />
                         <span>Requires verification (1-2 business days)</span>
                       </div>
                     </div>
-                    <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-amber-600 transition-colors" />
+                    <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-amber-500 group-hover:translate-x-1 transition-all" />
                   </div>
                 </button>
 
@@ -1074,19 +1081,21 @@ function SetupWizardContent() {
           {currentStep === "complete" && (
             <>
               <CardHeader className="text-center">
-                <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
-                  requiresVerification ? "bg-amber-100" : "bg-green-100"
+                <div className={`w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg ${
+                  requiresVerification
+                    ? "bg-gradient-to-br from-amber-400 to-orange-500 shadow-amber-500/25"
+                    : "bg-gradient-to-br from-emerald-400 to-green-500 shadow-emerald-500/25"
                 }`}>
                   {requiresVerification ? (
-                    <Clock className="w-8 h-8 text-amber-600" />
+                    <Clock className="w-10 h-10 text-white" />
                   ) : (
-                    <CheckCircle2 className="w-8 h-8 text-green-600" />
+                    <CheckCircle2 className="w-10 h-10 text-white" />
                   )}
                 </div>
-                <CardTitle>
+                <CardTitle className="text-2xl">
                   {requiresVerification ? "Setup Complete - Verification Pending" : "You're All Set!"}
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-base">
                   {requiresVerification
                     ? "Your account has been created and is pending verification"
                     : "Your PeeAP Plus account is ready to use"
@@ -1109,18 +1118,27 @@ function SetupWizardContent() {
                   </Alert>
                 )}
 
-                <div className="bg-muted rounded-lg p-4">
-                  <p className="font-medium mb-2">Your {tier === "business_plus" ? "Business++" : "Business"} plan includes:</p>
+                <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl p-5 border border-purple-100">
+                  <p className="font-semibold text-gray-900 mb-3">Your {tier === "business_plus" ? "Business++" : "Business"} plan includes:</p>
                   <div className="flex flex-wrap justify-center gap-2">
-                    {preferences.enableInvoicing && <Badge>Invoicing</Badge>}
-                    {preferences.enableSubscriptions && <Badge>Subscriptions</Badge>}
-                    {preferences.enableCards && <Badge variant="secondary">Employee Cards</Badge>}
+                    {preferences.enableInvoicing && <Badge className="bg-purple-100 text-purple-700 border-purple-200">Invoicing</Badge>}
+                    {preferences.enableSubscriptions && <Badge className="bg-indigo-100 text-indigo-700 border-indigo-200">Subscriptions</Badge>}
+                    {preferences.enableCards && <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Employee Cards</Badge>}
                   </div>
                 </div>
 
-                <Button size="lg" onClick={() => router.push("/dashboard")}>
+                <Button
+                  size="lg"
+                  className="bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white shadow-lg shadow-purple-500/25 px-8 py-6 text-lg"
+                  onClick={() => {
+                    // Ensure setup complete flag is set before navigation
+                    localStorage.setItem("plusSetupComplete", "true");
+                    localStorage.setItem("plusTier", tier);
+                    router.push("/dashboard");
+                  }}
+                >
                   Go to Dashboard
-                  <ArrowRight className="ml-2 h-4 w-4" />
+                  <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
               </CardContent>
             </>
@@ -1128,17 +1146,22 @@ function SetupWizardContent() {
 
           {/* Navigation Buttons */}
           {currentStep !== "complete" && currentStep !== "choose" && (
-            <div className="flex justify-between p-6 border-t">
+            <div className="flex justify-between p-6 border-t border-gray-100 bg-gray-50/50">
               <Button
                 variant="outline"
                 onClick={handleBack}
+                className="border-gray-300 hover:bg-gray-100"
               >
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Back
               </Button>
 
               {currentStep === "preferences" ? (
-                <Button onClick={handleComplete} disabled={isSubmitting || !businessInfo.legalName}>
+                <Button
+                  onClick={handleComplete}
+                  disabled={isSubmitting || !businessInfo.legalName}
+                  className="bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white shadow-lg shadow-purple-500/25"
+                >
                   {isSubmitting ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1152,7 +1175,11 @@ function SetupWizardContent() {
                   )}
                 </Button>
               ) : (
-                <Button onClick={handleNext} disabled={currentStep === "business" && !businessInfo.legalName}>
+                <Button
+                  onClick={handleNext}
+                  disabled={currentStep === "business" && !businessInfo.legalName}
+                  className="bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white shadow-lg shadow-purple-500/25"
+                >
                   Next
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
@@ -1163,14 +1190,14 @@ function SetupWizardContent() {
 
         {/* Skip Setup */}
         {currentStep !== "complete" && currentStep !== "choose" && (
-          <p className="text-center text-sm text-muted-foreground mt-4">
+          <p className="text-center text-sm text-white/60 mt-4">
             <button
               onClick={() => {
                 localStorage.setItem("plusSetupComplete", "true");
                 localStorage.setItem("plusTier", tier);
                 router.push("/dashboard");
               }}
-              className="underline hover:text-foreground"
+              className="underline hover:text-white transition-colors"
             >
               Skip setup and go to dashboard
             </button>
@@ -1183,8 +1210,11 @@ function SetupWizardContent() {
 
 function SetupLoading() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+      <div className="text-center">
+        <Loader2 className="h-10 w-10 animate-spin text-purple-400 mx-auto mb-4" />
+        <p className="text-white/60">Loading setup wizard...</p>
+      </div>
     </div>
   );
 }
