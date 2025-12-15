@@ -449,7 +449,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       let prefs: Preferences | null = null;
       if (storedPreferences) { try { prefs = JSON.parse(storedPreferences); setPreferences(prefs); } catch {} }
       if (storedMonthlyFee) setMonthlyFee(parseFloat(storedMonthlyFee));
-      if (paymentComplete === "true") setIsPaid(true);
+      if (paymentComplete) setIsPaid(true);
 
       if (storedUser) {
         let user;
