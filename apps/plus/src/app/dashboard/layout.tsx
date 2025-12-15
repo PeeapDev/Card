@@ -732,6 +732,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           monthlyFee={monthlyFee}
           businessName={userData?.businessName}
           userName={userData?.email?.split('@')[0]}
+          userId={userData?.id}
           onPay={handlePaymentComplete}
           onDecline={handlePaymentDecline}
         />
