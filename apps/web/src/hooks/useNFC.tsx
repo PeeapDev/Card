@@ -57,7 +57,7 @@ export interface NFCContextValue {
   stopWebNFC: () => void;
   connectUSBReader: () => Promise<boolean>;
   disconnectUSBReader: () => Promise<void>;
-  startUSBScanning: () => void;
+  startUSBScanning: () => Promise<void> | void;
   stopUSBScanning: () => void;
 
   // Write to NFC card
@@ -156,9 +156,26 @@ export function NFCProvider({ children }: { children: ReactNode }) {
         // Look for ACR122U (vendor ID 0x072F)
         const acr122u = devices.find(d => d.vendorId === 0x072F);
         if (acr122u) {
-          newStatus.usbReader.connected = true;
-          newStatus.usbReader.deviceName = acr122u.productName || 'ACR122U NFC Reader';
           usbDeviceRef.current = acr122u;
+
+          // Try to open and claim the device if not already opened
+          try {
+            if (!acr122u.opened) {
+              await acr122u.open();
+            }
+            if (acr122u.configuration === null) {
+              await acr122u.selectConfiguration(1);
+            }
+            await acr122u.claimInterface(0);
+
+            newStatus.usbReader.connected = true;
+            newStatus.usbReader.deviceName = acr122u.productName || 'ACR122U NFC Reader';
+          } catch (openErr: any) {
+            console.log('[NFC] Device found but could not open:', openErr.message);
+            // Device found but not yet claimed - user needs to click to connect
+            newStatus.usbReader.connected = false;
+            newStatus.usbReader.deviceName = acr122u.productName || 'ACR122U NFC Reader';
+          }
         }
       } catch (err: any) {
         newStatus.usbReader.error = err.message;
@@ -283,9 +300,24 @@ export function NFCProvider({ children }: { children: ReactNode }) {
 
       const device = usbDeviceRef.current;
 
-      if (!device.opened) {
-        await device.open();
+      // Check if already fully connected
+      if (device.opened) {
+        console.log('[NFC] USB device already opened');
+        setStatus(prev => ({
+          ...prev,
+          usbReader: {
+            ...prev.usbReader,
+            connected: true,
+            deviceName: device.productName || 'ACR122U NFC Reader',
+          },
+          anyReaderAvailable: true,
+        }));
+        setError(null);
+        return true;
       }
+
+      // Open and claim the device
+      await device.open();
 
       if (device.configuration === null) {
         await device.selectConfiguration(1);
@@ -343,10 +375,26 @@ export function NFCProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Start USB NFC scanning (polling)
-  const startUSBScanning = useCallback(() => {
-    if (!usbDeviceRef.current || !usbDeviceRef.current.opened) {
+  const startUSBScanning = useCallback(async () => {
+    if (!usbDeviceRef.current) {
       setError('USB reader not connected');
       return;
+    }
+
+    // Try to open the device if not already opened
+    if (!usbDeviceRef.current.opened) {
+      try {
+        await usbDeviceRef.current.open();
+        if (usbDeviceRef.current.configuration === null) {
+          await usbDeviceRef.current.selectConfiguration(1);
+        }
+        await usbDeviceRef.current.claimInterface(0);
+        console.log('[NFC] USB device opened for scanning');
+      } catch (err: any) {
+        console.error('[NFC] Failed to open device for scanning:', err);
+        setError('USB reader not connected - click to connect');
+        return;
+      }
     }
 
     usbPollingRef.current = true;
@@ -639,7 +687,24 @@ export function NFCProvider({ children }: { children: ReactNode }) {
 export function useNFC() {
   const context = useContext(NFCContext);
   if (!context) {
-    throw new Error('useNFC must be used within NFCProvider');
+    // Return a safe default instead of throwing - this allows components to render
+    // while waiting for the provider to mount
+    console.warn('[NFC] useNFC called outside NFCProvider - returning defaults');
+    return {
+      status: initialStatus,
+      isChecking: false,
+      lastCardRead: null,
+      error: null,
+      checkStatus: async () => {},
+      startWebNFC: async () => false,
+      stopWebNFC: () => {},
+      connectUSBReader: async () => false,
+      disconnectUSBReader: async () => {},
+      startUSBScanning: () => {},
+      stopUSBScanning: () => {},
+      writeToCard: async () => false,
+      onCardDetected: () => () => {},
+    } as NFCContextValue;
   }
   return context;
 }
