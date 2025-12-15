@@ -24,6 +24,7 @@ import {
   Eye,
   EyeOff,
   ChevronRight,
+  BadgeCheck,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { cardService } from '@/services/card.service';
@@ -43,6 +44,7 @@ interface CheckoutSession {
   description?: string;
   merchantName?: string;
   merchantLogoUrl?: string;
+  merchantIsVerified?: boolean;
   brandColor?: string;
   paymentMethods: {
     qr?: boolean;
@@ -150,6 +152,15 @@ export function HostedCheckoutPage() {
     url.searchParams.set('amount', String(sessionData.amount || 0));
     url.searchParams.set('currency', sessionData.currency_code || sessionData.currencyCode || 'SLE');
     url.searchParams.set('payment_method', paymentMethod);
+    // Include merchant info for receipt display
+    const merchantName = sessionData.merchant_name || sessionData.merchantName;
+    if (merchantName) {
+      url.searchParams.set('merchant_name', merchantName);
+    }
+    const merchantIsVerified = sessionData.merchant_is_verified || sessionData.merchantIsVerified;
+    if (merchantIsVerified) {
+      url.searchParams.set('merchant_verified', 'true');
+    }
     return url.toString();
   };
 
@@ -397,6 +408,7 @@ export function HostedCheckoutPage() {
         createdAt: rawData.created_at || rawData.createdAt,
         merchantName: rawData.merchant_name || rawData.merchantName,
         merchantLogoUrl: rawData.merchant_logo_url || rawData.merchantLogoUrl,
+        merchantIsVerified: rawData.merchant_is_verified || rawData.merchantIsVerified || false,
         brandColor: rawData.brand_color || rawData.brandColor || '#635BFF',
         successUrl: rawData.success_url || rawData.successUrl,
         cancelUrl: rawData.cancel_url || rawData.cancelUrl,
@@ -972,7 +984,12 @@ export function HostedCheckoutPage() {
                 {formatAmount(session.amount, session.currencyCode)}
               </p>
               {session?.merchantName && (
-                <p className="text-gray-500 text-sm">Paid to {session.merchantName}</p>
+                <p className="text-gray-500 text-sm flex items-center justify-center gap-1">
+                  Paid to {session.merchantName}
+                  {session.merchantIsVerified && (
+                    <BadgeCheck className="w-4 h-4 text-blue-500 inline-block" title="Verified Business" />
+                  )}
+                </p>
               )}
             </div>
           )}
@@ -1062,7 +1079,10 @@ export function HostedCheckoutPage() {
                   <ArrowLeft className="w-5 h-5 text-gray-500" />
                 </button>
                 <div className="ml-3">
-                  <p className="font-semibold text-gray-900">{session?.merchantName || 'Checkout'}</p>
+                  <p className="font-semibold text-gray-900 flex items-center gap-1">
+                    {session?.merchantName || 'Checkout'}
+                    {session?.merchantIsVerified && <BadgeCheck className="w-4 h-4 text-blue-500" title="Verified Business" />}
+                  </p>
                   <p className="text-sm text-gray-500">Sign in to continue</p>
                 </div>
               </div>
@@ -1239,7 +1259,10 @@ export function HostedCheckoutPage() {
                   <ArrowLeft className="w-5 h-5 text-gray-500" />
                 </button>
                 <div className="ml-3 flex-1 text-center">
-                  <p className="font-semibold text-gray-900">{session?.merchantName || 'Checkout'}</p>
+                  <p className="font-semibold text-gray-900 inline-flex items-center justify-center gap-1">
+                    {session?.merchantName || 'Checkout'}
+                    {session?.merchantIsVerified && <BadgeCheck className="w-4 h-4 text-blue-500" title="Verified Business" />}
+                  </p>
                 </div>
               </div>
             </div>
@@ -1297,7 +1320,10 @@ export function HostedCheckoutPage() {
                   <ArrowLeft className="w-5 h-5 text-gray-500" />
                 </button>
                 <div className="ml-3">
-                  <p className="font-semibold text-gray-900">{session?.merchantName || 'Checkout'}</p>
+                  <p className="font-semibold text-gray-900 flex items-center gap-1">
+                    {session?.merchantName || 'Checkout'}
+                    {session?.merchantIsVerified && <BadgeCheck className="w-4 h-4 text-blue-500" title="Verified Business" />}
+                  </p>
                   <p className="text-sm text-gray-500">Pay with Peeap Card</p>
                 </div>
               </div>
@@ -1519,7 +1545,14 @@ export function HostedCheckoutPage() {
                 <CreditCard className="w-7 h-7 text-indigo-600" />
               </div>
             )}
-            <h1 className="text-lg font-semibold text-gray-900">{session.merchantName || 'Checkout'}</h1>
+            <div className="flex items-center justify-center gap-1.5">
+              <h1 className="text-lg font-semibold text-gray-900">{session.merchantName || 'Checkout'}</h1>
+              {session.merchantIsVerified && (
+                <span className="inline-flex items-center" title="Verified Business">
+                  <BadgeCheck className="w-5 h-5 text-blue-500" />
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Amount Display */}

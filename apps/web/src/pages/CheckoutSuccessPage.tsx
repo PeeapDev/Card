@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { CheckCircle, Receipt, Home, Store } from 'lucide-react';
+import { CheckCircle, Receipt, Home, Store, BadgeCheck } from 'lucide-react';
 
 // Currency definitions
 const CURRENCIES: Record<string, { symbol: string; name: string }> = {
@@ -29,6 +29,8 @@ export function CheckoutSuccessPage() {
   const currency = searchParams.get('currency') || 'SLE';
   const reference = searchParams.get('reference');
   const paymentMethod = searchParams.get('payment_method');
+  const merchantName = searchParams.get('merchant_name');
+  const merchantVerified = searchParams.get('merchant_verified') === 'true';
 
   // Hide confetti after 5 seconds
   useEffect(() => {
@@ -109,6 +111,12 @@ export function CheckoutSuccessPage() {
             {formatAmount(amount)}
           </p>
           <p className="text-gray-500 text-sm">{CURRENCIES[currency]?.name || currency}</p>
+          {merchantName && (
+            <p className="text-gray-500 text-sm mt-2 flex items-center justify-center gap-1">
+              Paid to {merchantName}
+              {merchantVerified && <BadgeCheck className="w-4 h-4 text-blue-500" title="Verified Business" />}
+            </p>
+          )}
         </div>
 
         {/* Payment details */}
@@ -119,6 +127,15 @@ export function CheckoutSuccessPage() {
           </div>
 
           <div className="space-y-2 text-sm">
+            {merchantName && (
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500">Merchant</span>
+                <span className="font-medium text-gray-900 flex items-center gap-1">
+                  {merchantName}
+                  {merchantVerified && <BadgeCheck className="w-4 h-4 text-blue-500" title="Verified Business" />}
+                </span>
+              </div>
+            )}
             {paymentMethod && (
               <div className="flex justify-between">
                 <span className="text-gray-500">Payment Method</span>

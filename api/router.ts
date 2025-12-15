@@ -1566,6 +1566,7 @@ async function handleCheckoutCreate(req: VercelRequest, res: VercelResponse) {
         description: description || `Payment to ${business.name}`,
         merchant_name: business.name,
         merchant_logo_url: business.logo_url,
+        merchant_is_verified: business.is_verified || false,
         brand_color: '#4F46E5',
         success_url: successUrl,
         cancel_url: cancelUrl,

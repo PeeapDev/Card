@@ -34,6 +34,7 @@ import {
   EyeOff,
   QrCode,
   Scan,
+  BadgeCheck,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { supabase } from '@/lib/supabase';
@@ -53,6 +54,7 @@ interface Business {
   approval_status: string;
   live_public_key?: string | null;
   test_public_key?: string | null;
+  is_verified?: boolean;
 }
 
 interface PaymentMethod {
@@ -317,7 +319,7 @@ export function BusinessCheckoutPage() {
     try {
       const { data, error } = await supabase
         .from('merchant_businesses')
-        .select('id, name, logo_url, description, is_live_mode, approval_status, live_public_key, test_public_key')
+        .select('id, name, logo_url, description, is_live_mode, approval_status, live_public_key, test_public_key, is_verified')
         .eq('id', businessId)
         .single();
 
@@ -770,8 +772,9 @@ export function BusinessCheckoutPage() {
             <CheckCircle className="w-10 h-10 text-green-600" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Payment Successful!</h1>
-          <p className="text-gray-600 mb-2">
+          <p className="text-gray-600 mb-2 flex items-center justify-center gap-1 flex-wrap">
             Thank you for your payment of {formatAmount(parseFloat(amount))} to {business?.name}
+            {business?.is_verified && <BadgeCheck className="w-4 h-4 text-blue-500" title="Verified Business" />}
           </p>
           {(paymentId || paymentReference) && (
             <p className="text-xs text-gray-400 mb-6 font-mono">
@@ -837,7 +840,10 @@ export function BusinessCheckoutPage() {
                   </div>
                 )}
                 <div>
-                  <p className="font-semibold text-gray-900">{business?.name}</p>
+                  <p className="font-semibold text-gray-900 flex items-center gap-1">
+                    {business?.name}
+                    {business?.is_verified && <BadgeCheck className="w-4 h-4 text-blue-500" title="Verified Business" />}
+                  </p>
                   <p className="text-xs text-gray-500">
                     {urlMode === 'test' && (
                       <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-xs">
@@ -1005,7 +1011,10 @@ export function BusinessCheckoutPage() {
                     {business?.name?.charAt(0) || 'P'}
                   </div>
                 )}
-                <h2 className="text-lg font-semibold text-gray-900">{business?.name}</h2>
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center justify-center gap-1">
+                  {business?.name}
+                  {business?.is_verified && <BadgeCheck className="w-5 h-5 text-blue-500" title="Verified Business" />}
+                </h2>
               </div>
 
               {/* Timer Display */}
