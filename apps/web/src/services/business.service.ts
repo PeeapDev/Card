@@ -111,22 +111,12 @@ export const businessService = {
    * Get all businesses for the current merchant
    */
   async getMyBusinesses(): Promise<MerchantBusiness[]> {
-    // Get current user from session token (secure cookie)
-    const accessToken = sessionService.getSessionToken();
-    if (!accessToken) {
+    // Validate session and get user
+    const user = await sessionService.validateSession();
+    if (!user) {
       throw new Error('Not authenticated');
     }
-
-    let merchantId: string;
-    try {
-      const payload = JSON.parse(atob(accessToken));
-      if (payload.exp < Date.now()) {
-        throw new Error('Session expired');
-      }
-      merchantId = payload.userId;
-    } catch {
-      throw new Error('Invalid session');
-    }
+    const merchantId = user.id;
 
     const { data, error } = await supabase
       .from('merchant_businesses')
@@ -170,22 +160,12 @@ export const businessService = {
    * Create a new business
    */
   async createBusiness(dto: CreateBusinessDto): Promise<MerchantBusiness> {
-    // Get current user from session token (secure cookie)
-    const accessToken = sessionService.getSessionToken();
-    if (!accessToken) {
+    // Validate session and get user
+    const user = await sessionService.validateSession();
+    if (!user) {
       throw new Error('Not authenticated');
     }
-
-    let userId: string;
-    try {
-      const payload = JSON.parse(atob(accessToken));
-      if (payload.exp < Date.now()) {
-        throw new Error('Session expired');
-      }
-      userId = payload.userId;
-    } catch {
-      throw new Error('Invalid session');
-    }
+    const userId = user.id;
 
     const { data, error } = await supabase
       .from('merchant_businesses')

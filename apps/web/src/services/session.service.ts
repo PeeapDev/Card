@@ -68,11 +68,12 @@ export const sessionService = {
     }
 
     // Check session in database
+    // Accept sessions for 'peeap-pay' or 'my' (both refer to the main web app)
     const { data: session, error: sessionError } = await supabase
       .from('sso_tokens')
       .select('user_id, expires_at, used_at')
       .eq('token', token)
-      .eq('target_app', 'peeap-pay')
+      .in('target_app', ['peeap-pay', 'my'])
       .single();
 
     if (sessionError || !session) {
