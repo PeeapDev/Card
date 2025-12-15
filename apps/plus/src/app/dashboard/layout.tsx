@@ -516,7 +516,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             }
           }
         }
-      } else {
+      } else if (token) {
         try {
           const { valid, user } = await authService.validateToken(token);
           if (valid && user) {
@@ -533,6 +533,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           setNavigation(buildNavigation("basic", prefs));
           setFilteredQuickActions(buildQuickActions("basic", prefs));
         }
+      } else {
+        // No stored user and no token - redirect to login
+        console.log("Plus Dashboard: No stored user and no token, redirecting to login");
+        router.push("/auth/login?redirect=/dashboard");
+        return;
       }
     } catch (error) {
       console.error("Auth check error:", error);
