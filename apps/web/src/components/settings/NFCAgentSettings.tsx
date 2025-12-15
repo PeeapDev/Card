@@ -21,6 +21,10 @@ import {
   Loader2,
   AlertCircle,
   Usb,
+  Terminal,
+  Copy,
+  Check,
+  X,
 } from 'lucide-react';
 import { useNFC } from '@/hooks/useNFC';
 import { nfcAgentService } from '@/services/nfc-agent.service';
@@ -33,7 +37,8 @@ interface NFCAgentSettingsProps {
 export function NFCAgentSettings({ className = '', compact = false }: NFCAgentSettingsProps) {
   const { status, lastCardRead, checkStatus } = useNFC();
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [downloadStarted, setDownloadStarted] = useState(false);
+  const [showInstructions, setShowInstructions] = useState(false);
+  const [copiedCommand, setCopiedCommand] = useState<string | null>(null);
 
   // Agent connection state
   const agentConnected = status.agent?.connected;
@@ -67,18 +72,10 @@ export function NFCAgentSettings({ className = '', compact = false }: NFCAgentSe
     setTimeout(() => setIsRefreshing(false), 1000);
   };
 
-  const handleDownload = () => {
-    setDownloadStarted(true);
-    // Trigger download
-    const link = document.createElement('a');
-    link.href = '/downloads/peeap-nfc-agent.zip';
-    link.download = 'peeap-nfc-agent.zip';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    // Reset after 3 seconds
-    setTimeout(() => setDownloadStarted(false), 3000);
+  const copyCommand = (command: string) => {
+    navigator.clipboard.writeText(command);
+    setCopiedCommand(command);
+    setTimeout(() => setCopiedCommand(null), 2000);
   };
 
   // Compact version for smaller spaces
@@ -108,15 +105,18 @@ export function NFCAgentSettings({ className = '', compact = false }: NFCAgentSe
 
             {!agentConnected && (
               <button
-                onClick={handleDownload}
+                onClick={() => setShowInstructions(true)}
                 className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-lg flex items-center gap-1"
               >
-                <Download className="w-4 h-4" />
-                Install
+                <Terminal className="w-4 h-4" />
+                Setup
               </button>
             )}
           </div>
         </div>
+
+        {/* Instructions Modal for Compact */}
+        {showInstructions && <InstallInstructionsModal onClose={() => setShowInstructions(false)} copyCommand={copyCommand} copiedCommand={copiedCommand} />}
       </div>
     );
   }
@@ -250,59 +250,51 @@ export function NFCAgentSettings({ className = '', compact = false }: NFCAgentSe
             >
               <div className="flex items-start gap-4">
                 <div className="w-12 h-12 bg-blue-100 dark:bg-blue-800 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <Download className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                  <Terminal className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div className="flex-1">
                   <h4 className="font-semibold text-gray-900 dark:text-white mb-1">
-                    Install NFC Agent for Best Experience
+                    Setup NFC Agent for Reliable Card Reading
                   </h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                    The NFC Agent runs on your computer and provides reliable NFC card reading.
-                    It works with any NFC reader and doesn't require any special setup.
+                    Run a simple command to start the NFC Agent on your computer.
+                    Requires Node.js installed.
                   </p>
+
+                  {/* Quick Start Command */}
+                  <div className="bg-gray-900 rounded-lg p-3 mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-gray-400">Run in Terminal:</span>
+                      <button
+                        onClick={() => copyCommand('npx peeap-nfc-agent')}
+                        className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                      >
+                        {copiedCommand === 'npx peeap-nfc-agent' ? (
+                          <><Check className="w-3 h-3" /> Copied!</>
+                        ) : (
+                          <><Copy className="w-3 h-3" /> Copy</>
+                        )}
+                      </button>
+                    </div>
+                    <code className="text-green-400 font-mono text-sm">npx peeap-nfc-agent</code>
+                  </div>
 
                   <div className="flex flex-wrap gap-3">
                     <button
-                      onClick={handleDownload}
-                      disabled={downloadStarted}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50"
+                      onClick={() => setShowInstructions(true)}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors"
                     >
-                      {downloadStarted ? (
-                        <>
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                          Downloading...
-                        </>
-                      ) : (
-                        <>
-                          <Download className="w-5 h-5" />
-                          Download for {getOS()}
-                        </>
-                      )}
+                      <Terminal className="w-5 h-5" />
+                      View Full Setup Guide
                     </button>
-
-                    <a
-                      href="https://docs.peeap.com/nfc-agent"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl font-medium transition-colors"
-                    >
-                      <ExternalLink className="w-5 h-5" />
-                      View Guide
-                    </a>
                   </div>
 
                   {/* Supported platforms */}
                   <div className="mt-4 flex items-center gap-4 text-xs text-gray-500">
                     <span>Supports:</span>
-                    <span className="flex items-center gap-1">
-                      <span className="font-medium">Windows</span>
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <span className="font-medium">macOS</span>
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <span className="font-medium">Linux</span>
-                    </span>
+                    <span className="font-medium">Windows</span>
+                    <span className="font-medium">macOS</span>
+                    <span className="font-medium">Linux</span>
                   </div>
                 </div>
               </div>
@@ -352,6 +344,193 @@ export function NFCAgentSettings({ className = '', compact = false }: NFCAgentSe
             </div>
           </div>
         )}
+
+        {/* Instructions Modal */}
+        {showInstructions && (
+          <InstallInstructionsModal
+            onClose={() => setShowInstructions(false)}
+            copyCommand={copyCommand}
+            copiedCommand={copiedCommand}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Install Instructions Modal Component
+function InstallInstructionsModal({
+  onClose,
+  copyCommand,
+  copiedCommand,
+}: {
+  onClose: () => void;
+  copyCommand: (cmd: string) => void;
+  copiedCommand: string | null;
+}) {
+  const os = getOS();
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="sticky top-0 bg-white dark:bg-gray-800 px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
+              <Terminal className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-900 dark:text-white">NFC Agent Setup</h3>
+              <p className="text-sm text-gray-500">Follow these steps to get started</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 space-y-6">
+          {/* Step 1: Install Node.js */}
+          <div className="flex gap-4">
+            <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold flex-shrink-0">
+              1
+            </div>
+            <div className="flex-1">
+              <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
+                Install Node.js (if not installed)
+              </h4>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                Download and install Node.js from the official website.
+              </p>
+              <a
+                href="https://nodejs.org"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Download Node.js
+              </a>
+            </div>
+          </div>
+
+          {/* Step 2: Open Terminal */}
+          <div className="flex gap-4">
+            <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold flex-shrink-0">
+              2
+            </div>
+            <div className="flex-1">
+              <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
+                Open Terminal
+              </h4>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {os === 'macOS' && 'Open Terminal from Applications > Utilities, or press Cmd+Space and type "Terminal"'}
+                {os === 'Windows' && 'Press Win+R, type "cmd" and press Enter, or search for "Command Prompt"'}
+                {os === 'Linux' && 'Open your terminal application (Ctrl+Alt+T on most systems)'}
+                {os === 'Desktop' && 'Open your command line terminal'}
+              </p>
+            </div>
+          </div>
+
+          {/* Step 3: Run Command */}
+          <div className="flex gap-4">
+            <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold flex-shrink-0">
+              3
+            </div>
+            <div className="flex-1">
+              <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
+                Run the NFC Agent
+              </h4>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                Copy and paste this command into your terminal:
+              </p>
+              <div className="bg-gray-900 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-gray-400">Command:</span>
+                  <button
+                    onClick={() => copyCommand('npx peeap-nfc-agent')}
+                    className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                  >
+                    {copiedCommand === 'npx peeap-nfc-agent' ? (
+                      <><Check className="w-3 h-3" /> Copied!</>
+                    ) : (
+                      <><Copy className="w-3 h-3" /> Copy</>
+                    )}
+                  </button>
+                </div>
+                <code className="text-green-400 font-mono">npx peeap-nfc-agent</code>
+              </div>
+            </div>
+          </div>
+
+          {/* Step 4: Keep Running */}
+          <div className="flex gap-4">
+            <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold flex-shrink-0">
+              4
+            </div>
+            <div className="flex-1">
+              <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
+                Keep the Terminal Open
+              </h4>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                Keep the terminal window open while using NFC features. You should see:
+              </p>
+              <div className="bg-gray-900 rounded-lg p-4 font-mono text-sm text-gray-300">
+                <div className="text-cyan-400">╔═══════════════════════════════════════════╗</div>
+                <div className="text-cyan-400">║       PeeAP NFC Agent v1.0.0              ║</div>
+                <div className="text-cyan-400">╚═══════════════════════════════════════════╝</div>
+                <div className="mt-2 text-green-400">[10:30:45] WebSocket server running on ws://localhost:9876</div>
+                <div className="text-green-400">[10:30:45] ✓ NFC Reader connected: ACS ACR122U</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Success Notice */}
+          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm text-green-800 dark:text-green-300 font-medium">
+                  Auto-Connect
+                </p>
+                <p className="text-sm text-green-600 dark:text-green-400">
+                  Once the agent is running, this page will automatically detect it and show a green status indicator.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Linux Note */}
+          {os === 'Linux' && (
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm text-yellow-800 dark:text-yellow-300 font-medium">
+                    Linux: Install PC/SC daemon first
+                  </p>
+                  <div className="text-sm text-yellow-600 dark:text-yellow-400 mt-2 font-mono bg-yellow-100 dark:bg-yellow-900/30 p-2 rounded">
+                    sudo apt install pcscd && sudo systemctl start pcscd
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="sticky bottom-0 bg-white dark:bg-gray-800 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+          <button
+            onClick={onClose}
+            className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors"
+          >
+            Got It
+          </button>
+        </div>
       </div>
     </div>
   );
