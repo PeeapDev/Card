@@ -353,6 +353,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const checkAuthAndTier = async () => {
     try {
       const token = authService.getAccessToken();
+      const sessionToken = getCookie("plus_session"); // Database-backed session from SSO
       const storedUser = localStorage.getItem("user");
 
       // Check cookies first, then fall back to localStorage
@@ -362,9 +363,83 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       const storedMonthlyFee = getCookie("plusMonthlyFee") || localStorage.getItem("plusMonthlyFee");
       const paymentComplete = getCookie("plusPaymentComplete") === "true" || localStorage.getItem("plusPaymentComplete") === "true";
 
-      console.log("Plus Dashboard: Initial check - setupComplete from cookie/localStorage:", setupComplete);
+      console.log("Plus Dashboard: Auth check - token:", !!token, "sessionToken:", !!sessionToken);
+      console.log("Plus Dashboard: Initial check - setupComplete:", setupComplete, "tier:", plusTier);
 
-      if (!token) { router.push("/auth/login?redirect=/dashboard"); return; }
+      // Check for either token OR session cookie (from SSO)
+      if (!token && !sessionToken) {
+        console.log("Plus Dashboard: No auth token or session, redirecting to login");
+        router.push("/auth/login?redirect=/dashboard");
+        return;
+      }
+
+      // If we have session but no token, validate session from database
+      if (!token && sessionToken) {
+        console.log("Plus Dashboard: Has session cookie, validating from database...");
+        try {
+          const { data: sessions, error: sessionError } = await supabase
+            .from("user_sessions")
+            .select("user_id, tier, expires_at")
+            .eq("session_token", sessionToken)
+            .gt("expires_at", new Date().toISOString())
+            .limit(1);
+
+          if (sessionError || !sessions || sessions.length === 0) {
+            console.log("Plus Dashboard: Session invalid or expired");
+            router.push("/auth/login?redirect=/dashboard");
+            return;
+          }
+
+          const session = sessions[0];
+          console.log("Plus Dashboard: Valid session found for user:", session.user_id);
+
+          // Fetch user data from database
+          const { data: users } = await supabase
+            .from("users")
+            .select("*")
+            .eq("id", session.user_id)
+            .limit(1);
+
+          if (users && users.length > 0) {
+            const dbUser = users[0];
+            const user = {
+              id: dbUser.id,
+              email: dbUser.email,
+              firstName: dbUser.first_name,
+              lastName: dbUser.last_name,
+              businessName: dbUser.business_name,
+              tier: session.tier || dbUser.tier || "business",
+            };
+
+            // Create token for this session
+            const tokenPayload = {
+              userId: user.id,
+              email: user.email,
+              tier: user.tier,
+              exp: Date.now() + 7 * 24 * 60 * 60 * 1000,
+            };
+            const newToken = btoa(JSON.stringify(tokenPayload));
+
+            // Set the token cookie
+            const secure = window.location.protocol === 'https:' ? 'secure;' : '';
+            document.cookie = `plus_token=${newToken};path=/;max-age=${7 * 24 * 60 * 60};${secure}SameSite=Lax`;
+
+            // Store user data
+            try {
+              localStorage.setItem("user", JSON.stringify(user));
+              localStorage.setItem("plusTier", user.tier);
+            } catch {}
+
+            setUserData(user);
+            setUserTier(user.tier as UserTier);
+            setupComplete = true; // If they have a valid session, setup is complete
+          }
+        } catch (e) {
+          console.error("Plus Dashboard: Session validation error:", e);
+          router.push("/auth/login?redirect=/dashboard");
+          return;
+        }
+      }
 
       let prefs: Preferences | null = null;
       if (storedPreferences) { try { prefs = JSON.parse(storedPreferences); setPreferences(prefs); } catch {} }

@@ -1,30 +1,55 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, ArrowRight } from "lucide-react";
 import { authService } from "@/lib/auth";
 
+// Helper to get cookie
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get("redirect") || "/dashboard";
+  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    // Check if already authenticated
+    // Check if already authenticated via token or session
     const token = authService.getAccessToken();
-    if (token) {
+    const sessionToken = getCookie("plus_session");
+
+    if (token || sessionToken) {
+      console.log("Login: Already authenticated, redirecting to", redirect);
       router.replace(redirect);
+    } else {
+      setChecking(false);
     }
   }, [router, redirect]);
 
   const handleLoginViaPeeAP = () => {
-    // Redirect to my.peeap.com with callback to plus.peeap.com
-    const callbackUrl = encodeURIComponent(`${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirect)}`);
-    window.location.href = `https://my.peeap.com/auth/sso?app=plus&callback=${callbackUrl}`;
+    // Redirect to my.peeap.com merchant upgrade page which handles SSO
+    // The upgrade page will generate an SSO token and redirect back to Plus
+    const redirectPath = encodeURIComponent(redirect);
+    window.location.href = `https://my.peeap.com/merchant/upgrade?redirect_plus=${redirectPath}`;
   };
+
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+        <div className="text-center">
+          <Loader2 className="h-10 w-10 animate-spin text-purple-400 mx-auto mb-4" />
+          <p className="text-white/60">Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 px-4">
