@@ -16,14 +16,23 @@
 
 import { useState, useEffect, useCallback, useRef, createContext, useContext, ReactNode } from 'react';
 import { nfcAgentService, NFCAgentCardData, NFCAgentStatus } from '@/services/nfc-agent.service';
+import nfcExtensionService, { NFCExtensionStatus, NFCCardData as ExtensionCardData } from '@/services/nfc-extension.service';
 
 // Types
 export interface NFCReaderStatus {
-  // Local NFC Agent (most reliable)
+  // Local NFC Agent (most reliable - uses native PC/SC)
   agent: {
     available: boolean;
     connected: boolean;
     readerName: string | null;
+    scanning: boolean;
+    error?: string;
+  };
+  // Chrome Extension (uses WebUSB in extension context)
+  extension: {
+    available: boolean;
+    connected: boolean;
+    deviceName: string | null;
     scanning: boolean;
     error?: string;
   };
@@ -111,6 +120,12 @@ const initialStatus: NFCReaderStatus = {
     readerName: null,
     scanning: false,
   },
+  extension: {
+    available: false,
+    connected: false,
+    deviceName: null,
+    scanning: false,
+  },
   webNFC: {
     supported: false,
     available: false,
@@ -174,6 +189,17 @@ export function NFCProvider({ children }: { children: ReactNode }) {
       console.log('[NFC] Agent check error:', err);
     }
 
+    // Check Chrome Extension (second priority)
+    try {
+      const extensionStatus = await nfcExtensionService.getStatus();
+      newStatus.extension.available = extensionStatus.available;
+      newStatus.extension.connected = extensionStatus.connected;
+      newStatus.extension.deviceName = extensionStatus.deviceName;
+      newStatus.extension.scanning = extensionStatus.scanning;
+    } catch (err) {
+      console.log('[NFC] Extension check error:', err);
+    }
+
     // Check Web NFC support (mobile)
     if ('NDEFReader' in window) {
       newStatus.webNFC.supported = true;
@@ -211,11 +237,13 @@ export function NFCProvider({ children }: { children: ReactNode }) {
     // Update overall status
     newStatus.anyReaderAvailable =
       newStatus.agent.connected ||
+      newStatus.extension.connected ||
       newStatus.webNFC.available ||
       newStatus.usbReader.connected;
 
     newStatus.isScanning =
       newStatus.agent.scanning ||
+      newStatus.extension.scanning ||
       newStatus.webNFC.scanning ||
       newStatus.usbReader.scanning;
 
@@ -716,7 +744,14 @@ export function NFCProvider({ children }: { children: ReactNode }) {
         agentConnectedRef.current = true;
         checkStatus();
       } else {
-        console.log('[NFC] NFC Agent not available, will use fallback methods');
+        console.log('[NFC] NFC Agent not available, will try Chrome Extension...');
+        // Try Chrome Extension as fallback
+        const extensionAvailable = await nfcExtensionService.detectExtension();
+        if (extensionAvailable) {
+          console.log('[NFC] Chrome Extension detected');
+        } else {
+          console.log('[NFC] Chrome Extension not available, will use other fallback methods');
+        }
       }
     };
 
@@ -760,6 +795,36 @@ export function NFCProvider({ children }: { children: ReactNode }) {
       setError(agentError);
     });
 
+    // Listen for card detection from Chrome Extension
+    const unsubscribeExtensionCard = nfcExtensionService.onCardDetected((extCard: ExtensionCardData) => {
+      console.log('[NFC] Card detected via extension:', extCard);
+
+      const isUUID = extCard.data && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(extCard.data);
+
+      const cardData: NFCCardData = {
+        uid: extCard.uid,
+        type: isUUID ? 'wallet' : 'unknown',
+        data: extCard.data || extCard.uid,
+      };
+
+      notifyCardDetected(cardData);
+    });
+
+    // Listen for extension status changes
+    const unsubscribeExtensionStatus = nfcExtensionService.onStatusChange((extStatus: NFCExtensionStatus) => {
+      setStatus(prev => ({
+        ...prev,
+        extension: {
+          available: extStatus.available,
+          connected: extStatus.connected,
+          deviceName: extStatus.deviceName,
+          scanning: extStatus.scanning,
+        },
+        anyReaderAvailable: prev.agent.connected || extStatus.connected || prev.webNFC.available || prev.usbReader.connected,
+        isScanning: prev.agent.scanning || extStatus.scanning || prev.webNFC.scanning || prev.usbReader.scanning,
+      }));
+    });
+
     const handleUSBConnect = () => {
       console.log('[NFC] USB device connected');
       checkStatus();
@@ -791,6 +856,9 @@ export function NFCProvider({ children }: { children: ReactNode }) {
       unsubscribeCard();
       unsubscribeStatus();
       unsubscribeError();
+      // Cleanup extension subscriptions
+      unsubscribeExtensionCard();
+      unsubscribeExtensionStatus();
     };
   }, [checkStatus, stopWebNFC, notifyCardDetected]);
 
@@ -828,6 +896,7 @@ export function useNFC() {
       status: {
         ...initialStatus,
         agent: { available: false, connected: false, readerName: null, scanning: false },
+        extension: { available: false, connected: false, deviceName: null, scanning: false },
       },
       isChecking: false,
       lastCardRead: null,

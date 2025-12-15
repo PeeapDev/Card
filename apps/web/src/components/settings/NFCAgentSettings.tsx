@@ -1,7 +1,7 @@
 /**
- * NFC Agent Settings Component
+ * NFC Extension Settings Component
  *
- * Displays NFC Agent status and provides download link.
+ * Displays Chrome Extension status and provides install link.
  * Shows real-time connection status with live indicator lights.
  *
  * Usage: Add this component to any settings/profile page
@@ -21,13 +21,14 @@ import {
   Loader2,
   AlertCircle,
   Usb,
-  Terminal,
+  Chrome,
   Copy,
   Check,
   X,
+  Puzzle,
 } from 'lucide-react';
 import { useNFC } from '@/hooks/useNFC';
-import { nfcAgentService } from '@/services/nfc-agent.service';
+import nfcExtensionService, { NFCExtensionStatus } from '@/services/nfc-extension.service';
 
 interface NFCAgentSettingsProps {
   className?: string;
@@ -38,19 +39,40 @@ export function NFCAgentSettings({ className = '', compact = false }: NFCAgentSe
   const { status, lastCardRead, checkStatus } = useNFC();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
-  const [copiedCommand, setCopiedCommand] = useState<string | null>(null);
+  const [extensionStatus, setExtensionStatus] = useState<NFCExtensionStatus>({
+    available: false,
+    connected: false,
+    scanning: false,
+    deviceName: null,
+  });
+  const [isConnecting, setIsConnecting] = useState(false);
 
-  // Agent connection state
-  const agentConnected = status.agent?.connected;
-  const agentReaderName = status.agent?.readerName;
-  const agentAvailable = status.agent?.available;
+  // Listen for extension status changes
+  useEffect(() => {
+    const unsubscribe = nfcExtensionService.onStatusChange((status) => {
+      setExtensionStatus(status);
+    });
+
+    // Initial detection
+    nfcExtensionService.detectExtension();
+
+    return unsubscribe;
+  }, []);
+
+  // Check if running in Chrome
+  const isChrome = nfcExtensionService.isChromeBrowser();
+
+  // Extension states
+  const extensionAvailable = extensionStatus.available;
+  const readerConnected = extensionStatus.connected;
+  const readerName = extensionStatus.deviceName;
 
   // Fallback states
   const usbConnected = status.usbReader.connected;
   const webNFCSupported = status.webNFC.supported;
 
   // Overall connection
-  const anyConnected = agentConnected || usbConnected || status.webNFC.scanning;
+  const anyConnected = readerConnected || usbConnected || status.webNFC.scanning;
 
   // Card detection (show for 3 seconds after detection)
   const [cardDetected, setCardDetected] = useState(false);
@@ -64,18 +86,23 @@ export function NFCAgentSettings({ className = '', compact = false }: NFCAgentSe
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
+    await nfcExtensionService.detectExtension();
     await checkStatus();
-    // Also try to reconnect agent
-    if (!agentConnected) {
-      await nfcAgentService.connect();
-    }
     setTimeout(() => setIsRefreshing(false), 1000);
   };
 
-  const copyCommand = (command: string) => {
-    navigator.clipboard.writeText(command);
-    setCopiedCommand(command);
-    setTimeout(() => setCopiedCommand(null), 2000);
+  const handleConnectReader = async () => {
+    setIsConnecting(true);
+    try {
+      const result = await nfcExtensionService.connect();
+      if (result.success) {
+        await nfcExtensionService.startScan();
+      } else {
+        alert('Failed to connect: ' + result.error);
+      }
+    } finally {
+      setIsConnecting(false);
+    }
   };
 
   // Compact version for smaller spaces
@@ -85,14 +112,14 @@ export function NFCAgentSettings({ className = '', compact = false }: NFCAgentSe
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-              agentConnected ? 'bg-green-100 dark:bg-green-900/30' : 'bg-gray-200 dark:bg-gray-700'
+              readerConnected ? 'bg-green-100 dark:bg-green-900/30' : 'bg-gray-200 dark:bg-gray-700'
             }`}>
-              <Monitor className={`w-5 h-5 ${agentConnected ? 'text-green-600 dark:text-green-400' : 'text-gray-500'}`} />
+              <Puzzle className={`w-5 h-5 ${readerConnected ? 'text-green-600 dark:text-green-400' : 'text-gray-500'}`} />
             </div>
             <div>
-              <p className="font-medium text-gray-900 dark:text-white">NFC Agent</p>
+              <p className="font-medium text-gray-900 dark:text-white">NFC Extension</p>
               <p className="text-sm text-gray-500">
-                {agentConnected ? agentReaderName || 'Connected' : 'Not connected'}
+                {readerConnected ? readerName || 'Connected' : extensionAvailable ? 'Extension installed' : 'Not installed'}
               </p>
             </div>
           </div>
@@ -100,23 +127,32 @@ export function NFCAgentSettings({ className = '', compact = false }: NFCAgentSe
           <div className="flex items-center gap-2">
             {/* Status indicator */}
             <div className={`w-3 h-3 rounded-full ${
-              agentConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'
+              readerConnected ? 'bg-green-500 animate-pulse' : extensionAvailable ? 'bg-yellow-500' : 'bg-red-500'
             }`} />
 
-            {!agentConnected && (
+            {!extensionAvailable ? (
               <button
                 onClick={() => setShowInstructions(true)}
                 className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-lg flex items-center gap-1"
               >
-                <Terminal className="w-4 h-4" />
-                Setup
+                <Chrome className="w-4 h-4" />
+                Install
+              </button>
+            ) : !readerConnected && (
+              <button
+                onClick={handleConnectReader}
+                disabled={isConnecting}
+                className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white text-sm rounded-lg flex items-center gap-1"
+              >
+                {isConnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Usb className="w-4 h-4" />}
+                Connect
               </button>
             )}
           </div>
         </div>
 
         {/* Instructions Modal for Compact */}
-        {showInstructions && <InstallInstructionsModal onClose={() => setShowInstructions(false)} copyCommand={copyCommand} copiedCommand={copiedCommand} />}
+        {showInstructions && <InstallExtensionModal onClose={() => setShowInstructions(false)} />}
       </div>
     );
   }
@@ -128,14 +164,14 @@ export function NFCAgentSettings({ className = '', compact = false }: NFCAgentSe
       <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-            agentConnected ? 'bg-green-100 dark:bg-green-900/30' : 'bg-gray-100 dark:bg-gray-700'
+            readerConnected ? 'bg-green-100 dark:bg-green-900/30' : 'bg-gray-100 dark:bg-gray-700'
           }`}>
-            <Monitor className={`w-5 h-5 ${agentConnected ? 'text-green-600 dark:text-green-400' : 'text-gray-500'}`} />
+            <Puzzle className={`w-5 h-5 ${readerConnected ? 'text-green-600 dark:text-green-400' : 'text-gray-500'}`} />
           </div>
           <div>
-            <h3 className="font-semibold text-gray-900 dark:text-white">Local NFC Agent</h3>
+            <h3 className="font-semibold text-gray-900 dark:text-white">NFC Chrome Extension</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Desktop app for reliable NFC card reading
+              One-click install for reliable NFC card reading
             </p>
           </div>
         </div>
@@ -154,58 +190,58 @@ export function NFCAgentSettings({ className = '', compact = false }: NFCAgentSe
       <div className="p-6">
         {/* Connection Status Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          {/* Agent Status */}
+          {/* Extension Status */}
           <div className={`p-4 rounded-xl border-2 transition-all ${
-            agentConnected
+            extensionAvailable
               ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
               : 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50'
           }`}>
             <div className="flex items-center gap-3 mb-2">
               <div className="relative">
-                <Monitor className={`w-6 h-6 ${agentConnected ? 'text-green-600 dark:text-green-400' : 'text-gray-400'}`} />
+                <Chrome className={`w-6 h-6 ${extensionAvailable ? 'text-green-600 dark:text-green-400' : 'text-gray-400'}`} />
                 {/* Live indicator dot */}
                 <motion.div
                   className={`absolute -top-1 -right-1 w-3 h-3 rounded-full ${
-                    agentConnected ? 'bg-green-500' : 'bg-red-500'
+                    extensionAvailable ? 'bg-green-500' : 'bg-red-500'
                   }`}
-                  animate={agentConnected ? { scale: [1, 1.2, 1] } : {}}
+                  animate={extensionAvailable ? { scale: [1, 1.2, 1] } : {}}
                   transition={{ repeat: Infinity, duration: 2 }}
                 />
               </div>
-              <span className="font-medium text-gray-900 dark:text-white">NFC Agent</span>
+              <span className="font-medium text-gray-900 dark:text-white">Extension</span>
             </div>
-            <p className={`text-sm ${agentConnected ? 'text-green-600 dark:text-green-400' : 'text-gray-500'}`}>
-              {agentConnected ? 'Connected & Ready' : 'Not Installed'}
+            <p className={`text-sm ${extensionAvailable ? 'text-green-600 dark:text-green-400' : 'text-gray-500'}`}>
+              {extensionAvailable ? 'Installed' : 'Not Installed'}
             </p>
-            {agentConnected && agentReaderName && (
-              <p className="text-xs text-gray-500 mt-1 truncate" title={agentReaderName}>
-                {agentReaderName}
-              </p>
-            )}
           </div>
 
           {/* Reader Status */}
           <div className={`p-4 rounded-xl border-2 transition-all ${
-            anyConnected
+            readerConnected
               ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
               : 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50'
           }`}>
             <div className="flex items-center gap-3 mb-2">
               <div className="relative">
-                <Wifi className={`w-6 h-6 rotate-90 ${anyConnected ? 'text-green-600 dark:text-green-400' : 'text-gray-400'}`} />
+                <Usb className={`w-6 h-6 ${readerConnected ? 'text-green-600 dark:text-green-400' : 'text-gray-400'}`} />
                 <motion.div
                   className={`absolute -top-1 -right-1 w-3 h-3 rounded-full ${
-                    anyConnected ? 'bg-green-500' : 'bg-red-500'
+                    readerConnected ? 'bg-green-500' : 'bg-red-500'
                   }`}
-                  animate={anyConnected ? { scale: [1, 1.2, 1] } : {}}
+                  animate={readerConnected ? { scale: [1, 1.2, 1] } : {}}
                   transition={{ repeat: Infinity, duration: 2 }}
                 />
               </div>
               <span className="font-medium text-gray-900 dark:text-white">NFC Reader</span>
             </div>
-            <p className={`text-sm ${anyConnected ? 'text-green-600 dark:text-green-400' : 'text-gray-500'}`}>
-              {anyConnected ? 'Ready to Scan' : 'No Reader'}
+            <p className={`text-sm ${readerConnected ? 'text-green-600 dark:text-green-400' : 'text-gray-500'}`}>
+              {readerConnected ? 'Connected' : 'Not Connected'}
             </p>
+            {readerConnected && readerName && (
+              <p className="text-xs text-gray-500 mt-1 truncate" title={readerName}>
+                {readerName}
+              </p>
+            )}
           </div>
 
           {/* Card Status */}
@@ -238,9 +274,9 @@ export function NFCAgentSettings({ className = '', compact = false }: NFCAgentSe
           </div>
         </div>
 
-        {/* Download/Install Section */}
+        {/* Install/Connect Section */}
         <AnimatePresence mode="wait">
-          {!agentConnected ? (
+          {!extensionAvailable ? (
             <motion.div
               key="install"
               initial={{ opacity: 0, y: 10 }}
@@ -250,52 +286,75 @@ export function NFCAgentSettings({ className = '', compact = false }: NFCAgentSe
             >
               <div className="flex items-start gap-4">
                 <div className="w-12 h-12 bg-blue-100 dark:bg-blue-800 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <Terminal className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                  <Chrome className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div className="flex-1">
                   <h4 className="font-semibold text-gray-900 dark:text-white mb-1">
-                    Setup NFC Agent for Reliable Card Reading
+                    Install NFC Extension
                   </h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                    Run a simple command to start the NFC Agent on your computer.
-                    Requires Node.js installed.
+                    {isChrome
+                      ? 'Add the PeeAP NFC Reader extension to Chrome for instant NFC card reading. No downloads or terminal commands required!'
+                      : 'The NFC extension requires Google Chrome browser. Please open this page in Chrome to install.'}
                   </p>
 
-                  {/* Quick Start Command */}
-                  <div className="bg-gray-900 rounded-lg p-3 mb-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-gray-400">Run in Terminal:</span>
+                  {isChrome && (
+                    <div className="flex flex-wrap gap-3">
                       <button
-                        onClick={() => copyCommand('npx peeap-nfc-agent')}
-                        className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                        onClick={() => setShowInstructions(true)}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors"
                       >
-                        {copiedCommand === 'npx peeap-nfc-agent' ? (
-                          <><Check className="w-3 h-3" /> Copied!</>
-                        ) : (
-                          <><Copy className="w-3 h-3" /> Copy</>
-                        )}
+                        <Puzzle className="w-5 h-5" />
+                        Install Extension
                       </button>
                     </div>
-                    <code className="text-green-400 font-mono text-sm">npx peeap-nfc-agent</code>
-                  </div>
+                  )}
 
-                  <div className="flex flex-wrap gap-3">
-                    <button
-                      onClick={() => setShowInstructions(true)}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors"
-                    >
-                      <Terminal className="w-5 h-5" />
-                      View Full Setup Guide
-                    </button>
-                  </div>
+                  {!isChrome && (
+                    <div className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 px-4 py-2 rounded-lg text-sm">
+                      Open this page in Google Chrome to continue
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          ) : !readerConnected ? (
+            <motion.div
+              key="connect"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-5"
+            >
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 bg-green-100 dark:bg-green-800 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Usb className="w-6 h-6 text-green-600 dark:text-green-400" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-semibold text-gray-900 dark:text-white mb-1">
+                    Extension Ready - Connect Reader
+                  </h4>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                    Plug in your ACR122U NFC reader and click the button below to connect.
+                  </p>
 
-                  {/* Supported platforms */}
-                  <div className="mt-4 flex items-center gap-4 text-xs text-gray-500">
-                    <span>Supports:</span>
-                    <span className="font-medium">Windows</span>
-                    <span className="font-medium">macOS</span>
-                    <span className="font-medium">Linux</span>
-                  </div>
+                  <button
+                    onClick={handleConnectReader}
+                    disabled={isConnecting}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50"
+                  >
+                    {isConnecting ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Connecting...
+                      </>
+                    ) : (
+                      <>
+                        <Usb className="w-5 h-5" />
+                        Connect NFC Reader
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
             </motion.div>
@@ -313,11 +372,11 @@ export function NFCAgentSettings({ className = '', compact = false }: NFCAgentSe
                 </div>
                 <div>
                   <h4 className="font-semibold text-green-800 dark:text-green-300">
-                    NFC Agent Connected
+                    NFC Reader Connected
                   </h4>
                   <p className="text-sm text-green-600 dark:text-green-400">
-                    {agentReaderName
-                      ? `Reader: ${agentReaderName}`
+                    {readerName
+                      ? `Reader: ${readerName}`
                       : 'Ready to accept NFC card payments'}
                   </p>
                 </div>
@@ -326,62 +385,29 @@ export function NFCAgentSettings({ className = '', compact = false }: NFCAgentSe
           )}
         </AnimatePresence>
 
-        {/* Alternative Methods Notice */}
-        {!agentConnected && (webNFCSupported || usbConnected) && (
-          <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm text-yellow-800 dark:text-yellow-300 font-medium">
-                  Fallback method available
-                </p>
-                <p className="text-sm text-yellow-600 dark:text-yellow-400">
-                  {webNFCSupported && 'Web NFC is available on this device. '}
-                  {usbConnected && 'USB reader connected. '}
-                  For the most reliable experience, we recommend installing the NFC Agent.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Instructions Modal */}
         {showInstructions && (
-          <InstallInstructionsModal
-            onClose={() => setShowInstructions(false)}
-            copyCommand={copyCommand}
-            copiedCommand={copiedCommand}
-          />
+          <InstallExtensionModal onClose={() => setShowInstructions(false)} />
         )}
       </div>
     </div>
   );
 }
 
-// Install Instructions Modal Component
-function InstallInstructionsModal({
-  onClose,
-  copyCommand,
-  copiedCommand,
-}: {
-  onClose: () => void;
-  copyCommand: (cmd: string) => void;
-  copiedCommand: string | null;
-}) {
-  const os = getOS();
-
+// Install Extension Modal Component
+function InstallExtensionModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-white dark:bg-gray-800 px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
-              <Terminal className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              <Chrome className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900 dark:text-white">NFC Agent Setup</h3>
-              <p className="text-sm text-gray-500">Follow these steps to get started</p>
+              <h3 className="font-semibold text-gray-900 dark:text-white">Install NFC Extension</h3>
+              <p className="text-sm text-gray-500">Quick setup - no downloads needed</p>
             </div>
           </div>
           <button
@@ -394,98 +420,75 @@ function InstallInstructionsModal({
 
         {/* Content */}
         <div className="p-6 space-y-6">
-          {/* Step 1: Install Node.js */}
+          {/* Step 1 */}
           <div className="flex gap-4">
             <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold flex-shrink-0">
               1
             </div>
             <div className="flex-1">
               <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
-                Install Node.js (if not installed)
+                Load Extension in Chrome
               </h4>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                Download and install Node.js from the official website.
+                Open <code className="bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded text-sm">chrome://extensions</code> in your browser
               </p>
               <a
-                href="https://nodejs.org"
-                target="_blank"
-                rel="noopener noreferrer"
+                href="chrome://extensions"
                 className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium"
               >
                 <ExternalLink className="w-4 h-4" />
-                Download Node.js
+                Open Extensions Page
               </a>
             </div>
           </div>
 
-          {/* Step 2: Open Terminal */}
+          {/* Step 2 */}
           <div className="flex gap-4">
             <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold flex-shrink-0">
               2
             </div>
             <div className="flex-1">
               <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
-                Open Terminal
+                Enable Developer Mode
               </h4>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                {os === 'macOS' && 'Open Terminal from Applications > Utilities, or press Cmd+Space and type "Terminal"'}
-                {os === 'Windows' && 'Press Win+R, type "cmd" and press Enter, or search for "Command Prompt"'}
-                {os === 'Linux' && 'Open your terminal application (Ctrl+Alt+T on most systems)'}
-                {os === 'Desktop' && 'Open your command line terminal'}
+                Toggle "Developer mode" switch in the top-right corner of the extensions page
               </p>
             </div>
           </div>
 
-          {/* Step 3: Run Command */}
+          {/* Step 3 */}
           <div className="flex gap-4">
             <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold flex-shrink-0">
               3
             </div>
             <div className="flex-1">
               <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
-                Run the NFC Agent
+                Load Unpacked Extension
               </h4>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                Copy and paste this command into your terminal:
+                Click "Load unpacked" and select the <code className="bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded text-sm">nfc-extension</code> folder
               </p>
-              <div className="bg-gray-900 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-gray-400">Command:</span>
-                  <button
-                    onClick={() => copyCommand('npx peeap-nfc-agent')}
-                    className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
-                  >
-                    {copiedCommand === 'npx peeap-nfc-agent' ? (
-                      <><Check className="w-3 h-3" /> Copied!</>
-                    ) : (
-                      <><Copy className="w-3 h-3" /> Copy</>
-                    )}
-                  </button>
-                </div>
-                <code className="text-green-400 font-mono">npx peeap-nfc-agent</code>
+              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 text-sm text-gray-600 dark:text-gray-400">
+                <span className="font-medium">Path:</span>
+                <br />
+                <code className="text-xs">/apps/nfc-extension</code>
               </div>
             </div>
           </div>
 
-          {/* Step 4: Keep Running */}
+          {/* Step 4 */}
           <div className="flex gap-4">
             <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold flex-shrink-0">
               4
             </div>
             <div className="flex-1">
               <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
-                Keep the Terminal Open
+                Connect Your NFC Reader
               </h4>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                Keep the terminal window open while using NFC features. You should see:
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Click the extension icon in Chrome toolbar and click "Connect NFC Reader"
               </p>
-              <div className="bg-gray-900 rounded-lg p-4 font-mono text-sm text-gray-300">
-                <div className="text-cyan-400">╔═══════════════════════════════════════════╗</div>
-                <div className="text-cyan-400">║       PeeAP NFC Agent v1.0.0              ║</div>
-                <div className="text-cyan-400">╚═══════════════════════════════════════════╝</div>
-                <div className="mt-2 text-green-400">[10:30:45] WebSocket server running on ws://localhost:9876</div>
-                <div className="text-green-400">[10:30:45] ✓ NFC Reader connected: ACS ACR122U</div>
-              </div>
             </div>
           </div>
 
@@ -495,31 +498,24 @@ function InstallInstructionsModal({
               <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm text-green-800 dark:text-green-300 font-medium">
-                  Auto-Connect
+                  That's it!
                 </p>
                 <p className="text-sm text-green-600 dark:text-green-400">
-                  Once the agent is running, this page will automatically detect it and show a green status indicator.
+                  Once installed, the extension will automatically detect when you're on PeeAP and enable NFC reading.
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Linux Note */}
-          {os === 'Linux' && (
-            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm text-yellow-800 dark:text-yellow-300 font-medium">
-                    Linux: Install PC/SC daemon first
-                  </p>
-                  <div className="text-sm text-yellow-600 dark:text-yellow-400 mt-2 font-mono bg-yellow-100 dark:bg-yellow-900/30 p-2 rounded">
-                    sudo apt install pcscd && sudo systemctl start pcscd
-                  </div>
-                </div>
-              </div>
+          {/* Supported Readers */}
+          <div className="text-center text-sm text-gray-500">
+            <p className="mb-2">Supported readers:</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              <span className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-xs">ACR122U</span>
+              <span className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-xs">ACR1252U</span>
+              <span className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-xs">PC/SC Compatible</span>
             </div>
-          )}
+          </div>
         </div>
 
         {/* Footer */}
@@ -528,19 +524,10 @@ function InstallInstructionsModal({
             onClick={onClose}
             className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors"
           >
-            Got It
+            Done
           </button>
         </div>
       </div>
     </div>
   );
-}
-
-// Helper to detect OS
-function getOS(): string {
-  const userAgent = window.navigator.userAgent.toLowerCase();
-  if (userAgent.includes('win')) return 'Windows';
-  if (userAgent.includes('mac')) return 'macOS';
-  if (userAgent.includes('linux')) return 'Linux';
-  return 'Desktop';
 }

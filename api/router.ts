@@ -1537,8 +1537,22 @@ async function handleCheckoutCreate(req: VercelRequest, res: VercelResponse) {
     const checkoutUrl = process.env.CHECKOUT_URL || 'https://checkout.peeap.com';
     const frontendUrl = process.env.FRONTEND_URL || 'https://my.peeap.com';
 
+    // Validate and sanitize redirectUrl - reject localhost in live mode
+    let sanitizedRedirectUrl = redirectUrl;
+    if (redirectUrl && isLiveKey) {
+      try {
+        const urlObj = new URL(redirectUrl);
+        if (urlObj.hostname === 'localhost' || urlObj.hostname === '127.0.0.1') {
+          console.warn('[CheckoutCreate] Rejecting localhost redirectUrl in live mode:', redirectUrl);
+          sanitizedRedirectUrl = null; // Use default instead
+        }
+      } catch {
+        sanitizedRedirectUrl = null;
+      }
+    }
+
     // Determine success/cancel URLs
-    const successUrl = redirectUrl || business.callback_url || `${frontendUrl}/payment/success`;
+    const successUrl = sanitizedRedirectUrl || business.callback_url || `${frontendUrl}/payment/success`;
     const cancelUrl = business.callback_url || `${frontendUrl}/payment/cancel`;
 
     const { data: session, error: sessionError } = await supabase
@@ -1555,7 +1569,7 @@ async function handleCheckoutCreate(req: VercelRequest, res: VercelResponse) {
         brand_color: '#4F46E5',
         success_url: successUrl,
         cancel_url: cancelUrl,
-        return_url: redirectUrl || successUrl,
+        return_url: sanitizedRedirectUrl || successUrl,
         payment_methods: { qr: true, card: true, mobile: true },
         metadata: metadata ? { ...metadata, reference, isTestMode: isTestKey, customerEmail, customerPhone, paymentMethod } : { reference, isTestMode: isTestKey, customerEmail, customerPhone, paymentMethod },
         idempotency_key: idempotencyKey,
