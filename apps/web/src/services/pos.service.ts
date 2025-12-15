@@ -715,12 +715,13 @@ export const getLowStockProducts = async (businessId: string): Promise<POSProduc
 };
 
 // ================== Cash Session / Daily Balance ==================
+// Note: Using supabaseAdmin to bypass RLS since app uses custom auth
 
 // Get today's cash session
 export const getTodayCashSession = async (merchantId: string): Promise<POSCashSession | null> => {
   const today = new Date().toISOString().slice(0, 10);
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('pos_cash_sessions')
     .select('*')
     .eq('merchant_id', merchantId)
@@ -733,7 +734,7 @@ export const getTodayCashSession = async (merchantId: string): Promise<POSCashSe
 
 // Get cash session by date
 export const getCashSessionByDate = async (merchantId: string, date: string): Promise<POSCashSession | null> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('pos_cash_sessions')
     .select('*')
     .eq('merchant_id', merchantId)
@@ -749,7 +750,7 @@ export const getCashSessionHistory = async (
   merchantId: string,
   options?: { limit?: number; offset?: number }
 ): Promise<{ sessions: POSCashSession[]; total: number }> => {
-  let query = supabase
+  let query = supabaseAdmin
     .from('pos_cash_sessions')
     .select('*', { count: 'exact' })
     .eq('merchant_id', merchantId)
@@ -784,7 +785,7 @@ export const openCashSession = async (
     throw new Error('A cash session already exists for today');
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('pos_cash_sessions')
     .insert({
       merchant_id: merchantId,
@@ -812,7 +813,7 @@ export const closeCashSession = async (
   const now = new Date().toISOString();
 
   // Get the session first
-  const { data: session, error: fetchError } = await supabase
+  const { data: session, error: fetchError } = await supabaseAdmin
     .from('pos_cash_sessions')
     .select('*')
     .eq('id', sessionId)
@@ -823,7 +824,7 @@ export const closeCashSession = async (
   if (session.status === 'closed') throw new Error('Cash session is already closed');
 
   // Calculate cash sales for the session date
-  const { data: sales } = await supabase
+  const { data: sales } = await supabaseAdmin
     .from('pos_sales')
     .select('total_amount, payment_method')
     .eq('merchant_id', session.merchant_id)
@@ -836,7 +837,7 @@ export const closeCashSession = async (
   const expectedBalance = session.opening_balance + cashSalesTotal + (session.cash_in || 0) - (session.cash_out || 0);
   const difference = closingBalance - expectedBalance;
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('pos_cash_sessions')
     .update({
       closing_balance: closingBalance,
@@ -867,7 +868,7 @@ export const addCashTransaction = async (
   const now = new Date().toISOString();
 
   // Get current session
-  const { data: session, error: fetchError } = await supabase
+  const { data: session, error: fetchError } = await supabaseAdmin
     .from('pos_cash_sessions')
     .select('*')
     .eq('id', sessionId)
@@ -891,7 +892,7 @@ export const addCashTransaction = async (
     updates.notes = `${session.notes || ''}\n[${type.toUpperCase()}] SLE ${amount}: ${reason}`.trim();
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('pos_cash_sessions')
     .update(updates)
     .eq('id', sessionId)
@@ -907,7 +908,7 @@ export const updateOpeningBalance = async (
   sessionId: string,
   newOpeningBalance: number
 ): Promise<POSCashSession> => {
-  const { data: session, error: fetchError } = await supabase
+  const { data: session, error: fetchError } = await supabaseAdmin
     .from('pos_cash_sessions')
     .select('*')
     .eq('id', sessionId)
@@ -917,7 +918,7 @@ export const updateOpeningBalance = async (
   if (!session) throw new Error('Cash session not found');
   if (session.status === 'closed') throw new Error('Cannot modify a closed session');
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('pos_cash_sessions')
     .update({
       opening_balance: newOpeningBalance,
