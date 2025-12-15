@@ -263,7 +263,9 @@ export const ssoService = {
     expiryMinutes?: number;
   }): Promise<{ token: string; expiresAt: Date }> {
     const token = generateUuid();
-    const expiryMinutes = params.expiryMinutes || 5;
+    // SSO tokens are like OAuth authorization codes - short-lived (10 minutes)
+    // But sufficient time for the redirect and validation
+    const expiryMinutes = params.expiryMinutes || 10;
     const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000);
 
     const { error } = await supabase.from('sso_tokens').insert({

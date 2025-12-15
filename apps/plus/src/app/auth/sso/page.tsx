@@ -6,16 +6,19 @@ import { supabase } from "@/lib/supabase";
 import { Loader2, CheckCircle, XCircle } from "lucide-react";
 
 /**
- * SSO Authentication Page - Database-backed sessions (NO localStorage)
+ * SSO Authentication Page - Like Google OAuth
+ *
+ * This page handles SSO from my.peeap.com to plus.peeap.com
+ * Sessions persist for 30 days (like Google OAuth)
  *
  * Flow:
  * 1. Receive token from URL: /auth/sso?token=xxx
- * 2. Look up token in sso_tokens table
- * 3. Validate token (exists, not expired, not used)
- * 4. Fetch user from users table
- * 5. Mark SSO token as used
- * 6. Create session in user_sessions table
- * 7. Set session cookie and redirect
+ * 2. Validate token in sso_tokens table
+ * 3. Fetch user from users table
+ * 4. Check if user has existing subscription
+ * 5. Create long-lived session (30 days)
+ * 6. Set all required cookies
+ * 7. Redirect to dashboard or setup
  */
 
 interface SsoToken {
@@ -27,7 +30,6 @@ interface SsoToken {
   redirect_path?: string;
   expires_at: string;
   used_at?: string;
-  created_at: string;
 }
 
 interface User {
@@ -41,6 +43,13 @@ interface User {
   business_name?: string;
 }
 
+interface Subscription {
+  id: string;
+  tier: string;
+  status: string;
+  preferences?: Record<string, unknown>;
+}
+
 // Generate a random session token
 function generateSessionToken(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -51,24 +60,35 @@ function generateSessionToken(): string {
   return result;
 }
 
-// Set a cookie
+// Set a cookie with proper flags (like Google OAuth)
 function setCookie(name: string, value: string, days: number) {
   const expires = new Date();
   expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000);
   const secure = window.location.protocol === 'https:' ? 'Secure;' : '';
-  document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/;${secure}SameSite=Lax`;
+  // Set cookie with proper attributes for cross-site if needed
+  document.cookie = `${name}=${encodeURIComponent(value)};expires=${expires.toUTCString()};path=/;${secure}SameSite=Lax`;
 }
 
-async function validateAndConsumeSsoToken(token: string): Promise<{
+// Get a cookie value
+function getCookie(name: string): string | null {
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+async function handleSsoAuthentication(token: string): Promise<{
   success: boolean;
   user?: User;
+  subscription?: Subscription;
   tier?: string;
   redirectPath?: string;
   sessionToken?: string;
+  hasSubscription: boolean;
   error?: string;
 }> {
   try {
-    // Step 1: Find the SSO token in the database
+    console.log("SSO: Starting authentication with token");
+
+    // Step 1: Find and validate the SSO token
     const { data: tokens, error: findError } = await supabase
       .from("sso_tokens")
       .select("*")
@@ -78,21 +98,23 @@ async function validateAndConsumeSsoToken(token: string): Promise<{
 
     if (findError) {
       console.error("SSO: Database error finding token:", findError);
-      return { success: false, error: "Database error" };
+      return { success: false, hasSubscription: false, error: "Database error" };
     }
 
     if (!tokens || tokens.length === 0) {
-      return { success: false, error: "Invalid or already used token" };
+      console.log("SSO: Token not found or already used");
+      return { success: false, hasSubscription: false, error: "Invalid or already used token" };
     }
 
     const ssoToken = tokens[0] as SsoToken;
 
     // Step 2: Check if token is expired
     if (new Date(ssoToken.expires_at) < new Date()) {
-      return { success: false, error: "Token has expired" };
+      console.log("SSO: Token expired");
+      return { success: false, hasSubscription: false, error: "Token has expired" };
     }
 
-    // Step 3: Fetch the user from the database
+    // Step 3: Fetch the user from database
     const { data: users, error: userError } = await supabase
       .from("users")
       .select("id, email, first_name, last_name, phone, roles, tier, business_name")
@@ -101,46 +123,77 @@ async function validateAndConsumeSsoToken(token: string): Promise<{
 
     if (userError || !users || users.length === 0) {
       console.error("SSO: User not found:", userError);
-      return { success: false, error: "User not found" };
+      return { success: false, hasSubscription: false, error: "User not found" };
     }
 
     const user = users[0] as User;
+    console.log("SSO: Found user:", user.email);
 
-    // Step 4: Mark SSO token as used (one-time use)
+    // Step 4: Mark SSO token as used (one-time use like OAuth authorization code)
     await supabase
       .from("sso_tokens")
       .update({ used_at: new Date().toISOString() })
       .eq("id", ssoToken.id);
 
-    // Step 5: Create a session in the database
+    // Step 5: Check for existing subscription
+    let subscription: Subscription | undefined;
+    let hasSubscription = false;
+
+    const { data: subscriptions, error: subError } = await supabase
+      .from("merchant_subscriptions")
+      .select("id, tier, status, preferences")
+      .eq("user_id", user.id)
+      .limit(1);
+
+    if (!subError && subscriptions && subscriptions.length > 0) {
+      subscription = subscriptions[0] as Subscription;
+      hasSubscription = true;
+      console.log("SSO: Found existing subscription:", subscription.tier, subscription.status);
+    } else {
+      console.log("SSO: No existing subscription found");
+    }
+
+    // Step 6: Create a long-lived session in the database (30 days like Google)
     const sessionToken = generateSessionToken();
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
     const { error: sessionError } = await supabase
       .from("user_sessions")
-      .insert({
-        user_id: ssoToken.user_id,
+      .upsert({
+        user_id: user.id,
         session_token: sessionToken,
         app: "plus",
-        tier: ssoToken.tier || user.tier || "basic",
+        tier: ssoToken.tier || subscription?.tier || user.tier || "business",
         expires_at: expiresAt.toISOString(),
-      });
+        created_at: new Date().toISOString(),
+      }, { onConflict: 'user_id,app' });
 
     if (sessionError) {
-      console.error("SSO: Failed to create session:", sessionError);
-      return { success: false, error: "Failed to create session" };
+      console.log("SSO: Session upsert error (may not have unique constraint):", sessionError.message);
+      // Try insert instead
+      await supabase.from("user_sessions").insert({
+        user_id: user.id,
+        session_token: sessionToken,
+        app: "plus",
+        tier: ssoToken.tier || subscription?.tier || user.tier || "business",
+        expires_at: expiresAt.toISOString(),
+      });
     }
+
+    console.log("SSO: Session created successfully");
 
     return {
       success: true,
       user,
-      tier: ssoToken.tier,
+      subscription,
+      tier: ssoToken.tier || subscription?.tier || user.tier,
       redirectPath: ssoToken.redirect_path,
       sessionToken,
+      hasSubscription,
     };
   } catch (error) {
     console.error("SSO: Unexpected error:", error);
-    return { success: false, error: "Authentication failed" };
+    return { success: false, hasSubscription: false, error: "Authentication failed" };
   }
 }
 
@@ -151,7 +204,17 @@ function SsoContent() {
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
-    const handleSso = async () => {
+    const processSSO = async () => {
+      // Check if already authenticated
+      const existingToken = getCookie("plus_token");
+      const existingSession = getCookie("plus_session");
+
+      if (existingToken || existingSession) {
+        console.log("SSO: Already authenticated, redirecting to dashboard");
+        router.replace("/dashboard");
+        return;
+      }
+
       const token = searchParams.get("token");
 
       if (!token) {
@@ -161,8 +224,8 @@ function SsoContent() {
         return;
       }
 
-      // Validate and consume the SSO token
-      const result = await validateAndConsumeSsoToken(token);
+      // Process the SSO authentication
+      const result = await handleSsoAuthentication(token);
 
       if (!result.success || !result.user || !result.sessionToken) {
         setStatus("error");
@@ -171,27 +234,37 @@ function SsoContent() {
         return;
       }
 
-      // Set session cookie (NOT localStorage)
-      setCookie("plus_session", result.sessionToken, 7);
+      // ============================================
+      // SET ALL COOKIES (30 days like Google OAuth)
+      // ============================================
+      const COOKIE_DAYS = 30;
 
-      // Also set plus_token cookie that dashboard auth expects
-      // Create a simple JWT-like token with user info
+      // 1. Session cookie (database-backed)
+      setCookie("plus_session", result.sessionToken, COOKIE_DAYS);
+
+      // 2. Access token (JWT-like for quick auth checks)
       const tokenPayload = {
         userId: result.user.id,
         email: result.user.email,
         roles: result.user.roles || 'merchant',
-        tier: result.tier || result.user.tier || 'business',
-        exp: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
+        tier: result.tier || 'business',
+        exp: Date.now() + COOKIE_DAYS * 24 * 60 * 60 * 1000,
       };
       const plusToken = btoa(JSON.stringify(tokenPayload));
-      setCookie("plus_token", plusToken, 7);
-      setCookie("plus_refresh_token", result.sessionToken, 7);
+      setCookie("plus_token", plusToken, COOKIE_DAYS);
+      setCookie("plus_refresh_token", result.sessionToken, COOKIE_DAYS);
 
-      // Also set setup complete and tier cookies
-      setCookie("plusSetupComplete", "true", 365);
-      setCookie("plusTier", result.tier || result.user.tier || "business", 365);
+      // 3. Tier cookie
+      setCookie("plusTier", result.tier || "business", COOKIE_DAYS);
 
-      // Store user data in localStorage for dashboard use (backup)
+      // 4. Setup complete cookie - ONLY if user has subscription
+      if (result.hasSubscription) {
+        setCookie("plusSetupComplete", "true", COOKIE_DAYS);
+      }
+
+      // ============================================
+      // SET LOCALSTORAGE (backup)
+      // ============================================
       try {
         localStorage.setItem("user", JSON.stringify({
           id: result.user.id,
@@ -199,46 +272,62 @@ function SsoContent() {
           firstName: result.user.first_name,
           lastName: result.user.last_name,
           businessName: result.user.business_name,
-          tier: result.tier || result.user.tier,
+          tier: result.tier,
         }));
-        localStorage.setItem("plusTier", result.tier || result.user.tier || "business");
-        localStorage.setItem("plusSetupComplete", "true");
-      } catch {}
+        localStorage.setItem("plusTier", result.tier || "business");
+        if (result.hasSubscription) {
+          localStorage.setItem("plusSetupComplete", "true");
+          localStorage.setItem("plusSubscriptionStatus", result.subscription?.status || "active");
+        }
+      } catch (e) {
+        console.log("SSO: localStorage not available");
+      }
 
       setStatus("success");
 
-      // Redirect to the intended destination
-      const redirectPath = result.redirectPath || "/dashboard";
+      // Determine where to redirect
+      let redirectPath: string;
+      if (result.hasSubscription) {
+        // User has subscription, go to dashboard
+        redirectPath = "/dashboard";
+        console.log("SSO: User has subscription, redirecting to dashboard");
+      } else {
+        // No subscription, go to setup wizard
+        redirectPath = result.redirectPath || `/setup?tier=${result.tier || 'business'}`;
+        console.log("SSO: No subscription, redirecting to setup:", redirectPath);
+      }
+
+      // Redirect after a short delay to show success message
       setTimeout(() => router.replace(redirectPath), 1000);
     };
 
-    handleSso();
+    processSSO();
   }, [router, searchParams]);
 
   return (
     <div className="text-center">
       {status === "loading" && (
         <>
-          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
-          <h1 className="text-xl font-semibold mb-2">Signing you in...</h1>
-          <p className="text-muted-foreground">Validating your credentials</p>
+          <Loader2 className="h-12 w-12 animate-spin text-purple-500 mx-auto mb-4" />
+          <h1 className="text-xl font-semibold mb-2 text-gray-900">Signing you in...</h1>
+          <p className="text-gray-500">Validating your credentials</p>
         </>
       )}
 
       {status === "success" && (
         <>
           <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
-          <h1 className="text-xl font-semibold mb-2">Welcome to PeeAP Plus!</h1>
-          <p className="text-muted-foreground">Redirecting to your dashboard...</p>
+          <h1 className="text-xl font-semibold mb-2 text-gray-900">Welcome to PeeAP Plus!</h1>
+          <p className="text-gray-500">Redirecting to your dashboard...</p>
         </>
       )}
 
       {status === "error" && (
         <>
           <XCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-          <h1 className="text-xl font-semibold mb-2">Authentication Failed</h1>
-          <p className="text-muted-foreground">{errorMessage}</p>
-          <p className="text-sm text-muted-foreground mt-2">Redirecting to login...</p>
+          <h1 className="text-xl font-semibold mb-2 text-gray-900">Authentication Failed</h1>
+          <p className="text-red-600 mb-2">{errorMessage}</p>
+          <p className="text-sm text-gray-500">Redirecting to login...</p>
         </>
       )}
     </div>
@@ -248,8 +337,8 @@ function SsoContent() {
 function LoadingFallback() {
   return (
     <div className="text-center">
-      <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
-      <h1 className="text-xl font-semibold mb-2">Loading...</h1>
+      <Loader2 className="h-12 w-12 animate-spin text-purple-500 mx-auto mb-4" />
+      <h1 className="text-xl font-semibold mb-2 text-gray-900">Loading...</h1>
     </div>
   );
 }
@@ -260,7 +349,7 @@ export default function SsoPage() {
       {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500/20 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute top-1/2 -left-40 w-80 h-80 bg-blue-500/20 rounded-full blur-3xl animate-pulse delay-1000" />
+        <div className="absolute top-1/2 -left-40 w-80 h-80 bg-blue-500/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
       </div>
       <div className="relative bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
         <Suspense fallback={<LoadingFallback />}>

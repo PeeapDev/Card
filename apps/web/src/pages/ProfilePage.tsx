@@ -37,6 +37,7 @@ import {
   FileText,
   Globe,
   Scan,
+  Wifi,
 } from 'lucide-react';
 import { MotionCard } from '@/components/ui/Card';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -49,6 +50,7 @@ import QRCode from 'qrcode';
 import { FaceLiveness } from '@/components/kyc/FaceLiveness';
 import { IdCardScanner } from '@/components/kyc/IdCardScanner';
 import { kycService, fileToBase64 } from '@/services/kyc.service';
+import { NFCAgentSettings } from '@/components/settings/NFCAgentSettings';
 
 // Animation variants
 const containerVariants = {
@@ -742,6 +744,11 @@ export function ProfilePage() {
               )}
             </div>
           </MotionCard>
+        </motion.div>
+
+        {/* NFC Agent Settings - Compact version */}
+        <motion.div variants={itemVariants}>
+          <NFCAgentSettings compact />
         </motion.div>
 
         {/* Security and Preferences Row */}

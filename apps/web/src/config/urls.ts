@@ -40,7 +40,9 @@ export const isProduction = import.meta.env.PROD;
 // Helper to build API endpoints
 export function getApiEndpoint(path: string): string {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  return `${API_URL}${cleanPath}`;
+  // Ensure path starts with /api for the API server
+  const apiPath = cleanPath.startsWith('/api') ? cleanPath : `/api${cleanPath}`;
+  return `${API_URL}${apiPath}`;
 }
 
 // Helper to build checkout URLs
