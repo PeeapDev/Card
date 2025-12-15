@@ -597,6 +597,18 @@ function SetupWizardContent() {
     }));
   };
 
+  // Show loading while checking for existing subscription
+  if (isCheckingSubscription) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+        <div className="text-center">
+          <Loader2 className="h-10 w-10 animate-spin text-purple-400 mx-auto mb-4" />
+          <p className="text-white/60">Checking subscription status...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 relative overflow-hidden">
       {/* Animated background elements */}

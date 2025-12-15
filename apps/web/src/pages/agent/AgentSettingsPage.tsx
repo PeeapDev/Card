@@ -11,10 +11,12 @@ import {
   Save,
   CheckCircle,
   CreditCard,
+  Wifi,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { AgentLayout } from '@/components/layout/AgentLayout';
 import { useDeveloperMode } from '@/context/DeveloperModeContext';
+import { NFCAgentSettings } from '@/components/settings/NFCAgentSettings';
 
 export function AgentSettingsPage() {
   const { isDeveloperMode, toggleDeveloperMode } = useDeveloperMode();
@@ -42,6 +44,7 @@ export function AgentSettingsPage() {
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'preferences', label: 'Preferences', icon: Headphones },
+    { id: 'nfc', label: 'NFC Agent', icon: Wifi },
     { id: 'developer', label: 'Developer Mode', icon: Code2 },
   ];
 
@@ -224,6 +227,10 @@ export function AgentSettingsPage() {
                   </button>
                 </div>
               </Card>
+            )}
+
+            {activeTab === 'nfc' && (
+              <NFCAgentSettings />
             )}
 
             {activeTab === 'developer' && (
