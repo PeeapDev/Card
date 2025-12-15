@@ -1,9 +1,9 @@
 /**
- * POS App Landing Page
+ * POS App Dashboard - Comprehensive Management Hub
  *
- * Uses the merchant's user profile directly - no need to create a separate business
- * Provides quick access to POS terminal, products, and sales
- * Redirects to setup wizard if POS hasn't been configured yet
+ * This is the main POS management interface where all configuration,
+ * products, inventory, staff, and settings are managed.
+ * The POS Terminal is purely for sales operations.
  */
 
 import { useState, useEffect } from 'react';
@@ -11,25 +11,43 @@ import { useNavigate } from 'react-router-dom';
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseAdmin } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import {
   ShoppingCart,
-  Store,
   Package,
   BarChart3,
   Settings,
   Loader2,
-  Boxes,
   TrendingUp,
   Play,
-  History,
   DollarSign,
   ArrowUpRight,
   Wallet,
   Clock,
   CheckCircle,
   AlertCircle,
+  Users,
+  UserCog,
+  Boxes,
+  Tags,
+  Percent,
+  Receipt,
+  FileText,
+  Shield,
+  Truck,
+  CreditCard,
+  Gift,
+  Bell,
+  Database,
+  Building2,
+  ChevronRight,
+  Activity,
+  AlertTriangle,
+  PackageX,
+  TrendingDown,
+  Calendar,
+  Target,
 } from 'lucide-react';
 import posService, { POSCashSession } from '@/services/pos.service';
 
@@ -39,6 +57,9 @@ interface POSStats {
   totalRevenue: number;
   todaySales: number;
   todayRevenue: number;
+  lowStockCount: number;
+  activeCustomers: number;
+  pendingOrders: number;
 }
 
 interface RecentSale {
@@ -46,6 +67,17 @@ interface RecentSale {
   sale_number: string;
   total_amount: number;
   created_at: string;
+  payment_method: string;
+}
+
+interface QuickLink {
+  title: string;
+  description: string;
+  icon: React.ElementType;
+  href: string;
+  color: string;
+  bgColor: string;
+  category: string;
 }
 
 export function POSAppPage() {
@@ -59,9 +91,158 @@ export function POSAppPage() {
     totalRevenue: 0,
     todaySales: 0,
     todayRevenue: 0,
+    lowStockCount: 0,
+    activeCustomers: 0,
+    pendingOrders: 0,
   });
   const [recentSales, setRecentSales] = useState<RecentSale[]>([]);
   const [cashSession, setCashSession] = useState<POSCashSession | null>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | 'management'>('overview');
+
+  // Quick Links Configuration - All POS Management Features
+  const quickLinks: QuickLink[] = [
+    // Sales & Operations
+    {
+      title: 'POS Terminal',
+      description: 'Launch sales terminal',
+      icon: Play,
+      href: '/merchant/pos/terminal',
+      color: 'text-green-600',
+      bgColor: 'bg-green-100 dark:bg-green-900/30',
+      category: 'operations',
+    },
+    {
+      title: 'Sales History',
+      description: 'View all transactions',
+      icon: Receipt,
+      href: '/merchant/pos/sales',
+      color: 'text-blue-600',
+      bgColor: 'bg-blue-100 dark:bg-blue-900/30',
+      category: 'operations',
+    },
+    // Product & Catalog
+    {
+      title: 'Products',
+      description: 'Manage product catalog',
+      icon: Package,
+      href: '/merchant/pos/products',
+      color: 'text-purple-600',
+      bgColor: 'bg-purple-100 dark:bg-purple-900/30',
+      category: 'catalog',
+    },
+    {
+      title: 'Categories',
+      description: 'Organize products',
+      icon: Tags,
+      href: '/merchant/pos/products?tab=categories',
+      color: 'text-indigo-600',
+      bgColor: 'bg-indigo-100 dark:bg-indigo-900/30',
+      category: 'catalog',
+    },
+    {
+      title: 'Inventory',
+      description: 'Stock control',
+      icon: Boxes,
+      href: '/merchant/pos/inventory',
+      color: 'text-orange-600',
+      bgColor: 'bg-orange-100 dark:bg-orange-900/30',
+      category: 'catalog',
+    },
+    // People
+    {
+      title: 'Staff & Roles',
+      description: 'Manage team access',
+      icon: UserCog,
+      href: '/merchant/pos/staff',
+      color: 'text-cyan-600',
+      bgColor: 'bg-cyan-100 dark:bg-cyan-900/30',
+      category: 'people',
+    },
+    {
+      title: 'Customers',
+      description: 'Customer management',
+      icon: Users,
+      href: '/merchant/pos/customers',
+      color: 'text-pink-600',
+      bgColor: 'bg-pink-100 dark:bg-pink-900/30',
+      category: 'people',
+    },
+    {
+      title: 'Suppliers',
+      description: 'Vendor management',
+      icon: Truck,
+      href: '/merchant/pos/suppliers',
+      color: 'text-amber-600',
+      bgColor: 'bg-amber-100 dark:bg-amber-900/30',
+      category: 'people',
+    },
+    // Financial
+    {
+      title: 'Discounts',
+      description: 'Promotions & coupons',
+      icon: Percent,
+      href: '/merchant/pos/discounts',
+      color: 'text-red-600',
+      bgColor: 'bg-red-100 dark:bg-red-900/30',
+      category: 'financial',
+    },
+    {
+      title: 'Loyalty Program',
+      description: 'Rewards & points',
+      icon: Gift,
+      href: '/merchant/pos/loyalty',
+      color: 'text-yellow-600',
+      bgColor: 'bg-yellow-100 dark:bg-yellow-900/30',
+      category: 'financial',
+    },
+    {
+      title: 'Payments',
+      description: 'Payment methods',
+      icon: CreditCard,
+      href: '/merchant/pos/payments',
+      color: 'text-emerald-600',
+      bgColor: 'bg-emerald-100 dark:bg-emerald-900/30',
+      category: 'financial',
+    },
+    // Reports & Analytics
+    {
+      title: 'Reports',
+      description: 'Sales analytics',
+      icon: BarChart3,
+      href: '/merchant/pos/reports',
+      color: 'text-violet-600',
+      bgColor: 'bg-violet-100 dark:bg-violet-900/30',
+      category: 'reports',
+    },
+    {
+      title: 'Audit Logs',
+      description: 'Activity tracking',
+      icon: Shield,
+      href: '/merchant/pos/audit',
+      color: 'text-slate-600',
+      bgColor: 'bg-slate-100 dark:bg-slate-900/30',
+      category: 'reports',
+    },
+    // Settings
+    {
+      title: 'Business Settings',
+      description: 'Store configuration',
+      icon: Building2,
+      href: '/merchant/pos/settings',
+      color: 'text-gray-600',
+      bgColor: 'bg-gray-100 dark:bg-gray-900/30',
+      category: 'settings',
+    },
+    {
+      title: 'Receipt Setup',
+      description: 'Invoice templates',
+      icon: FileText,
+      href: '/merchant/pos/settings?tab=receipts',
+      color: 'text-teal-600',
+      bgColor: 'bg-teal-100 dark:bg-teal-900/30',
+      category: 'settings',
+    },
+  ];
 
   // Check if POS setup has been completed
   useEffect(() => {
@@ -69,17 +250,14 @@ export function POSAppPage() {
       if (!user?.id) return;
 
       try {
-        // Check database for setup status
         const isCompleted = await posService.isPOSSetupCompleted(user.id);
         if (!isCompleted) {
-          // Redirect to setup wizard if not completed
           navigate('/merchant/pos/setup', { replace: true });
           return;
         }
         setCheckingSetup(false);
       } catch (error) {
         console.error('Error checking POS setup:', error);
-        // On error, redirect to setup to be safe
         navigate('/merchant/pos/setup', { replace: true });
       }
     };
@@ -99,24 +277,35 @@ export function POSAppPage() {
     try {
       setLoading(true);
 
-      // Load stats for this merchant's products and sales (using merchant_id = user.id)
-      const [productsResult, allSalesResult, todaySalesResult] = await Promise.all([
-        supabase
+      const [productsResult, lowStockResult, allSalesResult, todaySalesResult, customersResult] = await Promise.all([
+        supabaseAdmin
           .from('pos_products')
           .select('id', { count: 'exact', head: true })
           .eq('merchant_id', user.id)
           .eq('is_active', true),
-        supabase
+        supabaseAdmin
+          .from('pos_products')
+          .select('id', { count: 'exact', head: true })
+          .eq('merchant_id', user.id)
+          .eq('is_active', true)
+          .eq('track_inventory', true)
+          .lte('stock_quantity', 10), // Low stock threshold
+        supabaseAdmin
           .from('pos_sales')
           .select('total_amount')
           .eq('merchant_id', user.id)
           .eq('status', 'completed'),
-        supabase
+        supabaseAdmin
           .from('pos_sales')
           .select('total_amount')
           .eq('merchant_id', user.id)
           .eq('status', 'completed')
           .gte('created_at', new Date().toISOString().split('T')[0]),
+        supabaseAdmin
+          .from('pos_customers')
+          .select('id', { count: 'exact', head: true })
+          .eq('merchant_id', user.id)
+          .eq('is_active', true),
       ]);
 
       const totalRevenue = allSalesResult.data?.reduce((sum, s) => sum + (s.total_amount || 0), 0) || 0;
@@ -128,12 +317,15 @@ export function POSAppPage() {
         totalRevenue,
         todaySales: todaySalesResult.data?.length || 0,
         todayRevenue,
+        lowStockCount: lowStockResult.count || 0,
+        activeCustomers: customersResult.count || 0,
+        pendingOrders: 0,
       });
 
       // Load recent sales
-      const { data: recentSalesData } = await supabase
+      const { data: recentSalesData } = await supabaseAdmin
         .from('pos_sales')
-        .select('id, sale_number, total_amount, created_at')
+        .select('id, sale_number, total_amount, created_at, payment_method')
         .eq('merchant_id', user.id)
         .eq('status', 'completed')
         .order('created_at', { ascending: false })
@@ -168,10 +360,18 @@ export function POSAppPage() {
     });
   };
 
-  // Get merchant name from user profile
+  const getPaymentMethodIcon = (method: string) => {
+    switch (method) {
+      case 'cash': return '💵';
+      case 'card': return '💳';
+      case 'mobile_money': return '📱';
+      case 'qr': return '📲';
+      default: return '💰';
+    }
+  };
+
   const merchantName = user ? `${user.firstName} ${user.lastName}` : 'Merchant';
 
-  // Show loading while checking setup or loading data
   if (checkingSetup || loading) {
     return (
       <MerchantLayout>
@@ -186,351 +386,450 @@ export function POSAppPage() {
     <MerchantLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-xl">
-                <ShoppingCart className="w-8 h-8 text-green-600 dark:text-green-400" />
+              <div className="p-3 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl shadow-lg shadow-green-500/30">
+                <ShoppingCart className="w-8 h-8 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Point of Sale</h1>
-                <p className="text-gray-500 dark:text-gray-400">{merchantName}'s POS Terminal</p>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">POS Dashboard</h1>
+                <p className="text-gray-500 dark:text-gray-400">Manage your point of sale system</p>
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <Button
               onClick={() => navigate('/merchant/pos/terminal')}
               size="lg"
+              className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 shadow-lg shadow-green-500/30"
             >
               <Play className="w-5 h-5 mr-2" />
-              Launch POS
-            </Button>
-            <Button
-              onClick={() => navigate('/merchant/pos/settings')}
-              variant="outline"
-            >
-              <Settings className="w-4 h-4 mr-2" />
-              Settings
+              Launch POS Terminal
             </Button>
           </div>
         </div>
 
-        {/* Quick Actions */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {/* Tab Navigation */}
+        <div className="flex gap-2 border-b border-gray-200 dark:border-gray-700">
           <button
-            onClick={() => navigate('/merchant/pos/terminal')}
-            className="bg-green-500 hover:bg-green-600 text-white rounded-xl p-4 text-left transition-colors"
+            onClick={() => setActiveTab('overview')}
+            className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
+              activeTab === 'overview'
+                ? 'border-primary-600 text-primary-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
           >
-            <Play className="w-6 h-6 mb-2" />
-            <p className="font-semibold">Start Selling</p>
-            <p className="text-sm text-green-100">Open POS Terminal</p>
+            Overview
           </button>
           <button
-            onClick={() => navigate('/merchant/pos/products')}
-            className="bg-blue-500 hover:bg-blue-600 text-white rounded-xl p-4 text-left transition-colors"
+            onClick={() => setActiveTab('management')}
+            className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
+              activeTab === 'management'
+                ? 'border-primary-600 text-primary-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
           >
-            <Package className="w-6 h-6 mb-2" />
-            <p className="font-semibold">Products</p>
-            <p className="text-sm text-blue-100">Manage inventory</p>
-          </button>
-          <button
-            onClick={() => navigate('/merchant/pos/sales')}
-            className="bg-purple-500 hover:bg-purple-600 text-white rounded-xl p-4 text-left transition-colors"
-          >
-            <History className="w-6 h-6 mb-2" />
-            <p className="font-semibold">Sales History</p>
-            <p className="text-sm text-purple-100">View transactions</p>
-          </button>
-          <button
-            onClick={() => navigate('/merchant/reports')}
-            className="bg-orange-500 hover:bg-orange-600 text-white rounded-xl p-4 text-left transition-colors"
-          >
-            <BarChart3 className="w-6 h-6 mb-2" />
-            <p className="font-semibold">Reports</p>
-            <p className="text-sm text-orange-100">Analytics & insights</p>
+            Management
           </button>
         </div>
 
-        {/* Cash Drawer Status */}
-        <Card className={`p-4 ${
-          cashSession?.status === 'open'
-            ? 'bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-800'
-            : cashSession?.status === 'closed'
-            ? 'bg-gradient-to-r from-gray-50 to-slate-50 dark:from-gray-900/20 dark:to-slate-900/20 border-gray-200 dark:border-gray-700'
-            : 'bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-800'
-        }`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className={`p-3 rounded-xl ${
+        {activeTab === 'overview' && (
+          <>
+            {/* Alert Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Cash Drawer Status */}
+              <Card className={`p-4 ${
                 cashSession?.status === 'open'
-                  ? 'bg-green-100 dark:bg-green-900/30'
-                  : cashSession?.status === 'closed'
-                  ? 'bg-gray-100 dark:bg-gray-800/50'
-                  : 'bg-yellow-100 dark:bg-yellow-900/30'
+                  ? 'bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-800'
+                  : 'bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20 border-amber-200 dark:border-amber-800'
               }`}>
-                <Wallet className={`w-6 h-6 ${
-                  cashSession?.status === 'open'
-                    ? 'text-green-600 dark:text-green-400'
-                    : cashSession?.status === 'closed'
-                    ? 'text-gray-600 dark:text-gray-400'
-                    : 'text-yellow-600 dark:text-yellow-400'
-                }`} />
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900 dark:text-white">
-                  Cash Drawer
-                </h3>
-                {cashSession ? (
-                  <div className="flex items-center gap-2 mt-1">
-                    {cashSession.status === 'open' ? (
-                      <>
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300">
-                          <CheckCircle className="w-3 h-3" />
-                          Open
-                        </span>
-                        <span className="text-sm text-gray-500 dark:text-gray-400">
-                          Opened at {new Date(cashSession.opened_at!).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
-                          <Clock className="w-3 h-3" />
-                          Closed
-                        </span>
-                        <span className="text-sm text-gray-500 dark:text-gray-400">
-                          Day ended
-                        </span>
-                      </>
-                    )}
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-xl ${
+                    cashSession?.status === 'open' ? 'bg-green-100' : 'bg-amber-100'
+                  }`}>
+                    <Wallet className={`w-5 h-5 ${
+                      cashSession?.status === 'open' ? 'text-green-600' : 'text-amber-600'
+                    }`} />
                   </div>
-                ) : (
-                  <p className="text-sm text-yellow-600 dark:text-yellow-400 mt-1 flex items-center gap-1">
-                    <AlertCircle className="w-4 h-4" />
-                    No session started today
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Balance Info */}
-            <div className="text-right">
-              {cashSession ? (
-                cashSession.status === 'open' ? (
-                  <>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Current Balance</p>
-                    <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                      {formatCurrency(
-                        cashSession.opening_balance +
-                        (cashSession.cash_in || 0) -
-                        (cashSession.cash_out || 0) +
-                        stats.todayRevenue
-                      )}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Opening: {formatCurrency(cashSession.opening_balance)}
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Final Balance</p>
-                    <p className="text-2xl font-bold text-gray-700 dark:text-gray-300">
-                      {formatCurrency(cashSession.closing_balance || 0)}
-                    </p>
-                    {cashSession.difference !== undefined && cashSession.difference !== 0 && (
-                      <p className={`text-xs ${
-                        cashSession.difference > 0 ? 'text-blue-600' : 'text-red-600'
-                      }`}>
-                        {cashSession.difference > 0 ? '+' : ''}{formatCurrency(cashSession.difference)} difference
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">Cash Drawer</p>
+                    {cashSession?.status === 'open' ? (
+                      <p className="text-xs text-green-600 flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3" /> Open
+                      </p>
+                    ) : (
+                      <p className="text-xs text-amber-600 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" /> Not started
                       </p>
                     )}
-                  </>
-                )
-              ) : (
-                <Button
-                  onClick={() => navigate('/merchant/pos/terminal')}
-                  size="sm"
-                >
-                  <Play className="w-4 h-4 mr-1" />
-                  Start Day
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {/* Session Details for Open Sessions */}
-          {cashSession?.status === 'open' && (
-            <div className="mt-4 pt-4 border-t border-green-200 dark:border-green-800">
-              <div className="grid grid-cols-4 gap-4 text-center">
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Opening</p>
-                  <p className="font-semibold text-gray-900 dark:text-white">
-                    {formatCurrency(cashSession.opening_balance)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Cash In</p>
-                  <p className="font-semibold text-green-600 dark:text-green-400">
-                    +{formatCurrency(cashSession.cash_in || 0)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Cash Out</p>
-                  <p className="font-semibold text-red-600 dark:text-red-400">
-                    -{formatCurrency(cashSession.cash_out || 0)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Cash Sales</p>
-                  <p className="font-semibold text-blue-600 dark:text-blue-400">
-                    +{formatCurrency(stats.todayRevenue)}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-        </Card>
-
-        {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Today's Sales</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {stats.todaySales}
-                </p>
-                <p className="text-sm text-green-600 dark:text-green-400 mt-1">
-                  {formatCurrency(stats.todayRevenue)}
-                </p>
-              </div>
-              <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                <DollarSign className="w-6 h-6 text-green-600 dark:text-green-400" />
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Total Sales</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {stats.totalSales}
-                </p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">All time</p>
-              </div>
-              <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                <ShoppingCart className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Total Revenue</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {formatCurrency(stats.totalRevenue)}
-                </p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">All time</p>
-              </div>
-              <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                <TrendingUp className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Products</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {stats.totalProducts}
-                </p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Active items</p>
-              </div>
-              <div className="p-3 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
-                <Package className="w-6 h-6 text-orange-600 dark:text-orange-400" />
-              </div>
-            </div>
-          </Card>
-        </div>
-
-        {/* Recent Sales */}
-        <Card className="p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-900 dark:text-white">Recent Sales</h3>
-            <button
-              onClick={() => navigate('/merchant/pos/sales')}
-              className="text-sm text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-1"
-            >
-              View All
-              <ArrowUpRight className="w-3 h-3" />
-            </button>
-          </div>
-
-          {recentSales.length === 0 ? (
-            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-              <ShoppingCart className="w-10 h-10 mx-auto mb-2 opacity-50" />
-              <p>No sales yet</p>
-              <p className="text-sm">Start your first sale!</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {recentSales.map(sale => (
-                <div
-                  key={sale.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg"
-                >
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-white">
-                      #{sale.sale_number}
+                  </div>
+                  {cashSession?.status === 'open' && (
+                    <p className="text-lg font-bold text-green-600">
+                      {formatCurrency(cashSession.opening_balance + (cashSession.cash_in || 0) - (cashSession.cash_out || 0))}
                     </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {formatTime(sale.created_at)}
+                  )}
+                </div>
+              </Card>
+
+              {/* Low Stock Alert */}
+              <Card className={`p-4 ${
+                stats.lowStockCount > 0
+                  ? 'bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 border-red-200 dark:border-red-800'
+                  : 'bg-gradient-to-br from-gray-50 to-slate-50 dark:from-gray-900/20 dark:to-slate-900/20'
+              }`}>
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-xl ${
+                    stats.lowStockCount > 0 ? 'bg-red-100' : 'bg-gray-100'
+                  }`}>
+                    <PackageX className={`w-5 h-5 ${
+                      stats.lowStockCount > 0 ? 'text-red-600' : 'text-gray-600'
+                    }`} />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">Low Stock</p>
+                    <p className={`text-xs ${stats.lowStockCount > 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                      {stats.lowStockCount > 0 ? `${stats.lowStockCount} items need restock` : 'All items stocked'}
                     </p>
                   </div>
-                  <p className="font-semibold text-green-600 dark:text-green-400">
-                    {formatCurrency(sale.total_amount)}
+                  {stats.lowStockCount > 0 && (
+                    <button
+                      onClick={() => navigate('/merchant/pos/inventory')}
+                      className="text-xs text-red-600 hover:underline"
+                    >
+                      View
+                    </button>
+                  )}
+                </div>
+              </Card>
+
+              {/* Today's Performance */}
+              <Card className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-800">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-blue-100">
+                    <Target className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">Today</p>
+                    <p className="text-xs text-blue-600">{stats.todaySales} sales</p>
+                  </div>
+                  <p className="text-lg font-bold text-blue-600">
+                    {formatCurrency(stats.todayRevenue)}
                   </p>
                 </div>
-              ))}
+              </Card>
             </div>
-          )}
-        </Card>
 
-        {/* Features Info */}
-        <Card className="p-6 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-800">
-          <h3 className="font-semibold text-gray-900 dark:text-white mb-4">POS Features</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="flex items-start gap-2">
-              <ShoppingCart className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card className="p-4 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/merchant/pos/sales')}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-xl">
+                    <DollarSign className="w-5 h-5 text-green-600" />
+                  </div>
+                  <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded-full">Today</span>
+                </div>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(stats.todayRevenue)}</p>
+                <p className="text-sm text-gray-500">{stats.todaySales} transactions</p>
+              </Card>
+
+              <Card className="p-4 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/merchant/pos/products')}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-xl">
+                    <Package className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-gray-400" />
+                </div>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalProducts}</p>
+                <p className="text-sm text-gray-500">Active products</p>
+              </Card>
+
+              <Card className="p-4 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/merchant/pos/customers')}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="p-2 bg-pink-100 dark:bg-pink-900/30 rounded-xl">
+                    <Users className="w-5 h-5 text-pink-600" />
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-gray-400" />
+                </div>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.activeCustomers}</p>
+                <p className="text-sm text-gray-500">Customers</p>
+              </Card>
+
+              <Card className="p-4 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/merchant/pos/reports')}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
+                    <TrendingUp className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-gray-400" />
+                </div>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(stats.totalRevenue)}</p>
+                <p className="text-sm text-gray-500">Total revenue</p>
+              </Card>
+            </div>
+
+            {/* Quick Actions & Recent Sales */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Quick Actions */}
+              <Card className="p-5 lg:col-span-1">
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Quick Actions</h3>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => navigate('/merchant/pos/terminal')}
+                    className="w-full flex items-center gap-3 p-3 bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:hover:bg-green-900/30 rounded-xl transition-colors"
+                  >
+                    <div className="p-2 bg-green-100 dark:bg-green-900/50 rounded-lg">
+                      <Play className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-medium text-gray-900 dark:text-white">Start Selling</p>
+                      <p className="text-xs text-gray-500">Open POS Terminal</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-gray-400 ml-auto" />
+                  </button>
+
+                  <button
+                    onClick={() => navigate('/merchant/pos/products')}
+                    className="w-full flex items-center gap-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl transition-colors"
+                  >
+                    <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                      <Package className="w-5 h-5 text-purple-600" />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-medium text-gray-900 dark:text-white">Add Product</p>
+                      <p className="text-xs text-gray-500">Create new item</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-gray-400 ml-auto" />
+                  </button>
+
+                  <button
+                    onClick={() => navigate('/merchant/pos/inventory')}
+                    className="w-full flex items-center gap-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl transition-colors"
+                  >
+                    <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+                      <Boxes className="w-5 h-5 text-orange-600" />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-medium text-gray-900 dark:text-white">Stock Update</p>
+                      <p className="text-xs text-gray-500">Adjust inventory</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-gray-400 ml-auto" />
+                  </button>
+
+                  <button
+                    onClick={() => navigate('/merchant/pos/reports')}
+                    className="w-full flex items-center gap-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl transition-colors"
+                  >
+                    <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                      <BarChart3 className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-medium text-gray-900 dark:text-white">View Reports</p>
+                      <p className="text-xs text-gray-500">Sales analytics</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-gray-400 ml-auto" />
+                  </button>
+                </div>
+              </Card>
+
+              {/* Recent Sales */}
+              <Card className="p-5 lg:col-span-2">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-gray-900 dark:text-white">Recent Sales</h3>
+                  <button
+                    onClick={() => navigate('/merchant/pos/sales')}
+                    className="text-sm text-primary-600 hover:underline flex items-center gap-1"
+                  >
+                    View All <ArrowUpRight className="w-3 h-3" />
+                  </button>
+                </div>
+
+                {recentSales.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <ShoppingCart className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                    <p>No sales yet today</p>
+                    <Button
+                      onClick={() => navigate('/merchant/pos/terminal')}
+                      size="sm"
+                      className="mt-3"
+                    >
+                      Start Selling
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {recentSales.map(sale => (
+                      <div
+                        key={sale.id}
+                        className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                        onClick={() => navigate(`/merchant/pos/sales?id=${sale.id}`)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-xl">{getPaymentMethodIcon(sale.payment_method)}</span>
+                          <div>
+                            <p className="font-medium text-gray-900 dark:text-white">#{sale.sale_number}</p>
+                            <p className="text-xs text-gray-500">{formatTime(sale.created_at)}</p>
+                          </div>
+                        </div>
+                        <p className="font-semibold text-green-600">{formatCurrency(sale.total_amount)}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            </div>
+          </>
+        )}
+
+        {activeTab === 'management' && (
+          <>
+            {/* Management Sections */}
+            <div className="space-y-6">
+              {/* Sales & Operations */}
               <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">Quick Sales</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Fast checkout</p>
+                <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+                  Sales & Operations
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {quickLinks.filter(l => l.category === 'operations').map(link => (
+                    <button
+                      key={link.href}
+                      onClick={() => navigate(link.href)}
+                      className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:shadow-lg hover:border-primary-300 transition-all text-left"
+                    >
+                      <div className={`p-3 rounded-xl ${link.bgColor}`}>
+                        <link.icon className={`w-6 h-6 ${link.color}`} />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900 dark:text-white">{link.title}</p>
+                        <p className="text-xs text-gray-500">{link.description}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Product & Catalog */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+                  Product & Catalog
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {quickLinks.filter(l => l.category === 'catalog').map(link => (
+                    <button
+                      key={link.href}
+                      onClick={() => navigate(link.href)}
+                      className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:shadow-lg hover:border-primary-300 transition-all text-left"
+                    >
+                      <div className={`p-3 rounded-xl ${link.bgColor}`}>
+                        <link.icon className={`w-6 h-6 ${link.color}`} />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900 dark:text-white">{link.title}</p>
+                        <p className="text-xs text-gray-500">{link.description}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* People */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+                  People Management
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {quickLinks.filter(l => l.category === 'people').map(link => (
+                    <button
+                      key={link.href}
+                      onClick={() => navigate(link.href)}
+                      className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:shadow-lg hover:border-primary-300 transition-all text-left"
+                    >
+                      <div className={`p-3 rounded-xl ${link.bgColor}`}>
+                        <link.icon className={`w-6 h-6 ${link.color}`} />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900 dark:text-white">{link.title}</p>
+                        <p className="text-xs text-gray-500">{link.description}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Financial */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+                  Pricing & Financial
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {quickLinks.filter(l => l.category === 'financial').map(link => (
+                    <button
+                      key={link.href}
+                      onClick={() => navigate(link.href)}
+                      className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:shadow-lg hover:border-primary-300 transition-all text-left"
+                    >
+                      <div className={`p-3 rounded-xl ${link.bgColor}`}>
+                        <link.icon className={`w-6 h-6 ${link.color}`} />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900 dark:text-white">{link.title}</p>
+                        <p className="text-xs text-gray-500">{link.description}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Reports & Analytics */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+                  Reports & Analytics
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {quickLinks.filter(l => l.category === 'reports').map(link => (
+                    <button
+                      key={link.href}
+                      onClick={() => navigate(link.href)}
+                      className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:shadow-lg hover:border-primary-300 transition-all text-left"
+                    >
+                      <div className={`p-3 rounded-xl ${link.bgColor}`}>
+                        <link.icon className={`w-6 h-6 ${link.color}`} />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900 dark:text-white">{link.title}</p>
+                        <p className="text-xs text-gray-500">{link.description}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Settings */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+                  System Settings
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {quickLinks.filter(l => l.category === 'settings').map(link => (
+                    <button
+                      key={link.href}
+                      onClick={() => navigate(link.href)}
+                      className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:shadow-lg hover:border-primary-300 transition-all text-left"
+                    >
+                      <div className={`p-3 rounded-xl ${link.bgColor}`}>
+                        <link.icon className={`w-6 h-6 ${link.color}`} />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900 dark:text-white">{link.title}</p>
+                        <p className="text-xs text-gray-500">{link.description}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-            <div className="flex items-start gap-2">
-              <Package className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">Inventory</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Track stock</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-2">
-              <Boxes className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">Offline Mode</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Works offline</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-2">
-              <BarChart3 className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">Reports</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Sales analytics</p>
-              </div>
-            </div>
-          </div>
-        </Card>
+          </>
+        )}
       </div>
     </MerchantLayout>
   );
