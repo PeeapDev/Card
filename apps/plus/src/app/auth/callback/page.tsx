@@ -132,19 +132,34 @@ function AuthCallbackContent() {
 
         console.log("SSO: User validated:", user.email, "Tier:", user.tier);
 
+        // Helper to set cookie
+        const setCookie = (name: string, value: string, days: number) => {
+          const expires = new Date();
+          expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000);
+          const secure = window.location.protocol === 'https:' ? 'secure;' : '';
+          document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/;${secure}SameSite=Lax`;
+        };
+
         // Store tokens using Plus's token key
         authService.setTokens({
           accessToken: token,
           refreshToken: token, // Same token for now
-          expiresIn: 3600,
+          expiresIn: 3600 * 24 * 7, // 7 days
         });
 
         // Store user data
-        localStorage.setItem("user", JSON.stringify(user));
+        try {
+          localStorage.setItem("user", JSON.stringify(user));
+        } catch {}
 
         // Store tier - use URL tier param or user's actual tier
         const userTier = tier || user.tier || "basic";
-        localStorage.setItem("plusTier", userTier);
+        try {
+          localStorage.setItem("plusTier", userTier);
+        } catch {}
+
+        // Set tier and setup cookies for dashboard auth
+        setCookie("plusTier", userTier, 365);
 
         setStatus("success");
 
@@ -178,12 +193,10 @@ function AuthCallbackContent() {
               console.log("SSO Callback: Found subscription in database:", subscription);
               setupComplete = true;
 
-              // Set cookies (primary storage)
-              const secure = window.location.protocol === 'https:';
-              const cookieOptions = `path=/; max-age=31536000; ${secure ? 'secure;' : ''} samesite=Lax`;
-              document.cookie = `plusSetupComplete=true; ${cookieOptions}`;
-              document.cookie = `plusTier=${subscription.tier || userTier}; ${cookieOptions}`;
-              document.cookie = `plusSubscriptionStatus=${subscription.status || "active"}; ${cookieOptions}`;
+              // Set cookies using our helper
+              setCookie("plusSetupComplete", "true", 365);
+              setCookie("plusTier", subscription.tier || userTier, 365);
+              setCookie("plusSubscriptionStatus", subscription.status || "active", 365);
 
               // Also set localStorage as backup
               try {

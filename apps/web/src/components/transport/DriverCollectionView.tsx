@@ -20,6 +20,7 @@ import { clsx } from 'clsx';
 import { supabase } from '@/lib/supabase';
 import { useNFC, NFCCardData } from '@/hooks/useNFC';
 import { NFCStatus } from '@/components/nfc/NFCStatus';
+import { NFCIndicator } from '@/components/nfc/NFCIndicator';
 import { notificationService } from '@/services/notification.service';
 
 type PaymentMode = 'qr' | 'card' | 'mobile';
@@ -416,17 +417,15 @@ export function DriverCollectionView({
 
     if (info.offset.y < -threshold) {
       if (activeMode === 'qr') {
-        setActiveMode('mobile');
-        setShowMobileCheckout(true);
+        switchToMode('mobile');
       } else if (activeMode === 'card') {
-        setActiveMode('qr');
+        switchToMode('qr');
       }
     } else if (info.offset.y > threshold) {
       if (activeMode === 'qr') {
-        setActiveMode('card');
+        switchToMode('card');
       } else if (activeMode === 'mobile') {
-        setActiveMode('qr');
-        setShowMobileCheckout(false);
+        switchToMode('qr');
       }
     }
   };
@@ -437,6 +436,16 @@ export function DriverCollectionView({
       setShowMobileCheckout(true);
     } else {
       setShowMobileCheckout(false);
+    }
+    // Immediately start NFC scanning when switching to card mode if reader is connected
+    if (mode === 'card') {
+      if (nfcStatus.usbReader.connected && !nfcStatus.usbReader.scanning) {
+        console.log('[DriverCollectionView] Starting USB scanning on card mode switch');
+        startUSBScanning();
+      }
+      if (nfcStatus.webNFC.supported && !nfcStatus.webNFC.scanning) {
+        startWebNFC();
+      }
     }
   };
 
@@ -584,7 +593,10 @@ export function DriverCollectionView({
           <p className="text-sm text-gray-400">Collecting</p>
           <p className="text-2xl font-bold">Le {amount.toLocaleString()}</p>
         </div>
-        <div className="w-10" /> {/* Spacer */}
+        {/* NFC Status Indicator */}
+        <div className="bg-white/10 rounded-lg">
+          <NFCIndicator showLabel={false} />
+        </div>
       </div>
 
       {/* Waiting indicator */}

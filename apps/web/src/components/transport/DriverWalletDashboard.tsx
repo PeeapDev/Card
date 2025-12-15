@@ -35,9 +35,9 @@ interface Transaction {
   merchant_name?: string;
   created_at: string;
   metadata?: any;
-  payer_name?: string;
-  recipient_user_id?: string;
-  sender_user_id?: string;
+  wallet_id?: string;
+  source_wallet_id?: string;
+  destination_wallet_id?: string;
 }
 
 interface DriverWalletDashboardProps {
@@ -68,12 +68,11 @@ export function DriverWalletDashboard({
     if (showRefreshIndicator) setRefreshing(true);
 
     try {
-      // Get transactions where this user received payment (driver collections)
+      // Get transactions for this wallet (both incoming and outgoing)
       const { data, error } = await supabase
         .from('transactions')
         .select('*')
-        .or(`recipient_user_id.eq.${userId},wallet_id.eq.${wallet.id}`)
-        .in('type', ['PAYMENT', 'PAYMENT_RECEIVED', 'TRANSFER', 'DEPOSIT'])
+        .eq('wallet_id', wallet.id)
         .order('created_at', { ascending: false })
         .limit(20);
 
@@ -125,38 +124,38 @@ export function DriverWalletDashboard({
     setRefundError('');
 
     try {
-      // Get payer's wallet to refund to
-      const payerUserId = selectedTransaction.sender_user_id || selectedTransaction.metadata?.payerUserId;
+      // Get payer's wallet to refund to (from source_wallet_id or metadata)
+      const payerWalletId = selectedTransaction.source_wallet_id || selectedTransaction.metadata?.sourceWalletId;
 
-      if (!payerUserId) {
+      if (!payerWalletId) {
         throw new Error('Cannot find payer information for refund');
       }
 
       // Check if driver wallet has sufficient balance
-      if (wallet.balance < selectedTransaction.amount) {
+      if (wallet.balance < Math.abs(selectedTransaction.amount)) {
         throw new Error('Insufficient wallet balance for refund');
       }
 
       // Get payer's wallet
       const { data: payerWallet, error: walletError } = await supabase
         .from('wallets')
-        .select('id, balance')
-        .eq('user_id', payerUserId)
+        .select('id, balance, user_id')
+        .eq('id', payerWalletId)
         .eq('status', 'ACTIVE')
-        .limit(1)
         .single();
 
       if (walletError || !payerWallet) {
         throw new Error('Payer wallet not found');
       }
 
+      const refundAmount = Math.abs(selectedTransaction.amount);
       const refundReference = `REF-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
       // Debit driver wallet
       const { error: debitError } = await supabase
         .from('wallets')
         .update({
-          balance: wallet.balance - selectedTransaction.amount,
+          balance: wallet.balance - refundAmount,
           updated_at: new Date().toISOString(),
         })
         .eq('id', wallet.id);
@@ -167,7 +166,7 @@ export function DriverWalletDashboard({
       const { error: creditError } = await supabase
         .from('wallets')
         .update({
-          balance: parseFloat(payerWallet.balance) + selectedTransaction.amount,
+          balance: parseFloat(payerWallet.balance) + refundAmount,
           updated_at: new Date().toISOString(),
         })
         .eq('id', payerWallet.id);
@@ -185,13 +184,13 @@ export function DriverWalletDashboard({
       await supabase.from('transactions').insert({
         wallet_id: wallet.id,
         type: 'REFUND',
-        amount: -selectedTransaction.amount,
+        amount: -refundAmount,
         currency: selectedTransaction.currency || 'SLE',
         status: 'COMPLETED',
         description: `Refund: ${refundReason}`,
         reference: refundReference,
-        recipient_user_id: payerUserId,
-        sender_user_id: userId,
+        source_wallet_id: wallet.id,
+        destination_wallet_id: payerWalletId,
         metadata: {
           originalTransactionId: selectedTransaction.id,
           refundReason,
@@ -203,13 +202,13 @@ export function DriverWalletDashboard({
       await supabase.from('transactions').insert({
         wallet_id: payerWallet.id,
         type: 'REFUND',
-        amount: selectedTransaction.amount,
+        amount: refundAmount,
         currency: selectedTransaction.currency || 'SLE',
         status: 'COMPLETED',
         description: `Refund received: ${refundReason}`,
         reference: refundReference,
-        recipient_user_id: payerUserId,
-        sender_user_id: userId,
+        source_wallet_id: wallet.id,
+        destination_wallet_id: payerWalletId,
         metadata: {
           originalTransactionId: selectedTransaction.id,
           refundReason,
@@ -231,18 +230,20 @@ export function DriverWalletDashboard({
         })
         .eq('id', selectedTransaction.id);
 
-      // Send notification to payer
-      await supabase.from('user_notifications').insert({
-        user_id: payerUserId,
-        type: 'refund_received',
-        title: 'Refund Received',
-        message: `You received a refund of Le ${selectedTransaction.amount.toLocaleString()}. Reason: ${refundReason}`,
-        read: false,
-        metadata: {
-          amount: selectedTransaction.amount,
-          refundReference,
-        },
-      });
+      // Send notification to payer if we have their user_id
+      if (payerWallet.user_id) {
+        await supabase.from('user_notifications').insert({
+          user_id: payerWallet.user_id,
+          type: 'refund_received',
+          title: 'Refund Received',
+          message: `You received a refund of Le ${refundAmount.toLocaleString()}. Reason: ${refundReason}`,
+          read: false,
+          metadata: {
+            amount: refundAmount,
+            refundReference,
+          },
+        });
+      }
 
       setRefundSuccess(true);
 

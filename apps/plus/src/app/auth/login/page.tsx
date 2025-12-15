@@ -1,134 +1,89 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { toast } from "sonner";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Loader2, ArrowRight } from "lucide-react";
 import { authService } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-  });
+  const searchParams = useSearchParams();
+  const redirect = searchParams.get("redirect") || "/dashboard";
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-
-    try {
-      const { user, tokens } = await authService.login(formData);
-
-      // Store tokens and user
-      authService.setTokens(tokens);
-      localStorage.setItem("user", JSON.stringify(user));
-
-      // Store tier for Plus dashboard
-      if (user.tier) {
-        localStorage.setItem("plusTier", user.tier);
-      }
-
-      toast.success("Welcome back!");
-
-      // Check if setup is needed for business tiers
-      const setupComplete = localStorage.getItem("plusSetupComplete");
-      if ((user.tier === "business" || user.tier === "business_plus") && !setupComplete) {
-        router.push(`/setup?tier=${user.tier}`);
-      } else {
-        router.push("/dashboard");
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Login failed");
-    } finally {
-      setIsLoading(false);
+  useEffect(() => {
+    // Check if already authenticated
+    const token = authService.getAccessToken();
+    if (token) {
+      router.replace(redirect);
     }
+  }, [router, redirect]);
+
+  const handleLoginViaPeeAP = () => {
+    // Redirect to my.peeap.com with callback to plus.peeap.com
+    const callbackUrl = encodeURIComponent(`${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirect)}`);
+    window.location.href = `https://my.peeap.com/auth/sso?app=plus&callback=${callbackUrl}`;
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 px-4">
+      {/* Animated background elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500/20 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute top-1/2 -left-40 w-80 h-80 bg-blue-500/20 rounded-full blur-3xl animate-pulse delay-1000" />
+        <div className="absolute -bottom-40 right-1/3 w-80 h-80 bg-indigo-500/20 rounded-full blur-3xl animate-pulse delay-500" />
+      </div>
+
+      <div className="relative w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-2">
-            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold">P+</span>
+          <div className="inline-flex items-center gap-3">
+            <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/25">
+              <span className="text-white font-bold text-xl">P+</span>
             </div>
-            <span className="font-bold text-2xl">PeeAP Plus</span>
-          </Link>
+            <span className="font-bold text-3xl text-white">PeeAP Plus</span>
+          </div>
+          <p className="text-white/60 mt-2">Business Dashboard</p>
         </div>
 
-        <Card>
-          <CardHeader className="text-center">
-            <CardTitle>Welcome back</CardTitle>
-            <CardDescription>Sign in to your business account</CardDescription>
+        <Card className="bg-white/95 backdrop-blur-xl border-white/20 shadow-2xl">
+          <CardHeader className="text-center pb-2">
+            <CardTitle className="text-2xl">Welcome to PeeAP Plus</CardTitle>
+            <CardDescription className="text-base">
+              Sign in with your PeeAP account to access your business dashboard
+            </CardDescription>
           </CardHeader>
-          <form onSubmit={handleSubmit}>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@company.com"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Password</Label>
-                  <a href="https://my.peeap.com/forgot-password" className="text-sm text-primary hover:underline">
-                    Forgot password?
-                  </a>
-                </div>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Enter your password"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-            </CardContent>
-            <CardFooter className="flex flex-col gap-4">
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Signing in...
-                  </>
-                ) : (
-                  "Sign In"
-                )}
-              </Button>
-              <p className="text-sm text-center text-muted-foreground">
-                Don&apos;t have an account?{" "}
-                <Link href="/auth/register" className="text-primary hover:underline">
-                  Sign up
-                </Link>
+          <CardContent className="space-y-6 pt-4">
+            <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl p-4 border border-purple-100">
+              <p className="text-sm text-gray-600 text-center">
+                PeeAP Plus uses your existing PeeAP account for secure single sign-on authentication.
               </p>
-            </CardFooter>
-          </form>
+            </div>
+
+            <Button
+              onClick={handleLoginViaPeeAP}
+              className="w-full bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white shadow-lg shadow-purple-500/25 py-6 text-lg"
+            >
+              Sign in with PeeAP
+              <ArrowRight className="ml-2 h-5 w-5" />
+            </Button>
+
+            <p className="text-xs text-center text-gray-500">
+              Don&apos;t have a PeeAP account?{" "}
+              <a
+                href="https://my.peeap.com/register"
+                className="text-purple-600 hover:underline font-medium"
+              >
+                Create one at my.peeap.com
+              </a>
+            </p>
+          </CardContent>
         </Card>
+
+        <p className="text-center text-white/40 text-xs mt-6">
+          By signing in, you agree to our Terms of Service and Privacy Policy
+        </p>
       </div>
     </div>
   );

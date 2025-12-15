@@ -24,7 +24,7 @@ import { TransportSetupWizard, DriverProfile } from '@/components/transport/Tran
 import { DriverCollectionView } from '@/components/transport/DriverCollectionView';
 import { PhoneFrame } from '@/components/ui/PhoneFrame';
 import { DriverWalletSetup } from '@/components/transport/DriverWalletSetup';
-import { DriverWalletDashboard } from '@/components/transport/DriverWalletDashboard';
+import { DriverTransactionDashboard } from '@/components/transport/DriverTransactionDashboard';
 import { walletService, ExtendedWallet } from '@/services/wallet.service';
 
 interface DriverProfileData {
@@ -427,11 +427,11 @@ export function CollectPaymentPage() {
     );
   }
 
-  // Wallet Dashboard (main view showing balance, transactions, and start button)
+  // Wallet Dashboard (main view showing balance, transactions, reports, and start button)
   if (pageState === 'wallet-dashboard' && user?.id && driverWallet) {
     return (
       <PhoneFrame>
-        <DriverWalletDashboard
+        <DriverTransactionDashboard
           userId={user.id}
           wallet={driverWallet}
           onStart={() => setPageState('select-mode')}

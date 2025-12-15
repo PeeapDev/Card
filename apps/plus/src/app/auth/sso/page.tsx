@@ -173,6 +173,37 @@ function SsoContent() {
       // Set session cookie (NOT localStorage)
       setCookie("plus_session", result.sessionToken, 7);
 
+      // Also set plus_token cookie that dashboard auth expects
+      // Create a simple JWT-like token with user info
+      const tokenPayload = {
+        userId: result.user.id,
+        email: result.user.email,
+        roles: result.user.roles || 'merchant',
+        tier: result.tier || result.user.tier || 'business',
+        exp: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
+      };
+      const plusToken = btoa(JSON.stringify(tokenPayload));
+      setCookie("plus_token", plusToken, 7);
+      setCookie("plus_refresh_token", result.sessionToken, 7);
+
+      // Also set setup complete and tier cookies
+      setCookie("plusSetupComplete", "true", 365);
+      setCookie("plusTier", result.tier || result.user.tier || "business", 365);
+
+      // Store user data in localStorage for dashboard use (backup)
+      try {
+        localStorage.setItem("user", JSON.stringify({
+          id: result.user.id,
+          email: result.user.email,
+          firstName: result.user.first_name,
+          lastName: result.user.last_name,
+          businessName: result.user.business_name,
+          tier: result.tier || result.user.tier,
+        }));
+        localStorage.setItem("plusTier", result.tier || result.user.tier || "business");
+        localStorage.setItem("plusSetupComplete", "true");
+      } catch {}
+
       setStatus("success");
 
       // Redirect to the intended destination
@@ -224,10 +255,17 @@ function LoadingFallback() {
 
 export default function SsoPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <Suspense fallback={<LoadingFallback />}>
-        <SsoContent />
-      </Suspense>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+      {/* Animated background elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500/20 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute top-1/2 -left-40 w-80 h-80 bg-blue-500/20 rounded-full blur-3xl animate-pulse delay-1000" />
+      </div>
+      <div className="relative bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
+        <Suspense fallback={<LoadingFallback />}>
+          <SsoContent />
+        </Suspense>
+      </div>
     </div>
   );
 }
