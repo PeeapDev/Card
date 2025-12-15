@@ -21,6 +21,7 @@ import {
   ChevronRight,
   ExternalLink,
   Smartphone,
+  Wifi,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
@@ -28,6 +29,7 @@ import { useDeveloperMode } from '@/context/DeveloperModeContext';
 import { useApps } from '@/context/AppsContext';
 import { Button } from '@/components/ui';
 import { NotificationSettings } from '@/components/settings/NotificationSettings';
+import { NFCAgentSettings } from '@/components/settings/NFCAgentSettings';
 
 export function MerchantSettingsPage() {
   const { isDeveloperMode, toggleDeveloperMode } = useDeveloperMode();
@@ -66,6 +68,7 @@ export function MerchantSettingsPage() {
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'security', label: 'Security', icon: Shield },
     { id: 'apps', label: 'Apps', icon: Boxes },
+    { id: 'nfc', label: 'NFC Agent', icon: Wifi },
     { id: 'developer', label: 'Developer Mode', icon: Code2 },
   ];
 
@@ -458,6 +461,10 @@ export function MerchantSettingsPage() {
                   </Card>
                 )}
               </div>
+            )}
+
+            {activeTab === 'nfc' && (
+              <NFCAgentSettings />
             )}
 
             {activeTab === 'developer' && (

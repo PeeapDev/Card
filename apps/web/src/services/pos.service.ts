@@ -2,7 +2,7 @@
  * POS Service - Handle all POS operations
  */
 
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseAdmin } from '@/lib/supabase';
 
 // Types
 
@@ -2435,10 +2435,11 @@ export interface POSSettings {
 
 /**
  * Get POS settings for a merchant
+ * Uses supabaseAdmin to bypass RLS since app uses custom auth
  */
 async function getPOSSettings(merchantId: string): Promise<POSSettings | null> {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('pos_settings')
       .select('*')
       .eq('merchant_id', merchantId)
@@ -2462,10 +2463,12 @@ async function getPOSSettings(merchantId: string): Promise<POSSettings | null> {
 
 /**
  * Save POS settings (create or update)
+ * Uses supabaseAdmin to bypass RLS since app uses custom auth
  */
 async function savePOSSettings(settings: Partial<POSSettings> & { merchant_id: string }): Promise<POSSettings | null> {
   try {
-    const { data, error } = await supabase
+    console.log('[POS] Saving settings for merchant:', settings.merchant_id);
+    const { data, error } = await supabaseAdmin
       .from('pos_settings')
       .upsert({
         merchant_id: settings.merchant_id,
@@ -2490,23 +2493,25 @@ async function savePOSSettings(settings: Partial<POSSettings> & { merchant_id: s
       .single();
 
     if (error) {
-      console.error('Error saving POS settings:', error);
+      console.error('[POS] Error saving settings:', error);
       return null;
     }
 
+    console.log('[POS] Settings saved successfully:', data);
     return data as POSSettings;
   } catch (error) {
-    console.error('Error saving POS settings:', error);
+    console.error('[POS] Error saving settings:', error);
     return null;
   }
 }
 
 /**
  * Check if POS setup is completed for a merchant
+ * Uses supabaseAdmin to bypass RLS since app uses custom auth
  */
 async function isPOSSetupCompleted(merchantId: string): Promise<boolean> {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('pos_settings')
       .select('setup_completed')
       .eq('merchant_id', merchantId)

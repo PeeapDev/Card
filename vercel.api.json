@@ -1,41 +1,22 @@
 {
   "version": 2,
-  "name": "api-peeap",
+  "framework": null,
+  "buildCommand": "",
+  "installCommand": "npm install",
   "functions": {
     "api/router.ts": {
-      "maxDuration": 30,
-      "memory": 1024
+      "maxDuration": 30
     }
   },
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/router"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/api/router"
-    }
-  ],
-  "env": {
-    "FRONTEND_URL": "https://checkout.peeap.com",
-    "MERCHANT_APP_URL": "https://my.peeap.com",
-    "CORS_ORIGIN": "https://checkout.peeap.com,https://my.peeap.com",
-    "MERCHANT_SERVICE_URL": "https://api.peeap.com"
-  },
-  "headers": [
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-cache, no-store, must-revalidate"
-        },
-        {
-          "key": "X-Content-Type-Options",
-          "value": "nosniff"
-        }
-      ]
+      "src": "/(.*)",
+      "dest": "/api/router",
+      "headers": {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "X-Content-Type-Options": "nosniff",
+        "Access-Control-Allow-Origin": "*"
+      }
     }
   ]
 }

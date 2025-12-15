@@ -29,8 +29,9 @@ export function NFCIndicator({ showLabel = false, className = '' }: NFCIndicator
   const [cardPresent, setCardPresent] = useState(false);
   const [cardTimeout, setCardTimeout] = useState<NodeJS.Timeout | null>(null);
 
-  // Determine connection status
-  const isConnected = status.webNFC.scanning || status.usbReader.connected;
+  // Determine connection status (agent takes priority)
+  const isAgentConnected = status.agent?.connected;
+  const isConnected = isAgentConnected || status.webNFC.scanning || status.usbReader.connected;
 
   // Handle card detection - show green for 3 seconds
   useEffect(() => {
@@ -73,9 +74,13 @@ export function NFCIndicator({ showLabel = false, className = '' }: NFCIndicator
     readerTooltip = 'Checking NFC status...';
   } else if (isConnected) {
     readerDotColor = 'bg-green-500';
-    readerTooltip = status.usbReader.connected
-      ? `USB Reader: ${status.usbReader.deviceName || 'Connected'}`
-      : 'Web NFC active';
+    if (isAgentConnected) {
+      readerTooltip = `NFC Agent: ${status.agent?.readerName || 'Connected'}`;
+    } else if (status.usbReader.connected) {
+      readerTooltip = `USB Reader: ${status.usbReader.deviceName || 'Connected'}`;
+    } else {
+      readerTooltip = 'Web NFC active';
+    }
   }
 
   const cardDotColor = cardPresent ? 'bg-green-500' : 'bg-red-500';

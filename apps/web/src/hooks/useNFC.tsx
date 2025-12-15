@@ -2,9 +2,10 @@
  * useNFC Hook
  *
  * Global NFC reader detection and management hook.
- * Supports:
- * - Web NFC API (mobile devices)
- * - ACR122U USB NFC reader (desktop)
+ * Supports (in order of priority):
+ * 1. Local NFC Agent (most reliable - uses native PC/SC)
+ * 2. Web NFC API (mobile devices)
+ * 3. ACR122U USB NFC reader via Web USB (desktop fallback)
  *
  * Use this hook anywhere you need NFC functionality:
  * - Admin dashboard
@@ -14,9 +15,18 @@
  */
 
 import { useState, useEffect, useCallback, useRef, createContext, useContext, ReactNode } from 'react';
+import { nfcAgentService, NFCAgentCardData, NFCAgentStatus } from '@/services/nfc-agent.service';
 
 // Types
 export interface NFCReaderStatus {
+  // Local NFC Agent (most reliable)
+  agent: {
+    available: boolean;
+    connected: boolean;
+    readerName: string | null;
+    scanning: boolean;
+    error?: string;
+  };
   // Web NFC (mobile)
   webNFC: {
     supported: boolean;
@@ -24,7 +34,7 @@ export interface NFCReaderStatus {
     scanning: boolean;
     error?: string;
   };
-  // USB NFC Reader (ACR122U)
+  // USB NFC Reader (ACR122U) - fallback
   usbReader: {
     supported: boolean;
     connected: boolean;
@@ -95,6 +105,12 @@ declare global {
 
 // Initial status
 const initialStatus: NFCReaderStatus = {
+  agent: {
+    available: false,
+    connected: false,
+    readerName: null,
+    scanning: false,
+  },
   webNFC: {
     supported: false,
     available: false,
@@ -127,6 +143,7 @@ export function NFCProvider({ children }: { children: ReactNode }) {
   const abortControllerRef = useRef<AbortController | null>(null);
   const cardCallbacksRef = useRef<Set<(card: NFCCardData) => void>>(new Set());
   const usbPollingRef = useRef<boolean>(false);
+  const agentConnectedRef = useRef<boolean>(false);
 
   // Notify card detected callbacks
   const notifyCardDetected = useCallback((card: NFCCardData) => {
@@ -142,14 +159,29 @@ export function NFCProvider({ children }: { children: ReactNode }) {
       lastCheck: new Date(),
     };
 
+    // Check Local NFC Agent first (most reliable)
+    try {
+      const agentAvailable = await nfcAgentService.isAgentAvailable();
+      newStatus.agent.available = agentAvailable;
+
+      if (agentAvailable) {
+        const agentStatus = nfcAgentService.getStatus();
+        newStatus.agent.connected = agentStatus.connected;
+        newStatus.agent.readerName = agentStatus.readerName;
+        newStatus.agent.scanning = agentStatus.connected; // Agent is always scanning when connected
+      }
+    } catch (err) {
+      console.log('[NFC] Agent check error:', err);
+    }
+
     // Check Web NFC support (mobile)
     if ('NDEFReader' in window) {
       newStatus.webNFC.supported = true;
       newStatus.webNFC.available = true;
     }
 
-    // Check Web USB support (desktop)
-    if (navigator.usb) {
+    // Check Web USB support (desktop) - fallback if agent not available
+    if (navigator.usb && !newStatus.agent.connected) {
       newStatus.usbReader.supported = true;
       try {
         const devices = await navigator.usb.getDevices();
@@ -178,10 +210,12 @@ export function NFCProvider({ children }: { children: ReactNode }) {
 
     // Update overall status
     newStatus.anyReaderAvailable =
+      newStatus.agent.connected ||
       newStatus.webNFC.available ||
       newStatus.usbReader.connected;
 
     newStatus.isScanning =
+      newStatus.agent.scanning ||
       newStatus.webNFC.scanning ||
       newStatus.usbReader.scanning;
 
@@ -286,10 +320,12 @@ export function NFCProvider({ children }: { children: ReactNode }) {
     try {
       // Request device if not already connected
       if (!usbDeviceRef.current) {
+        console.log('[NFC] Requesting USB device...');
         const device = await navigator.usb.requestDevice({
           filters: [{ vendorId: 0x072F }], // ACR122U
         });
         usbDeviceRef.current = device;
+        console.log('[NFC] Device selected:', device.productName);
       }
 
       const device = usbDeviceRef.current;
@@ -310,14 +346,50 @@ export function NFCProvider({ children }: { children: ReactNode }) {
         return true;
       }
 
-      // Open and claim the device
-      await device.open();
+      // Try to close first if it's in a bad state
+      try {
+        if (device.opened) {
+          console.log('[NFC] Closing device first...');
+          await device.close();
+        }
+      } catch (closeErr) {
+        console.log('[NFC] Close error (ignored):', closeErr);
+      }
 
+      // Open the device
+      console.log('[NFC] Opening device...');
+      await device.open();
+      console.log('[NFC] Device opened successfully');
+
+      // Select configuration
       if (device.configuration === null) {
+        console.log('[NFC] Selecting configuration 1...');
         await device.selectConfiguration(1);
       }
 
-      await device.claimInterface(0);
+      // Try to claim interface with retry
+      let claimed = false;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          console.log(`[NFC] Claiming interface 0 (attempt ${attempt})...`);
+          await device.claimInterface(0);
+          claimed = true;
+          console.log('[NFC] Interface claimed successfully');
+          break;
+        } catch (claimErr: any) {
+          console.error(`[NFC] Claim attempt ${attempt} failed:`, claimErr);
+          if (attempt < 3) {
+            // Wait a bit before retry
+            await new Promise(resolve => setTimeout(resolve, 500));
+          } else {
+            throw claimErr;
+          }
+        }
+      }
+
+      if (!claimed) {
+        throw new Error('Failed to claim USB interface after 3 attempts');
+      }
 
       setStatus(prev => ({
         ...prev,
@@ -330,11 +402,22 @@ export function NFCProvider({ children }: { children: ReactNode }) {
       }));
 
       setError(null);
+      console.log('[NFC] USB reader connected successfully!');
       return true;
     } catch (err: any) {
       console.error('[NFC] USB connect error:', err);
+
+      // Clear the device ref if connection failed
+      usbDeviceRef.current = null;
+
       if (err.name === 'NotFoundError') {
-        setError('No ACR122U reader found');
+        setError('No ACR122U reader found. Make sure it is plugged in.');
+      } else if (err.name === 'SecurityError') {
+        setError('USB access denied. Try refreshing the page.');
+      } else if (err.name === 'NetworkError' || err.message?.includes('claimed')) {
+        setError('USB reader is in use. Close other apps/tabs using it, unplug and replug the reader, then try again.');
+      } else if (err.message?.includes('denied') || err.message?.includes('Access denied')) {
+        setError('USB access denied. Unplug the reader, wait 5 seconds, plug it back in, then try again.');
       } else {
         setError(err.message || 'Failed to connect USB reader');
       }
@@ -620,9 +703,62 @@ export function NFCProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Initial status check and USB event listeners
+  // Initial status check, agent connection, and USB event listeners
   useEffect(() => {
     checkStatus();
+
+    // Try to connect to local NFC Agent
+    const connectToAgent = async () => {
+      console.log('[NFC] Attempting to connect to local NFC Agent...');
+      const connected = await nfcAgentService.connect();
+      if (connected) {
+        console.log('[NFC] Connected to local NFC Agent');
+        agentConnectedRef.current = true;
+        checkStatus();
+      } else {
+        console.log('[NFC] NFC Agent not available, will use fallback methods');
+      }
+    };
+
+    connectToAgent();
+
+    // Listen for card detection from agent
+    const unsubscribeCard = nfcAgentService.onCardDetected((agentCard: NFCAgentCardData) => {
+      console.log('[NFC] Card detected via agent:', agentCard);
+
+      // Convert agent card data to our format
+      const isUUID = agentCard.data && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(agentCard.data);
+
+      const cardData: NFCCardData = {
+        uid: agentCard.uid,
+        type: isUUID ? 'wallet' : 'unknown',
+        data: agentCard.data || agentCard.uid,
+      };
+
+      notifyCardDetected(cardData);
+    });
+
+    // Listen for agent status changes
+    const unsubscribeStatus = nfcAgentService.onStatusChange((agentStatus: NFCAgentStatus) => {
+      setStatus(prev => ({
+        ...prev,
+        agent: {
+          available: true,
+          connected: agentStatus.connected,
+          readerName: agentStatus.readerName,
+          scanning: agentStatus.connected && !!agentStatus.readerName,
+          error: agentStatus.lastError || undefined,
+        },
+        anyReaderAvailable: agentStatus.connected || prev.webNFC.available || prev.usbReader.connected,
+        isScanning: (agentStatus.connected && !!agentStatus.readerName) || prev.webNFC.scanning || prev.usbReader.scanning,
+      }));
+    });
+
+    // Listen for agent errors
+    const unsubscribeError = nfcAgentService.onError((agentError: string) => {
+      console.error('[NFC] Agent error:', agentError);
+      setError(agentError);
+    });
 
     const handleUSBConnect = () => {
       console.log('[NFC] USB device connected');
@@ -651,8 +787,12 @@ export function NFCProvider({ children }: { children: ReactNode }) {
         navigator.usb.removeEventListener('connect', handleUSBConnect);
         navigator.usb.removeEventListener('disconnect', handleUSBDisconnect);
       }
+      // Cleanup agent subscriptions
+      unsubscribeCard();
+      unsubscribeStatus();
+      unsubscribeError();
     };
-  }, [checkStatus, stopWebNFC]);
+  }, [checkStatus, stopWebNFC, notifyCardDetected]);
 
   const value: NFCContextValue = {
     status,
@@ -685,7 +825,10 @@ export function useNFC() {
     // while waiting for the provider to mount
     console.warn('[NFC] useNFC called outside NFCProvider - returning defaults');
     return {
-      status: initialStatus,
+      status: {
+        ...initialStatus,
+        agent: { available: false, connected: false, readerName: null, scanning: false },
+      },
       isChecking: false,
       lastCardRead: null,
       error: null,

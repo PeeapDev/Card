@@ -14,6 +14,8 @@ import {
   Volume2,
   Usb,
   Signal,
+  Monitor,
+  Download,
 } from 'lucide-react';
 import QRCode from 'react-qr-code';
 import { clsx } from 'clsx';
@@ -137,8 +139,9 @@ export function DriverCollectionView({
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Derived NFC state from context
-  const nfcSupported = nfcStatus.anyReaderAvailable || nfcStatus.webNFC.supported || nfcStatus.usbReader.supported;
+  const nfcSupported = nfcStatus.anyReaderAvailable || nfcStatus.webNFC.supported || nfcStatus.usbReader.supported || nfcStatus.agent?.available;
   const isScanning = nfcStatus.isScanning;
+  const agentConnected = nfcStatus.agent?.connected;
 
   // Subscribe to payment notification via Supabase Realtime broadcast channel
   // This is faster and more reliable than polling the database
@@ -776,6 +779,57 @@ export function DriverCollectionView({
 
                   {/* NFC Reader Status */}
                   <div className="mt-4 w-full max-w-xs">
+                    {/* Show agent status if connected */}
+                    {agentConnected && (
+                      <div className="flex items-center justify-center gap-2 mb-3 p-3 bg-green-500/20 border border-green-500/50 rounded-xl">
+                        <Monitor className="w-5 h-5 text-green-400" />
+                        <span className="text-green-400 font-medium">
+                          {nfcStatus.agent?.readerName || 'NFC Agent Connected'}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Show install prompt if no agent and no USB reader */}
+                    {!agentConnected && !nfcStatus.usbReader.connected && !nfcStatus.webNFC.supported && (
+                      <div className="mb-3 p-4 bg-blue-500/20 border border-blue-500/50 rounded-xl text-center">
+                        <Monitor className="w-8 h-8 text-blue-400 mx-auto mb-2" />
+                        <p className="text-blue-300 text-sm mb-3">
+                          For the best NFC experience, install the PeeAP NFC Agent
+                        </p>
+                        <a
+                          href="/downloads/peeap-nfc-agent.zip"
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium text-sm"
+                        >
+                          <Download className="w-4 h-4" />
+                          Download NFC Agent
+                        </a>
+                        <p className="text-blue-400/60 text-xs mt-2">
+                          Works reliably on any computer
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Show USB connect button if USB reader is supported but not connected and no agent */}
+                    {!agentConnected && nfcStatus.usbReader.supported && !nfcStatus.usbReader.connected && !isScanning && (
+                      <motion.button
+                        initial={{ scale: 0.9 }}
+                        animate={{ scale: 1 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={async () => {
+                          console.log('[DriverCollectionView] Connecting USB reader...');
+                          const success = await connectUSBReader();
+                          if (success) {
+                            console.log('[DriverCollectionView] USB connected, starting scan');
+                            startUSBScanning();
+                          }
+                        }}
+                        className="w-full py-4 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-semibold flex items-center justify-center gap-2 mb-3"
+                      >
+                        <Usb className="w-5 h-5" />
+                        Connect USB NFC Reader
+                      </motion.button>
+                    )}
+
                     <NFCStatus
                       variant="inline"
                       showConnectButton={true}
@@ -795,6 +849,17 @@ export function DriverCollectionView({
                       <Loader2 className="w-5 h-5 animate-spin" />
                       <span>Waiting for card...</span>
                     </motion.div>
+                  )}
+
+                  {nfcError && (
+                    <div className="mt-3 p-3 bg-red-500/20 border border-red-500/50 rounded-xl text-red-400 text-sm text-center">
+                      {nfcError}
+                      {nfcError.includes('denied') && (
+                        <p className="text-xs mt-1 text-red-300">
+                          Try closing other apps using the NFC reader, or reconnect the USB cable
+                        </p>
+                      )}
+                    </div>
                   )}
 
                   {nfcError && nfcSupported && (

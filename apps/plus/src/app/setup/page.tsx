@@ -86,10 +86,71 @@ function SetupWizardContent() {
   const [currentStep, setCurrentStep] = useState<SetupStep>("choose");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingExisting, setIsLoadingExisting] = useState(false);
+  const [isCheckingSubscription, setIsCheckingSubscription] = useState(true);
   const [tier, setTier] = useState<string>("business");
   const [businessSource, setBusinessSource] = useState<BusinessSource>(null);
   const [existingBusiness, setExistingBusiness] = useState<ExistingBusiness | null>(null);
   const [requiresVerification, setRequiresVerification] = useState(false);
+
+  // CHECK FOR EXISTING SUBSCRIPTION FIRST - Skip setup if already subscribed
+  useEffect(() => {
+    const checkExistingSubscription = async () => {
+      try {
+        const userStr = localStorage.getItem("user");
+        const user = userStr ? JSON.parse(userStr) : null;
+
+        if (!user?.id) {
+          console.log("Setup: No user found, continuing with setup");
+          setIsCheckingSubscription(false);
+          return;
+        }
+
+        console.log("Setup: Checking for existing subscription for user:", user.id);
+
+        // Query merchant_subscriptions table
+        const { data: subscriptions, error } = await supabase
+          .from('merchant_subscriptions')
+          .select('*')
+          .eq('user_id', user.id)
+          .limit(1);
+
+        if (error) {
+          console.log("Setup: Subscription query error:", error.message);
+          setIsCheckingSubscription(false);
+          return;
+        }
+
+        if (subscriptions && subscriptions.length > 0) {
+          const subscription = subscriptions[0];
+          console.log("Setup: Found existing subscription:", subscription);
+
+          // Set cookies and localStorage
+          const secure = window.location.protocol === 'https:' ? 'Secure;' : '';
+          document.cookie = `plusSetupComplete=true;path=/;max-age=31536000;${secure}SameSite=Lax`;
+          document.cookie = `plusTier=${subscription.tier};path=/;max-age=31536000;${secure}SameSite=Lax`;
+
+          try {
+            localStorage.setItem("plusSetupComplete", "true");
+            localStorage.setItem("plusTier", subscription.tier);
+            localStorage.setItem("plusSubscriptionStatus", subscription.status);
+          } catch {}
+
+          // Redirect to dashboard - user already has subscription
+          console.log("Setup: User already has subscription, redirecting to dashboard");
+          router.replace("/dashboard");
+          return;
+        }
+
+        console.log("Setup: No existing subscription found, showing setup wizard");
+        setIsCheckingSubscription(false);
+      } catch (e) {
+        console.error("Setup: Error checking subscription:", e);
+        setIsCheckingSubscription(false);
+      }
+    };
+
+    checkExistingSubscription();
+  }, [router]);
 
   const [businessInfo, setBusinessInfo] = useState<BusinessInfo>({
     legalName: "",

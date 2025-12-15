@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PeeAP NFC Agent</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: #fff;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 360px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .logo {
+      width: 60px;
+      height: 60px;
+      background: linear-gradient(135deg, #00d4aa 0%, #7c3aed 100%);
+      border-radius: 16px;
+      margin: 0 auto 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 5px;
+    }
+
+    .subtitle {
+      color: #888;
+      font-size: 14px;
+    }
+
+    .status-card {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .status-row:last-child {
+      border-bottom: none;
+    }
+
+    .status-label {
+      color: #888;
+      font-size: 14px;
+    }
+
+    .status-value {
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .status-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .status-dot.connected {
+      background: #00d4aa;
+      box-shadow: 0 0 10px #00d4aa;
+    }
+
+    .status-dot.disconnected {
+      background: #ff4757;
+    }
+
+    .status-dot.waiting {
+      background: #ffa502;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .card-section {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      text-align: center;
+    }
+
+    .card-icon {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+
+    .card-status {
+      font-size: 16px;
+      margin-bottom: 5px;
+    }
+
+    .card-uid {
+      font-family: monospace;
+      font-size: 12px;
+      color: #888;
+      word-break: break-all;
+    }
+
+    .info-section {
+      background: rgba(0, 212, 170, 0.1);
+      border-radius: 12px;
+      padding: 15px;
+      border: 1px solid rgba(0, 212, 170, 0.2);
+    }
+
+    .info-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #00d4aa;
+      margin-bottom: 8px;
+    }
+
+    .info-text {
+      font-size: 12px;
+      color: #aaa;
+      line-height: 1.5;
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 30px;
+      color: #555;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">📡</div>
+      <h1>PeeAP NFC Agent</h1>
+      <p class="subtitle">Local NFC Reader Service</p>
+    </div>
+
+    <div class="status-card">
+      <div class="status-row">
+        <span class="status-label">NFC Reader</span>
+        <span class="status-value">
+          <span class="status-indicator">
+            <span class="status-dot disconnected" id="reader-dot"></span>
+            <span id="reader-status">Not detected</span>
+          </span>
+        </span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">Reader Name</span>
+        <span class="status-value" id="reader-name">-</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">WebSocket Port</span>
+        <span class="status-value">9876</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">Connected Clients</span>
+        <span class="status-value" id="client-count">0</span>
+      </div>
+    </div>
+
+    <div class="card-section">
+      <div class="card-icon" id="card-icon">💳</div>
+      <div class="card-status" id="card-status">Waiting for card...</div>
+      <div class="card-uid" id="card-uid"></div>
+    </div>
+
+    <div class="info-section">
+      <div class="info-title">How it works</div>
+      <div class="info-text">
+        This agent runs in the background and provides NFC reader access to the PeeAP web app.
+        Keep this running while using NFC features on your POS.
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>Version <span id="version">1.0.0</span></p>
+      <p>© 2024 PeeAP</p>
+    </div>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+
+    // Get initial status
+    async function updateStatus() {
+      const status = await ipcRenderer.invoke('get-status');
+
+      const readerDot = document.getElementById('reader-dot');
+      const readerStatus = document.getElementById('reader-status');
+      const readerName = document.getElementById('reader-name');
+      const clientCount = document.getElementById('client-count');
+      const version = document.getElementById('version');
+
+      if (status.readerConnected) {
+        readerDot.className = 'status-dot connected';
+        readerStatus.textContent = 'Connected';
+        readerName.textContent = status.readerName || 'Unknown';
+      } else {
+        readerDot.className = 'status-dot disconnected';
+        readerStatus.textContent = 'Not detected';
+        readerName.textContent = '-';
+      }
+
+      clientCount.textContent = status.clientCount;
+      version.textContent = status.version;
+    }
+
+    // Listen for NFC events
+    ipcRenderer.on('nfc-status', (event, status) => {
+      const readerDot = document.getElementById('reader-dot');
+      const readerStatus = document.getElementById('reader-status');
+      const readerName = document.getElementById('reader-name');
+
+      if (status.readerConnected) {
+        readerDot.className = 'status-dot connected';
+        readerStatus.textContent = 'Connected';
+        readerName.textContent = status.readerName || 'Unknown';
+      } else {
+        readerDot.className = 'status-dot disconnected';
+        readerStatus.textContent = 'Not detected';
+        readerName.textContent = '-';
+      }
+    });
+
+    ipcRenderer.on('card-detected', (event, card) => {
+      const cardIcon = document.getElementById('card-icon');
+      const cardStatus = document.getElementById('card-status');
+      const cardUid = document.getElementById('card-uid');
+
+      cardIcon.textContent = '✅';
+      cardStatus.textContent = 'Card detected!';
+      cardUid.textContent = `UID: ${card.uid}${card.data ? `\nData: ${card.data}` : ''}`;
+    });
+
+    ipcRenderer.on('card-removed', () => {
+      const cardIcon = document.getElementById('card-icon');
+      const cardStatus = document.getElementById('card-status');
+      const cardUid = document.getElementById('card-uid');
+
+      cardIcon.textContent = '💳';
+      cardStatus.textContent = 'Waiting for card...';
+      cardUid.textContent = '';
+    });
+
+    ipcRenderer.on('nfc-error', (event, error) => {
+      console.error('NFC Error:', error);
+    });
+
+    // Initial status update
+    updateStatus();
+
+    // Periodic status update
+    setInterval(updateStatus, 5000);
+  </script>
+</body>
+</html>

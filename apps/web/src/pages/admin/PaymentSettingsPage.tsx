@@ -33,7 +33,9 @@ import {
   Globe,
   ToggleLeft,
   ToggleRight,
+  Wifi,
 } from 'lucide-react';
+import { NFCAgentSettings } from '@/components/settings/NFCAgentSettings';
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
@@ -113,7 +115,7 @@ export function PaymentSettingsPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showSecrets, setShowSecrets] = useState(false);
-  const [activeTab, setActiveTab] = useState<'monime' | 'withdrawal' | 'deposit'>('monime');
+  const [activeTab, setActiveTab] = useState<'monime' | 'withdrawal' | 'deposit' | 'nfc'>('monime');
   const [testAmount, setTestAmount] = useState<number>(1000); // Default Le 1,000
 
   useEffect(() => {
@@ -431,6 +433,7 @@ export function PaymentSettingsPage() {
               { id: 'monime', label: 'Monime Gateway', icon: CreditCard },
               { id: 'withdrawal', label: 'Withdrawal Settings', icon: ArrowDownToLine },
               { id: 'deposit', label: 'Deposit Settings', icon: ArrowUpFromLine },
+              { id: 'nfc', label: 'NFC Agent', icon: Wifi },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -1080,6 +1083,13 @@ export function PaymentSettingsPage() {
                 </div>
               </div>
             </Card>
+          </div>
+        )}
+
+        {/* NFC Agent Tab */}
+        {activeTab === 'nfc' && (
+          <div className="space-y-6">
+            <NFCAgentSettings />
           </div>
         )}
       </div>
