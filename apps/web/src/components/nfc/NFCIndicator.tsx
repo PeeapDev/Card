@@ -87,9 +87,9 @@ export function NFCIndicator({ showLabel = false, className = '' }: NFCIndicator
         const connected = await connectUSBReader();
         if (connected) {
           // Start scanning immediately after connecting
+          // Don't call checkStatus() here - connectUSBReader already updates the status
+          // and calling checkStatus again can cause race conditions
           startUSBScanning();
-          // Refresh status
-          await checkStatus();
         }
       } catch (err) {
         console.log('Could not connect USB reader:', err);

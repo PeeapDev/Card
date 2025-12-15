@@ -148,10 +148,16 @@ function AuthCallbackContent() {
 
         setStatus("success");
 
+        // Helper to get cookie value
+        const getCookie = (name: string): string | null => {
+          const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+          return match ? decodeURIComponent(match[1]) : null;
+        };
+
         // Check if setup is needed for business tiers
         // Also check the database for setup completion status
-        let setupComplete = localStorage.getItem("plusSetupComplete") === "true";
-        console.log("SSO Callback: Initial setupComplete from localStorage:", setupComplete);
+        let setupComplete = getCookie("plusSetupComplete") === "true" || localStorage.getItem("plusSetupComplete") === "true";
+        console.log("SSO Callback: Initial setupComplete from cookie/localStorage:", setupComplete);
 
         if (!setupComplete) {
           // Double-check with database
@@ -171,9 +177,20 @@ function AuthCallbackContent() {
               // User has a subscription, so setup was completed
               console.log("SSO Callback: Found subscription in database:", subscription);
               setupComplete = true;
-              localStorage.setItem("plusSetupComplete", "true");
-              localStorage.setItem("plusTier", subscription.tier || userTier);
-              localStorage.setItem("plusSubscriptionStatus", subscription.status || "active");
+
+              // Set cookies (primary storage)
+              const secure = window.location.protocol === 'https:';
+              const cookieOptions = `path=/; max-age=31536000; ${secure ? 'secure;' : ''} samesite=Lax`;
+              document.cookie = `plusSetupComplete=true; ${cookieOptions}`;
+              document.cookie = `plusTier=${subscription.tier || userTier}; ${cookieOptions}`;
+              document.cookie = `plusSubscriptionStatus=${subscription.status || "active"}; ${cookieOptions}`;
+
+              // Also set localStorage as backup
+              try {
+                localStorage.setItem("plusSetupComplete", "true");
+                localStorage.setItem("plusTier", subscription.tier || userTier);
+                localStorage.setItem("plusSubscriptionStatus", subscription.status || "active");
+              } catch {}
             }
           } catch (e) {
             // No subscription found, continue with setup check

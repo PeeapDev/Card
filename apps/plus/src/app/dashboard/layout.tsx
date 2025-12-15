@@ -343,15 +343,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [isLoading, isPaid, userTier]);
 
+  // Helper to get cookie value
+  const getCookie = (name: string): string | null => {
+    if (typeof document === 'undefined') return null;
+    const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+    return match ? decodeURIComponent(match[1]) : null;
+  };
+
   const checkAuthAndTier = async () => {
     try {
       const token = authService.getAccessToken();
       const storedUser = localStorage.getItem("user");
-      const plusTier = localStorage.getItem("plusTier");
-      let setupComplete = localStorage.getItem("plusSetupComplete") === "true";
+
+      // Check cookies first, then fall back to localStorage
+      const plusTier = getCookie("plusTier") || localStorage.getItem("plusTier");
+      let setupComplete = getCookie("plusSetupComplete") === "true" || localStorage.getItem("plusSetupComplete") === "true";
       const storedPreferences = localStorage.getItem("plusPreferences");
-      const storedMonthlyFee = localStorage.getItem("plusMonthlyFee");
-      const paymentComplete = localStorage.getItem("plusPaymentComplete");
+      const storedMonthlyFee = getCookie("plusMonthlyFee") || localStorage.getItem("plusMonthlyFee");
+      const paymentComplete = getCookie("plusPaymentComplete") === "true" || localStorage.getItem("plusPaymentComplete") === "true";
+
+      console.log("Plus Dashboard: Initial check - setupComplete from cookie/localStorage:", setupComplete);
 
       if (!token) { router.push("/auth/login?redirect=/dashboard"); return; }
 
@@ -388,25 +399,36 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 // User has a subscription, so setup was completed
                 console.log("Plus Dashboard: Found subscription in database:", subscription);
                 setupComplete = true;
-                localStorage.setItem("plusSetupComplete", "true");
-                localStorage.setItem("plusTier", subscription.tier || effectiveTier);
-                localStorage.setItem("plusSubscriptionStatus", subscription.status || "active");
+
+                // Set cookies (primary storage)
+                const secure = window.location.protocol === 'https:';
+                const cookieOptions = `path=/; max-age=31536000; ${secure ? 'secure;' : ''} samesite=Lax`;
+                document.cookie = `plusSetupComplete=true; ${cookieOptions}`;
+                document.cookie = `plusTier=${subscription.tier || effectiveTier}; ${cookieOptions}`;
+                document.cookie = `plusSubscriptionStatus=${subscription.status || "active"}; ${cookieOptions}`;
+
+                // Also set localStorage as backup
+                try {
+                  localStorage.setItem("plusSetupComplete", "true");
+                  localStorage.setItem("plusTier", subscription.tier || effectiveTier);
+                  localStorage.setItem("plusSubscriptionStatus", subscription.status || "active");
+                } catch {}
               }
             } catch (e) {
-              // No subscription found - re-check localStorage as it may have just been set
-              console.log("Plus Dashboard: Subscription query exception, re-checking localStorage");
-              setupComplete = localStorage.getItem("plusSetupComplete") === "true";
+              // No subscription found - re-check cookies/localStorage as it may have just been set
+              console.log("Plus Dashboard: Subscription query exception, re-checking cookies/localStorage");
+              setupComplete = getCookie("plusSetupComplete") === "true" || localStorage.getItem("plusSetupComplete") === "true";
               if (!setupComplete) {
-                console.log("Plus Dashboard: No subscription found in database and not in localStorage");
+                console.log("Plus Dashboard: No subscription found in database and not in cookies/localStorage");
               }
             }
           }
 
           // Only redirect to setup if setup is truly not complete
-          // Re-check localStorage one more time to avoid race conditions
+          // Re-check cookies/localStorage one more time to avoid race conditions
           if ((effectiveTier === "business" || effectiveTier === "business_plus") && !setupComplete) {
-            const finalCheck = localStorage.getItem("plusSetupComplete") === "true";
-            console.log("Plus Dashboard: Final localStorage check for setupComplete:", finalCheck);
+            const finalCheck = getCookie("plusSetupComplete") === "true" || localStorage.getItem("plusSetupComplete") === "true";
+            console.log("Plus Dashboard: Final cookie/localStorage check for setupComplete:", finalCheck);
             if (!finalCheck) {
               console.log("Plus Dashboard: Redirecting to setup wizard");
               router.push(`/setup?tier=${effectiveTier}`);

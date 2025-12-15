@@ -158,21 +158,15 @@ export function NFCProvider({ children }: { children: ReactNode }) {
         if (acr122u) {
           usbDeviceRef.current = acr122u;
 
-          // Try to open and claim the device if not already opened
-          try {
-            if (!acr122u.opened) {
-              await acr122u.open();
-            }
-            if (acr122u.configuration === null) {
-              await acr122u.selectConfiguration(1);
-            }
-            await acr122u.claimInterface(0);
-
+          // Check if device is already opened and claimed (preserve existing connection state)
+          if (acr122u.opened) {
+            // Device is already connected and opened - mark as connected
             newStatus.usbReader.connected = true;
             newStatus.usbReader.deviceName = acr122u.productName || 'ACR122U NFC Reader';
-          } catch (openErr: any) {
-            console.log('[NFC] Device found but could not open:', openErr.message);
-            // Device found but not yet claimed - user needs to click to connect
+            // Preserve scanning state if already scanning
+            newStatus.usbReader.scanning = usbPollingRef.current;
+          } else {
+            // Device found but not opened - user needs to click to connect
             newStatus.usbReader.connected = false;
             newStatus.usbReader.deviceName = acr122u.productName || 'ACR122U NFC Reader';
           }

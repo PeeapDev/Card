@@ -473,26 +473,41 @@ function SetupWizardContent() {
         console.log("Database not available, using local storage");
       }
 
-      // Mark setup as complete in local storage
-      console.log("Setup: Saving setup complete to localStorage");
-      localStorage.setItem("plusSetupComplete", "true");
-      localStorage.setItem("plusTier", tier);
-      localStorage.setItem("plusBusinessInfo", JSON.stringify(businessInfo));
-      localStorage.setItem("plusPreferences", JSON.stringify(preferences));
-      localStorage.setItem("plusMonthlyFee", calculateMonthlyFee().toString());
-      console.log("Setup: localStorage plusSetupComplete =", localStorage.getItem("plusSetupComplete"));
+      // Mark setup as complete in cookies (more reliable than localStorage)
+      const secure = window.location.protocol === 'https:';
+      const cookieOptions = `path=/; max-age=31536000; ${secure ? 'secure;' : ''} samesite=Lax`;
+
+      document.cookie = `plusSetupComplete=true; ${cookieOptions}`;
+      document.cookie = `plusTier=${tier}; ${cookieOptions}`;
+      document.cookie = `plusMonthlyFee=${calculateMonthlyFee()}; ${cookieOptions}`;
+
+      console.log("Setup: Saved setup complete to cookies");
+      console.log("Setup: Cookie plusSetupComplete =", document.cookie.includes('plusSetupComplete=true'));
+
+      // Also save to localStorage as backup
+      try {
+        localStorage.setItem("plusSetupComplete", "true");
+        localStorage.setItem("plusTier", tier);
+        localStorage.setItem("plusBusinessInfo", JSON.stringify(businessInfo));
+        localStorage.setItem("plusPreferences", JSON.stringify(preferences));
+        localStorage.setItem("plusMonthlyFee", calculateMonthlyFee().toString());
+      } catch (e) {
+        console.log("Setup: localStorage not available, using cookies only");
+      }
 
       if (requiresVerification) {
-        localStorage.setItem("plusVerificationStatus", "pending");
+        document.cookie = `plusVerificationStatus=pending; ${cookieOptions}`;
+        try { localStorage.setItem("plusVerificationStatus", "pending"); } catch {}
       } else {
-        localStorage.setItem("plusVerificationStatus", "verified");
+        document.cookie = `plusVerificationStatus=verified; ${cookieOptions}`;
+        try { localStorage.setItem("plusVerificationStatus", "verified"); } catch {}
       }
 
       // Update user data
       if (user) {
         user.businessName = businessInfo.legalName;
         user.tier = tier;
-        localStorage.setItem("user", JSON.stringify(user));
+        try { localStorage.setItem("user", JSON.stringify(user)); } catch {}
       }
 
       setCurrentStep("complete");
@@ -1133,13 +1148,17 @@ function SetupWizardContent() {
                   size="lg"
                   className="bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white shadow-lg shadow-purple-500/25 px-8 py-6 text-lg"
                   onClick={() => {
-                    // Ensure setup complete flag is set before navigation
+                    // Ensure setup complete flag is set in cookies before navigation
                     console.log("Setup Complete: Clicking Go to Dashboard");
-                    console.log("Setup Complete: Current plusSetupComplete =", localStorage.getItem("plusSetupComplete"));
-                    localStorage.setItem("plusSetupComplete", "true");
-                    localStorage.setItem("plusTier", tier);
-                    console.log("Setup Complete: After setting, plusSetupComplete =", localStorage.getItem("plusSetupComplete"));
-                    console.log("Setup Complete: Navigating to /dashboard");
+                    const secure = window.location.protocol === 'https:';
+                    const cookieOptions = `path=/; max-age=31536000; ${secure ? 'secure;' : ''} samesite=Lax`;
+                    document.cookie = `plusSetupComplete=true; ${cookieOptions}`;
+                    document.cookie = `plusTier=${tier}; ${cookieOptions}`;
+                    try {
+                      localStorage.setItem("plusSetupComplete", "true");
+                      localStorage.setItem("plusTier", tier);
+                    } catch {}
+                    console.log("Setup Complete: Cookie set, navigating to /dashboard");
                     router.push("/dashboard");
                   }}
                 >
