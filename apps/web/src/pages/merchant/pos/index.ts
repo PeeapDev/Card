@@ -9,3 +9,7 @@ export { POSLoyaltyPage } from './POSLoyaltyPage';
 export { POSSettingsPage } from './POSSettingsPage';
 export { POSKitchenDisplayPage } from './POSKitchenDisplayPage';
 export { POSTableManagementPage } from './POSTableManagementPage';
+export { POSCustomersPage } from './POSCustomersPage';
+export { POSSuppliersPage } from './POSSuppliersPage';
+export { POSDiscountsPage } from './POSDiscountsPage';
+export { POSPurchaseOrdersPage } from './POSPurchaseOrdersPage';
