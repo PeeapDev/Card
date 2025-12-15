@@ -2402,6 +2402,130 @@ export const posService = {
   redeemLoyaltyPoints,
   // Inventory
   logInventoryChange,
+  // POS Settings
+  getPOSSettings,
+  savePOSSettings,
+  isPOSSetupCompleted,
 };
+
+// =====================================================
+// POS SETTINGS TYPES AND FUNCTIONS
+// =====================================================
+
+export interface POSSettings {
+  id?: string;
+  merchant_id: string;
+  business_name?: string;
+  business_address?: string;
+  business_phone?: string;
+  business_email?: string;
+  tax_number?: string;
+  show_logo: boolean;
+  receipt_header: string;
+  receipt_footer: string;
+  enable_tax: boolean;
+  default_tax_rate: number;
+  tax_label: string;
+  expected_products: number;
+  setup_completed: boolean;
+  setup_completed_at?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/**
+ * Get POS settings for a merchant
+ */
+async function getPOSSettings(merchantId: string): Promise<POSSettings | null> {
+  try {
+    const { data, error } = await supabase
+      .from('pos_settings')
+      .select('*')
+      .eq('merchant_id', merchantId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // Not found - return null
+        return null;
+      }
+      console.error('Error fetching POS settings:', error);
+      return null;
+    }
+
+    return data as POSSettings;
+  } catch (error) {
+    console.error('Error fetching POS settings:', error);
+    return null;
+  }
+}
+
+/**
+ * Save POS settings (create or update)
+ */
+async function savePOSSettings(settings: Partial<POSSettings> & { merchant_id: string }): Promise<POSSettings | null> {
+  try {
+    const { data, error } = await supabase
+      .from('pos_settings')
+      .upsert({
+        merchant_id: settings.merchant_id,
+        business_name: settings.business_name,
+        business_address: settings.business_address,
+        business_phone: settings.business_phone,
+        business_email: settings.business_email,
+        tax_number: settings.tax_number,
+        show_logo: settings.show_logo ?? true,
+        receipt_header: settings.receipt_header ?? 'Thank you for your purchase!',
+        receipt_footer: settings.receipt_footer ?? 'Please come again!',
+        enable_tax: settings.enable_tax ?? false,
+        default_tax_rate: settings.default_tax_rate ?? 0,
+        tax_label: settings.tax_label ?? 'GST',
+        expected_products: settings.expected_products ?? 10,
+        setup_completed: settings.setup_completed ?? false,
+        setup_completed_at: settings.setup_completed ? new Date().toISOString() : null,
+      }, {
+        onConflict: 'merchant_id',
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error saving POS settings:', error);
+      return null;
+    }
+
+    return data as POSSettings;
+  } catch (error) {
+    console.error('Error saving POS settings:', error);
+    return null;
+  }
+}
+
+/**
+ * Check if POS setup is completed for a merchant
+ */
+async function isPOSSetupCompleted(merchantId: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from('pos_settings')
+      .select('setup_completed')
+      .eq('merchant_id', merchantId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // Not found - not completed
+        return false;
+      }
+      console.error('Error checking POS setup:', error);
+      return false;
+    }
+
+    return data?.setup_completed === true;
+  } catch (error) {
+    console.error('Error checking POS setup:', error);
+    return false;
+  }
+}
 
 export default posService;

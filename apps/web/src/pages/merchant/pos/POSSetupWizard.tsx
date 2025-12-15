@@ -15,8 +15,7 @@ import { MerchantLayout } from '@/components/layout/MerchantLayout';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
-import indexedDBService from '@/services/indexeddb.service';
-import posService, { POSCategory } from '@/services/pos.service';
+import posService, { POSCategory, POSSettings as DBPOSSettings } from '@/services/pos.service';
 import {
   ShoppingCart,
   FileText,
@@ -117,12 +116,26 @@ export function POSSetupWizard() {
   useEffect(() => {
     const loadSettings = async () => {
       if (user?.id) {
-        const savedSettings = await indexedDBService.getSetting<POSSettings>(`pos_settings_${user.id}`, defaultSettings);
-        if (savedSettings) {
-          setSettings({ ...defaultSettings, ...savedSettings });
-        }
-        // Pre-fill with user data
-        if (!savedSettings?.businessName && user) {
+        // Load from database
+        const dbSettings = await posService.getPOSSettings(user.id);
+        if (dbSettings) {
+          setSettings({
+            businessName: dbSettings.business_name || '',
+            businessAddress: dbSettings.business_address || '',
+            businessPhone: dbSettings.business_phone || '',
+            businessEmail: dbSettings.business_email || '',
+            taxNumber: dbSettings.tax_number || '',
+            showLogo: dbSettings.show_logo ?? true,
+            receiptHeader: dbSettings.receipt_header || 'Thank you for your purchase!',
+            receiptFooter: dbSettings.receipt_footer || 'Please come again!',
+            enableTax: dbSettings.enable_tax ?? false,
+            defaultTaxRate: dbSettings.default_tax_rate ?? 15,
+            taxLabel: dbSettings.tax_label || 'GST',
+            expectedProducts: dbSettings.expected_products ?? 10,
+            setupCompleted: dbSettings.setup_completed ?? false,
+          });
+        } else {
+          // Pre-fill with user data if no settings exist
           setSettings(prev => ({
             ...prev,
             businessName: `${user.firstName} ${user.lastName}`,
@@ -241,11 +254,34 @@ export function POSSetupWizard() {
 
     setSaving(true);
     try {
-      const finalSettings = { ...settings, setupCompleted: true };
-      await indexedDBService.saveSetting(`pos_settings_${user.id}`, finalSettings);
-      navigate('/merchant/apps/pos');
+      // Save to database
+      const dbSettings: Partial<DBPOSSettings> & { merchant_id: string } = {
+        merchant_id: user.id,
+        business_name: settings.businessName,
+        business_address: settings.businessAddress,
+        business_phone: settings.businessPhone,
+        business_email: settings.businessEmail,
+        tax_number: settings.taxNumber,
+        show_logo: settings.showLogo,
+        receipt_header: settings.receiptHeader,
+        receipt_footer: settings.receiptFooter,
+        enable_tax: settings.enableTax,
+        default_tax_rate: settings.defaultTaxRate,
+        tax_label: settings.taxLabel,
+        expected_products: settings.expectedProducts,
+        setup_completed: true,
+      };
+
+      const result = await posService.savePOSSettings(dbSettings);
+
+      if (result) {
+        navigate('/merchant/apps/pos');
+      } else {
+        alert('Failed to save settings. Please try again.');
+      }
     } catch (error) {
       console.error('Error saving POS settings:', error);
+      alert('Failed to save settings. Please try again.');
     } finally {
       setSaving(false);
     }

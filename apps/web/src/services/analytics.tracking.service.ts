@@ -156,7 +156,7 @@ class AnalyticsTrackingService {
     };
 
     try {
-      await fetch(`${API_URL}/analytics/pageview`, {
+      await fetch(`${API_URL}/api/analytics/pageview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -188,7 +188,7 @@ class AnalyticsTrackingService {
 
     if (duration > 0 && duration < 3600) { // Ignore durations > 1 hour (likely idle)
       try {
-        await fetch(`${API_URL}/analytics/pageview`, {
+        await fetch(`${API_URL}/api/analytics/pageview`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

@@ -86,7 +86,9 @@ export function NFCIndicator({ showLabel = false, className = '' }: NFCIndicator
       try {
         const connected = await connectUSBReader();
         if (connected) {
-          // Refresh status immediately
+          // Start scanning immediately after connecting
+          startUSBScanning();
+          // Refresh status
           await checkStatus();
         }
       } catch (err) {

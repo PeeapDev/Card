@@ -86,9 +86,9 @@ export default function LoginPage() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">Password</Label>
-                  <Link href="/auth/forgot-password" className="text-sm text-primary hover:underline">
+                  <a href="https://my.peeap.com/forgot-password" className="text-sm text-primary hover:underline">
                     Forgot password?
-                  </Link>
+                  </a>
                 </div>
                 <div className="relative">
                   <Input

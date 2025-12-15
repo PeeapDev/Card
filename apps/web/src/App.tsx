@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '@/context/AuthContext';
+import { NFCProvider } from '@/hooks/useNFC';
 import { DeveloperModeProvider } from '@/context/DeveloperModeContext';
 import { AppsProvider } from '@/context/AppsContext';
 import { NotificationProvider } from '@/context/NotificationContext';
@@ -51,6 +52,7 @@ import { CardsPage as AdminCardsPage } from '@/pages/admin/CardsPage';
 import { CardProgramsPage } from '@/pages/admin/CardProgramsPage';
 import { CardTypesPage } from '@/pages/admin/CardTypesPage';
 import { CardOrdersPage } from '@/pages/admin/CardOrdersPage';
+import { NFCPaymentPage as AdminNFCPaymentPage } from '@/pages/admin/NFCPaymentPage';
 import { TransactionsPage as AdminTransactionsPage } from '@/pages/admin/TransactionsPage';
 import { DisputesPage } from '@/pages/admin/DisputesPage';
 import Modules from '@/pages/admin/Modules';
@@ -160,6 +162,7 @@ function App() {
         <ThemeProvider>
           <BrowserRouter>
             <AuthProvider>
+              <NFCProvider>
               <NotificationProvider>
                 <DeveloperModeProvider>
                   <AppsProvider>
@@ -227,6 +230,16 @@ function App() {
                   <Route path="/auth/sso" element={<SsoPage />} />
                   <Route path="/auth/authorize" element={<OAuthAuthorizePage />} />
                   <Route path="/docs" element={<ApiDocsPage />} />
+
+                  {/* Payment Checkout Routes (Public - for QR scans) */}
+                  <Route path="/scan-pay/:sessionId" element={<ScanPayPage />} />
+                  <Route path="/checkout/pay/:sessionId" element={<HostedCheckoutPage />} />
+                  <Route path="/checkout/:businessId" element={<BusinessCheckoutPage />} />
+                  <Route path="/checkout/success" element={<CheckoutSuccessPage />} />
+                  <Route path="/t/:token" element={<PaymentCheckoutPage />} />
+                  <Route path="/pay/:token" element={<PaymentCheckoutPage />} />
+                  <Route path="/pay" element={<PayPage />} />
+                  <Route path="/app/pay/:paymentId" element={<AppPaymentRedirectPage />} />
 
               {/* Onboarding Route */}
               <Route
@@ -926,6 +939,38 @@ function App() {
                 }
               />
               <Route
+                path="/merchant/subscriptions"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <MerchantSubscriptionsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/subscription"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <MerchantSubscriptionPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/driver-wallet"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <DriverWalletPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/notifications"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <MerchantNotificationsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
                 path="/merchant/*"
                 element={
                   <RoleBasedRoute allowedRoles={['merchant']}>
@@ -1056,6 +1101,7 @@ function App() {
                   <Route path="/admin/card-programs" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><CardProgramsPage /></RoleBasedRoute>} />
                   <Route path="/admin/card-types" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><CardTypesPage /></RoleBasedRoute>} />
                   <Route path="/admin/card-orders" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><CardOrdersPage /></RoleBasedRoute>} />
+                  <Route path="/admin/nfc-payment" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><AdminNFCPaymentPage /></RoleBasedRoute>} />
                   <Route path="/admin/card-products" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><CardProducts /></RoleBasedRoute>} />
                   <Route path="/admin/modules" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><Modules /></RoleBasedRoute>} />
                   <Route path="/admin/authorization" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><AuthorizationPage /></RoleBasedRoute>} />
@@ -1152,6 +1198,7 @@ function App() {
                 </AppsProvider>
                 </DeveloperModeProvider>
               </NotificationProvider>
+              </NFCProvider>
             </AuthProvider>
           </BrowserRouter>
         </ThemeProvider>

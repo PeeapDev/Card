@@ -292,12 +292,15 @@ export function CardOrdersPage() {
     }
   }, [selectedOrderForNFC, lastCardRead, writeToCard, nfcError, queryClient, refetch]);
 
-  // Auto-trigger write when card is detected and we're waiting
+  // Auto-trigger write when card is detected - INSTANT write when modal is open
   useEffect(() => {
-    if (nfcWriteStatus === 'waiting' && lastCardRead && selectedOrderForNFC) {
+    if (showNFCModal && selectedOrderForNFC && lastCardRead && nfcWriteStatus === 'idle') {
+      // Instantly start writing when card is detected
+      handleWriteNFC();
+    } else if (nfcWriteStatus === 'waiting' && lastCardRead && selectedOrderForNFC) {
       handleWriteNFC();
     }
-  }, [lastCardRead, nfcWriteStatus, selectedOrderForNFC, handleWriteNFC]);
+  }, [lastCardRead, nfcWriteStatus, selectedOrderForNFC, handleWriteNFC, showNFCModal]);
 
   // Batch selection handlers
   const toggleBatchSelection = (orderId: string) => {
@@ -461,98 +464,26 @@ export function CardOrdersPage() {
           </MotionCard>
         </div>
 
-        {/* NFC Reader Status & Batch Actions */}
-        <MotionCard className="p-4" delay={0.35}>
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            {/* Reader Status */}
-            <div className="flex items-center gap-4">
-              <div className={clsx(
-                'w-12 h-12 rounded-full flex items-center justify-center',
-                isNFCReaderConnected ? 'bg-green-100 dark:bg-green-900/30' : 'bg-gray-100 dark:bg-gray-700'
-              )}>
-                <Usb className={clsx(
-                  'w-6 h-6',
-                  isNFCReaderConnected ? 'text-green-600 dark:text-green-400' : 'text-gray-400'
-                )} />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-gray-900 dark:text-white">NFC Reader</h3>
-                  <span className={clsx(
-                    'w-2 h-2 rounded-full',
-                    isNFCReaderConnected ? 'bg-green-500' : 'bg-red-500'
-                  )} />
-                </div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {isNFCReaderConnected
-                    ? `Connected: ${nfcStatus.usbReader.deviceName || 'ACR122U'}`
-                    : 'Connect reader to program cards'}
-                </p>
-              </div>
-            </div>
-
-            {/* NFC Stats */}
-            <div className="flex items-center gap-4 text-sm">
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
-                <Wifi className="w-4 h-4 text-orange-500" />
-                <span className="text-orange-700 dark:text-orange-400">{unprogrammedCount} need programming</span>
-              </div>
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                <CheckCircle className="w-4 h-4 text-green-500" />
-                <span className="text-green-700 dark:text-green-400">{programmedCount} programmed</span>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center gap-2">
-              {!isNFCReaderConnected ? (
-                <Button onClick={handleConnectReader}>
-                  <Usb className="w-4 h-4 mr-2" />
-                  Connect Reader
-                </Button>
-              ) : (
-                <>
-                  {selectedForBatch.size > 0 && (
-                    <Button onClick={handleBatchProgram} className="bg-blue-600 hover:bg-blue-700">
-                      <Wifi className="w-4 h-4 mr-2" />
-                      Program {selectedForBatch.size} Cards
-                    </Button>
-                  )}
-                  <Button variant="outline" onClick={selectAllUnprogrammed}>
-                    <CheckSquare className="w-4 h-4 mr-2" />
-                    Select Unprogrammed
-                  </Button>
-                  {selectedForBatch.size > 0 && (
-                    <Button variant="ghost" onClick={clearBatchSelection}>
-                      Clear
-                    </Button>
-                  )}
-                </>
-              )}
-            </div>
+        {/* Batch Actions - Only show when reader connected */}
+        {isNFCReaderConnected && (
+          <div className="flex items-center gap-2 justify-end">
+            {selectedForBatch.size > 0 && (
+              <Button onClick={handleBatchProgram} className="bg-blue-600 hover:bg-blue-700">
+                <Wifi className="w-4 h-4 mr-2" />
+                Program {selectedForBatch.size} Cards
+              </Button>
+            )}
+            <Button variant="outline" onClick={selectAllUnprogrammed}>
+              <CheckSquare className="w-4 h-4 mr-2" />
+              Select Unprogrammed ({unprogrammedCount})
+            </Button>
+            {selectedForBatch.size > 0 && (
+              <Button variant="ghost" onClick={clearBatchSelection}>
+                Clear
+              </Button>
+            )}
           </div>
-
-          {/* Card Detection Indicator */}
-          {isNFCReaderConnected && (
-            <div className={clsx(
-              'mt-4 p-3 rounded-lg flex items-center gap-3',
-              lastCardRead
-                ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
-                : 'bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-700'
-            )}>
-              <CreditCard className={clsx('w-5 h-5', lastCardRead ? 'text-green-600' : 'text-gray-400')} />
-              <span className={clsx('text-sm', lastCardRead ? 'text-green-700 dark:text-green-400' : 'text-gray-500')}>
-                {lastCardRead
-                  ? `Card detected - UID: ${lastCardRead.uid}`
-                  : 'Place card on reader to detect...'}
-              </span>
-              <span className={clsx(
-                'w-2 h-2 rounded-full ml-auto',
-                lastCardRead ? 'bg-green-500' : 'bg-red-500'
-              )} />
-            </div>
-          )}
-        </MotionCard>
+        )}
 
         {/* Filters */}
         <MotionCard className="p-4" delay={0.4}>
@@ -608,7 +539,6 @@ export function CardOrdersPage() {
                     <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Amount</th>
                     <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Card Number</th>
                     <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
-                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">NFC</th>
                     <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Date</th>
                     <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
                   </tr>
@@ -673,11 +603,11 @@ export function CardOrdersPage() {
                             <span className="text-gray-400 dark:text-gray-500 text-sm">Not generated</span>
                           )}
                         </td>
-                        <td className="px-6 py-4">{getStatusBadge(order.status)}</td>
                         <td className="px-6 py-4">
-                          {isPhysical ? getNFCBadge(order) : (
-                            <span className="text-xs text-gray-400">Virtual</span>
-                          )}
+                          <div className="flex flex-col gap-1">
+                            {getStatusBadge(order.status)}
+                            {isPhysical && getNFCBadge(order)}
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <span className="text-sm text-gray-600 dark:text-gray-400">
@@ -813,11 +743,11 @@ export function CardOrdersPage() {
               </div>
 
               {/* Status Messages */}
-              {nfcWriteStatus === 'waiting' && (
+              {(nfcWriteStatus === 'idle' || nfcWriteStatus === 'waiting') && !lastCardRead && (
                 <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                   <div className="flex items-center gap-2">
                     <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
-                    <span className="text-sm text-blue-700 dark:text-blue-400">Waiting for card...</span>
+                    <span className="text-sm text-blue-700 dark:text-blue-400">Place card on reader - will write instantly...</span>
                   </div>
                 </div>
               )}
@@ -859,31 +789,34 @@ export function CardOrdersPage() {
                     setSelectedOrderForNFC(null);
                     setNfcWriteStatus('idle');
                   }}
+                  disabled={nfcWriteStatus === 'writing'}
                 >
-                  Cancel
+                  {nfcWriteStatus === 'success' ? 'Close' : 'Cancel'}
                 </Button>
-                <Button
-                  className="flex-1"
-                  onClick={handleWriteNFC}
-                  disabled={nfcWriteStatus === 'writing' || nfcWriteStatus === 'success'}
-                >
-                  {nfcWriteStatus === 'writing' ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Writing...
-                    </>
-                  ) : nfcWriteStatus === 'waiting' ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Waiting...
-                    </>
-                  ) : (
-                    <>
-                      <Wifi className="w-4 h-4 mr-2" />
-                      {lastCardRead ? 'Write to Card' : 'Start Programming'}
-                    </>
-                  )}
-                </Button>
+                {nfcWriteStatus !== 'success' && (
+                  <Button
+                    className="flex-1"
+                    onClick={handleWriteNFC}
+                    disabled={nfcWriteStatus === 'writing' || !lastCardRead}
+                  >
+                    {nfcWriteStatus === 'writing' ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Writing...
+                      </>
+                    ) : lastCardRead ? (
+                      <>
+                        <Wifi className="w-4 h-4 mr-2" />
+                        Write Now
+                      </>
+                    ) : (
+                      <>
+                        <CreditCard className="w-4 h-4 mr-2" />
+                        Waiting for card...
+                      </>
+                    )}
+                  </Button>
+                )}
               </div>
             </div>
           </Card>

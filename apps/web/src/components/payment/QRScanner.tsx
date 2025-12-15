@@ -50,6 +50,19 @@ export function QRScanner({ onScan, onClose, autoValidate = true }: QRScannerPro
 
   const initializeScanner = async () => {
     try {
+      // Check if mediaDevices is available (requires HTTPS or localhost)
+      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+        // Camera API not available - likely non-HTTPS
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        if (!isLocalhost && window.location.protocol !== 'https:') {
+          setError('Camera requires HTTPS. Please use a secure connection.');
+        } else {
+          setError('Camera not available on this browser/device.');
+        }
+        setHasPermission(false);
+        return;
+      }
+
       // Check if camera is available
       const devices = await navigator.mediaDevices.enumerateDevices();
       const cameras = devices.filter(device => device.kind === 'videoinput');
@@ -73,6 +86,8 @@ export function QRScanner({ onScan, onClose, autoValidate = true }: QRScannerPro
         setError('Camera access denied. Please allow camera access in your browser settings.');
       } else if (err.name === 'NotFoundError') {
         setError('No camera found on this device.');
+      } else if (err.name === 'NotSupportedError' || err.name === 'TypeError') {
+        setError('Camera not supported. Try using HTTPS or a different browser.');
       } else {
         setError('Failed to access camera: ' + err.message);
       }

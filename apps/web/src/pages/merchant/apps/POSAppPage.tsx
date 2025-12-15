@@ -13,7 +13,6 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import indexedDBService from '@/services/indexeddb.service';
 import {
   ShoppingCart,
   Store,
@@ -49,10 +48,6 @@ interface RecentSale {
   created_at: string;
 }
 
-interface POSSettings {
-  setupCompleted: boolean;
-}
-
 export function POSAppPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -74,8 +69,9 @@ export function POSAppPage() {
       if (!user?.id) return;
 
       try {
-        const settings = await indexedDBService.getSetting<POSSettings>(`pos_settings_${user.id}`, { setupCompleted: false });
-        if (!settings?.setupCompleted) {
+        // Check database for setup status
+        const isCompleted = await posService.isPOSSetupCompleted(user.id);
+        if (!isCompleted) {
           // Redirect to setup wizard if not completed
           navigate('/merchant/pos/setup', { replace: true });
           return;

@@ -23,6 +23,8 @@ import {
   Clock,
   XCircle,
   AlertCircle,
+  Store,
+  ChevronDown,
 } from 'lucide-react';
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
 import { Card, CardHeader, CardTitle, Button } from '@/components/ui';
@@ -33,6 +35,7 @@ import {
   Subscription,
   CreatePlanRequest,
 } from '@/services/subscription.service';
+import { businessService, MerchantBusiness } from '@/services/business.service';
 
 const INTERVAL_OPTIONS = [
   { value: 'daily', label: 'Daily' },
@@ -53,6 +56,12 @@ const STATUS_COLORS = {
 export function MerchantSubscriptionsPage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'plans' | 'subscribers'>('plans');
+
+  // Business selection
+  const [businesses, setBusinesses] = useState<MerchantBusiness[]>([]);
+  const [selectedBusiness, setSelectedBusiness] = useState<MerchantBusiness | null>(null);
+  const [loadingBusinesses, setLoadingBusinesses] = useState(true);
+  const [showBusinessDropdown, setShowBusinessDropdown] = useState(false);
 
   // Plans state
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
@@ -89,23 +98,45 @@ export function MerchantSubscriptionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
 
+  // Load businesses on mount
   useEffect(() => {
-    if (user?.id) {
+    loadBusinesses();
+  }, []);
+
+  // Load plans when business is selected
+  useEffect(() => {
+    if (selectedBusiness?.id) {
       loadPlans();
       loadStats();
     }
-  }, [user?.id]);
+  }, [selectedBusiness?.id]);
 
   useEffect(() => {
-    if (activeTab === 'subscribers' && user?.id) {
+    if (activeTab === 'subscribers' && selectedBusiness?.id) {
       loadSubscribers();
     }
-  }, [activeTab, user?.id]);
+  }, [activeTab, selectedBusiness?.id]);
+
+  const loadBusinesses = async () => {
+    try {
+      setLoadingBusinesses(true);
+      const data = await businessService.getMyBusinesses();
+      setBusinesses(data);
+      // Auto-select first business with subscriptions enabled, or just first business
+      const subscriptionEnabled = data.find(b => b.enabled_features?.includes('subscriptions'));
+      setSelectedBusiness(subscriptionEnabled || data[0] || null);
+    } catch (err) {
+      console.error('Failed to load businesses:', err);
+    } finally {
+      setLoadingBusinesses(false);
+    }
+  };
 
   const loadPlans = async () => {
+    if (!selectedBusiness) return;
     try {
       setLoadingPlans(true);
-      const data = await subscriptionService.getMerchantPlans(user!.id);
+      const data = await subscriptionService.getMerchantPlans(selectedBusiness.id);
       setPlans(data);
     } catch (err) {
       console.error('Failed to load plans:', err);
@@ -115,9 +146,10 @@ export function MerchantSubscriptionsPage() {
   };
 
   const loadSubscribers = async () => {
+    if (!selectedBusiness) return;
     try {
       setLoadingSubscribers(true);
-      const data = await subscriptionService.getMerchantSubscriptions(user!.id);
+      const data = await subscriptionService.getMerchantSubscriptions(selectedBusiness.id);
       setSubscribers(data);
     } catch (err) {
       console.error('Failed to load subscribers:', err);
@@ -127,8 +159,9 @@ export function MerchantSubscriptionsPage() {
   };
 
   const loadStats = async () => {
+    if (!selectedBusiness) return;
     try {
-      const data = await subscriptionService.getMerchantStats(user!.id);
+      const data = await subscriptionService.getMerchantStats(selectedBusiness.id);
       setStats(data);
     } catch (err) {
       console.error('Failed to load stats:', err);
@@ -136,6 +169,10 @@ export function MerchantSubscriptionsPage() {
   };
 
   const handleCreatePlan = async () => {
+    if (!selectedBusiness) {
+      setError('Please select a business first');
+      return;
+    }
     if (!formData.name || formData.amount <= 0) {
       setError('Please fill in all required fields');
       return;
@@ -144,7 +181,7 @@ export function MerchantSubscriptionsPage() {
     try {
       setCreating(true);
       setError(null);
-      await subscriptionService.createPlan(user!.id, formData);
+      await subscriptionService.createPlan(selectedBusiness.id, formData);
       setShowCreateModal(false);
       setFormData({
         name: '',
@@ -206,20 +243,101 @@ export function MerchantSubscriptionsPage() {
     return `${symbols[currency] || currency} ${amount.toLocaleString()}`;
   };
 
+  // Show loading state while fetching businesses
+  if (loadingBusinesses) {
+    return (
+      <MerchantLayout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+        </div>
+      </MerchantLayout>
+    );
+  }
+
+  // Show message if no businesses
+  if (businesses.length === 0) {
+    return (
+      <MerchantLayout>
+        <div className="text-center py-12">
+          <Store className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">No Business Found</h2>
+          <p className="text-gray-500 mb-4">Create a business first to offer subscription plans</p>
+          <Button onClick={() => window.location.href = '/merchant/developer/new'}>
+            Create Business
+          </Button>
+        </div>
+      </MerchantLayout>
+    );
+  }
+
   return (
     <MerchantLayout>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
+        {/* Header with Business Selector */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Subscriptions</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Subscription Plans</h1>
             <p className="text-gray-500 mt-1">Create recurring subscription plans for your customers</p>
           </div>
-          <Button onClick={() => setShowCreateModal(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Create Plan
-          </Button>
+          <div className="flex items-center gap-3">
+            {/* Business Selector */}
+            <div className="relative">
+              <button
+                onClick={() => setShowBusinessDropdown(!showBusinessDropdown)}
+                className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                <Store className="w-4 h-4 text-gray-500" />
+                <span className="font-medium">{selectedBusiness?.name || 'Select Business'}</span>
+                <ChevronDown className="w-4 h-4 text-gray-400" />
+              </button>
+              {showBusinessDropdown && (
+                <div className="absolute right-0 top-full mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                  {businesses.map((biz) => (
+                    <button
+                      key={biz.id}
+                      onClick={() => {
+                        setSelectedBusiness(biz);
+                        setShowBusinessDropdown(false);
+                      }}
+                      className={`w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center justify-between ${
+                        selectedBusiness?.id === biz.id ? 'bg-primary-50' : ''
+                      }`}
+                    >
+                      <div>
+                        <p className="font-medium text-gray-900">{biz.name}</p>
+                        {biz.enabled_features?.includes('subscriptions') ? (
+                          <span className="text-xs text-green-600">Subscriptions enabled</span>
+                        ) : (
+                          <span className="text-xs text-gray-400">Subscriptions not enabled</span>
+                        )}
+                      </div>
+                      {selectedBusiness?.id === biz.id && (
+                        <Check className="w-4 h-4 text-primary-600" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <Button onClick={() => setShowCreateModal(true)} disabled={!selectedBusiness?.enabled_features?.includes('subscriptions')}>
+              <Plus className="w-4 h-4 mr-2" />
+              Create Plan
+            </Button>
+          </div>
         </div>
+
+        {/* Warning if subscriptions not enabled */}
+        {selectedBusiness && !selectedBusiness.enabled_features?.includes('subscriptions') && (
+          <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium text-yellow-800">Subscriptions not enabled</p>
+              <p className="text-sm text-yellow-700">
+                Contact admin to enable subscription billing for "{selectedBusiness.name}".
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

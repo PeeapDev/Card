@@ -23,6 +23,9 @@ import { APP_URL, isDevelopment } from '@/config/urls';
 import { TransportSetupWizard, DriverProfile } from '@/components/transport/TransportSetupWizard';
 import { DriverCollectionView } from '@/components/transport/DriverCollectionView';
 import { PhoneFrame } from '@/components/ui/PhoneFrame';
+import { DriverWalletSetup } from '@/components/transport/DriverWalletSetup';
+import { DriverWalletDashboard } from '@/components/transport/DriverWalletDashboard';
+import { walletService, ExtendedWallet } from '@/services/wallet.service';
 
 interface DriverProfileData {
   id: string;
@@ -54,7 +57,7 @@ interface RecentCollection {
   payment_method?: string;
 }
 
-type PageState = 'loading' | 'setup' | 'select-mode' | 'collect';
+type PageState = 'loading' | 'setup' | 'wallet-setup' | 'wallet-dashboard' | 'select-mode' | 'collect';
 type FareType = 'fixed' | 'meter';
 type CollectStep = 'form' | 'driving' | 'success' | 'error';
 
@@ -67,6 +70,9 @@ export function CollectPaymentPage() {
 
   // Driver profile
   const [driverProfile, setDriverProfile] = useState<DriverProfileData | null>(null);
+
+  // Driver wallet
+  const [driverWallet, setDriverWallet] = useState<ExtendedWallet | null>(null);
 
   // Collection step state
   const [collectStep, setCollectStep] = useState<CollectStep>('form');
@@ -86,12 +92,13 @@ export function CollectPaymentPage() {
   // Theme toggle (dark/light)
   const [isDarkTheme, setIsDarkTheme] = useState(true);
 
-  // Check if driver has completed setup
+  // Check if driver has completed setup and has a wallet
   useEffect(() => {
-    async function checkDriverProfile() {
+    async function checkDriverProfileAndWallet() {
       if (!user?.id) return;
 
       try {
+        // Check driver profile
         const { data: profiles, error } = await supabase
           .from('driver_profiles')
           .select('*')
@@ -103,11 +110,31 @@ export function CollectPaymentPage() {
           return;
         }
 
-        if (profiles && profiles.length > 0) {
-          setDriverProfile(profiles[0]);
-          setPageState('select-mode');
-        } else {
+        if (!profiles || profiles.length === 0) {
+          // No driver profile - show setup wizard
           setPageState('setup');
+          return;
+        }
+
+        // Driver profile exists
+        setDriverProfile(profiles[0]);
+
+        // Check for driver wallet
+        try {
+          const wallet = await walletService.getWalletByType(user.id, 'driver');
+
+          if (wallet) {
+            // Driver has a wallet - show wallet dashboard
+            setDriverWallet(wallet);
+            setPageState('wallet-dashboard');
+          } else {
+            // No wallet - show wallet setup
+            setPageState('wallet-setup');
+          }
+        } catch (walletErr) {
+          console.error('Error checking wallet:', walletErr);
+          // If wallet check fails, show wallet setup
+          setPageState('wallet-setup');
         }
       } catch (err) {
         console.error('Error checking driver profile:', err);
@@ -115,7 +142,7 @@ export function CollectPaymentPage() {
       }
     }
 
-    checkDriverProfile();
+    checkDriverProfileAndWallet();
   }, [user?.id]);
 
   // Fetch recent collections
@@ -214,10 +241,31 @@ export function CollectPaymentPage() {
       if (error) throw error;
 
       setDriverProfile(data);
-      setPageState('select-mode');
+      // After profile setup, go to wallet setup
+      setPageState('wallet-setup');
     } catch (err) {
       console.error('Error saving driver profile:', err);
-      setPageState('select-mode');
+      setPageState('wallet-setup');
+    }
+  };
+
+  // Handle wallet setup completion
+  const handleWalletSetupComplete = (wallet: ExtendedWallet) => {
+    setDriverWallet(wallet);
+    setPageState('wallet-dashboard');
+  };
+
+  // Refresh wallet balance
+  const refreshWallet = async () => {
+    if (!user?.id) return;
+
+    try {
+      const wallet = await walletService.getWalletByType(user.id, 'driver');
+      if (wallet) {
+        setDriverWallet(wallet);
+      }
+    } catch (err) {
+      console.error('Error refreshing wallet:', err);
     }
   };
 
@@ -298,6 +346,19 @@ export function CollectPaymentPage() {
     }
   };
 
+  // Reset to wallet dashboard (main screen when clicking Collect Payment)
+  const resetToWalletDashboard = () => {
+    setCollectStep('form');
+    setFareType(null);
+    setAmount('');
+    setDescription('');
+    setCurrentSession(null);
+    setError('');
+    // Refresh wallet and go back to dashboard
+    refreshWallet();
+    setPageState('wallet-dashboard');
+  };
+
   // Reset to mode selection
   const resetToModeSelection = () => {
     setCollectStep('form');
@@ -352,6 +413,34 @@ export function CollectPaymentPage() {
     );
   }
 
+  // Wallet Setup (after profile setup, before first use)
+  if (pageState === 'wallet-setup' && user?.id) {
+    return (
+      <PhoneFrame>
+        <DriverWalletSetup
+          userId={user.id}
+          userName={user.firstName}
+          onComplete={handleWalletSetupComplete}
+          onBack={() => setPageState('setup')}
+        />
+      </PhoneFrame>
+    );
+  }
+
+  // Wallet Dashboard (main view showing balance, transactions, and start button)
+  if (pageState === 'wallet-dashboard' && user?.id && driverWallet) {
+    return (
+      <PhoneFrame>
+        <DriverWalletDashboard
+          userId={user.id}
+          wallet={driverWallet}
+          onStart={() => setPageState('select-mode')}
+          onRefresh={refreshWallet}
+        />
+      </PhoneFrame>
+    );
+  }
+
   // Driver Collection View (full screen on mobile, phone frame on desktop)
   if (collectStep === 'driving' && currentSession && user?.id) {
     return (
@@ -401,7 +490,7 @@ export function CollectPaymentPage() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.4 }}
-          onClick={resetToModeSelection}
+          onClick={resetToWalletDashboard}
           className="w-full max-w-xs py-4 bg-white text-green-600 rounded-2xl font-semibold text-base md:text-lg hover:bg-green-50 transition-colors"
         >
           <DollarSign className="w-5 h-5 inline mr-2" />
@@ -427,7 +516,7 @@ export function CollectPaymentPage() {
         </p>
 
         <button
-          onClick={resetToModeSelection}
+          onClick={resetToWalletDashboard}
           className="w-full max-w-xs py-4 bg-white text-red-600 rounded-2xl font-semibold text-base md:text-lg"
         >
           Try Again
@@ -445,7 +534,7 @@ export function CollectPaymentPage() {
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-800">
           <button
-            onClick={() => window.history.back()}
+            onClick={() => setPageState('wallet-dashboard')}
             className="p-2 rounded-full hover:bg-gray-800 transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />

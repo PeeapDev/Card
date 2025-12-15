@@ -474,11 +474,13 @@ function SetupWizardContent() {
       }
 
       // Mark setup as complete in local storage
+      console.log("Setup: Saving setup complete to localStorage");
       localStorage.setItem("plusSetupComplete", "true");
       localStorage.setItem("plusTier", tier);
       localStorage.setItem("plusBusinessInfo", JSON.stringify(businessInfo));
       localStorage.setItem("plusPreferences", JSON.stringify(preferences));
       localStorage.setItem("plusMonthlyFee", calculateMonthlyFee().toString());
+      console.log("Setup: localStorage plusSetupComplete =", localStorage.getItem("plusSetupComplete"));
 
       if (requiresVerification) {
         localStorage.setItem("plusVerificationStatus", "pending");
@@ -1132,8 +1134,12 @@ function SetupWizardContent() {
                   className="bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white shadow-lg shadow-purple-500/25 px-8 py-6 text-lg"
                   onClick={() => {
                     // Ensure setup complete flag is set before navigation
+                    console.log("Setup Complete: Clicking Go to Dashboard");
+                    console.log("Setup Complete: Current plusSetupComplete =", localStorage.getItem("plusSetupComplete"));
                     localStorage.setItem("plusSetupComplete", "true");
                     localStorage.setItem("plusTier", tier);
+                    console.log("Setup Complete: After setting, plusSetupComplete =", localStorage.getItem("plusSetupComplete"));
+                    console.log("Setup Complete: Navigating to /dashboard");
                     router.push("/dashboard");
                   }}
                 >
