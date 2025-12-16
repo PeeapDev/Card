@@ -54,6 +54,7 @@ import {
   ArrowDownRight,
 } from 'lucide-react';
 import posService, { POSCashSession } from '@/services/pos.service';
+import { POSWallet } from '@/components/pos/POSWallet';
 import {
   AreaChart,
   Area,
@@ -584,6 +585,11 @@ export function POSAppPage() {
 
         {activeTab === 'overview' && (
           <>
+            {/* POS Wallet Section */}
+            <div className="mb-6">
+              <POSWallet />
+            </div>
+
             {/* Alert Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Cash Drawer Status */}
