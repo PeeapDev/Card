@@ -19,6 +19,7 @@ import indexedDBService from '@/services/indexeddb.service';
 import posService, { POSCategory, POSStaff } from '@/services/pos.service';
 import { notificationService } from '@/services/notification.service';
 import { supabase } from '@/lib/supabase';
+import { MultivendorSettings } from '@/components/pos/MultivendorSettings';
 import {
   Store,
   FolderOpen,
@@ -55,6 +56,7 @@ import {
   Eye,
   ShoppingCart,
   Clock,
+  Globe,
 } from 'lucide-react';
 
 // Format currency - using Le (Leone) symbol
@@ -294,6 +296,7 @@ const generatePin = () => {
 
 const tabs = [
   { id: 'general', label: 'General', icon: Store },
+  { id: 'multivendor', label: 'Multivendor', icon: Globe },
   { id: 'categories', label: 'Categories', icon: FolderOpen },
   { id: 'staff', label: 'Staff', icon: Users },
   { id: 'payments', label: 'Payments', icon: CreditCard },
@@ -898,6 +901,11 @@ export function POSSettingsPage() {
                 </div>
               </div>
             </Card>
+          )}
+
+          {/* Multivendor Tab */}
+          {activeTab === 'multivendor' && merchantId && (
+            <MultivendorSettings merchantId={merchantId} />
           )}
 
           {/* Categories Tab */}
