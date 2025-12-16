@@ -51,6 +51,7 @@ import { FaceLiveness } from '@/components/kyc/FaceLiveness';
 import { IdCardScanner } from '@/components/kyc/IdCardScanner';
 import { kycService, fileToBase64 } from '@/services/kyc.service';
 import { NFCAgentSettings } from '@/components/settings/NFCAgentSettings';
+import { BecomeMerchantCard } from '@/components/settings/BecomeMerchantCard';
 
 // Animation variants
 const containerVariants = {
@@ -744,6 +745,11 @@ export function ProfilePage() {
               )}
             </div>
           </MotionCard>
+        </motion.div>
+
+        {/* Become a Merchant */}
+        <motion.div variants={itemVariants}>
+          <BecomeMerchantCard />
         </motion.div>
 
         {/* NFC Agent Settings - Compact version */}

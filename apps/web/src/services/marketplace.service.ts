@@ -922,47 +922,10 @@ class MarketplaceService {
       }
     }
 
-    // Fallback: Get products from multivendor-enabled merchants only
-    // First get active multivendor merchants
-    let multivendorMerchants: string[] = [];
-    try {
-      const now = new Date().toISOString();
-      const { data: mvData } = await supabase
-        .from('pos_multivendor_settings')
-        .select('merchant_id')
-        .eq('is_enabled', true)
-        .or(`subscription_status.eq.trial,subscription_status.eq.active`);
-
-      if (mvData && mvData.length > 0) {
-        // Filter by valid trial/subscription dates
-        const { data: validSettings } = await supabase
-          .from('pos_multivendor_settings')
-          .select('merchant_id, subscription_status, trial_ends_at, subscription_expires_at')
-          .eq('is_enabled', true)
-          .in('subscription_status', ['trial', 'active']);
-
-        if (validSettings) {
-          multivendorMerchants = validSettings
-            .filter(s => {
-              if (s.subscription_status === 'trial' && s.trial_ends_at) {
-                return new Date(s.trial_ends_at) > new Date();
-              }
-              if (s.subscription_status === 'active' && s.subscription_expires_at) {
-                return new Date(s.subscription_expires_at) > new Date();
-              }
-              return false;
-            })
-            .map(s => s.merchant_id);
-        }
-      }
-    } catch {
-      // pos_multivendor_settings table may not exist yet
-    }
-
-    // If no multivendor merchants, return empty (products require multivendor subscription)
-    if (multivendorMerchants.length === 0) {
-      return [];
-    }
+    // Fallback: Get products from POS system
+    // For now, show all products with images (multivendor filter will be added later)
+    // This ensures products are visible while multivendor system is being set up
+    console.log('[Marketplace] Fetching products from POS system...');
 
     // Try to get marketplace stores for store info (may not exist)
     let storesData: any[] = [];
@@ -976,17 +939,46 @@ class MarketplaceService {
       // marketplace_stores table may not exist
     }
 
-    // Get POS products only from multivendor-enabled merchants
-    const { data: productsData, error: productsError } = await supabase
+    // Get all POS products with images first
+    let productsData: any[] | null = null;
+    let productsError: any = null;
+
+    // Try to get products with images first
+    const result1 = await supabase
       .from('pos_products')
       .select('*')
-      .in('merchant_id', multivendorMerchants)
       .eq('is_active', true)
       .not('image_url', 'is', null)
       .order('created_at', { ascending: false })
       .limit(limit);
 
-    if (productsError || !productsData || productsData.length === 0) {
+    productsData = result1.data;
+    productsError = result1.error;
+
+    console.log('[Marketplace] Products with images:', { count: productsData?.length, error: productsError });
+
+    // If no products with images, try all products
+    if (!productsError && (!productsData || productsData.length === 0)) {
+      console.log('[Marketplace] No products with images, trying all products...');
+      const result2 = await supabase
+        .from('pos_products')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      productsData = result2.data;
+      productsError = result2.error;
+      console.log('[Marketplace] All products result:', { count: productsData?.length, error: productsError });
+    }
+
+    if (productsError) {
+      console.error('[Marketplace] Error fetching products:', productsError);
+      return [];
+    }
+
+    if (!productsData || productsData.length === 0) {
+      console.log('[Marketplace] No products found');
       return [];
     }
 
