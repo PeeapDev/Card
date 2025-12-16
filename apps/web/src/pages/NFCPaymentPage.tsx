@@ -12,7 +12,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import QRCode from 'react-qr-code';
 import {
   Wifi,
   User,

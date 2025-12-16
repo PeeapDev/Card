@@ -41,7 +41,7 @@ import { supabase } from '@/lib/supabase';
 import { authService } from '@/services/auth.service';
 import { walletService } from '@/services/wallet.service';
 import { createHostedCheckoutSession } from '@/lib/hostedCheckout';
-import QRCode from 'react-qr-code';
+import { BrandedQRCode } from '@/components/ui/BrandedQRCode';
 import type { Wallet as WalletType } from '@/types';
 
 // Types
@@ -1075,12 +1075,9 @@ export function BusinessCheckoutPage() {
                     </div>
 
                     <div className="bg-white p-6 rounded-2xl border-2 border-indigo-100 inline-block mx-auto shadow-lg">
-                      <QRCode
+                      <BrandedQRCode
                         value={getQRCodeValue()}
                         size={200}
-                        level="H"
-                        style={{ height: 'auto', maxWidth: '100%', width: '100%' }}
-                        bgColor="#ffffff"
                         fgColor="#1e1b4b"
                       />
                     </div>

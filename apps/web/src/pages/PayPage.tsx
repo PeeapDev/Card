@@ -16,7 +16,6 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import QRCode from 'react-qr-code';
 import {
   Send,
   User,
@@ -35,6 +34,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
+import { BrandedQRCode } from '@/components/ui/BrandedQRCode';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { currencyService, Currency } from '@/services/currency.service';
@@ -628,7 +628,7 @@ export function PayPage() {
               <span className="text-sm font-medium text-gray-700">Scan with Peeap App</span>
             </div>
             <div className="bg-white p-4 rounded-xl inline-block shadow-sm border">
-              <QRCode value={paymentUrl} size={180} level="M" />
+              <BrandedQRCode value={paymentUrl} size={180} />
             </div>
             <p className="text-xs text-gray-500 mt-3">
               Open Peeap app and scan this code

@@ -6,3 +6,4 @@ export { ThemeToggle } from './ThemeToggle';
 export { NotificationBell } from './NotificationBell';
 export { Modal } from './Modal';
 export { SkipLink } from './SkipLink';
+export { BrandedQRCode, generateBrandedQRSVG, generateBrandedQRDataURL, getPeeapLogoSVG } from './BrandedQRCode';

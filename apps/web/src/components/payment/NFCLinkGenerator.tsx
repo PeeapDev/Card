@@ -10,7 +10,6 @@
  */
 
 import { useState, useEffect } from 'react';
-import QRCode from 'react-qr-code';
 import {
   Wifi,
   Copy,
@@ -30,6 +29,7 @@ import {
   EyeOff,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, Button, Input } from '@/components/ui';
+import { BrandedQRCode } from '@/components/ui/BrandedQRCode';
 import { nfcEngine, NFCCapabilities } from '@/services/nfc-engine';
 import { useCreateNFCPaymentLink, useNFCPaymentLinks } from '@/hooks/useNFCPayments';
 import { clsx } from 'clsx';
@@ -326,7 +326,7 @@ export function NFCLinkGenerator({
                   Scan to Pay or Write to NFC Tag
                 </p>
                 <div className="bg-white p-4 rounded-xl border border-gray-200 inline-block">
-                  <QRCode value={paymentUrl} size={180} level="H" />
+                  <BrandedQRCode value={paymentUrl} size={180} />
                 </div>
               </div>
 

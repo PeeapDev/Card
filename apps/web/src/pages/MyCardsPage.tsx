@@ -31,8 +31,8 @@ import {
   Copy,
   ExternalLink,
 } from 'lucide-react';
-import QRCode from 'react-qr-code';
 import { Card, CardHeader, CardTitle, Button, Input } from '@/components/ui';
+import { BrandedQRCode } from '@/components/ui/BrandedQRCode';
 import { MainLayout } from '@/components/layout/MainLayout';
 import {
   useCards,
@@ -935,8 +935,8 @@ function CardItem({
             </div>
 
             {/* QR Code for payment */}
-            <div className="absolute bottom-4 right-4 bg-white p-2 rounded-lg shadow-lg">
-              <QRCode value={qrCodeData} size={70} level="M" />
+            <div className="absolute bottom-4 right-4 bg-white p-1 rounded-lg shadow-lg">
+              <BrandedQRCode value={qrCodeData} size={70} logoSizePercent={25} />
             </div>
 
             {/* Card info */}

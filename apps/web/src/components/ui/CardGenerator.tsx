@@ -4,11 +4,11 @@
  * Generates digital card preview with QR code and PDF export
  */
 
-import { useRef } from 'react';
-import { CreditCard, Download, QrCode, Printer } from 'lucide-react';
-import QRCode from 'react-qr-code';
+import { useRef, useState } from 'react';
+import { CreditCard, Download, Printer, Loader2 } from 'lucide-react';
 import { Button } from './Button';
 import { clsx } from 'clsx';
+import { BrandedQRCode, generateBrandedQRSVG } from './BrandedQRCode';
 
 interface CardGeneratorProps {
   cardNumber: string;
@@ -34,6 +34,7 @@ export function CardGenerator({
   showBack = false,
 }: CardGeneratorProps) {
   const cardRef = useRef<HTMLDivElement>(null);
+  const [isPrinting, setIsPrinting] = useState(false);
 
   // Format card number with spaces
   const formatCardNumber = (num: string): string => {
@@ -41,12 +42,23 @@ export function CardGenerator({
   };
 
   // Generate printable PDF
-  const handlePrint = () => {
+  const handlePrint = async () => {
     const printContent = cardRef.current;
     if (!printContent) return;
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
+    setIsPrinting(true);
+
+    try {
+      // Generate the branded QR code SVG
+      const qrSvgContent = await generateBrandedQRSVG(qrCode, 80, true);
+      // Extract just the inner content (remove the outer <svg> wrapper since we have our own)
+      const svgInner = qrSvgContent.replace(/<svg[^>]*>/, '').replace('</svg>', '');
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        setIsPrinting(false);
+        return;
+      }
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -170,8 +182,8 @@ export function CardGenerator({
             <div class="card back">
               <div class="magnetic-strip"></div>
               <div class="qr-container">
-                <svg viewBox="0 0 256 256">
-                  ${generateQRSVG(qrCode)}
+                <svg viewBox="0 0 80 80" width="80" height="80">
+                  ${svgInner}
                 </svg>
               </div>
               <div class="card-footer" style="left: 24px; right: auto; width: 140px;">
@@ -192,13 +204,12 @@ export function CardGenerator({
         </body>
       </html>
     `);
-    printWindow.document.close();
-  };
-
-  // Simple QR code SVG generator placeholder
-  const generateQRSVG = (data: string): string => {
-    // This is a simplified version - the actual QR code is rendered by react-qr-code
-    return `<text x="128" y="128" text-anchor="middle" fill="#000" font-size="12">QR</text>`;
+      printWindow.document.close();
+    } catch (error) {
+      console.error('Failed to generate print preview:', error);
+    } finally {
+      setIsPrinting(false);
+    }
   };
 
   return (
@@ -245,8 +256,8 @@ export function CardGenerator({
             <div className="absolute top-8 left-0 right-0 h-10 bg-gray-800" />
 
             {/* QR Code */}
-            <div className="absolute bottom-6 right-6 bg-white p-2 rounded-lg">
-              <QRCode value={qrCode} size={80} />
+            <div className="absolute bottom-6 right-6 bg-white p-1 rounded-lg">
+              <BrandedQRCode value={qrCode} size={80} logoSizePercent={25} />
             </div>
 
             {/* Info */}
@@ -264,11 +275,15 @@ export function CardGenerator({
 
       {/* Actions */}
       <div className="flex justify-center gap-3">
-        <Button variant="outline" onClick={handlePrint}>
-          <Printer className="w-4 h-4 mr-2" />
+        <Button variant="outline" onClick={handlePrint} disabled={isPrinting}>
+          {isPrinting ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
+            <Printer className="w-4 h-4 mr-2" />
+          )}
           Print Card
         </Button>
-        <Button variant="outline" onClick={handlePrint}>
+        <Button variant="outline" onClick={handlePrint} disabled={isPrinting}>
           <Download className="w-4 h-4 mr-2" />
           Export PDF
         </Button>

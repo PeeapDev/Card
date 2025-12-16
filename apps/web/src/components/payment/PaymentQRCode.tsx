@@ -5,7 +5,6 @@
  */
 
 import { useState, useEffect } from 'react';
-import QRCode from 'react-qr-code';
 import {
   RefreshCw,
   Copy,
@@ -17,6 +16,7 @@ import {
 } from 'lucide-react';
 import { qrEngine, GeneratedQR } from '@/services/qr-engine';
 import { currencyService, Currency } from '@/services/currency.service';
+import { BrandedQRCode } from '@/components/ui/BrandedQRCode';
 
 interface PaymentQRCodeProps {
   userId: string;
@@ -189,18 +189,11 @@ export function PaymentQRCode({
       )}
 
       {/* QR Code - Use deepLink (URL) for universal scanability */}
-      <div
-        className={`p-4 bg-white rounded-xl shadow-lg ${
-          isExpired ? 'opacity-50' : ''
-        }`}
-      >
-        <QRCode
+      <div className="p-4 bg-white rounded-xl shadow-lg">
+        <BrandedQRCode
           value={qrData.deepLink}
           size={size}
-          level="M"
-          style={{
-            filter: isExpired ? 'blur(4px)' : 'none',
-          }}
+          disabled={isExpired}
         />
       </div>
 

@@ -17,8 +17,8 @@ import {
   Monitor,
   Download,
 } from 'lucide-react';
-import QRCode from 'react-qr-code';
 import { clsx } from 'clsx';
+import { BrandedQRCode } from '@/components/ui/BrandedQRCode';
 import { supabase } from '@/lib/supabase';
 import { useNFC, NFCCardData } from '@/hooks/useNFC';
 import { NFCStatus } from '@/components/nfc/NFCStatus';
@@ -669,7 +669,7 @@ export function DriverCollectionView({
                 }}
                 transition={{ repeat: Infinity, duration: 2 }}
               >
-                <QRCode value={paymentUrl} size={220} level="H" />
+                <BrandedQRCode value={paymentUrl} size={220} />
               </motion.div>
 
               <p className="mt-6 text-gray-400 text-center">

@@ -7,7 +7,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import QRCode from 'react-qr-code';
 import {
   Smartphone,
   QrCode,
@@ -27,6 +26,7 @@ import {
   BadgeCheck,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { BrandedQRCode } from '@/components/ui/BrandedQRCode';
 import { cardService } from '@/services/card.service';
 import { supabase } from '@/lib/supabase';
 import { sanitizeForDisplay, safeDecodeURIComponent } from '@/utils/sanitize';
@@ -1278,7 +1278,7 @@ export function HostedCheckoutPage() {
 
             <div className="p-8 text-center">
               <div className="inline-block p-4 bg-white rounded-2xl shadow-lg border border-gray-100">
-                <QRCode value={getQRCodeData()} size={200} level="M" />
+                <BrandedQRCode value={getQRCodeData()} size={200} />
               </div>
               <p className="text-gray-600 mt-6 text-sm">
                 Scan with your phone camera to pay with Peeap

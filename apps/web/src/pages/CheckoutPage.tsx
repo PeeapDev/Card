@@ -14,7 +14,6 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
-import QRCode from 'react-qr-code';
 import {
   Smartphone,
   QrCode,
@@ -30,6 +29,7 @@ import {
   DollarSign,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
+import { BrandedQRCode } from '@/components/ui/BrandedQRCode';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { monimeService, toMinorUnits } from '@/services/monime.service';
@@ -630,7 +630,7 @@ export function CheckoutPage() {
             </div>
             <div className="bg-white p-4 rounded-xl inline-block shadow-sm border mx-auto block text-center">
               <div className="flex justify-center">
-                <QRCode value={qrCodeUrl} size={180} level="M" />
+                <BrandedQRCode value={qrCodeUrl} size={180} />
               </div>
             </div>
             <p className="text-xs text-gray-500 mt-3 text-center">
