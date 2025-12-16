@@ -129,7 +129,8 @@ class AnalyticsTrackingService {
     this.currentPath = path;
 
     try {
-      const { error } = await supabase.from('page_views').insert({
+      console.log('[Analytics] Tracking page view:', path);
+      const { data, error } = await supabase.from('page_views').insert({
         session_id: this.sessionId,
         user_id: userId || null,
         page_path: path,
@@ -142,13 +143,15 @@ class AnalyticsTrackingService {
         screen_width: window.screen.width,
         screen_height: window.screen.height,
         is_bounce: true,
-      });
+      }).select();
 
       if (error) {
-        console.error('[Analytics] Failed to track page view:', error);
+        console.error('[Analytics] Failed to track page view:', error.message, error.details, error.hint);
+      } else {
+        console.log('[Analytics] Page view tracked successfully:', data);
       }
     } catch (error) {
-      console.error('[Analytics] Failed to track page view:', error);
+      console.error('[Analytics] Exception tracking page view:', error);
     }
   }
 
