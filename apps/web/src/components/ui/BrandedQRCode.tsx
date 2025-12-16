@@ -8,8 +8,26 @@
  * remain scannable even with the logo overlay.
  */
 
+import { useEffect } from 'react';
 import QRCode from 'react-qr-code';
 import * as QRCodeLib from 'qrcode';
+
+// Load Google Font for cursive branding
+const CURSIVE_FONT_URL = 'https://fonts.googleapis.com/css2?family=Pacifico&display=swap';
+
+let fontLoaded = false;
+function loadCursiveFont() {
+  if (fontLoaded || typeof document === 'undefined') return;
+
+  const existing = document.querySelector(`link[href="${CURSIVE_FONT_URL}"]`);
+  if (!existing) {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = CURSIVE_FONT_URL;
+    document.head.appendChild(link);
+  }
+  fontLoaded = true;
+}
 
 export interface BrandedQRCodeProps {
   /** The data to encode in the QR code */
@@ -83,6 +101,11 @@ export function BrandedQRCode({
   const logoSize = Math.floor(size * (logoSizePercent / 100));
   const logoContainerSize = logoSize + 8;
 
+  // Load cursive font on mount
+  useEffect(() => {
+    loadCursiveFont();
+  }, []);
+
   return (
     <div
       className={className}
@@ -118,28 +141,31 @@ export function BrandedQRCode({
             top: '50%',
             left: '50%',
             transform: 'translate(-50%, -50%)',
-            minWidth: logoContainerSize,
+            minWidth: logoContainerSize * 1.5,
             height: logoContainerSize,
-            paddingLeft: 8,
-            paddingRight: 8,
+            paddingLeft: 12,
+            paddingRight: 12,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: '#22c55e',
-            borderRadius: 6,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+            background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+            borderRadius: logoContainerSize / 2,
+            boxShadow: '0 3px 12px rgba(34, 197, 94, 0.45)',
             zIndex: 10,
             overflow: 'hidden',
+            border: '2px solid rgba(255,255,255,0.3)',
           }}
         >
-          <span style={{
-            color: 'white',
-            fontSize: Math.max(logoSize * 0.45, 10),
-            fontWeight: 'bold',
-            fontFamily: 'Arial, sans-serif',
-            letterSpacing: '-0.5px',
-            textTransform: 'lowercase',
-          }}>
+          <span
+            style={{
+              color: 'white',
+              fontSize: Math.max(logoSize * 0.6, 14),
+              fontFamily: '"Pacifico", "Brush Script MT", "Segoe Script", cursive',
+              letterSpacing: '0.5px',
+              textShadow: '1px 1px 2px rgba(0,0,0,0.15)',
+              whiteSpace: 'nowrap',
+            }}
+          >
             peeap
           </span>
         </div>
@@ -174,17 +200,24 @@ export async function generateBrandedQRSVG(
     return qrSvg;
   }
 
-  // Parse the SVG to inject the logo
+  // Parse the SVG to inject the logo with gradient and cursive style
   const logoHeight = Math.floor(size * 0.15);
-  const logoWidth = Math.floor(logoHeight * 2.5); // wider for "peeap" text
+  const logoWidth = Math.floor(logoHeight * 2.8); // wider for "peeap" text
   const logoX = (size - logoWidth) / 2;
   const logoY = (size - logoHeight) / 2;
-  const fontSize = Math.max(Math.floor(logoHeight * 0.6), 8);
+  const fontSize = Math.max(Math.floor(logoHeight * 0.65), 10);
+  const rx = logoHeight / 2; // pill shape
 
   const logoSVG = `
+    <defs>
+      <linearGradient id="peeapGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#22c55e"/>
+        <stop offset="100%" style="stop-color:#16a34a"/>
+      </linearGradient>
+    </defs>
     <g>
-      <rect x="${logoX}" y="${logoY}" width="${logoWidth}" height="${logoHeight}" rx="4" fill="#22c55e"/>
-      <text x="${size / 2}" y="${logoY + logoHeight * 0.7}" font-size="${fontSize}" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-weight="bold">peeap</text>
+      <rect x="${logoX}" y="${logoY}" width="${logoWidth}" height="${logoHeight}" rx="${rx}" fill="url(#peeapGradient)" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+      <text x="${size / 2}" y="${logoY + logoHeight * 0.72}" font-size="${fontSize}" text-anchor="middle" fill="white" font-family="Pacifico, Brush Script MT, cursive" style="text-shadow: 1px 1px 2px rgba(0,0,0,0.15)">peeap</text>
     </g>
   `;
 
@@ -206,19 +239,25 @@ export async function generateBrandedQRDataURL(
 }
 
 /**
- * Get the Peeap logo as an SVG string
+ * Get the Peeap logo as an SVG string with cursive styling
  */
 export function getPeeapLogoSVG(size: number = 40): string {
-  const width = size * 2.5;
+  const width = size * 2.8;
   const height = size;
-  const rx = Math.floor(size * 0.15);
-  const fontSize = Math.floor(size * 0.5);
-  const textY = Math.floor(size * 0.65);
+  const rx = size / 2; // pill shape
+  const fontSize = Math.floor(size * 0.55);
+  const textY = Math.floor(size * 0.68);
 
   return `
     <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-      <rect width="${width}" height="${height}" rx="${rx}" fill="#22c55e"/>
-      <text x="${width / 2}" y="${textY}" font-size="${fontSize}" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-weight="bold">peeap</text>
+      <defs>
+        <linearGradient id="peeapGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:#22c55e"/>
+          <stop offset="100%" style="stop-color:#16a34a"/>
+        </linearGradient>
+      </defs>
+      <rect width="${width}" height="${height}" rx="${rx}" fill="url(#peeapGrad)" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+      <text x="${width / 2}" y="${textY}" font-size="${fontSize}" text-anchor="middle" fill="white" font-family="Pacifico, Brush Script MT, cursive">peeap</text>
     </svg>
   `.trim();
 }
