@@ -13,6 +13,7 @@ import { ScanToPayModal } from '@/components/payment/ScanToPayModal';
 import { SendToMobileMoneyModal } from '@/components/payment/SendToMobileMoneyModal';
 import { PendingSubscriptionPaymentsCompact } from '@/components/subscriptions/PendingSubscriptionPayments';
 import { ProductCarousel } from '@/components/marketplace/ProductCarousel';
+import { RecentOrdersCompact } from '@/components/marketplace/RecentOrders';
 import { clsx } from 'clsx';
 import { currencyService, Currency } from '@/services/currency.service';
 
@@ -229,6 +230,9 @@ export function DashboardPage() {
 
         {/* Product Carousel - Auto-sliding banner */}
         <ProductCarousel />
+
+        {/* Active Orders Status */}
+        <RecentOrdersCompact />
 
         {/* Pending Subscription Payments */}
         <PendingSubscriptionPaymentsCompact />
