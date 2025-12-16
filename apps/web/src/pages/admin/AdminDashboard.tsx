@@ -8,7 +8,6 @@ import {
   AlertTriangle,
   CheckCircle,
   Clock,
-  Activity,
   DollarSign,
   Layers,
   ShieldCheck,
@@ -17,7 +16,6 @@ import {
   Bell,
   Package,
   CheckCheck,
-  BarChart3,
 } from 'lucide-react';
 import { MotionCard } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
@@ -374,12 +372,21 @@ export function AdminDashboard() {
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
               <p className="text-gray-500 dark:text-gray-400">Overview of your card issuing platform</p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
+              {/* Visitor Stats */}
+              <div className="flex items-center gap-3 px-4 py-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                <Eye className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <div className="text-sm">
+                  <span className="font-semibold text-indigo-700 dark:text-indigo-300">{stats.pageViewsToday.toLocaleString()}</span>
+                  <span className="text-indigo-600 dark:text-indigo-400 ml-1">visits today</span>
+                </div>
+                <div className="h-4 w-px bg-indigo-200 dark:bg-indigo-700" />
+                <div className="text-sm">
+                  <span className="font-semibold text-indigo-700 dark:text-indigo-300">{stats.uniqueVisitorsToday.toLocaleString()}</span>
+                  <span className="text-indigo-600 dark:text-indigo-400 ml-1">unique</span>
+                </div>
+              </div>
               <span className="text-sm text-gray-500 dark:text-gray-400">Last updated: Just now</span>
-              <button className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2">
-                <Activity className="w-4 h-4" />
-                View Analytics
-              </button>
             </div>
           </div>
 
@@ -434,27 +441,6 @@ export function AdminDashboard() {
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">This month</p>
           </MotionCard>
         </motion.div>
-
-        {/* Website Analytics Card */}
-        <Link to="/admin/analytics">
-          <MotionCard className="p-6 hover:shadow-lg transition-shadow cursor-pointer" delay={0.35}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
-                  <BarChart3 className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Website Visits</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.pageViewsToday.toLocaleString()}</p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                    {stats.uniqueVisitorsToday} unique visitors today · {stats.pageViewsTotal.toLocaleString()} total views
-                  </p>
-                </div>
-              </div>
-              <ArrowUpRight className="w-5 h-5 text-gray-400" />
-            </div>
-          </MotionCard>
-        </Link>
 
         {/* Action Required Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

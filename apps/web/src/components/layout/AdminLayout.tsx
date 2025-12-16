@@ -35,7 +35,6 @@ import {
   PackagePlus,
   Puzzle,
   Mail,
-  BarChart3,
   Wifi,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -129,12 +128,6 @@ const navSections: NavSection[] = [
     items: [
       { path: '/admin/support', label: 'Support Tickets', icon: Headphones },
       { path: '/admin/notifications', label: 'Notifications', icon: Bell, badge: 'New', badgeColor: 'primary' },
-    ],
-  },
-  {
-    title: 'Analytics',
-    items: [
-      { path: '/admin/analytics', label: 'Website Analytics', icon: BarChart3, badge: 'New', badgeColor: 'primary' },
     ],
   },
 ];
