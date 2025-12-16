@@ -1,5 +1,5 @@
 -- Migration: Fix page_views RLS policies
--- The roles column is an array, so we need to use array operators
+-- The roles column is VARCHAR with comma-separated values
 
 -- Drop existing policies
 DROP POLICY IF EXISTS "Allow insert page views" ON page_views;
@@ -17,7 +17,7 @@ CREATE POLICY "Allow admin read page views" ON page_views
     EXISTS (
       SELECT 1 FROM users
       WHERE users.id = auth.uid()
-      AND (users.roles && ARRAY['admin', 'superadmin'])
+      AND (users.roles LIKE '%admin%' OR users.roles LIKE '%superadmin%')
     )
   );
 
