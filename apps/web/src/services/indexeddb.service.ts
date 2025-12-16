@@ -117,7 +117,7 @@ export interface LocalSalesReport {
 }
 
 const DB_NAME = 'peeap_pos_db';
-const DB_VERSION = 4; // Bumped to 4 for general caching stores
+const DB_VERSION = 5; // Bumped to 5 for suppliers, discounts, purchase orders
 
 // Store names
 export const STORES = {
@@ -138,11 +138,15 @@ export const STORES = {
   // General caching stores
   CACHE: 'cache',
   SUPPORT_TICKETS: 'support_tickets',
+  // POS Management stores
+  SUPPLIERS: 'suppliers',
+  DISCOUNTS: 'discounts',
+  PURCHASE_ORDERS: 'purchase_orders',
 } as const;
 
 let db: IDBDatabase | null = null;
 
-// Initialize the database
+// Initialize the database with timeout
 export const initDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
     if (db) {
@@ -150,16 +154,31 @@ export const initDB = (): Promise<IDBDatabase> => {
       return;
     }
 
+    // Add timeout to prevent hanging
+    const timeout = setTimeout(() => {
+      console.warn('IndexedDB initialization timed out');
+      reject(new Error('IndexedDB timeout'));
+    }, 5000);
+
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onerror = () => {
+      clearTimeout(timeout);
       console.error('IndexedDB error:', request.error);
       reject(request.error);
     };
 
     request.onsuccess = () => {
+      clearTimeout(timeout);
       db = request.result;
       resolve(db);
+    };
+
+    // Handle blocked event (when another tab has the db open with old version)
+    request.onblocked = () => {
+      clearTimeout(timeout);
+      console.warn('IndexedDB upgrade blocked - close other tabs');
+      reject(new Error('IndexedDB blocked'));
     };
 
     request.onupgradeneeded = (event) => {
@@ -272,6 +291,30 @@ export const initDB = (): Promise<IDBDatabase> => {
         ticketStore.createIndex('user_id', 'user_id', { unique: false });
         ticketStore.createIndex('status', 'status', { unique: false });
         ticketStore.createIndex('created_at', 'created_at', { unique: false });
+      }
+
+      // Suppliers store
+      if (!database.objectStoreNames.contains(STORES.SUPPLIERS)) {
+        const supplierStore = database.createObjectStore(STORES.SUPPLIERS, { keyPath: 'id' });
+        supplierStore.createIndex('merchant_id', 'merchant_id', { unique: false });
+        supplierStore.createIndex('status', 'status', { unique: false });
+      }
+
+      // Discounts store
+      if (!database.objectStoreNames.contains(STORES.DISCOUNTS)) {
+        const discountStore = database.createObjectStore(STORES.DISCOUNTS, { keyPath: 'id' });
+        discountStore.createIndex('merchant_id', 'merchant_id', { unique: false });
+        discountStore.createIndex('is_active', 'is_active', { unique: false });
+        discountStore.createIndex('code', 'code', { unique: false });
+      }
+
+      // Purchase orders store
+      if (!database.objectStoreNames.contains(STORES.PURCHASE_ORDERS)) {
+        const poStore = database.createObjectStore(STORES.PURCHASE_ORDERS, { keyPath: 'id' });
+        poStore.createIndex('merchant_id', 'merchant_id', { unique: false });
+        poStore.createIndex('supplier_id', 'supplier_id', { unique: false });
+        poStore.createIndex('status', 'status', { unique: false });
+        poStore.createIndex('order_date', 'order_date', { unique: false });
       }
 
     };
@@ -805,6 +848,185 @@ export const clearExpiredCache = async (): Promise<void> => {
   });
 };
 
+// ================== Supplier Types and Functions ==================
+
+export interface OfflineSupplier {
+  id: string;
+  merchant_id: string;
+  name: string;
+  contact_person?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  payment_terms?: string;
+  credit_limit?: number;
+  bank_name?: string;
+  account_number?: string;
+  notes?: string;
+  status: 'active' | 'inactive' | 'blocked';
+  created_at?: string;
+  updated_at?: string;
+  synced_at?: string;
+  pending_sync?: boolean;
+}
+
+export const saveSuppliers = async (suppliers: OfflineSupplier[], merchantId: string): Promise<void> => {
+  const suppliersWithMeta: OfflineSupplier[] = suppliers.map(s => ({
+    ...s,
+    merchant_id: merchantId,
+    synced_at: new Date().toISOString(),
+  }));
+  await putMany(STORES.SUPPLIERS, suppliersWithMeta);
+};
+
+export const getSuppliers = async (merchantId: string): Promise<OfflineSupplier[]> => {
+  return getAll<OfflineSupplier>(STORES.SUPPLIERS, 'merchant_id', merchantId);
+};
+
+export const getSupplierById = async (supplierId: string): Promise<OfflineSupplier | undefined> => {
+  return getByKey<OfflineSupplier>(STORES.SUPPLIERS, supplierId);
+};
+
+export const saveSupplier = async (supplier: Partial<OfflineSupplier>): Promise<void> => {
+  const supplierWithMeta: OfflineSupplier = {
+    ...supplier as OfflineSupplier,
+    synced_at: new Date().toISOString(),
+    pending_sync: true,
+  };
+  await put(STORES.SUPPLIERS, supplierWithMeta);
+};
+
+export const deleteSupplier = async (supplierId: string): Promise<void> => {
+  await deleteByKey(STORES.SUPPLIERS, supplierId);
+};
+
+// ================== Discount Types and Functions ==================
+
+export interface OfflineDiscount {
+  id: string;
+  merchant_id: string;
+  name: string;
+  code?: string;
+  type: 'percentage' | 'fixed' | 'bogo' | 'bundle';
+  value: number;
+  min_purchase?: number;
+  max_discount?: number;
+  usage_limit?: number;
+  usage_count?: number;
+  start_date?: string;
+  end_date?: string;
+  is_active: boolean;
+  applies_to?: 'all' | 'category' | 'product';
+  category_ids?: string[];
+  product_ids?: string[];
+  created_at?: string;
+  updated_at?: string;
+  synced_at?: string;
+  pending_sync?: boolean;
+}
+
+export const saveDiscounts = async (discounts: OfflineDiscount[], merchantId: string): Promise<void> => {
+  const discountsWithMeta: OfflineDiscount[] = discounts.map(d => ({
+    ...d,
+    merchant_id: merchantId,
+    synced_at: new Date().toISOString(),
+  }));
+  await putMany(STORES.DISCOUNTS, discountsWithMeta);
+};
+
+export const getDiscounts = async (merchantId: string): Promise<OfflineDiscount[]> => {
+  return getAll<OfflineDiscount>(STORES.DISCOUNTS, 'merchant_id', merchantId);
+};
+
+export const getDiscountById = async (discountId: string): Promise<OfflineDiscount | undefined> => {
+  return getByKey<OfflineDiscount>(STORES.DISCOUNTS, discountId);
+};
+
+export const getDiscountByCode = async (merchantId: string, code: string): Promise<OfflineDiscount | undefined> => {
+  const discounts = await getDiscounts(merchantId);
+  return discounts.find(d => d.code?.toLowerCase() === code.toLowerCase());
+};
+
+export const saveDiscount = async (discount: Partial<OfflineDiscount>): Promise<void> => {
+  const discountWithMeta: OfflineDiscount = {
+    ...discount as OfflineDiscount,
+    synced_at: new Date().toISOString(),
+    pending_sync: true,
+  };
+  await put(STORES.DISCOUNTS, discountWithMeta);
+};
+
+export const deleteDiscount = async (discountId: string): Promise<void> => {
+  await deleteByKey(STORES.DISCOUNTS, discountId);
+};
+
+// ================== Purchase Order Types and Functions ==================
+
+export interface PurchaseOrderItem {
+  product_id: string;
+  product_name: string;
+  quantity: number;
+  unit_cost: number;
+  tax_rate?: number;
+  total: number;
+}
+
+export interface OfflinePurchaseOrder {
+  id: string;
+  merchant_id: string;
+  supplier_id: string;
+  supplier_name?: string;
+  order_number: string;
+  status: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled';
+  order_date: string;
+  expected_date?: string;
+  received_date?: string;
+  items: PurchaseOrderItem[];
+  subtotal: number;
+  tax_amount: number;
+  total_amount: number;
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
+  synced_at?: string;
+  pending_sync?: boolean;
+}
+
+export const savePurchaseOrders = async (orders: OfflinePurchaseOrder[], merchantId: string): Promise<void> => {
+  const ordersWithMeta: OfflinePurchaseOrder[] = orders.map(o => ({
+    ...o,
+    merchant_id: merchantId,
+    synced_at: new Date().toISOString(),
+  }));
+  await putMany(STORES.PURCHASE_ORDERS, ordersWithMeta);
+};
+
+export const getPurchaseOrders = async (merchantId: string): Promise<OfflinePurchaseOrder[]> => {
+  return getAll<OfflinePurchaseOrder>(STORES.PURCHASE_ORDERS, 'merchant_id', merchantId);
+};
+
+export const getPurchaseOrderById = async (orderId: string): Promise<OfflinePurchaseOrder | undefined> => {
+  return getByKey<OfflinePurchaseOrder>(STORES.PURCHASE_ORDERS, orderId);
+};
+
+export const getPurchaseOrdersBySupplier = async (merchantId: string, supplierId: string): Promise<OfflinePurchaseOrder[]> => {
+  const orders = await getPurchaseOrders(merchantId);
+  return orders.filter(o => o.supplier_id === supplierId);
+};
+
+export const savePurchaseOrder = async (order: Partial<OfflinePurchaseOrder>): Promise<void> => {
+  const orderWithMeta: OfflinePurchaseOrder = {
+    ...order as OfflinePurchaseOrder,
+    synced_at: new Date().toISOString(),
+    pending_sync: true,
+  };
+  await put(STORES.PURCHASE_ORDERS, orderWithMeta);
+};
+
+export const deletePurchaseOrder = async (orderId: string): Promise<void> => {
+  await deleteByKey(STORES.PURCHASE_ORDERS, orderId);
+};
+
 // ================== Support Ticket Caching Functions ==================
 
 // Save support tickets to cache
@@ -900,6 +1122,26 @@ export const indexedDBService = {
   saveSupportTickets,
   getCachedSupportTickets,
   clearSupportTicketsCache,
+  // Suppliers
+  saveSuppliers,
+  getSuppliers,
+  getSupplierById,
+  saveSupplier,
+  deleteSupplier,
+  // Discounts
+  saveDiscounts,
+  getDiscounts,
+  getDiscountById,
+  getDiscountByCode,
+  saveDiscount,
+  deleteDiscount,
+  // Purchase Orders
+  savePurchaseOrders,
+  getPurchaseOrders,
+  getPurchaseOrderById,
+  getPurchaseOrdersBySupplier,
+  savePurchaseOrder,
+  deletePurchaseOrder,
 };
 
 export default indexedDBService;

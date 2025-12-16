@@ -48,8 +48,29 @@ import {
   TrendingDown,
   Calendar,
   Target,
+  ShoppingBag,
+  Globe,
+  PieChart as PieChartIcon,
+  ArrowDownRight,
 } from 'lucide-react';
 import posService, { POSCashSession } from '@/services/pos.service';
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+} from 'recharts';
+
+// Chart colors
+const CHART_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
 
 interface POSStats {
   totalProducts: number;
@@ -60,6 +81,26 @@ interface POSStats {
   lowStockCount: number;
   activeCustomers: number;
   pendingOrders: number;
+  // Comparison
+  revenueChange: number;
+  salesChange: number;
+}
+
+interface HourlyData {
+  hour: string;
+  sales: number;
+  revenue: number;
+}
+
+interface PaymentData {
+  name: string;
+  value: number;
+  count: number;
+}
+
+interface CategoryData {
+  name: string;
+  revenue: number;
 }
 
 interface RecentSale {
@@ -94,10 +135,17 @@ export function POSAppPage() {
     lowStockCount: 0,
     activeCustomers: 0,
     pendingOrders: 0,
+    revenueChange: 0,
+    salesChange: 0,
   });
   const [recentSales, setRecentSales] = useState<RecentSale[]>([]);
   const [cashSession, setCashSession] = useState<POSCashSession | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'management'>('overview');
+
+  // Chart data
+  const [hourlyData, setHourlyData] = useState<HourlyData[]>([]);
+  const [paymentData, setPaymentData] = useState<PaymentData[]>([]);
+  const [categoryData, setCategoryData] = useState<CategoryData[]>([]);
 
   // Quick Links Configuration - All POS Management Features
   const quickLinks: QuickLink[] = [
@@ -199,7 +247,7 @@ export function POSAppPage() {
       title: 'Payments',
       description: 'Payment methods',
       icon: CreditCard,
-      href: '/merchant/pos/payments',
+      href: '/merchant/pos/settings?tab=payments',
       color: 'text-emerald-600',
       bgColor: 'bg-emerald-100 dark:bg-emerald-900/30',
       category: 'financial',
@@ -242,6 +290,16 @@ export function POSAppPage() {
       bgColor: 'bg-teal-100 dark:bg-teal-900/30',
       category: 'settings',
     },
+    // Online Sales
+    {
+      title: 'Marketplace',
+      description: 'Sell online to customers',
+      icon: Globe,
+      href: '/merchant/pos/marketplace',
+      color: 'text-green-600',
+      bgColor: 'bg-green-100 dark:bg-green-900/30',
+      category: 'online',
+    },
   ];
 
   // Check if POS setup has been completed
@@ -277,7 +335,11 @@ export function POSAppPage() {
     try {
       setLoading(true);
 
-      const [productsResult, lowStockResult, allSalesResult, todaySalesResult, customersResult] = await Promise.all([
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+
+      const [productsResult, lowStockResult, allSalesResult, todaySalesResult, yesterdaySalesResult, customersResult, categoriesResult] = await Promise.all([
         supabaseAdmin
           .from('pos_products')
           .select('id', { count: 'exact', head: true })
@@ -289,7 +351,7 @@ export function POSAppPage() {
           .eq('merchant_id', user.id)
           .eq('is_active', true)
           .eq('track_inventory', true)
-          .lte('stock_quantity', 10), // Low stock threshold
+          .lte('stock_quantity', 10),
         supabaseAdmin
           .from('pos_sales')
           .select('total_amount')
@@ -297,30 +359,116 @@ export function POSAppPage() {
           .eq('status', 'completed'),
         supabaseAdmin
           .from('pos_sales')
+          .select('id, total_amount, created_at, payment_method')
+          .eq('merchant_id', user.id)
+          .eq('status', 'completed')
+          .gte('created_at', today.toISOString()),
+        supabaseAdmin
+          .from('pos_sales')
           .select('total_amount')
           .eq('merchant_id', user.id)
           .eq('status', 'completed')
-          .gte('created_at', new Date().toISOString().split('T')[0]),
+          .gte('created_at', yesterday.toISOString())
+          .lt('created_at', today.toISOString()),
         supabaseAdmin
           .from('pos_customers')
           .select('id', { count: 'exact', head: true })
           .eq('merchant_id', user.id)
           .eq('is_active', true),
+        supabaseAdmin
+          .from('pos_categories')
+          .select('id, name')
+          .eq('merchant_id', user.id),
       ]);
 
       const totalRevenue = allSalesResult.data?.reduce((sum, s) => sum + (s.total_amount || 0), 0) || 0;
       const todayRevenue = todaySalesResult.data?.reduce((sum, s) => sum + (s.total_amount || 0), 0) || 0;
+      const yesterdayRevenue = yesterdaySalesResult.data?.reduce((sum, s) => sum + (s.total_amount || 0), 0) || 0;
+      const yesterdaySalesCount = yesterdaySalesResult.data?.length || 0;
+      const todaySalesCount = todaySalesResult.data?.length || 0;
+
+      // Calculate changes
+      const revenueChange = yesterdayRevenue > 0 ? ((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 100 : 0;
+      const salesChange = yesterdaySalesCount > 0 ? ((todaySalesCount - yesterdaySalesCount) / yesterdaySalesCount) * 100 : 0;
 
       setStats({
         totalProducts: productsResult.count || 0,
         totalSales: allSalesResult.data?.length || 0,
         totalRevenue,
-        todaySales: todaySalesResult.data?.length || 0,
+        todaySales: todaySalesCount,
         todayRevenue,
         lowStockCount: lowStockResult.count || 0,
         activeCustomers: customersResult.count || 0,
         pendingOrders: 0,
+        revenueChange,
+        salesChange,
       });
+
+      // Process hourly data for today
+      const hourlyMap = new Map<number, { sales: number; revenue: number }>();
+      for (let i = 0; i < 24; i++) {
+        hourlyMap.set(i, { sales: 0, revenue: 0 });
+      }
+      (todaySalesResult.data || []).forEach(sale => {
+        const hour = new Date(sale.created_at).getHours();
+        const data = hourlyMap.get(hour) || { sales: 0, revenue: 0 };
+        data.sales += 1;
+        data.revenue += Number(sale.total_amount || 0);
+        hourlyMap.set(hour, data);
+      });
+      const hourlyChartData = Array.from(hourlyMap.entries()).map(([hour, data]) => ({
+        hour: `${hour}:00`,
+        sales: data.sales,
+        revenue: data.revenue,
+      }));
+      setHourlyData(hourlyChartData);
+
+      // Process payment method data
+      const paymentMap = new Map<string, { value: number; count: number }>();
+      (todaySalesResult.data || []).forEach(sale => {
+        const method = sale.payment_method || 'other';
+        const existing = paymentMap.get(method) || { value: 0, count: 0 };
+        existing.value += Number(sale.total_amount || 0);
+        existing.count += 1;
+        paymentMap.set(method, existing);
+      });
+      const paymentChartData = Array.from(paymentMap.entries())
+        .map(([name, data]) => ({
+          name: name.charAt(0).toUpperCase() + name.slice(1).replace('_', ' '),
+          ...data
+        }))
+        .sort((a, b) => b.value - a.value);
+      setPaymentData(paymentChartData);
+
+      // Fetch category sales data
+      const { data: salesWithItems } = await supabaseAdmin
+        .from('pos_sales')
+        .select('*, items:pos_sale_items(product_id, total_price)')
+        .eq('merchant_id', user.id)
+        .eq('status', 'completed')
+        .gte('created_at', today.toISOString());
+
+      // Fetch products with category
+      const { data: productsData } = await supabaseAdmin
+        .from('pos_products')
+        .select('id, category_id')
+        .eq('merchant_id', user.id);
+
+      // Process category data
+      const categoryMap = new Map<string, number>();
+      (salesWithItems || []).forEach(sale => {
+        (sale.items || []).forEach((item: any) => {
+          const product = productsData?.find(p => p.id === item.product_id);
+          const category = categoriesResult.data?.find(c => c.id === product?.category_id);
+          const categoryName = category?.name || 'Uncategorized';
+          categoryMap.set(categoryName, (categoryMap.get(categoryName) || 0) + Number(item.total_price || 0));
+        });
+      });
+      const categoryChartData = Array.from(categoryMap.entries())
+        .map(([name, revenue]) => ({ name, revenue }))
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 5);
+      setCategoryData(categoryChartData);
 
       // Load recent sales
       const { data: recentSalesData } = await supabaseAdmin
@@ -520,32 +668,61 @@ export function POSAppPage() {
               </Card>
             </div>
 
-            {/* Stats Grid */}
+            {/* Key Stats with Change Indicators */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <Card className="p-4 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/merchant/pos/sales')}>
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center justify-between mb-2">
                   <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-xl">
                     <DollarSign className="w-5 h-5 text-green-600" />
                   </div>
-                  <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded-full">Today</span>
+                  {stats.revenueChange !== 0 && (
+                    <span className={`text-xs flex items-center gap-0.5 px-2 py-0.5 rounded-full ${
+                      stats.revenueChange >= 0
+                        ? 'text-green-700 bg-green-100'
+                        : 'text-red-700 bg-red-100'
+                    }`}>
+                      {stats.revenueChange >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                      {Math.abs(stats.revenueChange).toFixed(0)}%
+                    </span>
+                  )}
                 </div>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(stats.todayRevenue)}</p>
-                <p className="text-sm text-gray-500">{stats.todaySales} transactions</p>
+                <p className="text-sm text-gray-500">Today's Revenue</p>
+              </Card>
+
+              <Card className="p-4 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/merchant/pos/sales')}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
+                    <ShoppingBag className="w-5 h-5 text-blue-600" />
+                  </div>
+                  {stats.salesChange !== 0 && (
+                    <span className={`text-xs flex items-center gap-0.5 px-2 py-0.5 rounded-full ${
+                      stats.salesChange >= 0
+                        ? 'text-green-700 bg-green-100'
+                        : 'text-red-700 bg-red-100'
+                    }`}>
+                      {stats.salesChange >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                      {Math.abs(stats.salesChange).toFixed(0)}%
+                    </span>
+                  )}
+                </div>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.todaySales}</p>
+                <p className="text-sm text-gray-500">Today's Sales</p>
               </Card>
 
               <Card className="p-4 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/merchant/pos/products')}>
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center justify-between mb-2">
                   <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-xl">
                     <Package className="w-5 h-5 text-purple-600" />
                   </div>
                   <ChevronRight className="w-4 h-4 text-gray-400" />
                 </div>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalProducts}</p>
-                <p className="text-sm text-gray-500">Active products</p>
+                <p className="text-sm text-gray-500">Products</p>
               </Card>
 
               <Card className="p-4 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/merchant/pos/customers')}>
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center justify-between mb-2">
                   <div className="p-2 bg-pink-100 dark:bg-pink-900/30 rounded-xl">
                     <Users className="w-5 h-5 text-pink-600" />
                   </div>
@@ -554,18 +731,142 @@ export function POSAppPage() {
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.activeCustomers}</p>
                 <p className="text-sm text-gray-500">Customers</p>
               </Card>
+            </div>
 
-              <Card className="p-4 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/merchant/pos/reports')}>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
-                    <TrendingUp className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-gray-400" />
+            {/* Charts Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Hourly Sales Chart */}
+              <Card className="p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5 text-gray-400" />
+                    Today's Hourly Sales
+                  </h3>
+                  <button
+                    onClick={() => navigate('/merchant/pos/reports')}
+                    className="text-xs text-primary-600 hover:underline"
+                  >
+                    View Details
+                  </button>
                 </div>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(stats.totalRevenue)}</p>
-                <p className="text-sm text-gray-500">Total revenue</p>
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={hourlyData}>
+                      <defs>
+                        <linearGradient id="colorRevenueDash" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                      <XAxis dataKey="hour" tick={{ fontSize: 10 }} interval={3} />
+                      <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `Le ${v >= 1000 ? (v/1000).toFixed(0) + 'K' : v}`} />
+                      <Tooltip
+                        formatter={(value: number, name: string) => [
+                          name === 'revenue' ? formatCurrency(value) : value,
+                          name === 'revenue' ? 'Revenue' : 'Sales'
+                        ]}
+                        labelFormatter={(label) => `Time: ${label}`}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="revenue"
+                        stroke="#3B82F6"
+                        fill="url(#colorRevenueDash)"
+                        strokeWidth={2}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+
+              {/* Payment Methods Pie Chart */}
+              <Card className="p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                    <PieChartIcon className="w-5 h-5 text-gray-400" />
+                    Payment Methods
+                  </h3>
+                </div>
+                {paymentData.length === 0 ? (
+                  <div className="h-48 flex items-center justify-center text-gray-400">
+                    <div className="text-center">
+                      <CreditCard className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                      <p>No sales today yet</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-48 flex items-center">
+                    <div className="w-1/2">
+                      <ResponsiveContainer width="100%" height={180}>
+                        <PieChart>
+                          <Pie
+                            data={paymentData as any[]}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={35}
+                            outerRadius={70}
+                            paddingAngle={2}
+                            dataKey="value"
+                          >
+                            {paymentData.map((_, index) => (
+                              <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="w-1/2 space-y-2">
+                      {paymentData.map((item, index) => (
+                        <div key={item.name} className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-3 h-3 rounded-full"
+                              style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}
+                            />
+                            <span className="text-gray-600 dark:text-gray-400 truncate">{item.name}</span>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-medium text-gray-900 dark:text-white">{formatCurrency(item.value)}</p>
+                            <p className="text-xs text-gray-400">{item.count} txn</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </Card>
             </div>
+
+            {/* Category Performance Bar Chart */}
+            {categoryData.length > 0 && (
+              <Card className="p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                    <Tags className="w-5 h-5 text-gray-400" />
+                    Top Categories Today
+                  </h3>
+                  <button
+                    onClick={() => navigate('/merchant/pos/reports')}
+                    className="text-xs text-primary-600 hover:underline"
+                  >
+                    View All
+                  </button>
+                </div>
+                <div className="h-40">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={categoryData} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" horizontal={false} />
+                      <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v) => `Le ${v >= 1000 ? (v/1000).toFixed(0) + 'K' : v}`} />
+                      <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={80} />
+                      <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                      <Bar dataKey="revenue" fill="#10B981" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+            )}
 
             {/* Quick Actions & Recent Sales */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

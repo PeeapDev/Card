@@ -28,6 +28,13 @@ import {
 } from 'lucide-react';
 import { supabaseAdmin } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import {
+  getDiscounts as getOfflineDiscounts,
+  saveDiscounts as saveOfflineDiscounts,
+  saveDiscount as saveOfflineDiscount,
+  deleteDiscount as deleteOfflineDiscount,
+  type OfflineDiscount
+} from '@/services/indexeddb.service';
 
 interface Discount {
   id: string;
@@ -106,11 +113,31 @@ export function POSDiscountsPage() {
   }, [discounts, searchQuery, statusFilter, typeFilter]);
 
   const loadDiscounts = async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
 
     try {
       setLoading(true);
 
+      // First, try to load from IndexedDB with timeout (non-blocking)
+      const cachePromise = getOfflineDiscounts(user.id)
+        .then(cached => {
+          if (cached.length > 0) {
+            setDiscounts(cached as unknown as Discount[]);
+            updateStats(cached as unknown as Discount[]);
+          }
+        })
+        .catch(() => console.log('Cache not available'));
+
+      // Race with a short timeout - don't wait for cache if it's slow
+      await Promise.race([
+        cachePromise,
+        new Promise(resolve => setTimeout(resolve, 500))
+      ]);
+
+      // Fetch fresh data from server
       const { data, error } = await supabaseAdmin
         .from('pos_discounts')
         .select('*')
@@ -121,28 +148,35 @@ export function POSDiscountsPage() {
 
       const discountsData = data || [];
       setDiscounts(discountsData);
+      updateStats(discountsData);
 
-      // Calculate stats
-      const now = new Date();
-      const active = discountsData.filter(d => {
-        const startDate = new Date(d.start_date);
-        const endDate = new Date(d.end_date);
-        return d.is_active && startDate <= now && endDate >= now;
-      }).length;
-      const totalRedeemed = discountsData.reduce((sum, d) => sum + (d.usage_count || 0), 0);
-
-      setStats({
-        total: discountsData.length,
-        active,
-        totalRedeemed,
-        totalSavings: 0 // Would need separate calculation
-      });
+      // Save to IndexedDB in background (non-blocking)
+      if (discountsData.length > 0) {
+        saveOfflineDiscounts(discountsData as unknown as OfflineDiscount[], user.id).catch(() => {});
+      }
 
     } catch (error) {
       console.error('Error loading discounts:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const updateStats = (discountsData: Discount[]) => {
+    const now = new Date();
+    const active = discountsData.filter(d => {
+      const startDate = new Date(d.start_date);
+      const endDate = new Date(d.end_date);
+      return d.is_active && startDate <= now && endDate >= now;
+    }).length;
+    const totalRedeemed = discountsData.reduce((sum, d) => sum + (d.usage_count || 0), 0);
+
+    setStats({
+      total: discountsData.length,
+      active,
+      totalRedeemed,
+      totalSavings: 0
+    });
   };
 
   const filterDiscounts = () => {
@@ -191,11 +225,18 @@ export function POSDiscountsPage() {
         updated_at: new Date().toISOString()
       };
 
-      const { error } = await supabaseAdmin
+      const { data, error } = await supabaseAdmin
         .from('pos_discounts')
-        .insert(discountData);
+        .insert(discountData)
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Save to IndexedDB for offline access
+      if (data) {
+        await saveOfflineDiscount(data as unknown as OfflineDiscount);
+      }
 
       setShowAddModal(false);
       resetForm();
@@ -210,15 +251,22 @@ export function POSDiscountsPage() {
     if (!selectedDiscount) return;
 
     try {
-      const { error } = await supabaseAdmin
+      const { data, error } = await supabaseAdmin
         .from('pos_discounts')
         .update({
           ...formData,
           updated_at: new Date().toISOString()
         })
-        .eq('id', selectedDiscount.id);
+        .eq('id', selectedDiscount.id)
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Update in IndexedDB
+      if (data) {
+        await saveOfflineDiscount(data as unknown as OfflineDiscount);
+      }
 
       setShowAddModal(false);
       setSelectedDiscount(null);
@@ -232,15 +280,23 @@ export function POSDiscountsPage() {
 
   const handleToggleActive = async (discount: Discount) => {
     try {
-      const { error } = await supabaseAdmin
+      const { data, error } = await supabaseAdmin
         .from('pos_discounts')
         .update({
           is_active: !discount.is_active,
           updated_at: new Date().toISOString()
         })
-        .eq('id', discount.id);
+        .eq('id', discount.id)
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Update in IndexedDB
+      if (data) {
+        await saveOfflineDiscount(data as unknown as OfflineDiscount);
+      }
+
       loadDiscounts();
     } catch (error) {
       console.error('Error toggling discount:', error);
@@ -258,6 +314,9 @@ export function POSDiscountsPage() {
         .eq('id', discountId);
 
       if (error) throw error;
+
+      // Delete from IndexedDB
+      await deleteOfflineDiscount(discountId);
 
       loadDiscounts();
     } catch (error) {
@@ -281,11 +340,19 @@ export function POSDiscountsPage() {
 
       delete (newDiscount as any).id;
 
-      const { error } = await supabaseAdmin
+      const { data, error } = await supabaseAdmin
         .from('pos_discounts')
-        .insert(newDiscount);
+        .insert(newDiscount)
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Save to IndexedDB for offline access
+      if (data) {
+        await saveOfflineDiscount(data as unknown as OfflineDiscount);
+      }
+
       loadDiscounts();
     } catch (error) {
       console.error('Error duplicating discount:', error);

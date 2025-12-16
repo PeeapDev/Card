@@ -229,7 +229,7 @@ export function POSSalesPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
-              onClick={() => navigate('/merchant/pos/terminal')}
+              onClick={() => navigate('/merchant/apps/pos')}
               className="p-2 hover:bg-gray-100 dark:bg-gray-900 rounded-lg"
             >
               <ArrowLeft className="w-5 h-5" />

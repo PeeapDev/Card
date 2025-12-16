@@ -26,6 +26,13 @@ import {
 } from 'lucide-react';
 import { supabaseAdmin } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import {
+  getSuppliers as getOfflineSuppliers,
+  saveSuppliers as saveOfflineSuppliers,
+  saveSupplier as saveOfflineSupplier,
+  deleteSupplier as deleteOfflineSupplier,
+  type OfflineSupplier
+} from '@/services/indexeddb.service';
 
 interface Supplier {
   id: string;
@@ -120,11 +127,31 @@ export function POSSuppliersPage() {
   }, [suppliers, searchQuery, statusFilter]);
 
   const loadSuppliers = async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
 
     try {
       setLoading(true);
 
+      // First, try to load from IndexedDB with timeout (non-blocking)
+      const cachePromise = getOfflineSuppliers(user.id)
+        .then(cached => {
+          if (cached.length > 0) {
+            setSuppliers(cached as unknown as Supplier[]);
+            updateStats(cached as unknown as Supplier[]);
+          }
+        })
+        .catch(() => console.log('Cache not available'));
+
+      // Race with a short timeout - don't wait for cache if it's slow
+      await Promise.race([
+        cachePromise,
+        new Promise(resolve => setTimeout(resolve, 500))
+      ]);
+
+      // Fetch fresh data from server
       const { data, error } = await supabaseAdmin
         .from('pos_suppliers')
         .select('*')
@@ -135,23 +162,30 @@ export function POSSuppliersPage() {
 
       const suppliersData = data || [];
       setSuppliers(suppliersData);
+      updateStats(suppliersData);
 
-      // Calculate stats
-      const active = suppliersData.filter(s => s.status === 'active').length;
-      const totalOwed = suppliersData.reduce((sum, s) => sum + (s.current_balance || 0), 0);
-
-      setStats({
-        total: suppliersData.length,
-        active,
-        totalOwed,
-        ordersThisMonth: 0 // Would need separate query for this
-      });
+      // Save to IndexedDB in background (non-blocking)
+      if (suppliersData.length > 0) {
+        saveOfflineSuppliers(suppliersData as unknown as OfflineSupplier[], user.id).catch(() => {});
+      }
 
     } catch (error) {
       console.error('Error loading suppliers:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const updateStats = (suppliersData: Supplier[]) => {
+    const active = suppliersData.filter(s => s.status === 'active').length;
+    const totalOwed = suppliersData.reduce((sum, s) => sum + (s.current_balance || 0), 0);
+
+    setStats({
+      total: suppliersData.length,
+      active,
+      totalOwed,
+      ordersThisMonth: 0
+    });
   };
 
   const filterSuppliers = () => {
@@ -186,11 +220,18 @@ export function POSSuppliersPage() {
         updated_at: new Date().toISOString()
       };
 
-      const { error } = await supabaseAdmin
+      const { data, error } = await supabaseAdmin
         .from('pos_suppliers')
-        .insert(supplierData);
+        .insert(supplierData)
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Save to IndexedDB for offline access
+      if (data) {
+        await saveOfflineSupplier(data as unknown as OfflineSupplier);
+      }
 
       setShowAddModal(false);
       resetForm();
@@ -205,15 +246,24 @@ export function POSSuppliersPage() {
     if (!selectedSupplier) return;
 
     try {
-      const { error } = await supabaseAdmin
+      const updateData = {
+        ...formData,
+        updated_at: new Date().toISOString()
+      };
+
+      const { data, error } = await supabaseAdmin
         .from('pos_suppliers')
-        .update({
-          ...formData,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', selectedSupplier.id);
+        .update(updateData)
+        .eq('id', selectedSupplier.id)
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Update in IndexedDB
+      if (data) {
+        await saveOfflineSupplier(data as unknown as OfflineSupplier);
+      }
 
       setShowAddModal(false);
       setSelectedSupplier(null);
@@ -229,15 +279,22 @@ export function POSSuppliersPage() {
     if (!confirm('Are you sure you want to delete this supplier?')) return;
 
     try {
-      const { error } = await supabaseAdmin
+      const { data, error } = await supabaseAdmin
         .from('pos_suppliers')
         .update({
           status: 'inactive',
           updated_at: new Date().toISOString()
         })
-        .eq('id', supplierId);
+        .eq('id', supplierId)
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Update in IndexedDB
+      if (data) {
+        await saveOfflineSupplier(data as unknown as OfflineSupplier);
+      }
 
       loadSuppliers();
     } catch (error) {

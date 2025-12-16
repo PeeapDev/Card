@@ -27,6 +27,13 @@ import {
 } from 'lucide-react';
 import { supabaseAdmin } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import {
+  getPurchaseOrders as getOfflinePurchaseOrders,
+  savePurchaseOrders as saveOfflinePurchaseOrders,
+  savePurchaseOrder as saveOfflinePurchaseOrder,
+  deletePurchaseOrder as deleteOfflinePurchaseOrder,
+  type OfflinePurchaseOrder
+} from '@/services/indexeddb.service';
 
 interface PurchaseOrder {
   id: string;
@@ -120,11 +127,31 @@ export function POSPurchaseOrdersPage() {
   }, [orders, searchQuery, statusFilter]);
 
   const loadOrders = async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
 
     try {
       setLoading(true);
 
+      // First, try to load from IndexedDB with timeout (non-blocking)
+      const cachePromise = getOfflinePurchaseOrders(user.id)
+        .then(cached => {
+          if (cached.length > 0) {
+            setOrders(cached as unknown as PurchaseOrder[]);
+            updateStats(cached as unknown as PurchaseOrder[]);
+          }
+        })
+        .catch(() => console.log('Cache not available'));
+
+      // Race with a short timeout - don't wait for cache if it's slow
+      await Promise.race([
+        cachePromise,
+        new Promise(resolve => setTimeout(resolve, 500))
+      ]);
+
+      // Fetch fresh data from server
       const { data, error } = await supabaseAdmin
         .from('pos_purchase_orders')
         .select('*')
@@ -135,29 +162,36 @@ export function POSPurchaseOrdersPage() {
 
       const ordersData = data || [];
       setOrders(ordersData);
+      updateStats(ordersData);
 
-      // Calculate stats
-      const pending = ordersData.filter(o => ['draft', 'sent', 'confirmed', 'partial'].includes(o.status)).length;
-      const totalValue = ordersData.reduce((sum, o) => sum + (o.total_amount || 0), 0);
-      const now = new Date();
-      const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-      const dueThisWeek = ordersData.filter(o => {
-        const expected = new Date(o.expected_date);
-        return expected >= now && expected <= weekFromNow && !['received', 'cancelled'].includes(o.status);
-      }).length;
-
-      setStats({
-        total: ordersData.length,
-        pending,
-        totalValue,
-        dueThisWeek
-      });
+      // Save to IndexedDB in background (non-blocking)
+      if (ordersData.length > 0) {
+        saveOfflinePurchaseOrders(ordersData as unknown as OfflinePurchaseOrder[], user.id).catch(() => {});
+      }
 
     } catch (error) {
       console.error('Error loading orders:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const updateStats = (ordersData: PurchaseOrder[]) => {
+    const pending = ordersData.filter(o => ['draft', 'sent', 'confirmed', 'partial'].includes(o.status)).length;
+    const totalValue = ordersData.reduce((sum, o) => sum + (o.total_amount || 0), 0);
+    const now = new Date();
+    const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const dueThisWeek = ordersData.filter(o => {
+      const expected = new Date(o.expected_date);
+      return expected >= now && expected <= weekFromNow && !['received', 'cancelled'].includes(o.status);
+    }).length;
+
+    setStats({
+      total: ordersData.length,
+      pending,
+      totalValue,
+      dueThisWeek
+    });
   };
 
   const loadSuppliers = async () => {
@@ -248,11 +282,18 @@ export function POSPurchaseOrdersPage() {
         updated_at: new Date().toISOString()
       };
 
-      const { error } = await supabaseAdmin
+      const { data, error } = await supabaseAdmin
         .from('pos_purchase_orders')
-        .insert(orderData);
+        .insert(orderData)
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Save to IndexedDB for offline access
+      if (data) {
+        await saveOfflinePurchaseOrder(data as unknown as OfflinePurchaseOrder);
+      }
 
       setShowAddModal(false);
       resetForm();
@@ -274,12 +315,20 @@ export function POSPurchaseOrdersPage() {
         updateData.received_date = new Date().toISOString();
       }
 
-      const { error } = await supabaseAdmin
+      const { data, error } = await supabaseAdmin
         .from('pos_purchase_orders')
         .update(updateData)
-        .eq('id', orderId);
+        .eq('id', orderId)
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Update in IndexedDB
+      if (data) {
+        await saveOfflinePurchaseOrder(data as unknown as OfflinePurchaseOrder);
+      }
+
       loadOrders();
     } catch (error) {
       console.error('Error updating order status:', error);
@@ -297,6 +346,10 @@ export function POSPurchaseOrdersPage() {
         .eq('id', orderId);
 
       if (error) throw error;
+
+      // Delete from IndexedDB
+      await deleteOfflinePurchaseOrder(orderId);
+
       loadOrders();
     } catch (error) {
       console.error('Error deleting order:', error);

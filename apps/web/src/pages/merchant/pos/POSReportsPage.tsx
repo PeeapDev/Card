@@ -1,14 +1,15 @@
 /**
- * POS Reports Page
- * Comprehensive reporting dashboard with sales reports, analytics, and end of day summary
+ * POS Reports Page - Comprehensive Analytics Dashboard
+ * Features: Sales analytics, charts, comparisons, insights
  */
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
+import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
-import { useOfflineSync } from '@/hooks/useOfflineSync';
+import { supabaseAdmin } from '@/lib/supabase';
 import {
   ArrowLeft,
   Loader2,
@@ -17,7 +18,7 @@ import {
   Calendar,
   Download,
   BarChart3,
-  PieChart,
+  PieChart as PieChartIcon,
   Clock,
   DollarSign,
   ShoppingBag,
@@ -27,147 +28,377 @@ import {
   RefreshCw,
   FileText,
   Printer,
-  Wifi,
-  WifiOff,
+  ArrowUpRight,
+  ArrowDownRight,
+  Target,
+  Zap,
+  CreditCard,
+  Banknote,
+  Smartphone,
+  Star,
+  Award,
+  Activity,
+  ShoppingCart,
 } from 'lucide-react';
-import posService, { POSSalesReport } from '@/services/pos.service';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  PieChart,
+  Pie,
+  Cell,
+  AreaChart,
+  Area,
+  Legend,
+} from 'recharts';
 
 // Format currency - using Le (Leone) symbol
 const formatCurrency = (amount: number) => {
+  if (amount >= 1000000) {
+    return `Le ${(amount / 1000000).toFixed(1)}M`;
+  }
+  if (amount >= 1000) {
+    return `Le ${(amount / 1000).toFixed(1)}K`;
+  }
   return `Le ${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 };
 
-// Format percentage
-const formatPercent = (value: number) => {
-  return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
+const formatFullCurrency = (amount: number) => {
+  return `Le ${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 };
 
-// Simple bar chart component
-const SimpleBarChart = ({ data, labelKey, valueKey, formatValue }: {
-  data: any[];
-  labelKey: string;
-  valueKey: string;
-  formatValue?: (v: number) => string;
-}) => {
-  const maxValue = Math.max(...data.map(d => d[valueKey]), 1);
+// Colors for charts
+const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
 
-  return (
-    <div className="space-y-2">
-      {data.map((item, idx) => (
-        <div key={idx} className="flex items-center gap-3">
-          <span className="text-sm text-gray-600 dark:text-gray-400 w-20 truncate">{item[labelKey]}</span>
-          <div className="flex-1 h-6 bg-gray-100 dark:bg-gray-900 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-primary-500 rounded-full transition-all"
-              style={{ width: `${(item[valueKey] / maxValue) * 100}%` }}
-            />
-          </div>
-          <span className="text-sm font-medium w-24 text-right">
-            {formatValue ? formatValue(item[valueKey]) : item[valueKey]}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-};
-
-// Hourly chart component
-const HourlyChart = ({ data }: { data: { hour: number; count: number; amount: number }[] }) => {
-  const maxAmount = Math.max(...data.map(d => d.amount), 1);
-
-  return (
-    <div className="flex items-end gap-1 h-32">
-      {Array.from({ length: 24 }, (_, hour) => {
-        const item = data.find(d => d.hour === hour) || { hour, count: 0, amount: 0 };
-        const height = (item.amount / maxAmount) * 100;
-
-        return (
-          <div
-            key={hour}
-            className="flex-1 bg-primary-500 rounded-t transition-all hover:bg-primary-600 cursor-pointer group relative"
-            style={{ height: `${Math.max(height, 2)}%` }}
-            title={`${hour}:00 - ${formatCurrency(item.amount)} (${item.count} sales)`}
-          >
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap z-10">
-              {hour}:00 - {formatCurrency(item.amount)}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-};
+interface ReportData {
+  // Summary stats
+  totalSales: number;
+  totalRevenue: number;
+  totalProfit: number;
+  totalItems: number;
+  avgTicket: number;
+  profitMargin: number;
+  totalCustomers: number;
+  totalRefunds: number;
+  refundAmount: number;
+  // Comparison with previous period
+  salesChange: number;
+  revenueChange: number;
+  profitChange: number;
+  ticketChange: number;
+  // Hourly data
+  hourlyData: { hour: string; sales: number; revenue: number }[];
+  // Daily data
+  dailyData: { date: string; sales: number; revenue: number; profit: number }[];
+  // Category data
+  categoryData: { name: string; revenue: number; quantity: number; profit: number }[];
+  // Payment data
+  paymentData: { name: string; value: number; count: number }[];
+  // Top products
+  topProducts: { name: string; quantity: number; revenue: number; profit: number }[];
+  // Staff performance
+  staffData: { name: string; sales: number; revenue: number }[];
+  // Peak hours
+  peakHour: string;
+  peakDay: string;
+  // Customer metrics
+  newCustomers: number;
+  returningCustomers: number;
+}
 
 export function POSReportsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const merchantId = user?.id;
 
-  // Use offline sync hook for offline-first data access
-  const offlineSync = useOfflineSync(merchantId);
-
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('daily');
-  const [report, setReport] = useState<POSSalesReport | null>(null);
-  const [eodReport, setEodReport] = useState<any>(null);
-  const [customDates, setCustomDates] = useState({
-    start: new Date().toISOString().split('T')[0],
-    end: new Date().toISOString().split('T')[0],
-  });
-  const [showEOD, setShowEOD] = useState(false);
-  const [isOfflineData, setIsOfflineData] = useState(false);
+  const [period, setPeriod] = useState<'today' | 'week' | 'month' | 'year'>('today');
+  const [report, setReport] = useState<ReportData | null>(null);
+  const [activeChart, setActiveChart] = useState<'revenue' | 'sales' | 'profit'>('revenue');
 
   useEffect(() => {
     if (merchantId) {
       loadReport();
     }
-  }, [merchantId, activeTab, customDates]);
+  }, [merchantId, period]);
+
+  const getDateRange = () => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    switch (period) {
+      case 'today':
+        return {
+          start: today.toISOString(),
+          end: now.toISOString(),
+          prevStart: new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString(),
+          prevEnd: today.toISOString(),
+        };
+      case 'week':
+        const weekStart = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+        return {
+          start: weekStart.toISOString(),
+          end: now.toISOString(),
+          prevStart: new Date(weekStart.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+          prevEnd: weekStart.toISOString(),
+        };
+      case 'month':
+        const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+        const prevMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        return {
+          start: monthStart.toISOString(),
+          end: now.toISOString(),
+          prevStart: prevMonthStart.toISOString(),
+          prevEnd: monthStart.toISOString(),
+        };
+      case 'year':
+        const yearStart = new Date(today.getFullYear(), 0, 1);
+        const prevYearStart = new Date(today.getFullYear() - 1, 0, 1);
+        return {
+          start: yearStart.toISOString(),
+          end: now.toISOString(),
+          prevStart: prevYearStart.toISOString(),
+          prevEnd: yearStart.toISOString(),
+        };
+      default:
+        return { start: today.toISOString(), end: now.toISOString(), prevStart: '', prevEnd: '' };
+    }
+  };
 
   const loadReport = async () => {
+    if (!merchantId) return;
+
+    setLoading(true);
     try {
-      setLoading(true);
+      const dateRange = getDateRange();
 
-      let startDate: string;
-      let endDate = new Date().toISOString();
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      // Fetch current period sales
+      const { data: currentSales, error: salesError } = await supabaseAdmin
+        .from('pos_sales')
+        .select('*, items:pos_sale_items(*)')
+        .eq('merchant_id', merchantId)
+        .gte('created_at', dateRange.start)
+        .lte('created_at', dateRange.end)
+        .order('created_at', { ascending: true });
 
-      switch (activeTab) {
-        case 'daily':
-          startDate = today.toISOString();
-          break;
-        case 'weekly':
-          const weekAgo = new Date(today);
-          weekAgo.setDate(weekAgo.getDate() - 7);
-          startDate = weekAgo.toISOString();
-          break;
-        case 'monthly':
-          const monthAgo = new Date(today);
-          monthAgo.setMonth(monthAgo.getMonth() - 1);
-          startDate = monthAgo.toISOString();
-          break;
-        case 'custom':
-          startDate = new Date(customDates.start).toISOString();
-          endDate = new Date(customDates.end + 'T23:59:59').toISOString();
-          break;
-        default:
-          startDate = today.toISOString();
+      if (salesError) throw salesError;
+
+      // Fetch previous period sales for comparison
+      const { data: prevSales } = await supabaseAdmin
+        .from('pos_sales')
+        .select('total_amount, subtotal')
+        .eq('merchant_id', merchantId)
+        .eq('status', 'completed')
+        .gte('created_at', dateRange.prevStart)
+        .lte('created_at', dateRange.prevEnd);
+
+      // Fetch products for cost calculation
+      const { data: products } = await supabaseAdmin
+        .from('pos_products')
+        .select('id, name, price, cost_price, category_id')
+        .eq('merchant_id', merchantId);
+
+      // Fetch categories
+      const { data: categories } = await supabaseAdmin
+        .from('pos_categories')
+        .select('id, name')
+        .eq('merchant_id', merchantId);
+
+      // Fetch staff
+      const { data: staff } = await supabaseAdmin
+        .from('pos_staff')
+        .select('id, name')
+        .eq('merchant_id', merchantId);
+
+      // Process current period data
+      const completedSales = (currentSales || []).filter(s => s.status === 'completed');
+      const refundedSales = (currentSales || []).filter(s => s.status === 'refunded' || s.status === 'voided');
+
+      // Calculate totals
+      const totalRevenue = completedSales.reduce((sum, s) => sum + Number(s.total_amount || 0), 0);
+      const totalCost = completedSales.reduce((sum, s) => {
+        const items = s.items || [];
+        return sum + items.reduce((itemSum: number, item: any) => {
+          const product = products?.find(p => p.id === item.product_id);
+          return itemSum + (Number(product?.cost_price || 0) * item.quantity);
+        }, 0);
+      }, 0);
+      const totalProfit = totalRevenue - totalCost;
+      const totalItems = completedSales.reduce((sum, s) => {
+        return sum + (s.items || []).reduce((itemSum: number, item: any) => itemSum + item.quantity, 0);
+      }, 0);
+
+      // Previous period totals
+      const prevRevenue = (prevSales || []).reduce((sum, s) => sum + Number(s.total_amount || 0), 0);
+      const prevSalesCount = prevSales?.length || 0;
+
+      // Calculate changes
+      const revenueChange = prevRevenue > 0 ? ((totalRevenue - prevRevenue) / prevRevenue) * 100 : 0;
+      const salesChange = prevSalesCount > 0 ? ((completedSales.length - prevSalesCount) / prevSalesCount) * 100 : 0;
+
+      // Hourly breakdown
+      const hourlyMap = new Map<number, { sales: number; revenue: number }>();
+      for (let i = 0; i < 24; i++) {
+        hourlyMap.set(i, { sales: 0, revenue: 0 });
       }
+      completedSales.forEach(sale => {
+        const hour = new Date(sale.created_at).getHours();
+        const data = hourlyMap.get(hour) || { sales: 0, revenue: 0 };
+        data.sales += 1;
+        data.revenue += Number(sale.total_amount || 0);
+        hourlyMap.set(hour, data);
+      });
+      const hourlyData = Array.from(hourlyMap.entries()).map(([hour, data]) => ({
+        hour: `${hour}:00`,
+        sales: data.sales,
+        revenue: data.revenue,
+      }));
 
-      // Use offline sync - works offline with IndexedDB
-      const data = await offlineSync.getSalesReport(startDate, endDate);
-      setReport({ ...data, period: activeTab } as POSSalesReport);
-      setIsOfflineData(data?.isOffline || false);
+      // Daily breakdown (for week/month/year views)
+      const dailyMap = new Map<string, { sales: number; revenue: number; profit: number }>();
+      completedSales.forEach(sale => {
+        const date = new Date(sale.created_at).toISOString().split('T')[0];
+        const existing = dailyMap.get(date) || { sales: 0, revenue: 0, profit: 0 };
+        const saleCost = (sale.items || []).reduce((sum: number, item: any) => {
+          const product = products?.find(p => p.id === item.product_id);
+          return sum + (Number(product?.cost_price || 0) * item.quantity);
+        }, 0);
+        existing.sales += 1;
+        existing.revenue += Number(sale.total_amount || 0);
+        existing.profit += Number(sale.total_amount || 0) - saleCost;
+        dailyMap.set(date, existing);
+      });
+      const dailyData = Array.from(dailyMap.entries())
+        .map(([date, data]) => ({ date, ...data }))
+        .sort((a, b) => a.date.localeCompare(b.date));
 
-      // Also load end of day report for today (online only)
-      if (activeTab === 'daily' && offlineSync.isOnline) {
-        try {
-          const eod = await posService.getEndOfDayReport(merchantId!, today.toISOString().split('T')[0]);
-          setEodReport(eod);
-        } catch (e) {
-          console.warn('EOD report not available offline');
+      // Category breakdown
+      const categoryMap = new Map<string, { revenue: number; quantity: number; profit: number }>();
+      completedSales.forEach(sale => {
+        (sale.items || []).forEach((item: any) => {
+          const product = products?.find(p => p.id === item.product_id);
+          const category = categories?.find(c => c.id === product?.category_id);
+          const categoryName = category?.name || 'Uncategorized';
+          const existing = categoryMap.get(categoryName) || { revenue: 0, quantity: 0, profit: 0 };
+          const itemCost = Number(product?.cost_price || 0) * item.quantity;
+          existing.revenue += Number(item.total_price || 0);
+          existing.quantity += item.quantity;
+          existing.profit += Number(item.total_price || 0) - itemCost;
+          categoryMap.set(categoryName, existing);
+        });
+      });
+      const categoryData = Array.from(categoryMap.entries())
+        .map(([name, data]) => ({ name, ...data }))
+        .sort((a, b) => b.revenue - a.revenue);
+
+      // Payment method breakdown
+      const paymentMap = new Map<string, { value: number; count: number }>();
+      completedSales.forEach(sale => {
+        const method = sale.payment_method || 'other';
+        const existing = paymentMap.get(method) || { value: 0, count: 0 };
+        existing.value += Number(sale.total_amount || 0);
+        existing.count += 1;
+        paymentMap.set(method, existing);
+      });
+      const paymentData = Array.from(paymentMap.entries())
+        .map(([name, data]) => ({
+          name: name.charAt(0).toUpperCase() + name.slice(1).replace('_', ' '),
+          ...data
+        }))
+        .sort((a, b) => b.value - a.value);
+
+      // Top products
+      const productMap = new Map<string, { quantity: number; revenue: number; profit: number }>();
+      completedSales.forEach(sale => {
+        (sale.items || []).forEach((item: any) => {
+          const product = products?.find(p => p.id === item.product_id);
+          const productName = item.product_name || product?.name || 'Unknown';
+          const existing = productMap.get(productName) || { quantity: 0, revenue: 0, profit: 0 };
+          const itemCost = Number(product?.cost_price || 0) * item.quantity;
+          existing.quantity += item.quantity;
+          existing.revenue += Number(item.total_price || 0);
+          existing.profit += Number(item.total_price || 0) - itemCost;
+          productMap.set(productName, existing);
+        });
+      });
+      const topProducts = Array.from(productMap.entries())
+        .map(([name, data]) => ({ name, ...data }))
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 10);
+
+      // Staff performance
+      const staffMap = new Map<string, { sales: number; revenue: number }>();
+      completedSales.forEach(sale => {
+        const staffName = sale.cashier_name || 'Unknown';
+        const existing = staffMap.get(staffName) || { sales: 0, revenue: 0 };
+        existing.sales += 1;
+        existing.revenue += Number(sale.total_amount || 0);
+        staffMap.set(staffName, existing);
+      });
+      const staffData = Array.from(staffMap.entries())
+        .map(([name, data]) => ({ name, ...data }))
+        .sort((a, b) => b.revenue - a.revenue);
+
+      // Find peak hour
+      let peakHour = '12:00';
+      let maxHourlyRevenue = 0;
+      hourlyData.forEach(h => {
+        if (h.revenue > maxHourlyRevenue) {
+          maxHourlyRevenue = h.revenue;
+          peakHour = h.hour;
         }
-      }
+      });
+
+      // Find peak day
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const dayMap = new Map<number, number>();
+      completedSales.forEach(sale => {
+        const day = new Date(sale.created_at).getDay();
+        dayMap.set(day, (dayMap.get(day) || 0) + Number(sale.total_amount || 0));
+      });
+      let peakDay = 'Monday';
+      let maxDayRevenue = 0;
+      dayMap.forEach((revenue, day) => {
+        if (revenue > maxDayRevenue) {
+          maxDayRevenue = revenue;
+          peakDay = dayNames[day];
+        }
+      });
+
+      // Customer metrics
+      const uniqueCustomers = new Set(completedSales.map(s => s.customer_id).filter(Boolean)).size;
+
+      setReport({
+        totalSales: completedSales.length,
+        totalRevenue,
+        totalProfit,
+        totalItems,
+        avgTicket: completedSales.length > 0 ? totalRevenue / completedSales.length : 0,
+        profitMargin: totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0,
+        totalCustomers: uniqueCustomers,
+        totalRefunds: refundedSales.length,
+        refundAmount: refundedSales.reduce((sum, s) => sum + Number(s.total_amount || 0), 0),
+        salesChange,
+        revenueChange,
+        profitChange: revenueChange, // Simplified
+        ticketChange: 0,
+        hourlyData,
+        dailyData,
+        categoryData,
+        paymentData,
+        topProducts,
+        staffData,
+        peakHour,
+        peakDay,
+        newCustomers: uniqueCustomers,
+        returningCustomers: 0,
+      });
     } catch (error) {
       console.error('Error loading report:', error);
     } finally {
@@ -179,42 +410,37 @@ export function POSReportsPage() {
     if (!report) return;
 
     const csv = [
-      ['Sales Report', report.period.toUpperCase()],
-      ['Period', `${report.start_date} to ${report.end_date}`],
+      ['POS Sales Report'],
+      [`Period: ${period.toUpperCase()}`],
       [''],
-      ['Metric', 'Value'],
-      ['Total Sales', report.total_sales],
-      ['Total Revenue', report.total_revenue],
-      ['Total Cost', report.total_cost],
-      ['Gross Profit', report.gross_profit],
-      ['Profit Margin', `${report.profit_margin.toFixed(1)}%`],
-      ['Items Sold', report.total_items_sold],
-      ['Average Ticket', report.average_ticket],
-      [''],
-      ['Sales by Category'],
-      ['Category', 'Sales Count', 'Revenue'],
-      ...report.sales_by_category.map(c => [c.category, c.sales, c.revenue]),
-      [''],
-      ['Payment Methods'],
-      ['Method', 'Count', 'Amount'],
-      ...report.sales_by_payment.map(p => [p.method, p.count, p.amount]),
+      ['Summary Metrics'],
+      ['Total Sales', report.totalSales],
+      ['Total Revenue', report.totalRevenue],
+      ['Total Profit', report.totalProfit],
+      ['Profit Margin', `${report.profitMargin.toFixed(1)}%`],
+      ['Average Ticket', report.avgTicket],
+      ['Items Sold', report.totalItems],
       [''],
       ['Top Products'],
-      ['Product', 'Qty Sold', 'Revenue', 'Profit'],
-      ...report.top_products.map(p => [p.name, p.quantity, p.revenue, p.profit]),
+      ['Product', 'Quantity', 'Revenue', 'Profit'],
+      ...report.topProducts.map(p => [p.name, p.quantity, p.revenue, p.profit]),
+      [''],
+      ['Category Breakdown'],
+      ['Category', 'Revenue', 'Quantity'],
+      ...report.categoryData.map(c => [c.name, c.revenue, c.quantity]),
+      [''],
+      ['Payment Methods'],
+      ['Method', 'Amount', 'Count'],
+      ...report.paymentData.map(p => [p.name, p.value, p.count]),
     ].map(row => row.join(',')).join('\n');
 
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `sales-report-${report.period}-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `pos-report-${period}-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  };
-
-  const printEODReport = () => {
-    window.print();
   };
 
   if (loading && !report) {
@@ -231,393 +457,427 @@ export function POSReportsPage() {
     <MerchantLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-4">
             <button
-              onClick={() => navigate('/merchant/pos/terminal')}
-              className="p-2 hover:bg-gray-100 dark:bg-gray-900 rounded-lg"
+              onClick={() => navigate('/merchant/apps/pos')}
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Sales Reports</h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Analytics and performance insights</p>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Sales Analytics</h1>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Comprehensive performance insights</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setShowEOD(!showEOD)}>
-              <FileText className="w-4 h-4 mr-2" />
-              {showEOD ? 'Sales Report' : 'End of Day'}
-            </Button>
-            <Button variant="outline" onClick={loadReport}>
+            <Button variant="outline" size="sm" onClick={loadReport}>
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
             </Button>
-            <Button onClick={exportReport}>
+            <Button variant="outline" size="sm" onClick={exportReport}>
               <Download className="w-4 h-4 mr-2" />
               Export
             </Button>
           </div>
         </div>
 
-        {/* Period Tabs */}
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex bg-gray-100 dark:bg-gray-900 rounded-lg p-1">
-            {(['daily', 'weekly', 'monthly', 'custom'] as const).map(period => (
-              <button
-                key={period}
-                onClick={() => setActiveTab(period)}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  activeTab === period
-                    ? 'bg-white dark:bg-gray-800 text-primary-600 shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white'
-                }`}
-              >
-                {period.charAt(0).toUpperCase() + period.slice(1)}
-              </button>
-            ))}
-          </div>
-
-          {activeTab === 'custom' && (
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={customDates.start}
-                onChange={e => setCustomDates({ ...customDates, start: e.target.value })}
-                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm"
-              />
-              <span className="text-gray-500 dark:text-gray-400">to</span>
-              <input
-                type="date"
-                value={customDates.end}
-                onChange={e => setCustomDates({ ...customDates, end: e.target.value })}
-                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm"
-              />
-            </div>
-          )}
+        {/* Period Selector */}
+        <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl w-fit">
+          {(['today', 'week', 'month', 'year'] as const).map(p => (
+            <button
+              key={p}
+              onClick={() => setPeriod(p)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                period === p
+                  ? 'bg-white dark:bg-gray-700 text-primary-600 shadow-sm'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+              }`}
+            >
+              {p.charAt(0).toUpperCase() + p.slice(1)}
+            </button>
+          ))}
         </div>
 
-        {showEOD && eodReport ? (
-          /* End of Day Report View */
-          <div className="space-y-6 print:space-y-4" id="eod-report">
-            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 print:border-none print:p-0">
-              <div className="text-center mb-6 print:mb-4">
-                <h2 className="text-xl font-bold">End of Day Report</h2>
-                <p className="text-gray-500 dark:text-gray-400">{eodReport.date}</p>
-              </div>
-
-              {/* Summary */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                <div className="text-center p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Total Sales</p>
-                  <p className="text-2xl font-bold">{eodReport.total_sales}</p>
-                </div>
-                <div className="text-center p-4 bg-green-50 rounded-lg">
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Revenue</p>
-                  <p className="text-2xl font-bold text-green-600">{formatCurrency(eodReport.total_revenue)}</p>
-                </div>
-                <div className="text-center p-4 bg-blue-50 rounded-lg">
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Items Sold</p>
-                  <p className="text-2xl font-bold text-blue-600">{eodReport.total_items_sold}</p>
-                </div>
-                <div className="text-center p-4 bg-purple-50 rounded-lg">
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Avg Ticket</p>
-                  <p className="text-2xl font-bold text-purple-600">{formatCurrency(eodReport.average_ticket)}</p>
-                </div>
-              </div>
-
-              {/* Cash Session */}
-              {eodReport.cash_session && (
-                <div className="mb-6 p-4 border rounded-lg">
-                  <h3 className="font-semibold mb-3">Cash Drawer</h3>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-500 dark:text-gray-400">Opening Balance:</span>
-                      <span className="font-medium">{formatCurrency(eodReport.cash_session.opening_balance || 0)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500 dark:text-gray-400">Cash Sales:</span>
-                      <span className="font-medium">{formatCurrency(eodReport.cash_session.cash_sales_total || 0)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500 dark:text-gray-400">Cash In:</span>
-                      <span className="font-medium text-green-600">+{formatCurrency(eodReport.cash_session.cash_in || 0)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500 dark:text-gray-400">Cash Out:</span>
-                      <span className="font-medium text-red-600">-{formatCurrency(eodReport.cash_session.cash_out || 0)}</span>
-                    </div>
-                    <div className="flex justify-between col-span-2 pt-2 border-t">
-                      <span className="font-semibold">Expected Balance:</span>
-                      <span className="font-bold">{formatCurrency(eodReport.cash_session.expected_balance || 0)}</span>
-                    </div>
-                    {eodReport.cash_session.closing_balance !== null && (
-                      <>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500 dark:text-gray-400">Actual Balance:</span>
-                          <span className="font-medium">{formatCurrency(eodReport.cash_session.closing_balance || 0)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500 dark:text-gray-400">Difference:</span>
-                          <span className={`font-medium ${
-                            (eodReport.cash_session.difference || 0) >= 0 ? 'text-green-600' : 'text-red-600'
-                          }`}>
-                            {formatCurrency(eodReport.cash_session.difference || 0)}
-                          </span>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Payment Breakdown */}
-              <div className="mb-6">
-                <h3 className="font-semibold mb-3">Payment Methods</h3>
-                <div className="space-y-2">
-                  {eodReport.payment_breakdown?.map((pm: any) => (
-                    <div key={pm.method} className="flex justify-between text-sm p-2 bg-gray-50 dark:bg-gray-700 rounded">
-                      <span className="capitalize">{pm.method.replace('_', ' ')}</span>
-                      <span className="font-medium">{pm.count} x {formatCurrency(pm.amount)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Refunds */}
-              {eodReport.refunds && eodReport.refunds.count > 0 && (
-                <div className="mb-6 p-4 bg-red-50 rounded-lg">
-                  <h3 className="font-semibold mb-2 text-red-700">Refunds</h3>
-                  <div className="flex justify-between text-sm">
-                    <span>{eodReport.refunds.count} refunds</span>
-                    <span className="font-medium text-red-600">-{formatCurrency(eodReport.refunds.total)}</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Top Products */}
-              <div className="mb-6">
-                <h3 className="font-semibold mb-3">Top Products</h3>
-                <div className="space-y-2">
-                  {eodReport.top_products?.slice(0, 5).map((p: any, idx: number) => (
-                    <div key={p.id} className="flex justify-between text-sm">
-                      <span>{idx + 1}. {p.name}</span>
-                      <span className="font-medium">{p.quantity} sold - {formatCurrency(p.revenue)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex justify-center mt-6 print:hidden">
-                <Button onClick={printEODReport}>
-                  <Printer className="w-4 h-4 mr-2" />
-                  Print Report
-                </Button>
-              </div>
-            </div>
-          </div>
-        ) : report ? (
-          /* Main Report View */
+        {report && (
           <>
-            {/* Key Metrics */}
+            {/* Key Metrics Grid */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              <MetricCard
-                icon={<ShoppingBag className="w-5 h-5 text-blue-600" />}
+              <StatCard
+                icon={<ShoppingBag className="w-5 h-5" />}
                 label="Total Sales"
-                value={report.total_sales.toString()}
-                bgColor="bg-blue-50"
+                value={report.totalSales.toString()}
+                change={report.salesChange}
+                color="blue"
               />
-              <MetricCard
-                icon={<DollarSign className="w-5 h-5 text-green-600" />}
+              <StatCard
+                icon={<DollarSign className="w-5 h-5" />}
                 label="Revenue"
-                value={formatCurrency(report.total_revenue)}
-                bgColor="bg-green-50"
+                value={formatCurrency(report.totalRevenue)}
+                change={report.revenueChange}
+                color="green"
               />
-              <MetricCard
-                icon={<TrendingUp className="w-5 h-5 text-purple-600" />}
-                label="Gross Profit"
-                value={formatCurrency(report.gross_profit)}
-                bgColor="bg-purple-50"
+              <StatCard
+                icon={<TrendingUp className="w-5 h-5" />}
+                label="Profit"
+                value={formatCurrency(report.totalProfit)}
+                change={report.profitChange}
+                color="purple"
               />
-              <MetricCard
-                icon={<Percent className="w-5 h-5 text-orange-600" />}
-                label="Profit Margin"
-                value={`${report.profit_margin.toFixed(1)}%`}
-                bgColor="bg-orange-50"
+              <StatCard
+                icon={<Percent className="w-5 h-5" />}
+                label="Margin"
+                value={`${report.profitMargin.toFixed(1)}%`}
+                color="orange"
               />
-              <MetricCard
-                icon={<Package className="w-5 h-5 text-cyan-600" />}
-                label="Items Sold"
-                value={report.total_items_sold.toString()}
-                bgColor="bg-cyan-50"
-              />
-              <MetricCard
-                icon={<TrendingUp className="w-5 h-5 text-pink-600" />}
+              <StatCard
+                icon={<Target className="w-5 h-5" />}
                 label="Avg Ticket"
-                value={formatCurrency(report.average_ticket)}
-                bgColor="bg-pink-50"
+                value={formatCurrency(report.avgTicket)}
+                color="cyan"
+              />
+              <StatCard
+                icon={<Package className="w-5 h-5" />}
+                label="Items Sold"
+                value={report.totalItems.toString()}
+                color="pink"
               />
             </div>
 
-            {/* Charts Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Sales by Category */}
-              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <PieChart className="w-5 h-5 text-gray-400" />
-                  <h3 className="font-semibold text-gray-900 dark:text-white">Sales by Category</h3>
+            {/* Quick Insights */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Card className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-800">
+                <div className="flex items-center gap-3">
+                  <Clock className="w-8 h-8 text-blue-600" />
+                  <div>
+                    <p className="text-xs text-blue-600 font-medium">Peak Hour</p>
+                    <p className="text-xl font-bold text-blue-700">{report.peakHour}</p>
+                  </div>
                 </div>
-                {report.sales_by_category.length === 0 ? (
-                  <p className="text-gray-500 dark:text-gray-400 text-center py-8">No category data</p>
-                ) : (
-                  <SimpleBarChart
-                    data={report.sales_by_category}
-                    labelKey="category"
-                    valueKey="revenue"
-                    formatValue={formatCurrency}
-                  />
-                )}
-              </div>
-
-              {/* Payment Methods */}
-              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <BarChart3 className="w-5 h-5 text-gray-400" />
-                  <h3 className="font-semibold text-gray-900 dark:text-white">Payment Methods</h3>
+              </Card>
+              <Card className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-800">
+                <div className="flex items-center gap-3">
+                  <Calendar className="w-8 h-8 text-green-600" />
+                  <div>
+                    <p className="text-xs text-green-600 font-medium">Best Day</p>
+                    <p className="text-xl font-bold text-green-700">{report.peakDay}</p>
+                  </div>
                 </div>
-                {report.sales_by_payment.length === 0 ? (
-                  <p className="text-gray-500 dark:text-gray-400 text-center py-8">No payment data</p>
-                ) : (
-                  <SimpleBarChart
-                    data={report.sales_by_payment.map(p => ({
-                      method: p.method.charAt(0).toUpperCase() + p.method.slice(1).replace('_', ' '),
-                      amount: p.amount,
-                    }))}
-                    labelKey="method"
-                    valueKey="amount"
-                    formatValue={formatCurrency}
-                  />
-                )}
-              </div>
+              </Card>
+              <Card className="p-4 bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-900/20 dark:to-violet-900/20 border-purple-200 dark:border-purple-800">
+                <div className="flex items-center gap-3">
+                  <Users className="w-8 h-8 text-purple-600" />
+                  <div>
+                    <p className="text-xs text-purple-600 font-medium">Customers</p>
+                    <p className="text-xl font-bold text-purple-700">{report.totalCustomers}</p>
+                  </div>
+                </div>
+              </Card>
+              <Card className="p-4 bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 border-red-200 dark:border-red-800">
+                <div className="flex items-center gap-3">
+                  <Activity className="w-8 h-8 text-red-600" />
+                  <div>
+                    <p className="text-xs text-red-600 font-medium">Refunds</p>
+                    <p className="text-xl font-bold text-red-700">{report.totalRefunds}</p>
+                  </div>
+                </div>
+              </Card>
             </div>
 
-            {/* Hourly Sales */}
-            {activeTab === 'daily' && (
-              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <Clock className="w-5 h-5 text-gray-400" />
-                  <h3 className="font-semibold text-gray-900 dark:text-white">Sales by Hour</h3>
+            {/* Main Charts Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Revenue/Sales Trend Chart */}
+              <Card className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5 text-gray-400" />
+                    {period === 'today' ? 'Hourly' : 'Daily'} Performance
+                  </h3>
+                  <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+                    {(['revenue', 'sales', 'profit'] as const).map(type => (
+                      <button
+                        key={type}
+                        onClick={() => setActiveChart(type)}
+                        className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                          activeChart === type
+                            ? 'bg-white dark:bg-gray-700 text-primary-600 shadow-sm'
+                            : 'text-gray-500'
+                        }`}
+                      >
+                        {type.charAt(0).toUpperCase() + type.slice(1)}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <HourlyChart data={report.sales_by_hour} />
-                <div className="flex justify-between text-xs text-gray-400 mt-2">
-                  <span>12am</span>
-                  <span>6am</span>
-                  <span>12pm</span>
-                  <span>6pm</span>
-                  <span>11pm</span>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    {period === 'today' ? (
+                      <AreaChart data={report.hourlyData}>
+                        <defs>
+                          <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                        <XAxis dataKey="hour" tick={{ fontSize: 10 }} interval={2} />
+                        <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => activeChart === 'sales' ? v : formatCurrency(v)} />
+                        <Tooltip
+                          formatter={(value: number) => [
+                            activeChart === 'sales' ? value : formatFullCurrency(value),
+                            activeChart.charAt(0).toUpperCase() + activeChart.slice(1)
+                          ]}
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey={activeChart === 'sales' ? 'sales' : 'revenue'}
+                          stroke="#3B82F6"
+                          fill="url(#colorRevenue)"
+                          strokeWidth={2}
+                        />
+                      </AreaChart>
+                    ) : (
+                      <BarChart data={report.dailyData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                        <XAxis
+                          dataKey="date"
+                          tick={{ fontSize: 10 }}
+                          tickFormatter={(v) => new Date(v).toLocaleDateString('en', { month: 'short', day: 'numeric' })}
+                        />
+                        <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => activeChart === 'sales' ? v : formatCurrency(v)} />
+                        <Tooltip
+                          formatter={(value: number) => [
+                            activeChart === 'sales' ? value : formatFullCurrency(value),
+                            activeChart.charAt(0).toUpperCase() + activeChart.slice(1)
+                          ]}
+                          labelFormatter={(v) => new Date(v).toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' })}
+                        />
+                        <Bar
+                          dataKey={activeChart}
+                          fill="#3B82F6"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </BarChart>
+                    )}
+                  </ResponsiveContainer>
                 </div>
-              </div>
-            )}
+              </Card>
 
-            {/* Sales Trend */}
-            {(activeTab === 'weekly' || activeTab === 'monthly' || activeTab === 'custom') && report.sales_trend.length > 0 && (
-              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <TrendingUp className="w-5 h-5 text-gray-400" />
-                  <h3 className="font-semibold text-gray-900 dark:text-white">Sales Trend</h3>
+              {/* Payment Methods Pie Chart */}
+              <Card className="p-6">
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                  <PieChartIcon className="w-5 h-5 text-gray-400" />
+                  Payment Methods
+                </h3>
+                {report.paymentData.length === 0 ? (
+                  <div className="h-64 flex items-center justify-center text-gray-400">
+                    No payment data available
+                  </div>
+                ) : (
+                  <div className="h-64 flex items-center">
+                    <div className="w-1/2">
+                      <ResponsiveContainer width="100%" height={200}>
+                        <PieChart>
+                          <Pie
+                            data={report.paymentData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={40}
+                            outerRadius={80}
+                            paddingAngle={2}
+                            dataKey="value"
+                          >
+                            {report.paymentData.map((_, index) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip formatter={(value: number) => formatFullCurrency(value)} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="w-1/2 space-y-2">
+                      {report.paymentData.map((item, index) => (
+                        <div key={item.name} className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-3 h-3 rounded-full"
+                              style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                            />
+                            <span className="text-gray-600 dark:text-gray-400">{item.name}</span>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-medium">{formatCurrency(item.value)}</p>
+                            <p className="text-xs text-gray-400">{item.count} txns</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </Card>
+            </div>
+
+            {/* Category Performance */}
+            <Card className="p-6">
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                <Package className="w-5 h-5 text-gray-400" />
+                Category Performance
+              </h3>
+              {report.categoryData.length === 0 ? (
+                <div className="h-48 flex items-center justify-center text-gray-400">
+                  No category data available
                 </div>
-                <div className="overflow-x-auto">
-                  <div className="flex items-end gap-2 h-40 min-w-[600px]">
-                    {report.sales_trend.map((day, idx) => {
-                      const maxRevenue = Math.max(...report.sales_trend.map(d => d.revenue), 1);
-                      const height = (day.revenue / maxRevenue) * 100;
+              ) : (
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={report.categoryData} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" horizontal={false} />
+                      <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v) => formatCurrency(v)} />
+                      <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={100} />
+                      <Tooltip formatter={(value: number) => formatFullCurrency(value)} />
+                      <Bar dataKey="revenue" fill="#10B981" radius={[0, 4, 4, 0]} name="Revenue" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </Card>
+
+            {/* Bottom Section: Top Products & Staff Performance */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Top Products */}
+              <Card className="p-6">
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                  <Star className="w-5 h-5 text-yellow-500" />
+                  Top Selling Products
+                </h3>
+                {report.topProducts.length === 0 ? (
+                  <div className="py-8 text-center text-gray-400">No product data</div>
+                ) : (
+                  <div className="space-y-3">
+                    {report.topProducts.slice(0, 8).map((product, index) => (
+                      <div
+                        key={product.name}
+                        className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg"
+                      >
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                          index === 0 ? 'bg-yellow-100 text-yellow-700' :
+                          index === 1 ? 'bg-gray-200 text-gray-700' :
+                          index === 2 ? 'bg-orange-100 text-orange-700' :
+                          'bg-gray-100 text-gray-500'
+                        }`}>
+                          {index + 1}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-900 dark:text-white truncate">{product.name}</p>
+                          <p className="text-xs text-gray-500">{product.quantity} sold</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold text-gray-900 dark:text-white">{formatCurrency(product.revenue)}</p>
+                          <p className="text-xs text-green-600">+{formatCurrency(product.profit)} profit</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+
+              {/* Staff Performance */}
+              <Card className="p-6">
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                  <Award className="w-5 h-5 text-purple-500" />
+                  Staff Performance
+                </h3>
+                {report.staffData.length === 0 ? (
+                  <div className="py-8 text-center text-gray-400">No staff data</div>
+                ) : (
+                  <div className="space-y-3">
+                    {report.staffData.map((staff, index) => {
+                      const maxRevenue = Math.max(...report.staffData.map(s => s.revenue), 1);
+                      const percentage = (staff.revenue / maxRevenue) * 100;
 
                       return (
-                        <div key={idx} className="flex-1 flex flex-col items-center">
-                          <div
-                            className="w-full bg-primary-500 rounded-t hover:bg-primary-600 transition-colors"
-                            style={{ height: `${Math.max(height, 5)}%` }}
-                            title={`${day.date}: ${formatCurrency(day.revenue)}`}
-                          />
-                          <span className="text-xs text-gray-400 mt-1 rotate-45 origin-left whitespace-nowrap">
-                            {new Date(day.date).toLocaleDateString('en', { month: 'short', day: 'numeric' })}
-                          </span>
+                        <div key={staff.name} className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold ${
+                                index === 0 ? 'bg-purple-500' :
+                                index === 1 ? 'bg-blue-500' :
+                                'bg-gray-400'
+                              }`}>
+                                {staff.name.charAt(0).toUpperCase()}
+                              </div>
+                              <span className="font-medium text-gray-900 dark:text-white">{staff.name}</span>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-semibold">{formatCurrency(staff.revenue)}</p>
+                              <p className="text-xs text-gray-500">{staff.sales} sales</p>
+                            </div>
+                          </div>
+                          <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                index === 0 ? 'bg-purple-500' :
+                                index === 1 ? 'bg-blue-500' :
+                                'bg-gray-400'
+                              }`}
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
                         </div>
                       );
                     })}
                   </div>
-                </div>
-              </div>
-            )}
-
-            {/* Top Products */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Package className="w-5 h-5 text-gray-400" />
-                <h3 className="font-semibold text-gray-900 dark:text-white">Top Products</h3>
-              </div>
-              {report.top_products.length === 0 ? (
-                <p className="text-gray-500 dark:text-gray-400 text-center py-8">No product data</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="border-b">
-                      <tr>
-                        <th className="text-left py-2 text-sm font-medium text-gray-500 dark:text-gray-400">#</th>
-                        <th className="text-left py-2 text-sm font-medium text-gray-500 dark:text-gray-400">Product</th>
-                        <th className="text-right py-2 text-sm font-medium text-gray-500 dark:text-gray-400">Qty Sold</th>
-                        <th className="text-right py-2 text-sm font-medium text-gray-500 dark:text-gray-400">Revenue</th>
-                        <th className="text-right py-2 text-sm font-medium text-gray-500 dark:text-gray-400">Profit</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {report.top_products.map((product, idx) => (
-                        <tr key={product.id}>
-                          <td className="py-3 text-sm text-gray-400">{idx + 1}</td>
-                          <td className="py-3 font-medium">{product.name}</td>
-                          <td className="py-3 text-right text-sm">{product.quantity}</td>
-                          <td className="py-3 text-right text-sm font-medium">{formatCurrency(product.revenue)}</td>
-                          <td className="py-3 text-right text-sm font-medium text-green-600">
-                            {formatCurrency(product.profit)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                )}
+              </Card>
             </div>
           </>
-        ) : (
-          <div className="text-center py-12">
-            <BarChart3 className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-            <p className="text-gray-500 dark:text-gray-400">No report data available</p>
-          </div>
         )}
       </div>
     </MerchantLayout>
   );
 }
 
-// Metric Card Component
-function MetricCard({ icon, label, value, bgColor }: {
+// Stat Card Component
+function StatCard({
+  icon,
+  label,
+  value,
+  change,
+  color
+}: {
   icon: React.ReactNode;
   label: string;
   value: string;
-  bgColor: string;
+  change?: number;
+  color: 'blue' | 'green' | 'purple' | 'orange' | 'cyan' | 'pink';
 }) {
+  const colorClasses = {
+    blue: 'bg-blue-50 dark:bg-blue-900/20 text-blue-600',
+    green: 'bg-green-50 dark:bg-green-900/20 text-green-600',
+    purple: 'bg-purple-50 dark:bg-purple-900/20 text-purple-600',
+    orange: 'bg-orange-50 dark:bg-orange-900/20 text-orange-600',
+    cyan: 'bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600',
+    pink: 'bg-pink-50 dark:bg-pink-900/20 text-pink-600',
+  };
+
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+    <Card className="p-4">
       <div className="flex items-center gap-3">
-        <div className={`w-10 h-10 ${bgColor} rounded-lg flex items-center justify-center`}>
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${colorClasses[color]}`}>
           {icon}
         </div>
-        <div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
-          <p className="text-lg font-bold text-gray-900 dark:text-white">{value}</p>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{label}</p>
+          <p className="text-lg font-bold text-gray-900 dark:text-white truncate">{value}</p>
         </div>
       </div>
-    </div>
+      {change !== undefined && change !== 0 && (
+        <div className={`flex items-center gap-1 mt-2 text-xs ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+          {change >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+          <span>{Math.abs(change).toFixed(1)}% vs prev</span>
+        </div>
+      )}
+    </Card>
   );
 }
 

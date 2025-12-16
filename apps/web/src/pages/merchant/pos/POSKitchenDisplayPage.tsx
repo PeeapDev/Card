@@ -350,7 +350,7 @@ export function POSKitchenDisplayPage() {
         <div className="flex items-center gap-4">
           {!isFullScreen && (
             <button
-              onClick={() => navigate('/merchant/pos/terminal')}
+              onClick={() => navigate('/merchant/apps/pos')}
               className="p-2 hover:bg-gray-700 rounded-lg"
             >
               <ArrowLeft className="w-5 h-5" />

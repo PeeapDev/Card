@@ -13,3 +13,4 @@ export { POSCustomersPage } from './POSCustomersPage';
 export { POSSuppliersPage } from './POSSuppliersPage';
 export { POSDiscountsPage } from './POSDiscountsPage';
 export { POSPurchaseOrdersPage } from './POSPurchaseOrdersPage';
+export { POSMarketplacePage } from './POSMarketplacePage';

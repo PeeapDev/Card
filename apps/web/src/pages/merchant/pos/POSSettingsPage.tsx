@@ -41,6 +41,11 @@ import {
   ShieldCheck,
   Search,
   User,
+  CreditCard,
+  QrCode,
+  Smartphone,
+  Wallet,
+  Nfc,
 } from 'lucide-react';
 
 // Format currency - using Le (Leone) symbol
@@ -59,10 +64,19 @@ interface POSSettings {
   showLogo: boolean;
   receiptHeader: string;
   receiptFooter: string;
+  receiptTemplate: 'classic' | 'modern' | 'detailed';
   // Tax settings
   enableTax: boolean;
   defaultTaxRate: number;
   taxLabel: string;
+  // Payment methods
+  paymentMethods: {
+    qrCode: boolean;
+    nfcTapToPay: boolean;
+    mobileMoney: boolean;
+    cash: boolean;
+    bankTransfer: boolean;
+  };
   // Setup complete flag
   setupCompleted: boolean;
 }
@@ -76,9 +90,17 @@ const defaultSettings: POSSettings = {
   showLogo: true,
   receiptHeader: 'Thank you for your purchase!',
   receiptFooter: 'Please come again!',
+  receiptTemplate: 'classic',
   enableTax: false,
   defaultTaxRate: 15,
   taxLabel: 'GST',
+  paymentMethods: {
+    qrCode: true,
+    nfcTapToPay: true,
+    mobileMoney: true,
+    cash: true,
+    bankTransfer: false,
+  },
   setupCompleted: false,
 };
 
@@ -87,6 +109,92 @@ const colorOptions = [
   '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
   '#EC4899', '#06B6D4', '#84CC16', '#F97316', '#6366F1',
 ];
+
+// Category templates by business type
+const categoryTemplates = {
+  restaurant: {
+    name: 'Restaurant',
+    icon: '🍽️',
+    categories: [
+      { name: 'Appetizers', color: '#F59E0B', description: 'Starters and small plates' },
+      { name: 'Main Course', color: '#EF4444', description: 'Main dishes' },
+      { name: 'Desserts', color: '#EC4899', description: 'Sweet treats' },
+      { name: 'Beverages', color: '#06B6D4', description: 'Drinks and refreshments' },
+      { name: 'Sides', color: '#84CC16', description: 'Side dishes' },
+      { name: 'Specials', color: '#8B5CF6', description: 'Daily specials' },
+    ]
+  },
+  cafe: {
+    name: 'Cafe / Coffee Shop',
+    icon: '☕',
+    categories: [
+      { name: 'Hot Drinks', color: '#F97316', description: 'Coffee, tea, hot chocolate' },
+      { name: 'Cold Drinks', color: '#06B6D4', description: 'Iced coffee, smoothies, juices' },
+      { name: 'Pastries', color: '#F59E0B', description: 'Croissants, muffins, cakes' },
+      { name: 'Sandwiches', color: '#84CC16', description: 'Fresh sandwiches and wraps' },
+      { name: 'Breakfast', color: '#EF4444', description: 'Morning meals' },
+      { name: 'Snacks', color: '#8B5CF6', description: 'Light bites' },
+    ]
+  },
+  retail: {
+    name: 'Retail Store',
+    icon: '🛒',
+    categories: [
+      { name: 'Electronics', color: '#3B82F6', description: 'Phones, gadgets, accessories' },
+      { name: 'Clothing', color: '#EC4899', description: 'Apparel and fashion' },
+      { name: 'Groceries', color: '#84CC16', description: 'Food and household items' },
+      { name: 'Home & Garden', color: '#10B981', description: 'Home essentials' },
+      { name: 'Health & Beauty', color: '#F59E0B', description: 'Personal care products' },
+      { name: 'Accessories', color: '#8B5CF6', description: 'Bags, jewelry, watches' },
+    ]
+  },
+  salon: {
+    name: 'Salon / Spa',
+    icon: '💇',
+    categories: [
+      { name: 'Haircuts', color: '#8B5CF6', description: 'Hair cutting services' },
+      { name: 'Hair Styling', color: '#EC4899', description: 'Styling and treatments' },
+      { name: 'Coloring', color: '#F59E0B', description: 'Hair coloring services' },
+      { name: 'Nails', color: '#EF4444', description: 'Manicure and pedicure' },
+      { name: 'Skincare', color: '#10B981', description: 'Facials and treatments' },
+      { name: 'Products', color: '#3B82F6', description: 'Retail hair products' },
+    ]
+  },
+  bar: {
+    name: 'Bar / Nightclub',
+    icon: '🍺',
+    categories: [
+      { name: 'Beer', color: '#F59E0B', description: 'Draft and bottled beers' },
+      { name: 'Wine', color: '#EF4444', description: 'Red, white, and sparkling' },
+      { name: 'Spirits', color: '#8B5CF6', description: 'Whiskey, vodka, rum, etc.' },
+      { name: 'Cocktails', color: '#EC4899', description: 'Mixed drinks' },
+      { name: 'Soft Drinks', color: '#06B6D4', description: 'Non-alcoholic options' },
+      { name: 'Snacks', color: '#84CC16', description: 'Bar food and nibbles' },
+    ]
+  },
+  pharmacy: {
+    name: 'Pharmacy',
+    icon: '💊',
+    categories: [
+      { name: 'Medications', color: '#EF4444', description: 'Over-the-counter drugs' },
+      { name: 'Vitamins', color: '#84CC16', description: 'Supplements and vitamins' },
+      { name: 'Personal Care', color: '#EC4899', description: 'Hygiene products' },
+      { name: 'First Aid', color: '#F59E0B', description: 'Bandages, antiseptics' },
+      { name: 'Baby Care', color: '#06B6D4', description: 'Baby products' },
+      { name: 'Medical Devices', color: '#3B82F6', description: 'Thermometers, BP monitors' },
+    ]
+  },
+  general: {
+    name: 'General / Other',
+    icon: '🏪',
+    categories: [
+      { name: 'Products', color: '#3B82F6', description: 'Physical products' },
+      { name: 'Services', color: '#10B981', description: 'Service offerings' },
+      { name: 'Packages', color: '#8B5CF6', description: 'Bundled offerings' },
+      { name: 'Specials', color: '#F59E0B', description: 'Special items or deals' },
+    ]
+  },
+};
 
 // Searched user type
 interface SearchedUser {
@@ -108,8 +216,31 @@ const tabs = [
   { id: 'general', label: 'General', icon: Store },
   { id: 'categories', label: 'Categories', icon: FolderOpen },
   { id: 'staff', label: 'Staff', icon: Users },
+  { id: 'payments', label: 'Payments', icon: CreditCard },
   { id: 'tax', label: 'Tax', icon: Percent },
-  { id: 'receipt', label: 'Receipt', icon: Receipt },
+  { id: 'receipts', label: 'Receipt', icon: Receipt },
+];
+
+// Receipt templates
+const receiptTemplates = [
+  {
+    id: 'classic',
+    name: 'Classic',
+    description: 'Traditional centered layout',
+    preview: 'classic',
+  },
+  {
+    id: 'modern',
+    name: 'Modern',
+    description: 'Clean minimal design',
+    preview: 'modern',
+  },
+  {
+    id: 'detailed',
+    name: 'Detailed',
+    description: 'Full item details with tax breakdown',
+    preview: 'detailed',
+  },
 ];
 
 export function POSSettingsPage() {
@@ -133,6 +264,8 @@ export function POSSettingsPage() {
     color: '#3B82F6',
   });
   const [deletingCategory, setDeletingCategory] = useState<string | null>(null);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [addingTemplates, setAddingTemplates] = useState(false);
 
   // Staff state
   const [staff, setStaff] = useState<POSStaff[]>([]);
@@ -316,6 +449,37 @@ export function POSSettingsPage() {
       alert('Failed to delete category');
     } finally {
       setDeletingCategory(null);
+    }
+  };
+
+  // Apply template categories
+  const applyTemplateCategories = async (templateKey: keyof typeof categoryTemplates) => {
+    if (!merchantId) return;
+
+    const template = categoryTemplates[templateKey];
+    if (!template) return;
+
+    setAddingTemplates(true);
+    try {
+      // Create all categories from the template
+      for (const cat of template.categories) {
+        await posService.createCategory({
+          merchant_id: merchantId,
+          name: cat.name,
+          description: cat.description,
+          color: cat.color,
+        });
+      }
+
+      // Reload categories
+      await loadCategories();
+      setShowTemplates(false);
+      alert(`Successfully added ${template.categories.length} categories from ${template.name} template!`);
+    } catch (error) {
+      console.error('Error applying templates:', error);
+      alert('Failed to add template categories');
+    } finally {
+      setAddingTemplates(false);
     }
   };
 
@@ -535,7 +699,7 @@ export function POSSettingsPage() {
               <p className="text-sm text-gray-500 dark:text-gray-400 hidden sm:block">Configure your point of sale system</p>
             </div>
           </div>
-          {(activeTab === 'general' || activeTab === 'tax' || activeTab === 'receipt') && (
+          {(activeTab === 'general' || activeTab === 'tax' || activeTab === 'receipts' || activeTab === 'payments') && (
             <Button onClick={saveSettings} disabled={saving} className="w-full sm:w-auto">
               {saving ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -663,21 +827,90 @@ export function POSSettingsPage() {
                   <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Product Categories</h2>
                   <p className="text-sm text-gray-500 dark:text-gray-400">Organize your products into categories</p>
                 </div>
-                <Button onClick={() => openCategoryModal()} className="w-full sm:w-auto">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Category
-                </Button>
+                <div className="flex gap-2 w-full sm:w-auto">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowTemplates(true)}
+                    className="flex-1 sm:flex-initial"
+                  >
+                    Use Templates
+                  </Button>
+                  <Button onClick={() => openCategoryModal()} className="flex-1 sm:flex-initial">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Category
+                  </Button>
+                </div>
               </div>
 
               {loadingCategories ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
                 </div>
-              ) : categories.length === 0 ? (
+              ) : categories.length === 0 && !showTemplates ? (
                 <div className="text-center py-12">
                   <FolderOpen className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
-                  <p className="text-gray-500 dark:text-gray-400">No categories yet</p>
-                  <p className="text-sm text-gray-400 dark:text-gray-500">Add categories to organize your products</p>
+                  <p className="text-gray-500 dark:text-gray-400 mb-2">No categories yet</p>
+                  <p className="text-sm text-gray-400 dark:text-gray-500 mb-4">
+                    Add categories manually or use templates to get started quickly
+                  </p>
+                  <Button onClick={() => setShowTemplates(true)} variant="outline">
+                    Browse Templates
+                  </Button>
+                </div>
+              ) : showTemplates ? (
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-medium text-gray-900 dark:text-white">Choose a Template</h3>
+                    <button
+                      onClick={() => setShowTemplates(false)}
+                      className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                    Select a business type to add pre-made categories instantly
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                    {Object.entries(categoryTemplates).map(([key, template]) => (
+                      <button
+                        key={key}
+                        onClick={() => applyTemplateCategories(key as keyof typeof categoryTemplates)}
+                        disabled={addingTemplates}
+                        className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border-2 border-gray-200 dark:border-gray-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all text-left group disabled:opacity-50"
+                      >
+                        <div className="text-3xl mb-2">{template.icon}</div>
+                        <h4 className="font-medium text-gray-900 dark:text-white group-hover:text-primary-600">
+                          {template.name}
+                        </h4>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          {template.categories.length} categories
+                        </p>
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {template.categories.slice(0, 3).map((cat, i) => (
+                            <span
+                              key={i}
+                              className="text-xs px-2 py-0.5 rounded-full"
+                              style={{ backgroundColor: cat.color + '20', color: cat.color }}
+                            >
+                              {cat.name}
+                            </span>
+                          ))}
+                          {template.categories.length > 3 && (
+                            <span className="text-xs text-gray-400">
+                              +{template.categories.length - 3} more
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  {addingTemplates && (
+                    <div className="flex items-center justify-center py-4 mt-4">
+                      <Loader2 className="w-5 h-5 animate-spin text-primary-500 mr-2" />
+                      <span className="text-sm text-gray-500">Adding categories...</span>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
@@ -823,6 +1056,160 @@ export function POSSettingsPage() {
             </Card>
           )}
 
+          {/* Payments Tab */}
+          {activeTab === 'payments' && (
+            <Card className="p-4 sm:p-6">
+              <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-2">Payment Methods</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                Choose which payment methods to accept at your POS terminal
+              </p>
+
+              <div className="space-y-4">
+                {/* QR Code Payment */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
+                      <QrCode className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">QR Code Payment</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Customers scan QR to pay via mobile banking
+                      </p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settings.paymentMethods?.qrCode ?? true}
+                      onChange={e => setSettings({
+                        ...settings,
+                        paymentMethods: { ...settings.paymentMethods, qrCode: e.target.checked }
+                      })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 dark:peer-focus:ring-primary-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary-600"></div>
+                  </label>
+                </div>
+
+                {/* NFC Tap to Pay */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center">
+                      <Nfc className="w-6 h-6 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">Tap to Pay (NFC Card)</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Accept contactless NFC card payments
+                      </p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settings.paymentMethods?.nfcTapToPay ?? true}
+                      onChange={e => setSettings({
+                        ...settings,
+                        paymentMethods: { ...settings.paymentMethods, nfcTapToPay: e.target.checked }
+                      })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 dark:peer-focus:ring-primary-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary-600"></div>
+                  </label>
+                </div>
+
+                {/* Mobile Money */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center">
+                      <Smartphone className="w-6 h-6 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">Mobile Money</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Accept Orange Money, Africell Money payments
+                      </p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settings.paymentMethods?.mobileMoney ?? true}
+                      onChange={e => setSettings({
+                        ...settings,
+                        paymentMethods: { ...settings.paymentMethods, mobileMoney: e.target.checked }
+                      })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 dark:peer-focus:ring-primary-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary-600"></div>
+                  </label>
+                </div>
+
+                {/* Cash */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900/30 rounded-xl flex items-center justify-center">
+                      <Wallet className="w-6 h-6 text-yellow-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">Cash</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Accept cash payments with change calculation
+                      </p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settings.paymentMethods?.cash ?? true}
+                      onChange={e => setSettings({
+                        ...settings,
+                        paymentMethods: { ...settings.paymentMethods, cash: e.target.checked }
+                      })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 dark:peer-focus:ring-primary-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary-600"></div>
+                  </label>
+                </div>
+
+                {/* Bank Transfer */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-cyan-100 dark:bg-cyan-900/30 rounded-xl flex items-center justify-center">
+                      <CreditCard className="w-6 h-6 text-cyan-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">Bank Transfer</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Accept direct bank transfers
+                      </p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settings.paymentMethods?.bankTransfer ?? false}
+                      onChange={e => setSettings({
+                        ...settings,
+                        paymentMethods: { ...settings.paymentMethods, bankTransfer: e.target.checked }
+                      })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 dark:peer-focus:ring-primary-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary-600"></div>
+                  </label>
+                </div>
+              </div>
+
+              <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  <strong>Tip:</strong> Enabled payment methods will appear in the POS terminal checkout.
+                  QR Code, Tap to Pay, and Mobile Money are recommended for faster transactions.
+                </p>
+              </div>
+            </Card>
+          )}
+
           {/* Tax Tab */}
           {activeTab === 'tax' && (
             <Card className="p-4 sm:p-6">
@@ -883,85 +1270,295 @@ export function POSSettingsPage() {
           )}
 
           {/* Receipt Tab */}
-          {activeTab === 'receipt' && (
-            <Card className="p-4 sm:p-6">
-              <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-4">Receipt Customization</h2>
+          {activeTab === 'receipts' && (
+            <div className="space-y-6">
+              {/* Receipt Template Selection */}
+              <Card className="p-4 sm:p-6">
+                <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-2">Receipt Template</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                  Choose a receipt layout that fits your business style
+                </p>
 
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-white">Show Logo on Receipt</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Display your business logo</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={settings.showLogo}
-                      onChange={e => setSettings({ ...settings, showLogo: e.target.checked })}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 dark:peer-focus:ring-primary-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary-600"></div>
-                  </label>
-                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {receiptTemplates.map(template => (
+                    <button
+                      key={template.id}
+                      onClick={() => setSettings({ ...settings, receiptTemplate: template.id as 'classic' | 'modern' | 'detailed' })}
+                      className={`relative p-4 rounded-xl border-2 transition-all text-left ${
+                        settings.receiptTemplate === template.id
+                          ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                      }`}
+                    >
+                      {/* Template Preview */}
+                      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600 p-3 mb-3">
+                        {template.id === 'classic' && (
+                          <div className="text-center font-mono text-[8px] space-y-1">
+                            <div className="w-6 h-6 bg-gray-200 dark:bg-gray-600 rounded mx-auto mb-1"></div>
+                            <p className="font-bold text-gray-700 dark:text-gray-300">BUSINESS NAME</p>
+                            <div className="border-t border-dashed border-gray-300 my-1"></div>
+                            <p className="text-gray-500">Item x 2 ... Le 5,000</p>
+                            <p className="text-gray-500">Item x 1 ... Le 3,000</p>
+                            <div className="border-t border-dashed border-gray-300 my-1"></div>
+                            <p className="font-bold text-gray-700 dark:text-gray-300">TOTAL Le 8,000</p>
+                          </div>
+                        )}
+                        {template.id === 'modern' && (
+                          <div className="font-sans text-[8px] space-y-1">
+                            <div className="flex items-center gap-1 mb-2">
+                              <div className="w-4 h-4 bg-gray-200 dark:bg-gray-600 rounded"></div>
+                              <span className="font-semibold text-gray-700 dark:text-gray-300">Business</span>
+                            </div>
+                            <div className="flex justify-between text-gray-500">
+                              <span>Item x 2</span><span>Le 5,000</span>
+                            </div>
+                            <div className="flex justify-between text-gray-500">
+                              <span>Item x 1</span><span>Le 3,000</span>
+                            </div>
+                            <div className="border-t border-gray-200 dark:border-gray-600 my-1"></div>
+                            <div className="flex justify-between font-bold text-gray-700 dark:text-gray-300">
+                              <span>Total</span><span>Le 8,000</span>
+                            </div>
+                          </div>
+                        )}
+                        {template.id === 'detailed' && (
+                          <div className="font-mono text-[7px] space-y-0.5">
+                            <div className="text-center">
+                              <p className="font-bold text-gray-700 dark:text-gray-300">BUSINESS NAME</p>
+                              <p className="text-gray-400">Address Line</p>
+                            </div>
+                            <div className="border-t border-gray-200 dark:border-gray-600 my-1"></div>
+                            <div className="text-gray-500">
+                              <p>Product One</p>
+                              <p className="flex justify-between pl-2"><span>2 x Le 2,500</span><span>Le 5,000</span></p>
+                              <p>Product Two</p>
+                              <p className="flex justify-between pl-2"><span>1 x Le 3,000</span><span>Le 3,000</span></p>
+                            </div>
+                            <div className="border-t border-gray-200 dark:border-gray-600 my-1"></div>
+                            <div className="text-gray-500">
+                              <p className="flex justify-between"><span>Subtotal</span><span>Le 8,000</span></p>
+                              <p className="flex justify-between"><span>Tax (0%)</span><span>Le 0</span></p>
+                            </div>
+                            <div className="border-t border-gray-200 dark:border-gray-600 my-1"></div>
+                            <p className="flex justify-between font-bold text-gray-700 dark:text-gray-300">
+                              <span>TOTAL</span><span>Le 8,000</span>
+                            </p>
+                          </div>
+                        )}
+                      </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Receipt Header Message
-                  </label>
-                  <textarea
-                    value={settings.receiptHeader}
-                    onChange={e => setSettings({ ...settings, receiptHeader: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    placeholder="Thank you for your purchase!"
-                    rows={2}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Receipt Footer Message
-                  </label>
-                  <textarea
-                    value={settings.receiptFooter}
-                    onChange={e => setSettings({ ...settings, receiptFooter: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    placeholder="Please come again!"
-                    rows={2}
-                  />
-                </div>
-
-                {/* Receipt Preview */}
-                <div className="mt-6">
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Preview</p>
-                  <div className="bg-white border border-gray-200 rounded-lg p-6 max-w-xs mx-auto font-mono text-sm">
-                    <div className="text-center border-b pb-3 mb-3">
-                      {settings.showLogo && (
-                        <div className="w-12 h-12 bg-gray-200 rounded mx-auto mb-2 flex items-center justify-center">
-                          <Store className="w-6 h-6 text-gray-400" />
+                      {/* Template Info */}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-gray-900 dark:text-white">{template.name}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{template.description}</p>
                         </div>
-                      )}
-                      <p className="font-bold">{settings.businessName || 'Business Name'}</p>
-                      <p className="text-xs text-gray-500">{settings.businessAddress || 'Address'}</p>
-                      <p className="text-xs text-gray-500">{settings.businessPhone}</p>
+                        {settings.receiptTemplate === template.id && (
+                          <div className="w-5 h-5 bg-primary-500 rounded-full flex items-center justify-center">
+                            <Check className="w-3 h-3 text-white" />
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </Card>
+
+              {/* Receipt Customization */}
+              <Card className="p-4 sm:p-6">
+                <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-4">Customize Content</h2>
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">Show Logo on Receipt</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Display your business logo</p>
                     </div>
-                    <p className="text-center text-gray-600 text-xs mb-3">{settings.receiptHeader}</p>
-                    <div className="border-t border-dashed pt-2 text-xs text-gray-400">
-                      <p>Item 1 x 2 .............. Le 5,000</p>
-                      <p>Item 2 x 1 .............. Le 3,000</p>
-                    </div>
-                    <div className="border-t border-dashed pt-2 mt-2">
-                      <p className="flex justify-between font-bold">
-                        <span>TOTAL</span>
-                        <span>Le 8,000</span>
-                      </p>
-                    </div>
-                    <p className="text-center text-gray-600 text-xs mt-3 pt-3 border-t border-dashed">
-                      {settings.receiptFooter}
-                    </p>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settings.showLogo}
+                        onChange={e => setSettings({ ...settings, showLogo: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 dark:peer-focus:ring-primary-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary-600"></div>
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Receipt Header Message
+                    </label>
+                    <textarea
+                      value={settings.receiptHeader}
+                      onChange={e => setSettings({ ...settings, receiptHeader: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      placeholder="Thank you for your purchase!"
+                      rows={2}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Receipt Footer Message
+                    </label>
+                    <textarea
+                      value={settings.receiptFooter}
+                      onChange={e => setSettings({ ...settings, receiptFooter: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      placeholder="Please come again!"
+                      rows={2}
+                    />
                   </div>
                 </div>
-              </div>
-            </Card>
+              </Card>
+
+              {/* Live Receipt Preview */}
+              <Card className="p-4 sm:p-6">
+                <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-4">Live Preview</h2>
+                <div className="flex justify-center">
+                  <div className="bg-white border border-gray-200 rounded-lg p-6 w-72 shadow-lg font-mono text-sm">
+                    {/* Classic Template Preview */}
+                    {settings.receiptTemplate === 'classic' && (
+                      <>
+                        <div className="text-center border-b pb-3 mb-3">
+                          {settings.showLogo && (
+                            <div className="w-12 h-12 bg-gray-200 rounded mx-auto mb-2 flex items-center justify-center">
+                              <Store className="w-6 h-6 text-gray-400" />
+                            </div>
+                          )}
+                          <p className="font-bold text-gray-800">{settings.businessName || 'Business Name'}</p>
+                          <p className="text-xs text-gray-500">{settings.businessAddress || 'Address'}</p>
+                          <p className="text-xs text-gray-500">{settings.businessPhone}</p>
+                        </div>
+                        {settings.receiptHeader && (
+                          <p className="text-center text-gray-600 text-xs mb-3">{settings.receiptHeader}</p>
+                        )}
+                        <div className="border-t border-dashed pt-2 text-xs text-gray-600">
+                          <p>Item 1 x 2 .............. Le 5,000</p>
+                          <p>Item 2 x 1 .............. Le 3,000</p>
+                        </div>
+                        <div className="border-t border-dashed pt-2 mt-2">
+                          <p className="flex justify-between font-bold text-gray-800">
+                            <span>TOTAL</span>
+                            <span>Le 8,000</span>
+                          </p>
+                        </div>
+                        {settings.receiptFooter && (
+                          <p className="text-center text-gray-600 text-xs mt-3 pt-3 border-t border-dashed">
+                            {settings.receiptFooter}
+                          </p>
+                        )}
+                      </>
+                    )}
+
+                    {/* Modern Template Preview */}
+                    {settings.receiptTemplate === 'modern' && (
+                      <div className="font-sans">
+                        <div className="flex items-center gap-3 mb-4">
+                          {settings.showLogo && (
+                            <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center flex-shrink-0">
+                              <Store className="w-5 h-5 text-gray-400" />
+                            </div>
+                          )}
+                          <div>
+                            <p className="font-semibold text-gray-800">{settings.businessName || 'Business Name'}</p>
+                            <p className="text-xs text-gray-400">{settings.businessPhone}</p>
+                          </div>
+                        </div>
+                        {settings.receiptHeader && (
+                          <p className="text-xs text-gray-500 mb-3 pb-3 border-b">{settings.receiptHeader}</p>
+                        )}
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Item 1 x 2</span>
+                            <span className="text-gray-800">Le 5,000</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Item 2 x 1</span>
+                            <span className="text-gray-800">Le 3,000</span>
+                          </div>
+                        </div>
+                        <div className="border-t mt-3 pt-3">
+                          <div className="flex justify-between font-semibold text-lg">
+                            <span className="text-gray-600">Total</span>
+                            <span className="text-gray-800">Le 8,000</span>
+                          </div>
+                        </div>
+                        {settings.receiptFooter && (
+                          <p className="text-xs text-gray-400 text-center mt-4">{settings.receiptFooter}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Detailed Template Preview */}
+                    {settings.receiptTemplate === 'detailed' && (
+                      <>
+                        <div className="text-center border-b pb-3 mb-3">
+                          {settings.showLogo && (
+                            <div className="w-12 h-12 bg-gray-200 rounded mx-auto mb-2 flex items-center justify-center">
+                              <Store className="w-6 h-6 text-gray-400" />
+                            </div>
+                          )}
+                          <p className="font-bold text-gray-800">{settings.businessName || 'Business Name'}</p>
+                          <p className="text-xs text-gray-500">{settings.businessAddress || 'Address'}</p>
+                          <p className="text-xs text-gray-500">{settings.businessPhone}</p>
+                          {settings.taxNumber && (
+                            <p className="text-xs text-gray-400">Tax #: {settings.taxNumber}</p>
+                          )}
+                        </div>
+                        {settings.receiptHeader && (
+                          <p className="text-xs text-gray-500 text-center mb-3">{settings.receiptHeader}</p>
+                        )}
+                        <div className="text-xs space-y-2">
+                          <div>
+                            <p className="font-medium text-gray-700">Sample Product One</p>
+                            <div className="flex justify-between text-gray-500 pl-2">
+                              <span>2 x Le 2,500</span>
+                              <span>Le 5,000</span>
+                            </div>
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-700">Sample Product Two</p>
+                            <div className="flex justify-between text-gray-500 pl-2">
+                              <span>1 x Le 3,000</span>
+                              <span>Le 3,000</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="border-t border-dashed pt-2 mt-3 text-xs space-y-1">
+                          <div className="flex justify-between text-gray-600">
+                            <span>Subtotal</span>
+                            <span>Le 8,000</span>
+                          </div>
+                          {settings.enableTax && (
+                            <div className="flex justify-between text-gray-600">
+                              <span>{settings.taxLabel} ({settings.defaultTaxRate}%)</span>
+                              <span>Le {Math.round(8000 * settings.defaultTaxRate / 100).toLocaleString()}</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="border-t border-double pt-2 mt-2">
+                          <div className="flex justify-between font-bold text-gray-800">
+                            <span>TOTAL</span>
+                            <span>Le {settings.enableTax ? (8000 + Math.round(8000 * settings.defaultTaxRate / 100)).toLocaleString() : '8,000'}</span>
+                          </div>
+                        </div>
+                        {settings.receiptFooter && (
+                          <p className="text-center text-gray-500 text-xs mt-3 pt-3 border-t border-dashed">
+                            {settings.receiptFooter}
+                          </p>
+                        )}
+                        <div className="text-center text-[10px] text-gray-400 mt-3 pt-2 border-t">
+                          <p>{new Date().toLocaleString()}</p>
+                          <p>Receipt #001234</p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            </div>
           )}
         </div>
 
