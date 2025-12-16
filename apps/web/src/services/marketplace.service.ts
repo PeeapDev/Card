@@ -923,25 +923,22 @@ class MarketplaceService {
     }
 
     // Fallback: Get products from ALL POS products that have images
-    // First get marketplace stores for store info
-    const { data: storesData } = await supabase
-      .from('marketplace_stores')
-      .select(`
-        id,
-        store_name,
-        store_slug,
-        logo_url,
-        merchant_id
-      `)
-      .eq('is_listed', true);
+    // First try to get marketplace stores for store info (may not exist)
+    let storesData: any[] = [];
+    try {
+      const { data } = await supabase
+        .from('marketplace_stores')
+        .select(`id, store_name, store_slug, logo_url, merchant_id`)
+        .eq('is_listed', true);
+      storesData = data || [];
+    } catch {
+      // marketplace_stores table may not exist
+    }
 
     // Get ALL POS products with images (from any business)
     const { data: productsData, error: productsError } = await supabase
       .from('pos_products')
-      .select(`
-        *,
-        business:businesses(id, business_name, logo_url)
-      `)
+      .select('*')
       .eq('is_active', true)
       .not('image_url', 'is', null)
       .order('created_at', { ascending: false })
@@ -951,20 +948,34 @@ class MarketplaceService {
       return [];
     }
 
+    // Try to get business info if businesses table exists
+    let businessesData: any[] = [];
+    const merchantIds = [...new Set(productsData.map(p => p.merchant_id))];
+    try {
+      const { data } = await supabase
+        .from('businesses')
+        .select('id, business_name, logo_url, merchant_id')
+        .in('merchant_id', merchantIds);
+      businessesData = data || [];
+    } catch {
+      // businesses table may not exist
+    }
+
     // Map products with store info (use marketplace store if exists, otherwise use business info)
     return productsData.map((product: any) => {
-      const store = storesData?.find(s => s.merchant_id === product.merchant_id);
-      const businessName = product.business?.business_name || 'Store';
-      const businessLogo = product.business?.logo_url;
+      const store = storesData.find(s => s.merchant_id === product.merchant_id);
+      const business = businessesData.find(b => b.merchant_id === product.merchant_id);
+      const storeName = store?.store_name || business?.business_name || 'Store';
+      const storeLogo = store?.logo_url || business?.logo_url || null;
 
       return {
         id: product.id,
         name: product.name,
         price: product.price,
         image_url: product.image_url,
-        store_name: store?.store_name || businessName,
+        store_name: storeName,
         store_slug: store?.store_slug || null,
-        store_logo: store?.logo_url || businessLogo,
+        store_logo: storeLogo,
         store_id: store?.id || product.merchant_id,
         is_featured: false,
       };
