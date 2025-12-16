@@ -41,175 +41,6 @@ interface FeaturedProduct {
   is_featured: boolean;
 }
 
-// Demo products with real images for showcase
-const DEMO_PRODUCTS: FeaturedProduct[] = [
-  {
-    id: 'demo-1',
-    name: 'Fresh Vegetables',
-    price: 45.00,
-    image_url: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=400&h=400&fit=crop',
-    store_name: 'Farm Fresh',
-    store_slug: null,
-    store_logo: null,
-    store_id: 'demo',
-    is_featured: true,
-  },
-  {
-    id: 'demo-2',
-    name: 'Coffee Beans',
-    price: 35.00,
-    image_url: 'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=400&h=400&fit=crop',
-    store_name: 'Bean & Brew',
-    store_slug: null,
-    store_logo: null,
-    store_id: 'demo',
-    is_featured: true,
-  },
-  {
-    id: 'demo-3',
-    name: 'Leather Bag',
-    price: 120.00,
-    image_url: 'https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400&h=400&fit=crop',
-    store_name: 'Craft Style',
-    store_slug: null,
-    store_logo: null,
-    store_id: 'demo',
-    is_featured: false,
-  },
-  {
-    id: 'demo-4',
-    name: 'Wireless Earbuds',
-    price: 89.00,
-    image_url: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=400&h=400&fit=crop',
-    store_name: 'Tech Galaxy',
-    store_slug: null,
-    store_logo: null,
-    store_id: 'demo',
-    is_featured: true,
-  },
-  {
-    id: 'demo-5',
-    name: 'Chocolate Box',
-    price: 55.00,
-    image_url: 'https://images.unsplash.com/photo-1549007994-cb92caebd54b?w=400&h=400&fit=crop',
-    store_name: 'Sweet Delights',
-    store_slug: null,
-    store_logo: null,
-    store_id: 'demo',
-    is_featured: false,
-  },
-  {
-    id: 'demo-6',
-    name: 'Yoga Mat',
-    price: 65.00,
-    image_url: 'https://images.unsplash.com/photo-1601925260368-ae2f83cf8b7f?w=400&h=400&fit=crop',
-    store_name: 'Fitness Zone',
-    store_slug: null,
-    store_logo: null,
-    store_id: 'demo',
-    is_featured: true,
-  },
-  {
-    id: 'demo-7',
-    name: 'Smart Watch',
-    price: 199.00,
-    image_url: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&h=400&fit=crop',
-    store_name: 'Tech Hub',
-    store_slug: null,
-    store_logo: null,
-    store_id: 'demo',
-    is_featured: true,
-  },
-  {
-    id: 'demo-8',
-    name: 'Sneakers',
-    price: 85.00,
-    image_url: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&h=400&fit=crop',
-    store_name: 'Shoe Palace',
-    store_slug: null,
-    store_logo: null,
-    store_id: 'demo',
-    is_featured: false,
-  },
-  {
-    id: 'demo-9',
-    name: 'Sunglasses',
-    price: 45.00,
-    image_url: 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&h=400&fit=crop',
-    store_name: 'Style Co',
-    store_slug: null,
-    store_logo: null,
-    store_id: 'demo',
-    is_featured: false,
-  },
-  {
-    id: 'demo-10',
-    name: 'Perfume',
-    price: 75.00,
-    image_url: 'https://images.unsplash.com/photo-1541643600914-78b084683601?w=400&h=400&fit=crop',
-    store_name: 'Fragrance',
-    store_slug: null,
-    store_logo: null,
-    store_id: 'demo',
-    is_featured: true,
-  },
-  {
-    id: 'demo-11',
-    name: 'Headphones',
-    price: 150.00,
-    image_url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=400&fit=crop',
-    store_name: 'Audio World',
-    store_slug: null,
-    store_logo: null,
-    store_id: 'demo',
-    is_featured: true,
-  },
-  {
-    id: 'demo-12',
-    name: 'Plant Pot',
-    price: 25.00,
-    image_url: 'https://images.unsplash.com/photo-1485955900006-10f4d324d411?w=400&h=400&fit=crop',
-    store_name: 'Green Life',
-    store_slug: null,
-    store_logo: null,
-    store_id: 'demo',
-    is_featured: false,
-  },
-  {
-    id: 'demo-13',
-    name: 'Backpack',
-    price: 65.00,
-    image_url: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&h=400&fit=crop',
-    store_name: 'Travel Gear',
-    store_slug: null,
-    store_logo: null,
-    store_id: 'demo',
-    is_featured: false,
-  },
-  {
-    id: 'demo-14',
-    name: 'Camera',
-    price: 450.00,
-    image_url: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=400&h=400&fit=crop',
-    store_name: 'Photo Pro',
-    store_slug: null,
-    store_logo: null,
-    store_id: 'demo',
-    is_featured: true,
-  },
-  {
-    id: 'demo-15',
-    name: 'Candles Set',
-    price: 30.00,
-    image_url: 'https://images.unsplash.com/photo-1602607847679-99aa9e327c40?w=400&h=400&fit=crop',
-    store_name: 'Home Decor',
-    store_slug: null,
-    store_logo: null,
-    store_id: 'demo',
-    is_featured: false,
-  },
-];
-
 export function ProductCarousel() {
   const [products, setProducts] = useState<FeaturedProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -268,14 +99,10 @@ export function ProductCarousel() {
   const loadProducts = async () => {
     try {
       const data = await marketplaceService.getFeaturedProducts(15);
-      if (data && data.length > 0) {
-        setProducts(data);
-      } else {
-        setProducts(DEMO_PRODUCTS);
-      }
+      setProducts(data || []);
     } catch (error) {
       console.error('Error loading products:', error);
-      setProducts(DEMO_PRODUCTS);
+      setProducts([]);
     } finally {
       setLoading(false);
     }
@@ -403,10 +230,23 @@ export function ProductCarousel() {
   // Navigate to store
   const handleOrderNow = useCallback((product: FeaturedProduct) => {
     closeStoryView();
-    if (product.store_id === 'demo') {
-      navigate('/marketplace');
-    } else if (product.store_slug) {
+    if (product.store_slug) {
       navigate(`/marketplace/store/${product.store_slug}`);
+    } else if (product.store_id) {
+      navigate(`/marketplace/store/${product.store_id}`);
+    } else {
+      navigate('/marketplace');
+    }
+  }, [navigate, closeStoryView]);
+
+  // Navigate to store page directly (for "Visit Shop" link)
+  const handleVisitShop = useCallback((product: FeaturedProduct, e: React.MouseEvent) => {
+    e.stopPropagation();
+    closeStoryView();
+    if (product.store_slug) {
+      navigate(`/marketplace/store/${product.store_slug}`);
+    } else if (product.store_id) {
+      navigate(`/marketplace/store/${product.store_id}`);
     } else {
       navigate('/marketplace');
     }
@@ -646,7 +486,10 @@ export function ProductCarousel() {
 
             {/* Header */}
             <div className="absolute top-8 left-0 right-0 z-30 flex items-center justify-between px-4">
-              <div className="flex items-center gap-3">
+              <button
+                onClick={(e) => handleVisitShop(selectedProduct, e)}
+                className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+              >
                 {selectedProduct.store_logo ? (
                   <img
                     src={selectedProduct.store_logo}
@@ -658,11 +501,14 @@ export function ProductCarousel() {
                     <Store className="w-5 h-5 text-white" />
                   </div>
                 )}
-                <div>
-                  <p className="text-white font-medium text-sm">{selectedProduct.store_name}</p>
-                  <p className="text-white/70 text-xs">{selectedProduct.name}</p>
+                <div className="text-left">
+                  <p className="text-white font-medium text-sm flex items-center gap-1">
+                    {selectedProduct.store_name}
+                    <ChevronRight className="w-4 h-4" />
+                  </p>
+                  <p className="text-white/70 text-xs">Tap to visit shop</p>
                 </div>
-              </div>
+              </button>
               <button
                 onClick={closeStoryView}
                 className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors"

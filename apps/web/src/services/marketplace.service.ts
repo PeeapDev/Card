@@ -886,7 +886,8 @@ class MarketplaceService {
     store_id: string;
     is_featured: boolean;
   }[]> {
-    const { data, error } = await supabase
+    // First try to get from marketplace_listings
+    const { data: listingsData, error: listingsError } = await supabase
       .from('marketplace_listings')
       .select(`
         id,
@@ -900,25 +901,74 @@ class MarketplaceService {
       .order('view_count', { ascending: false })
       .limit(limit);
 
-    if (error) {
-      console.error('Error fetching featured products:', error);
+    if (!listingsError && listingsData && listingsData.length > 0) {
+      // Filter to only include products from listed stores and transform data
+      const products = listingsData
+        .filter((item: any) => item.store?.is_listed)
+        .map((item: any) => ({
+          id: item.id,
+          name: item.product?.name || 'Product',
+          price: item.marketplace_price || item.product?.price || 0,
+          image_url: item.product?.image_url,
+          store_name: item.store?.store_name || 'Store',
+          store_slug: item.store?.store_slug,
+          store_logo: item.store?.logo_url,
+          store_id: item.store?.id,
+          is_featured: item.is_featured,
+        }));
+
+      if (products.length > 0) {
+        return products;
+      }
+    }
+
+    // Fallback: Get products directly from POS stores that have a marketplace store
+    const { data: storesData, error: storesError } = await supabase
+      .from('marketplace_stores')
+      .select(`
+        id,
+        store_name,
+        store_slug,
+        logo_url,
+        merchant_id
+      `)
+      .eq('is_listed', true)
+      .limit(10);
+
+    if (storesError || !storesData || storesData.length === 0) {
       return [];
     }
 
-    // Filter to only include products from listed stores and transform data
-    return (data || [])
-      .filter((item: any) => item.store?.is_listed)
-      .map((item: any) => ({
-        id: item.id,
-        name: item.product?.name || 'Product',
-        price: item.marketplace_price || item.product?.price || 0,
-        image_url: item.product?.image_url,
-        store_name: item.store?.store_name || 'Store',
-        store_slug: item.store?.store_slug,
-        store_logo: item.store?.logo_url,
-        store_id: item.store?.id,
-        is_featured: item.is_featured,
-      }));
+    // Get products from these merchants' POS
+    const merchantIds = storesData.map(s => s.merchant_id);
+    const { data: productsData, error: productsError } = await supabase
+      .from('pos_products')
+      .select('*')
+      .in('merchant_id', merchantIds)
+      .eq('is_active', true)
+      .not('image_url', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (productsError || !productsData) {
+      return [];
+    }
+
+    // Map products with store info
+    return productsData.map((product: any) => {
+      const store = storesData.find(s => s.merchant_id === product.merchant_id);
+      return {
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        image_url: product.image_url,
+        store_name: store?.store_name || 'Store',
+        store_slug: store?.store_slug,
+        store_logo: store?.logo_url,
+        store_id: store?.id || product.merchant_id,
+        is_featured: false,
+      };
+    });
   }
 
   // Real-time subscription for new notifications
