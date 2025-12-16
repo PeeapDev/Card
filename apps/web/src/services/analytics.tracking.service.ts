@@ -3,11 +3,7 @@
  * Tracks page views, user sessions, and visitor information
  */
 
-import { ANALYTICS_API_URL, isDevelopment } from '@/config/urls';
-
-// In development, skip analytics to avoid CORS issues with production API
-const API_URL = ANALYTICS_API_URL;
-const SKIP_ANALYTICS_IN_DEV = isDevelopment;
+import { supabase } from '@/lib/supabase';
 
 interface PageViewData {
   sessionId: string;
@@ -119,14 +115,6 @@ class AnalyticsTrackingService {
    * Track a page view
    */
   async trackPageView(path: string, title?: string, userId?: string) {
-    // Skip analytics in development to avoid CORS issues
-    if (SKIP_ANALYTICS_IN_DEV) {
-      console.log('[Analytics] Skipping in development mode');
-      this.pageStartTime = Date.now();
-      this.currentPath = path;
-      return;
-    }
-
     // Avoid duplicate tracking for same path in same session
     const trackKey = `${this.sessionId}_${path}`;
     if (this.pageViewsSent.has(trackKey)) {
@@ -140,28 +128,25 @@ class AnalyticsTrackingService {
     this.pageStartTime = Date.now();
     this.currentPath = path;
 
-    const data: PageViewData = {
-      sessionId: this.sessionId,
-      userId,
-      pagePath: path,
-      pageTitle: title || document.title,
-      referrer: document.referrer || undefined,
-      userAgent: navigator.userAgent,
-      deviceType: getDeviceType(),
-      browser: getBrowser(),
-      os: getOS(),
-      screenWidth: window.screen.width,
-      screenHeight: window.screen.height,
-      isBounce: true, // Will be updated to false if user navigates
-    };
-
     try {
-      await fetch(`${API_URL}/api/analytics/pageview`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-        keepalive: true, // Ensures request completes even on page unload
+      const { error } = await supabase.from('page_views').insert({
+        session_id: this.sessionId,
+        user_id: userId || null,
+        page_path: path,
+        page_title: title || document.title,
+        referrer: document.referrer || null,
+        user_agent: navigator.userAgent,
+        device_type: getDeviceType(),
+        browser: getBrowser(),
+        os: getOS(),
+        screen_width: window.screen.width,
+        screen_height: window.screen.height,
+        is_bounce: true,
       });
+
+      if (error) {
+        console.error('[Analytics] Failed to track page view:', error);
+      }
     } catch (error) {
       console.error('[Analytics] Failed to track page view:', error);
     }
@@ -179,26 +164,20 @@ class AnalyticsTrackingService {
    * Send page duration
    */
   private async sendDuration() {
-    // Skip in development
-    if (SKIP_ANALYTICS_IN_DEV) return;
-
     if (!this.currentPath || !this.pageStartTime) return;
 
     const duration = Math.round((Date.now() - this.pageStartTime) / 1000);
 
     if (duration > 0 && duration < 3600) { // Ignore durations > 1 hour (likely idle)
       try {
-        await fetch(`${API_URL}/api/analytics/pageview`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionId: this.sessionId,
-            pagePath: this.currentPath,
-            durationSeconds: duration,
-            isBounce: false,
-          }),
-          keepalive: true,
-        });
+        await supabase
+          .from('page_views')
+          .update({
+            duration_seconds: duration,
+            is_bounce: false
+          })
+          .eq('session_id', this.sessionId)
+          .eq('page_path', this.currentPath);
       } catch (error) {
         // Ignore errors on unload
       }
