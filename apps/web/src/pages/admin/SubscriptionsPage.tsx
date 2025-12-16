@@ -54,7 +54,30 @@ export function SubscriptionsPage() {
     return `${currencySymbol} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([
+    {
+      id: 'pos-multivendor',
+      name: 'POS Multivendor',
+      description: 'List products on marketplace & user dashboards',
+      monthlyPrice: 50000,
+      yearlyPrice: 500000,
+      features: [
+        'List all products on marketplace',
+        'Appear on user dashboard carousel',
+        'Access to thousands of customers',
+        'Real-time order notifications',
+        'Analytics dashboard',
+        '7-day free trial',
+      ],
+      limits: {
+        transactions: -1,
+        apiCalls: -1,
+        teamMembers: -1,
+      },
+      isPopular: true,
+      isActive: true,
+    },
+  ]);
 
   const handleSave = () => {
     setSaved(true);
