@@ -24,6 +24,7 @@ export type NotificationType =
   | 'payout_completed'
   | 'payout_failed'
   | 'pos_sale'
+  | 'pos_receipt'
   | 'refund_processed'
   | 'subscription_expiring'
   | 'feature_unlock';
@@ -455,6 +456,122 @@ class NotificationService {
       sourceId: params.transactionId,
       priority: params.status === 'failed' ? 'high' : 'normal',
     });
+  }
+
+  /**
+   * Send POS receipt notification to customer
+   */
+  async sendReceiptNotification(params: {
+    recipientPhone: string;
+    businessName: string;
+    businessPhone?: string;
+    saleNumber: string;
+    totalAmount: number;
+    currency: string;
+    items: Array<{
+      name: string;
+      quantity: number;
+      price: number;
+    }>;
+    paymentMethod: string;
+    saleId?: string;
+    cashierName?: string;
+  }): Promise<{ success: boolean; method: 'app' | 'sms'; error?: string }> {
+    try {
+      // Format receipt message
+      const itemsList = params.items
+        .map(item => `• ${item.name} x${item.quantity} - ${params.currency} ${(item.price * item.quantity).toLocaleString()}`)
+        .join('\n');
+
+      const receiptMessage = `Receipt from ${params.businessName}
+
+Receipt #: ${params.saleNumber}
+Date: ${new Date().toLocaleString()}
+${params.cashierName ? `Served by: ${params.cashierName}` : ''}
+
+Items:
+${itemsList}
+
+Total: ${params.currency} ${params.totalAmount.toLocaleString()}
+Paid via: ${params.paymentMethod.replace('_', ' ')}
+
+Thank you for your purchase!
+${params.businessPhone ? `Contact: ${params.businessPhone}` : ''}`;
+
+      // Try to find user by phone number
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('id, phone')
+        .eq('phone', params.recipientPhone)
+        .single();
+
+      if (userProfile?.id) {
+        // User exists - send in-app notification
+        await this.create({
+          userId: userProfile.id,
+          type: 'pos_receipt',
+          title: `Receipt from ${params.businessName}`,
+          message: `Your purchase of ${params.currency} ${params.totalAmount.toLocaleString()} - Receipt #${params.saleNumber}`,
+          icon: 'Receipt',
+          actionData: {
+            saleNumber: params.saleNumber,
+            totalAmount: params.totalAmount,
+            currency: params.currency,
+            businessName: params.businessName,
+            businessPhone: params.businessPhone,
+            items: params.items,
+            paymentMethod: params.paymentMethod,
+            fullReceipt: receiptMessage,
+          },
+          sourceService: 'pos',
+          sourceId: params.saleId,
+          priority: 'normal',
+        });
+
+        return { success: true, method: 'app' };
+      }
+
+      // User not found - send via SMS API
+      const smsResult = await this.sendSMS(params.recipientPhone, receiptMessage);
+      return { success: smsResult.success, method: 'sms', error: smsResult.error };
+
+    } catch (error) {
+      console.error('[NotificationService] SendReceipt error:', error);
+      return { success: false, method: 'sms', error: 'Failed to send receipt' };
+    }
+  }
+
+  /**
+   * Send SMS via API
+   */
+  private async sendSMS(phone: string, message: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Format phone number (Sierra Leone)
+      let formattedPhone = phone.replace(/\s+/g, '').replace(/^0/, '232');
+      if (!formattedPhone.startsWith('+')) {
+        formattedPhone = '+' + formattedPhone;
+      }
+
+      // Call SMS API endpoint
+      const response = await fetch('/api/sms/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: formattedPhone,
+          message: message,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        return { success: false, error: errorData.message || 'SMS sending failed' };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('[NotificationService] SMS error:', error);
+      return { success: false, error: 'SMS service unavailable' };
+    }
   }
 }
 
