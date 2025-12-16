@@ -32,12 +32,12 @@ export interface MultivendorSubscriptionPlan {
   features: string[];
 }
 
-// Subscription pricing (in SLE)
+// Subscription pricing (in NLe - New Leone)
 export const MULTIVENDOR_PLANS: MultivendorSubscriptionPlan[] = [
   {
     id: 'monthly',
     name: 'Monthly',
-    price: 50000, // Le 50,000/month
+    price: 50, // NLe 50/month
     interval: 'monthly',
     features: [
       'List all your products on marketplace',
@@ -50,11 +50,11 @@ export const MULTIVENDOR_PLANS: MultivendorSubscriptionPlan[] = [
   {
     id: 'yearly',
     name: 'Yearly',
-    price: 500000, // Le 500,000/year (2 months free)
+    price: 500, // NLe 500/year (2 months free)
     interval: 'yearly',
     features: [
       'All monthly features',
-      '2 months FREE (save Le 100,000)',
+      '2 months FREE (save NLe 100)',
       'Priority listing',
       'Featured badge',
       'Priority support',

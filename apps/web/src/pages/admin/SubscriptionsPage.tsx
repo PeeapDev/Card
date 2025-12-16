@@ -59,8 +59,8 @@ export function SubscriptionsPage() {
       id: 'pos-multivendor',
       name: 'POS Multivendor',
       description: 'List products on marketplace & user dashboards',
-      monthlyPrice: 50000,
-      yearlyPrice: 500000,
+      monthlyPrice: 50,
+      yearlyPrice: 500,
       features: [
         'List all products on marketplace',
         'Appear on user dashboard carousel',

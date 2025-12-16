@@ -35,9 +35,9 @@ import {
   Wallet,
 } from 'lucide-react';
 
-// Format currency
+// Format currency (New Leone - NLe)
 const formatCurrency = (amount: number) => {
-  return `Le ${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  return `NLe ${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 };
 
 interface Props {
@@ -442,7 +442,7 @@ export function MultivendorSettings({ merchantId }: Props) {
                   </div>
                   {plan.id === 'yearly' && (
                     <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium">
-                      Save Le 100,000
+                      Save NLe 100
                     </span>
                   )}
                 </div>
