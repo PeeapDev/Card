@@ -922,8 +922,9 @@ class MarketplaceService {
       }
     }
 
-    // Fallback: Get products directly from POS stores that have a marketplace store
-    const { data: storesData, error: storesError } = await supabase
+    // Fallback: Get products from ALL POS products that have images
+    // First get marketplace stores for store info
+    const { data: storesData } = await supabase
       .from('marketplace_stores')
       .select(`
         id,
@@ -932,39 +933,38 @@ class MarketplaceService {
         logo_url,
         merchant_id
       `)
-      .eq('is_listed', true)
-      .limit(10);
+      .eq('is_listed', true);
 
-    if (storesError || !storesData || storesData.length === 0) {
-      return [];
-    }
-
-    // Get products from these merchants' POS
-    const merchantIds = storesData.map(s => s.merchant_id);
+    // Get ALL POS products with images (from any business)
     const { data: productsData, error: productsError } = await supabase
       .from('pos_products')
-      .select('*')
-      .in('merchant_id', merchantIds)
+      .select(`
+        *,
+        business:businesses(id, business_name, logo_url)
+      `)
       .eq('is_active', true)
       .not('image_url', 'is', null)
       .order('created_at', { ascending: false })
       .limit(limit);
 
-    if (productsError || !productsData) {
+    if (productsError || !productsData || productsData.length === 0) {
       return [];
     }
 
-    // Map products with store info
+    // Map products with store info (use marketplace store if exists, otherwise use business info)
     return productsData.map((product: any) => {
-      const store = storesData.find(s => s.merchant_id === product.merchant_id);
+      const store = storesData?.find(s => s.merchant_id === product.merchant_id);
+      const businessName = product.business?.business_name || 'Store';
+      const businessLogo = product.business?.logo_url;
+
       return {
         id: product.id,
         name: product.name,
         price: product.price,
         image_url: product.image_url,
-        store_name: store?.store_name || 'Store',
-        store_slug: store?.store_slug,
-        store_logo: store?.logo_url,
+        store_name: store?.store_name || businessName,
+        store_slug: store?.store_slug || null,
+        store_logo: store?.logo_url || businessLogo,
         store_id: store?.id || product.merchant_id,
         is_featured: false,
       };
