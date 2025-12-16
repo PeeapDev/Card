@@ -68,6 +68,9 @@ import posService, {
   POSDiscount,
 } from '@/services/pos.service';
 import { useOfflineSync } from '@/hooks/useOfflineSync';
+import { PaymentQRCode } from '@/components/payment/PaymentQRCode';
+import { walletService } from '@/services/wallet.service';
+import { monimeService, MonimeTransaction } from '@/services/monime.service';
 
 // Format currency - using Le (Leone) symbol
 const formatCurrency = (amount: number) => {
@@ -155,6 +158,23 @@ export function POSTerminalPage() {
   const [cashReason, setCashReason] = useState('');
   const [sessionProcessing, setSessionProcessing] = useState(false);
 
+  // QR Payment
+  const [merchantWalletId, setMerchantWalletId] = useState<string | null>(null);
+  const [qrPaymentReference, setQrPaymentReference] = useState<string | null>(null);
+  const [qrPaymentStatus, setQrPaymentStatus] = useState<'pending' | 'paid' | null>(null);
+  const qrPollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Mobile Money Payment
+  const [mobileMoneyPhone, setMobileMoneyPhone] = useState('');
+  const [mobileMoneyProvider, setMobileMoneyProvider] = useState<'orange' | 'africell'>('orange');
+  const [mobileMoneyTransactionId, setMobileMoneyTransactionId] = useState<string | null>(null);
+  const [mobileMoneyStatus, setMobileMoneyStatus] = useState<'idle' | 'pending' | 'processing' | 'completed' | 'failed'>('idle');
+  const [mobileMoneyUssdCode, setMobileMoneyUssdCode] = useState<string | null>(null);
+  const mobileMoneyPollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Customer Display BroadcastChannel
+  const displayChannelRef = useRef<BroadcastChannel | null>(null);
+
   // Full-screen toggle
   const toggleFullScreen = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -187,12 +207,43 @@ export function POSTerminalPage() {
     }
   }, [merchantId]);
 
-  // Save cart to IndexedDB when it changes
+  // Save cart to IndexedDB when it changes and broadcast to customer display
   useEffect(() => {
     if (merchantId && cart.length > 0) {
       offlineSync.saveCart(cart);
     }
+    // Broadcast cart update to customer display
+    if (displayChannelRef.current) {
+      displayChannelRef.current.postMessage({
+        type: 'cart_update',
+        data: { cart }
+      });
+    }
   }, [cart, merchantId]);
+
+  // Initialize BroadcastChannel for customer display
+  useEffect(() => {
+    if (!merchantId) return;
+
+    const channel = new BroadcastChannel(`pos_display_${merchantId}`);
+    displayChannelRef.current = channel;
+
+    // Listen for display connection
+    channel.onmessage = (event) => {
+      if (event.data.type === 'display_connected') {
+        // Send current cart state to newly connected display
+        channel.postMessage({
+          type: 'cart_update',
+          data: { cart }
+        });
+      }
+    };
+
+    return () => {
+      channel.close();
+      displayChannelRef.current = null;
+    };
+  }, [merchantId]);
 
   // Load data (with offline support)
   useEffect(() => {
@@ -221,6 +272,17 @@ export function POSTerminalPage() {
       setCategories(cats);
       setProducts(prods);
       setFilteredProducts(prods);
+
+      // Load merchant wallet for QR payments
+      try {
+        const wallets = await walletService.getWallets(merchantId!) as any[];
+        const primaryWallet = wallets.find(w => w.wallet_type === 'primary' || w.wallet_type === 'merchant') || wallets[0];
+        if (primaryWallet) {
+          setMerchantWalletId(primaryWallet.id);
+        }
+      } catch (err) {
+        console.error('Error loading merchant wallet:', err);
+      }
 
       // Check for today's cash session
       try {
@@ -582,6 +644,12 @@ export function POSTerminalPage() {
     if (cart.length === 0) return;
 
     setProcessing(true);
+
+    // Broadcast payment start to customer display
+    if (displayChannelRef.current) {
+      displayChannelRef.current.postMessage({ type: 'payment_start' });
+    }
+
     try {
       const saleItems: POSSaleItem[] = cart.map(item => ({
         product_id: item.product.id,
@@ -626,16 +694,203 @@ export function POSTerminalPage() {
       setAppliedDiscount(null);
       setSelectedCustomer(null);
       setReceiptPhone('');
+
+      // Broadcast payment success to customer display
+      if (displayChannelRef.current) {
+        displayChannelRef.current.postMessage({ type: 'payment_success' });
+      }
     } catch (error) {
       console.error('Error processing sale:', error);
       alert('Failed to process sale');
+      // Broadcast payment failed to customer display
+      if (displayChannelRef.current) {
+        displayChannelRef.current.postMessage({ type: 'payment_failed' });
+      }
     } finally {
       setProcessing(false);
     }
   };
 
+  // QR Payment handlers
+  const handleQRGenerated = useCallback((qr: any) => {
+    setQrPaymentReference(qr.reference);
+    setQrPaymentStatus('pending');
+
+    // Start polling for payment status by checking transactions
+    if (qrPollingRef.current) {
+      clearInterval(qrPollingRef.current);
+    }
+
+    qrPollingRef.current = setInterval(async () => {
+      try {
+        // Check if a transaction with this reference exists
+        const { data: transactions } = await supabase
+          .from('transactions')
+          .select('id, status, amount')
+          .eq('reference', qr.reference)
+          .eq('status', 'COMPLETED')
+          .limit(1);
+
+        if (transactions && transactions.length > 0) {
+          setQrPaymentStatus('paid');
+          if (qrPollingRef.current) {
+            clearInterval(qrPollingRef.current);
+            qrPollingRef.current = null;
+          }
+          // Auto-complete the sale when payment is received
+          processSale();
+        }
+      } catch (error) {
+        console.error('Error checking QR payment status:', error);
+      }
+    }, 3000); // Poll every 3 seconds
+  }, [processSale]);
+
+  // Cleanup polling on unmount or payment method change
+  useEffect(() => {
+    return () => {
+      if (qrPollingRef.current) {
+        clearInterval(qrPollingRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (paymentMethod !== 'qr' && qrPollingRef.current) {
+      clearInterval(qrPollingRef.current);
+      qrPollingRef.current = null;
+      setQrPaymentStatus(null);
+      setQrPaymentReference(null);
+    }
+  }, [paymentMethod]);
+
+  // Mobile Money Payment handlers - Redirect to Monime for payment
+  const initiateMobileMoneyPayment = async () => {
+    if (!merchantWalletId || !merchantId) {
+      return;
+    }
+
+    setMobileMoneyStatus('pending');
+    setProcessing(true);
+
+    try {
+      // Generate a unique sale ID for tracking
+      const pendingSaleId = `pos_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+      // Build callback URLs
+      const baseUrl = window.location.origin;
+      const successUrl = `${baseUrl}/merchant/pos/payment/callback?status=success&sale_id=${pendingSaleId}`;
+      const cancelUrl = `${baseUrl}/merchant/pos/payment/callback?status=cancel&sale_id=${pendingSaleId}`;
+
+      // Store pending sale data in sessionStorage for retrieval after redirect
+      const pendingSaleData = {
+        id: pendingSaleId,
+        cart: cart,
+        totalAmount: totalAmount,
+        taxAmount: taxAmount,
+        discountAmount: discountAmount,
+        paymentMethod: 'mobile_money',
+        mobileMoneyProvider: mobileMoneyProvider,
+        customerPhone: mobileMoneyPhone,
+        merchantId: merchantId,
+        createdAt: new Date().toISOString(),
+      };
+      sessionStorage.setItem(`pos_pending_sale_${pendingSaleId}`, JSON.stringify(pendingSaleData));
+
+      // Create checkout session with Monime
+      const response = await monimeService.initiateDeposit({
+        walletId: merchantWalletId,
+        amount: totalAmount,
+        currency: 'SLE',
+        method: 'CHECKOUT_SESSION', // Use checkout session for redirect flow
+        description: `POS Sale - ${cart.length} item(s) - ${formatCurrency(totalAmount)}`,
+        successUrl: successUrl,
+        cancelUrl: cancelUrl,
+      });
+
+      setMobileMoneyTransactionId(response.id);
+
+      // Store transaction ID with the pending sale
+      const updatedPendingSaleData = { ...pendingSaleData, monimeTransactionId: response.id };
+      sessionStorage.setItem(`pos_pending_sale_${pendingSaleId}`, JSON.stringify(updatedPendingSaleData));
+
+      // If we have a payment URL, redirect to Monime
+      if (response.paymentUrl) {
+        // Redirect to Monime payment page
+        window.location.href = response.paymentUrl;
+      } else if (response.ussdCode) {
+        // Fallback to USSD if no redirect URL available
+        setMobileMoneyUssdCode(response.ussdCode);
+        setMobileMoneyStatus('processing');
+        startMobileMoneyPolling(response.id, pendingSaleId);
+      } else {
+        throw new Error('No payment URL or USSD code received');
+      }
+    } catch (error: any) {
+      console.error('Mobile money payment error:', error);
+      setMobileMoneyStatus('failed');
+      setProcessing(false);
+    }
+  };
+
+  // Fallback polling for USSD payments (when redirect is not available)
+  const startMobileMoneyPolling = (transactionId: string, pendingSaleId: string) => {
+    if (mobileMoneyPollingRef.current) {
+      clearInterval(mobileMoneyPollingRef.current);
+    }
+
+    mobileMoneyPollingRef.current = setInterval(async () => {
+      try {
+        const tx = await monimeService.getTransaction(transactionId);
+
+        if (tx.status === 'completed') {
+          setMobileMoneyStatus('completed');
+          if (mobileMoneyPollingRef.current) {
+            clearInterval(mobileMoneyPollingRef.current);
+            mobileMoneyPollingRef.current = null;
+          }
+          // Clear the pending sale from storage
+          sessionStorage.removeItem(`pos_pending_sale_${pendingSaleId}`);
+          // Auto-complete the sale when payment is received
+          processSale();
+        } else if (tx.status === 'failed' || tx.status === 'expired' || tx.status === 'cancelled') {
+          setMobileMoneyStatus('failed');
+          if (mobileMoneyPollingRef.current) {
+            clearInterval(mobileMoneyPollingRef.current);
+            mobileMoneyPollingRef.current = null;
+          }
+          // Clear the pending sale from storage
+          sessionStorage.removeItem(`pos_pending_sale_${pendingSaleId}`);
+        }
+      } catch (error) {
+        console.error('Error checking mobile money status:', error);
+      }
+    }, 3000);
+  };
+
+  // Cleanup mobile money polling
+  useEffect(() => {
+    return () => {
+      if (mobileMoneyPollingRef.current) {
+        clearInterval(mobileMoneyPollingRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (paymentMethod !== 'mobile_money') {
+      if (mobileMoneyPollingRef.current) {
+        clearInterval(mobileMoneyPollingRef.current);
+        mobileMoneyPollingRef.current = null;
+      }
+      setMobileMoneyStatus('idle');
+      setMobileMoneyTransactionId(null);
+      setMobileMoneyUssdCode(null);
+    }
+  }, [paymentMethod]);
+
   // Quick amount buttons for cash
-  const quickAmounts = [1000, 2000, 5000, 10000, 20000, 50000];
+  const quickAmounts = [1, 2, 5, 10, 20, 50, 100]; // New Leone amounts
 
   if (loading) {
     return (
@@ -1819,20 +2074,182 @@ export function POSTerminalPage() {
 
                   {/* Mobile Money - Phone Number */}
                   {paymentMethod === 'mobile_money' && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                      <p className="text-sm text-blue-700 text-center">
-                        Request payment from customer's mobile money account
-                      </p>
+                    <div className="space-y-4 mb-6">
+                      {mobileMoneyStatus === 'completed' ? (
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
+                          <Check className="w-16 h-16 mx-auto text-green-500 mb-4" />
+                          <p className="text-lg font-semibold text-green-600">Payment Received!</p>
+                        </div>
+                      ) : mobileMoneyStatus === 'failed' ? (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+                          <AlertCircle className="w-16 h-16 mx-auto text-red-500 mb-4" />
+                          <p className="text-lg font-semibold text-red-600">Payment Failed</p>
+                          <button
+                            onClick={() => setMobileMoneyStatus('idle')}
+                            className="mt-4 px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-sm font-medium"
+                          >
+                            Try Again
+                          </button>
+                        </div>
+                      ) : mobileMoneyStatus === 'processing' ? (
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
+                          <div className="relative w-20 h-20 mx-auto mb-4">
+                            <Loader2 className="w-20 h-20 text-blue-500 animate-spin" />
+                            <Smartphone className="w-8 h-8 text-blue-600 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+                          </div>
+                          <p className="text-lg font-semibold text-blue-700">Waiting for Payment</p>
+                          <p className="text-sm text-blue-600 mt-2">
+                            Customer will receive a payment prompt on their phone
+                          </p>
+                          {mobileMoneyUssdCode && (
+                            <div className="mt-4 bg-white rounded-lg p-3 border border-blue-200">
+                              <p className="text-xs text-gray-500">Or dial this USSD code:</p>
+                              <p className="text-xl font-mono font-bold text-gray-900 mt-1">
+                                {mobileMoneyUssdCode}
+                              </p>
+                            </div>
+                          )}
+                          <button
+                            onClick={() => {
+                              if (mobileMoneyPollingRef.current) {
+                                clearInterval(mobileMoneyPollingRef.current);
+                                mobileMoneyPollingRef.current = null;
+                              }
+                              setMobileMoneyStatus('idle');
+                              setMobileMoneyTransactionId(null);
+                              setMobileMoneyUssdCode(null);
+                            }}
+                            className="mt-4 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Provider Selection */}
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setMobileMoneyProvider('orange')}
+                              className={`flex-1 py-3 px-4 rounded-lg border-2 flex items-center justify-center gap-2 transition-colors ${
+                                mobileMoneyProvider === 'orange'
+                                  ? 'border-orange-500 bg-orange-50 text-orange-700'
+                                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                              }`}
+                            >
+                              <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center text-white font-bold text-sm">OM</div>
+                              <span className="font-medium">Orange Money</span>
+                            </button>
+                            <button
+                              onClick={() => setMobileMoneyProvider('africell')}
+                              className={`flex-1 py-3 px-4 rounded-lg border-2 flex items-center justify-center gap-2 transition-colors ${
+                                mobileMoneyProvider === 'africell'
+                                  ? 'border-purple-500 bg-purple-50 text-purple-700'
+                                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                              }`}
+                            >
+                              <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center text-white font-bold text-sm">AF</div>
+                              <span className="font-medium">Africell Money</span>
+                            </button>
+                          </div>
+
+                          {/* Phone Number Input */}
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              Customer's Phone Number
+                            </label>
+                            <div className="flex gap-2">
+                              <div className="flex items-center px-3 bg-gray-100 dark:bg-gray-700 rounded-lg border border-gray-300 dark:border-gray-600">
+                                <span className="text-gray-600 dark:text-gray-400 font-medium">+232</span>
+                              </div>
+                              <input
+                                type="tel"
+                                value={mobileMoneyPhone}
+                                onChange={(e) => setMobileMoneyPhone(e.target.value.replace(/\D/g, ''))}
+                                placeholder={mobileMoneyProvider === 'orange' ? '76 XXX XXX' : '77 XXX XXX'}
+                                className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-lg"
+                                maxLength={8}
+                              />
+                            </div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                              {mobileMoneyProvider === 'orange'
+                                ? 'Enter Orange Money number (starts with 76, 77, 78)'
+                                : 'Enter Africell Money number (starts with 30, 33, 34)'}
+                            </p>
+                          </div>
+
+                          {/* Request Payment Button */}
+                          <button
+                            onClick={initiateMobileMoneyPayment}
+                            disabled={!mobileMoneyPhone || mobileMoneyPhone.length < 6 || !merchantWalletId || processing}
+                            className="w-full py-4 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:from-gray-400 disabled:to-gray-500 text-white rounded-lg font-semibold flex items-center justify-center gap-2 transition-all"
+                          >
+                            {processing ? (
+                              <>
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                                Sending Request...
+                              </>
+                            ) : (
+                              <>
+                                <Send className="w-5 h-5" />
+                                Request Payment of {formatCurrency(totalAmount)}
+                              </>
+                            )}
+                          </button>
+
+                          {!merchantWalletId && (
+                            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-center">
+                              <AlertCircle className="w-5 h-5 inline text-yellow-600 mr-1" />
+                              <span className="text-sm text-yellow-700">Wallet not configured for mobile payments</span>
+                            </div>
+                          )}
+                        </>
+                      )}
                     </div>
                   )}
 
-                  {/* QR Code */}
+                  {/* QR Code Payment */}
                   {paymentMethod === 'qr' && (
-                    <div className="bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-6 text-center">
-                      <QrCode className="w-32 h-32 mx-auto text-gray-400 mb-2" />
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        QR code will be generated for customer to scan
-                      </p>
+                    <div className="bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-6">
+                      {merchantId && merchantWalletId ? (
+                        <div className="text-center">
+                          {qrPaymentStatus === 'paid' ? (
+                            <div className="py-8">
+                              <Check className="w-16 h-16 mx-auto text-green-500 mb-4" />
+                              <p className="text-lg font-semibold text-green-600">Payment Received!</p>
+                            </div>
+                          ) : (
+                            <>
+                              <PaymentQRCode
+                                userId={merchantId}
+                                walletId={merchantWalletId}
+                                amount={totalAmount}
+                                type="dynamic"
+                                merchantName={business?.name || 'POS Terminal'}
+                                description={`POS Sale - ${cart.length} item(s)`}
+                                onGenerated={handleQRGenerated}
+                                size={180}
+                                currency="SLE"
+                              />
+                              {qrPaymentStatus === 'pending' && (
+                                <div className="mt-4 flex items-center justify-center gap-2 text-sm text-blue-600">
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  <span>Waiting for payment...</span>
+                                </div>
+                              )}
+                              <p className="mt-2 text-xs text-gray-500">
+                                Customer scans with Peeap app to pay
+                              </p>
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-center py-4">
+                          <QrCode className="w-16 h-16 mx-auto text-gray-400 mb-2" />
+                          <p className="text-sm text-gray-500">
+                            Wallet not configured for QR payments
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
 

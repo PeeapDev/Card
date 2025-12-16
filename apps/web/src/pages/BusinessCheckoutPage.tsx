@@ -329,6 +329,7 @@ export function BusinessCheckoutPage() {
         return;
       }
 
+      console.log('[BusinessCheckout] Loaded business:', data.name, 'is_verified:', data.is_verified);
       setBusiness(data);
 
       // If amount is pre-filled from SDK/URL, go DIRECTLY to QR code

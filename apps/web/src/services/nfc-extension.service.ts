@@ -53,21 +53,20 @@ class NFCExtensionService {
   };
 
   constructor() {
-    // Try to detect extension on load
-    this.detectExtension();
-
     // Listen for messages from extension via content script
     window.addEventListener('message', this.handleWindowMessage);
+
+    // Try to detect extension on load
+    this.detectExtension();
   }
 
   /**
    * Detect if the PeeAP NFC extension is installed
    */
   async detectExtension(): Promise<boolean> {
-    // Check if chrome.runtime is available (running in Chrome)
-    if (typeof window.chrome === 'undefined' || !window.chrome?.runtime) {
-      this.updateStatus({ available: false });
-      return false;
+    // First check if we already detected via content script message
+    if (this.extensionId && this.status.available) {
+      return true;
     }
 
     // Try stored extension ID first
@@ -75,6 +74,14 @@ class NFCExtensionService {
     if (storedId) {
       const detected = await this.tryExtensionId(storedId);
       if (detected) return true;
+    }
+
+    // Wait a bit for content script to announce itself
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Check again if detected via content script
+    if (this.extensionId && this.status.available) {
+      return true;
     }
 
     // Try well-known extension IDs
@@ -153,14 +160,33 @@ class NFCExtensionService {
     if (event.source !== window) return;
     if (!event.data || event.data.source !== 'peeap-nfc-extension') return;
 
-    const { type, payload } = event.data;
+    const { type, payload, extensionId } = event.data;
+
+    // Store extension ID when we receive any message from the extension
+    if (extensionId && !this.extensionId) {
+      console.log('[NFC Extension] Detected extension ID:', extensionId);
+      this.extensionId = extensionId;
+      localStorage.setItem('peeap_nfc_extension_id', extensionId);
+    }
 
     switch (type) {
+      case 'EXTENSION_AVAILABLE':
+        console.log('[NFC Extension] Extension available:', payload);
+        this.extensionId = extensionId || payload?.extensionId;
+        if (this.extensionId) {
+          localStorage.setItem('peeap_nfc_extension_id', this.extensionId);
+        }
+        this.updateStatus({
+          available: true,
+          version: payload?.version,
+        });
+        break;
       case 'CARD_DETECTED':
         this.notifyListeners(payload);
         break;
       case 'READER_CONNECTED':
         this.updateStatus({
+          available: true,
           connected: true,
           deviceName: payload.deviceName,
         });
@@ -174,6 +200,7 @@ class NFCExtensionService {
         break;
       case 'STATUS':
         this.updateStatus({
+          available: true,
           connected: payload.connected,
           scanning: payload.scanning,
           deviceName: payload.deviceName,
@@ -351,7 +378,12 @@ class NFCExtensionService {
    * Check if running in Chrome browser
    */
   isChromeBrowser(): boolean {
-    return typeof window.chrome !== 'undefined' && !!window.chrome?.runtime;
+    // Check user agent for Chrome (but not Edge which also has chrome in UA)
+    const ua = navigator.userAgent.toLowerCase();
+    const isChrome = ua.includes('chrome') && !ua.includes('edg');
+    // Also check for chromium-based browsers
+    const isChromium = ua.includes('chromium');
+    return isChrome || isChromium;
   }
 
   /**

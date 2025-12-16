@@ -71,10 +71,10 @@ export function BusinessIntegrationPage() {
             The business you're looking for doesn't exist or you don't have access.
           </p>
           <button
-            onClick={() => navigate('/merchant/shops')}
+            onClick={() => navigate('/merchant/businesses')}
             className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
           >
-            Back to My Shops
+            Back to My Businesses
           </button>
         </div>
       </MerchantLayout>
@@ -88,7 +88,7 @@ export function BusinessIntegrationPage() {
         <div className="flex items-start justify-between">
           <div className="flex items-start gap-4">
             <button
-              onClick={() => navigate(`/merchant/shops/${business.id}`)}
+              onClick={() => navigate(`/merchant/businesses/${business.id}`)}
               className="p-2 hover:bg-gray-100 rounded-lg mt-1"
             >
               <ArrowLeft className="w-5 h-5 text-gray-600" />

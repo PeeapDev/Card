@@ -15,6 +15,7 @@ import { MerchantLayout } from '@/components/layout/MerchantLayout';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
+import { useApps } from '@/context/AppsContext';
 import posService, { POSCategory, POSSettings as DBPOSSettings } from '@/services/pos.service';
 import {
   ShoppingCart,
@@ -96,6 +97,7 @@ const colorOptions = [
 export function POSSetupWizard() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { refreshApps } = useApps();
   const [currentStep, setCurrentStep] = useState(0);
   const [settings, setSettings] = useState<POSSettings>(defaultSettings);
   const [saving, setSaving] = useState(false);
@@ -275,6 +277,8 @@ export function POSSetupWizard() {
       const result = await posService.savePOSSettings(dbSettings);
 
       if (result) {
+        // Refresh apps context to update sidebar
+        await refreshApps();
         navigate('/merchant/apps/pos');
       } else {
         alert('Failed to save settings. Please try again.');

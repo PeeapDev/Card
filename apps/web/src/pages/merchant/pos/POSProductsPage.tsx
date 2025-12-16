@@ -232,7 +232,7 @@ export function POSProductsPage() {
     setSaving(true);
     try {
       const productData = {
-        business_id: merchantId!,
+        merchant_id: merchantId!,
         name: productForm.name,
         description: productForm.description || undefined,
         category_id: productForm.category_id || undefined,
@@ -304,7 +304,7 @@ export function POSProductsPage() {
     setSaving(true);
     try {
       const categoryData = {
-        business_id: merchantId!,
+        merchant_id: merchantId!,
         name: categoryForm.name,
         description: categoryForm.description || undefined,
         color: categoryForm.color,

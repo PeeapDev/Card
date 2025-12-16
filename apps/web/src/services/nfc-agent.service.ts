@@ -40,7 +40,9 @@ type ErrorCallback = (error: string) => void;
 class NFCAgentService {
   private ws: WebSocket | null = null;
   private readonly AGENT_URL = 'ws://localhost:9876';
-  private readonly RECONNECT_INTERVAL = 3000;
+  private readonly BASE_RECONNECT_INTERVAL = 3000;
+  private readonly MAX_RECONNECT_INTERVAL = 60000; // Max 1 minute between attempts
+  private readonly MAX_RECONNECT_ATTEMPTS = 5; // Stop after 5 failed attempts
   private readonly PING_INTERVAL = 10000;
 
   private status: NFCAgentStatus = {
@@ -58,6 +60,8 @@ class NFCAgentService {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private isManuallyDisconnected = false;
+  private wasEverConnected = false; // Track if we ever successfully connected
+  private reconnectAttempts = 0;
 
   /**
    * Check if the NFC Agent is available
@@ -113,6 +117,8 @@ class NFCAgentService {
         this.ws.onopen = () => {
           clearTimeout(connectionTimeout);
           console.log('[NFC Agent] Connected to local agent');
+          this.wasEverConnected = true;
+          this.reconnectAttempts = 0; // Reset on successful connection
           this.updateStatus({ connected: true, lastError: null });
           this.startPing();
           resolve(true);
@@ -138,9 +144,14 @@ class NFCAgentService {
             cardPresent: false
           });
 
-          // Auto-reconnect unless manually disconnected
-          if (!this.isManuallyDisconnected) {
+          // Only auto-reconnect if:
+          // 1. Not manually disconnected
+          // 2. Was previously connected successfully (not initial connection failure)
+          // 3. Haven't exceeded max retry attempts
+          if (!this.isManuallyDisconnected && this.wasEverConnected && this.reconnectAttempts < this.MAX_RECONNECT_ATTEMPTS) {
             this.scheduleReconnect();
+          } else if (this.reconnectAttempts >= this.MAX_RECONNECT_ATTEMPTS) {
+            console.log('[NFC Agent] Max reconnection attempts reached, stopping auto-reconnect');
           }
         };
       } catch (err: any) {
@@ -164,11 +175,23 @@ class NFCAgentService {
       this.ws = null;
     }
 
+    // Reset reconnection state
+    this.reconnectAttempts = 0;
+    this.wasEverConnected = false;
+
     this.updateStatus({
       connected: false,
       readerName: null,
       cardPresent: false,
     });
+  }
+
+  /**
+   * Reset reconnection state (call before manual reconnect attempt)
+   */
+  resetReconnectState(): void {
+    this.reconnectAttempts = 0;
+    this.isManuallyDisconnected = false;
   }
 
   /**
@@ -312,10 +335,19 @@ class NFCAgentService {
 
   private scheduleReconnect(): void {
     this.stopReconnect();
+    this.reconnectAttempts++;
+
+    // Exponential backoff: 3s, 6s, 12s, 24s, 48s (capped at MAX_RECONNECT_INTERVAL)
+    const delay = Math.min(
+      this.BASE_RECONNECT_INTERVAL * Math.pow(2, this.reconnectAttempts - 1),
+      this.MAX_RECONNECT_INTERVAL
+    );
+
+    console.log(`[NFC Agent] Scheduling reconnect attempt ${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS} in ${delay / 1000}s`);
+
     this.reconnectTimer = setTimeout(() => {
-      console.log('[NFC Agent] Attempting to reconnect...');
       this.connect();
-    }, this.RECONNECT_INTERVAL);
+    }, delay);
   }
 
   private stopReconnect(): void {

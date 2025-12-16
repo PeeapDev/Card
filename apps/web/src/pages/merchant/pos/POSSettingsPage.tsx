@@ -46,6 +46,15 @@ import {
   Smartphone,
   Wallet,
   Nfc,
+  Monitor,
+  ExternalLink,
+  Palette,
+  Type,
+  Image,
+  Volume2,
+  Eye,
+  ShoppingCart,
+  Clock,
 } from 'lucide-react';
 
 // Format currency - using Le (Leone) symbol
@@ -77,6 +86,42 @@ interface POSSettings {
     cash: boolean;
     bankTransfer: boolean;
   };
+  // Second screen / Customer display settings
+  secondScreen: {
+    enabled: boolean;
+    theme: 'light' | 'dark' | 'auto';
+    fontSize: 'small' | 'medium' | 'large';
+    // Header options
+    showLogo: boolean;
+    showBusinessName: boolean;
+    showDateTime: boolean;
+    // Welcome screen options
+    showWelcomeMessage: boolean;
+    welcomeMessage: string;
+    showPromotionalBanner: boolean;
+    promotionalMessage: string;
+    // Cart display options
+    showItemImages: boolean;
+    showItemDescriptions: boolean;
+    showItemPrices: boolean;
+    showItemQuantity: boolean;
+    showItemsAsAdded: boolean;
+    // Totals display options
+    showSubtotal: boolean;
+    showTaxBreakdown: boolean;
+    showDiscounts: boolean;
+    showTotalAmount: boolean;
+    // Payment options
+    showPaymentMethod: boolean;
+    showPaymentAnimation: boolean;
+    showThankYouMessage: boolean;
+    thankYouMessage: string;
+    // Effects
+    playSound: boolean;
+    // Colors
+    backgroundColor: string;
+    accentColor: string;
+  };
   // Setup complete flag
   setupCompleted: boolean;
 }
@@ -100,6 +145,41 @@ const defaultSettings: POSSettings = {
     mobileMoney: true,
     cash: true,
     bankTransfer: false,
+  },
+  secondScreen: {
+    enabled: false,
+    theme: 'dark',
+    fontSize: 'large',
+    // Header options
+    showLogo: true,
+    showBusinessName: true,
+    showDateTime: true,
+    // Welcome screen options
+    showWelcomeMessage: true,
+    welcomeMessage: 'Welcome! Your order will appear here.',
+    showPromotionalBanner: false,
+    promotionalMessage: '',
+    // Cart display options
+    showItemImages: true,
+    showItemDescriptions: false,
+    showItemPrices: true,
+    showItemQuantity: true,
+    showItemsAsAdded: true,
+    // Totals display options
+    showSubtotal: true,
+    showTaxBreakdown: true,
+    showDiscounts: true,
+    showTotalAmount: true,
+    // Payment options
+    showPaymentMethod: true,
+    showPaymentAnimation: true,
+    showThankYouMessage: true,
+    thankYouMessage: 'Thank you for your purchase!',
+    // Effects
+    playSound: false,
+    // Colors
+    backgroundColor: '#1a1a2e',
+    accentColor: '#4f46e5',
   },
   setupCompleted: false,
 };
@@ -217,6 +297,7 @@ const tabs = [
   { id: 'categories', label: 'Categories', icon: FolderOpen },
   { id: 'staff', label: 'Staff', icon: Users },
   { id: 'payments', label: 'Payments', icon: CreditCard },
+  { id: 'display', label: 'Display', icon: Monitor },
   { id: 'tax', label: 'Tax', icon: Percent },
   { id: 'receipts', label: 'Receipt', icon: Receipt },
 ];
@@ -699,7 +780,7 @@ export function POSSettingsPage() {
               <p className="text-sm text-gray-500 dark:text-gray-400 hidden sm:block">Configure your point of sale system</p>
             </div>
           </div>
-          {(activeTab === 'general' || activeTab === 'tax' || activeTab === 'receipts' || activeTab === 'payments') && (
+          {(activeTab === 'general' || activeTab === 'tax' || activeTab === 'receipts' || activeTab === 'payments' || activeTab === 'display') && (
             <Button onClick={saveSettings} disabled={saving} className="w-full sm:w-auto">
               {saving ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -1208,6 +1289,605 @@ export function POSSettingsPage() {
                 </p>
               </div>
             </Card>
+          )}
+
+          {/* Display / Second Screen Tab */}
+          {activeTab === 'display' && (
+            <div className="space-y-6">
+              {/* Enable Second Screen */}
+              <Card className="p-4 sm:p-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
+                      <Monitor className="w-7 h-7 text-white" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Customer Display</h2>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Show order details on a second screen facing customers
+                      </p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settings.secondScreen?.enabled ?? false}
+                      onChange={e => setSettings({
+                        ...settings,
+                        secondScreen: { ...settings.secondScreen, enabled: e.target.checked }
+                      })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-14 h-7 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 dark:peer-focus:ring-primary-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all dark:border-gray-600 peer-checked:bg-primary-600"></div>
+                  </label>
+                </div>
+
+                {settings.secondScreen?.enabled && (
+                  <>
+                    {/* Launch Display Button */}
+                    <div className="mb-6 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-xl border border-indigo-200 dark:border-indigo-800">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-gray-900 dark:text-white">Open Customer Display</p>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">
+                            Launch in a new window and drag to second monitor
+                          </p>
+                        </div>
+                        <Button
+                          onClick={() => {
+                            const displayUrl = `/merchant/pos/display?merchantId=${user?.id}`;
+                            window.open(
+                              displayUrl,
+                              'CustomerDisplay',
+                              'width=1920,height=1080,menubar=no,toolbar=no,location=no,status=no'
+                            );
+                          }}
+                          className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700"
+                        >
+                          <ExternalLink className="w-4 h-4 mr-2" />
+                          Launch Display
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Theme Selection - Improved with mini screen previews */}
+                    <div className="mb-6">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                        <Palette className="w-4 h-4 inline mr-2" />
+                        Display Theme
+                      </label>
+                      <div className="grid grid-cols-3 gap-4">
+                        {[
+                          { id: 'light', label: 'Light', icon: '☀️', bgColor: 'bg-white', textColor: 'text-gray-900', headerBg: 'bg-gray-100' },
+                          { id: 'dark', label: 'Dark', icon: '🌙', bgColor: 'bg-gray-900', textColor: 'text-white', headerBg: 'bg-gray-800' },
+                          { id: 'auto', label: 'Auto', icon: '🔄', bgColor: 'bg-gradient-to-br from-white to-gray-900', textColor: 'text-gray-600', headerBg: 'bg-gradient-to-r from-gray-100 to-gray-800' },
+                        ].map(theme => (
+                          <button
+                            key={theme.id}
+                            onClick={() => setSettings({
+                              ...settings,
+                              secondScreen: { ...settings.secondScreen, theme: theme.id as 'light' | 'dark' | 'auto' }
+                            })}
+                            className={`group relative p-3 rounded-xl border-2 transition-all ${
+                              settings.secondScreen?.theme === theme.id
+                                ? 'border-primary-500 ring-2 ring-primary-200 dark:ring-primary-800 shadow-lg'
+                                : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 hover:shadow-md'
+                            }`}
+                          >
+                            {/* Mini screen preview */}
+                            <div className={`w-full aspect-video rounded-lg ${theme.bgColor} border border-gray-300 dark:border-gray-600 overflow-hidden shadow-inner`}>
+                              {/* Mini header */}
+                              <div className={`h-3 ${theme.headerBg} flex items-center justify-center`}>
+                                <div className="w-4 h-1 bg-gray-400/50 rounded-full"></div>
+                              </div>
+                              {/* Mini content */}
+                              <div className="p-1.5 space-y-1">
+                                <div className={`h-1.5 ${theme.id === 'light' ? 'bg-gray-300' : theme.id === 'dark' ? 'bg-gray-600' : 'bg-gray-400'} rounded-full w-3/4`}></div>
+                                <div className={`h-1 ${theme.id === 'light' ? 'bg-gray-200' : theme.id === 'dark' ? 'bg-gray-700' : 'bg-gray-500'} rounded-full w-1/2`}></div>
+                                <div className={`h-1 ${theme.id === 'light' ? 'bg-gray-200' : theme.id === 'dark' ? 'bg-gray-700' : 'bg-gray-500'} rounded-full w-2/3`}></div>
+                              </div>
+                              {/* Mini total bar */}
+                              <div className={`absolute bottom-3 left-3 right-3 h-2 ${theme.id === 'light' ? 'bg-green-500' : theme.id === 'dark' ? 'bg-green-400' : 'bg-green-500'} rounded-full opacity-80`}></div>
+                            </div>
+                            {/* Label with icon */}
+                            <div className="flex items-center justify-center gap-2 mt-3">
+                              <span className="text-lg">{theme.icon}</span>
+                              <p className={`font-semibold ${settings.secondScreen?.theme === theme.id ? 'text-primary-600' : 'text-gray-700 dark:text-gray-300'}`}>
+                                {theme.label}
+                              </p>
+                            </div>
+                            {/* Selected indicator */}
+                            {settings.secondScreen?.theme === theme.id && (
+                              <div className="absolute -top-2 -right-2 w-6 h-6 bg-primary-500 rounded-full flex items-center justify-center shadow-lg">
+                                <Check className="w-4 h-4 text-white" />
+                              </div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Font Size - Improved with visual scale */}
+                    <div className="mb-6">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                        <Type className="w-4 h-4 inline mr-2" />
+                        Text Size
+                      </label>
+                      <div className="grid grid-cols-3 gap-4">
+                        {[
+                          { id: 'small', label: 'Small', textSize: 'text-lg', previewSize: '16px', scale: 0.85 },
+                          { id: 'medium', label: 'Medium', textSize: 'text-xl', previewSize: '18px', scale: 1 },
+                          { id: 'large', label: 'Large', textSize: 'text-2xl', previewSize: '22px', scale: 1.2 },
+                        ].map(size => (
+                          <button
+                            key={size.id}
+                            onClick={() => setSettings({
+                              ...settings,
+                              secondScreen: { ...settings.secondScreen, fontSize: size.id as 'small' | 'medium' | 'large' }
+                            })}
+                            className={`relative p-4 rounded-xl border-2 transition-all ${
+                              settings.secondScreen?.fontSize === size.id
+                                ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 shadow-lg'
+                                : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 hover:shadow-md'
+                            }`}
+                          >
+                            {/* Preview text with actual scale */}
+                            <div className="h-14 flex items-center justify-center">
+                              <span
+                                className={`font-bold ${settings.secondScreen?.fontSize === size.id ? 'text-primary-600' : 'text-gray-700 dark:text-gray-300'}`}
+                                style={{ fontSize: `${24 * size.scale}px` }}
+                              >
+                                Aa
+                              </span>
+                            </div>
+                            <p className={`text-sm font-medium mt-2 ${settings.secondScreen?.fontSize === size.id ? 'text-primary-600' : 'text-gray-600 dark:text-gray-400'}`}>
+                              {size.label}
+                            </p>
+                            <p className={`text-xs ${settings.secondScreen?.fontSize === size.id ? 'text-primary-400' : 'text-gray-400'}`}>
+                              {size.previewSize}
+                            </p>
+                            {/* Selected indicator */}
+                            {settings.secondScreen?.fontSize === size.id && (
+                              <div className="absolute -top-2 -right-2 w-6 h-6 bg-primary-500 rounded-full flex items-center justify-center shadow-lg">
+                                <Check className="w-4 h-4 text-white" />
+                              </div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* HEADER OPTIONS - Improved with icons */}
+                    <div className="border-t border-gray-200 dark:border-gray-700 pt-6 mt-6">
+                      <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                        <Store className="w-4 h-4 text-indigo-500" />
+                        Header Display
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {[
+                          { key: 'showLogo', label: 'Logo', desc: 'Business logo', icon: '🏪' },
+                          { key: 'showBusinessName', label: 'Business Name', desc: 'Store name', icon: '🏷️' },
+                          { key: 'showDateTime', label: 'Date & Time', desc: 'Current time', icon: '🕐' },
+                        ].map(option => (
+                          <label key={option.key} className={`relative flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all hover:shadow-md ${
+                            settings.secondScreen?.[option.key as keyof typeof settings.secondScreen]
+                              ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 shadow-sm'
+                              : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                          }`}>
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl ${
+                              settings.secondScreen?.[option.key as keyof typeof settings.secondScreen]
+                                ? 'bg-indigo-100 dark:bg-indigo-900/40'
+                                : 'bg-gray-100 dark:bg-gray-800'
+                            }`}>
+                              {option.icon}
+                            </div>
+                            <div className="flex-1">
+                              <p className={`font-medium text-sm ${
+                                settings.secondScreen?.[option.key as keyof typeof settings.secondScreen]
+                                  ? 'text-indigo-700 dark:text-indigo-300'
+                                  : 'text-gray-900 dark:text-white'
+                              }`}>{option.label}</p>
+                              <p className="text-xs text-gray-500">{option.desc}</p>
+                            </div>
+                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                              settings.secondScreen?.[option.key as keyof typeof settings.secondScreen]
+                                ? 'border-indigo-500 bg-indigo-500'
+                                : 'border-gray-300 dark:border-gray-600'
+                            }`}>
+                              {settings.secondScreen?.[option.key as keyof typeof settings.secondScreen] && (
+                                <Check className="w-4 h-4 text-white" />
+                              )}
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={settings.secondScreen?.[option.key as keyof typeof settings.secondScreen] as boolean ?? true}
+                              onChange={e => setSettings({
+                                ...settings,
+                                secondScreen: { ...settings.secondScreen, [option.key]: e.target.checked }
+                              })}
+                              className="sr-only"
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* CART ITEM OPTIONS - Improved with icons */}
+                    <div className="border-t border-gray-200 dark:border-gray-700 pt-6 mt-6">
+                      <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                        <ShoppingCart className="w-4 h-4 text-emerald-500" />
+                        Cart Items Display
+                      </h3>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {[
+                          { key: 'showItemImages', label: 'Product Images', desc: 'Item photos', icon: '🖼️' },
+                          { key: 'showItemDescriptions', label: 'Descriptions', desc: 'Product details', icon: '📝' },
+                          { key: 'showItemPrices', label: 'Unit Prices', desc: 'Price per item', icon: '💰' },
+                          { key: 'showItemQuantity', label: 'Quantity', desc: 'Number of items', icon: '🔢' },
+                          { key: 'showItemsAsAdded', label: 'Animate Items', desc: 'Highlight new items', icon: '✨' },
+                        ].map(option => (
+                          <label key={option.key} className={`relative flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all hover:shadow-md ${
+                            settings.secondScreen?.[option.key as keyof typeof settings.secondScreen]
+                              ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 shadow-sm'
+                              : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                          }`}>
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl ${
+                              settings.secondScreen?.[option.key as keyof typeof settings.secondScreen]
+                                ? 'bg-emerald-100 dark:bg-emerald-900/40'
+                                : 'bg-gray-100 dark:bg-gray-800'
+                            }`}>
+                              {option.icon}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className={`font-medium text-sm truncate ${
+                                settings.secondScreen?.[option.key as keyof typeof settings.secondScreen]
+                                  ? 'text-emerald-700 dark:text-emerald-300'
+                                  : 'text-gray-900 dark:text-white'
+                              }`}>{option.label}</p>
+                              <p className="text-xs text-gray-500 truncate">{option.desc}</p>
+                            </div>
+                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                              settings.secondScreen?.[option.key as keyof typeof settings.secondScreen]
+                                ? 'border-emerald-500 bg-emerald-500'
+                                : 'border-gray-300 dark:border-gray-600'
+                            }`}>
+                              {settings.secondScreen?.[option.key as keyof typeof settings.secondScreen] && (
+                                <Check className="w-4 h-4 text-white" />
+                              )}
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={settings.secondScreen?.[option.key as keyof typeof settings.secondScreen] as boolean ?? true}
+                              onChange={e => setSettings({
+                                ...settings,
+                                secondScreen: { ...settings.secondScreen, [option.key]: e.target.checked }
+                              })}
+                              className="sr-only"
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* TOTALS OPTIONS - Improved with icons */}
+                    <div className="border-t border-gray-200 dark:border-gray-700 pt-6 mt-6">
+                      <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                        <Receipt className="w-4 h-4 text-amber-500" />
+                        Totals Display
+                      </h3>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {[
+                          { key: 'showSubtotal', label: 'Subtotal', desc: 'Before tax', icon: '📋' },
+                          { key: 'showTaxBreakdown', label: 'Tax', desc: 'Tax amount', icon: '🧾' },
+                          { key: 'showDiscounts', label: 'Discounts', desc: 'Savings applied', icon: '🏷️' },
+                          { key: 'showTotalAmount', label: 'Total', desc: 'Final amount', icon: '💵' },
+                        ].map(option => (
+                          <label key={option.key} className={`relative flex flex-col items-center gap-2 p-4 rounded-xl border-2 cursor-pointer transition-all hover:shadow-md ${
+                            settings.secondScreen?.[option.key as keyof typeof settings.secondScreen]
+                              ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20 shadow-sm'
+                              : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                          }`}>
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${
+                              settings.secondScreen?.[option.key as keyof typeof settings.secondScreen]
+                                ? 'bg-amber-100 dark:bg-amber-900/40'
+                                : 'bg-gray-100 dark:bg-gray-800'
+                            }`}>
+                              {option.icon}
+                            </div>
+                            <div className="text-center">
+                              <p className={`font-medium text-sm ${
+                                settings.secondScreen?.[option.key as keyof typeof settings.secondScreen]
+                                  ? 'text-amber-700 dark:text-amber-300'
+                                  : 'text-gray-900 dark:text-white'
+                              }`}>{option.label}</p>
+                              <p className="text-xs text-gray-500">{option.desc}</p>
+                            </div>
+                            <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                              settings.secondScreen?.[option.key as keyof typeof settings.secondScreen]
+                                ? 'border-amber-500 bg-amber-500'
+                                : 'border-gray-300 dark:border-gray-600'
+                            }`}>
+                              {settings.secondScreen?.[option.key as keyof typeof settings.secondScreen] && (
+                                <Check className="w-3 h-3 text-white" />
+                              )}
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={settings.secondScreen?.[option.key as keyof typeof settings.secondScreen] as boolean ?? true}
+                              onChange={e => setSettings({
+                                ...settings,
+                                secondScreen: { ...settings.secondScreen, [option.key]: e.target.checked }
+                              })}
+                              className="sr-only"
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* PAYMENT & COMPLETION OPTIONS - Improved with icons */}
+                    <div className="border-t border-gray-200 dark:border-gray-700 pt-6 mt-6">
+                      <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                        <CreditCard className="w-4 h-4 text-purple-500" />
+                        Payment & Completion
+                      </h3>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {[
+                          { key: 'showPaymentMethod', label: 'Payment Method', desc: 'How they paid', icon: '💳' },
+                          { key: 'showPaymentAnimation', label: 'Success Animation', desc: 'Celebration effect', icon: '🎉' },
+                          { key: 'showThankYouMessage', label: 'Thank You', desc: 'Completion message', icon: '🙏' },
+                          { key: 'playSound', label: 'Sound Effects', desc: 'Audio feedback', icon: '🔔' },
+                        ].map(option => (
+                          <label key={option.key} className={`relative flex flex-col items-center gap-2 p-4 rounded-xl border-2 cursor-pointer transition-all hover:shadow-md ${
+                            settings.secondScreen?.[option.key as keyof typeof settings.secondScreen]
+                              ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20 shadow-sm'
+                              : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                          }`}>
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${
+                              settings.secondScreen?.[option.key as keyof typeof settings.secondScreen]
+                                ? 'bg-purple-100 dark:bg-purple-900/40'
+                                : 'bg-gray-100 dark:bg-gray-800'
+                            }`}>
+                              {option.icon}
+                            </div>
+                            <div className="text-center">
+                              <p className={`font-medium text-sm ${
+                                settings.secondScreen?.[option.key as keyof typeof settings.secondScreen]
+                                  ? 'text-purple-700 dark:text-purple-300'
+                                  : 'text-gray-900 dark:text-white'
+                              }`}>{option.label}</p>
+                              <p className="text-xs text-gray-500">{option.desc}</p>
+                            </div>
+                            <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                              settings.secondScreen?.[option.key as keyof typeof settings.secondScreen]
+                                ? 'border-purple-500 bg-purple-500'
+                                : 'border-gray-300 dark:border-gray-600'
+                            }`}>
+                              {settings.secondScreen?.[option.key as keyof typeof settings.secondScreen] && (
+                                <Check className="w-3 h-3 text-white" />
+                              )}
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={settings.secondScreen?.[option.key as keyof typeof settings.secondScreen] as boolean ?? false}
+                              onChange={e => setSettings({
+                                ...settings,
+                                secondScreen: { ...settings.secondScreen, [option.key]: e.target.checked }
+                              })}
+                              className="sr-only"
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* MESSAGES - Improved with visual cards */}
+                    <div className="border-t border-gray-200 dark:border-gray-700 pt-6 mt-6">
+                      <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-rose-500" />
+                        Custom Messages
+                      </h3>
+                      <div className="space-y-4">
+                        {/* Welcome Message */}
+                        <div className={`rounded-xl border-2 overflow-hidden transition-all ${
+                          settings.secondScreen?.showWelcomeMessage
+                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                            : 'border-gray-200 dark:border-gray-700'
+                        }`}>
+                          <div className="flex items-center justify-between p-4 bg-white/50 dark:bg-gray-800/50">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl ${
+                                settings.secondScreen?.showWelcomeMessage
+                                  ? 'bg-blue-100 dark:bg-blue-900/40'
+                                  : 'bg-gray-100 dark:bg-gray-800'
+                              }`}>
+                                👋
+                              </div>
+                              <div>
+                                <p className={`font-medium text-sm ${
+                                  settings.secondScreen?.showWelcomeMessage
+                                    ? 'text-blue-700 dark:text-blue-300'
+                                    : 'text-gray-900 dark:text-white'
+                                }`}>Welcome Message</p>
+                                <p className="text-xs text-gray-500">Shown when display is idle</p>
+                              </div>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={settings.secondScreen?.showWelcomeMessage ?? true}
+                                onChange={e => setSettings({
+                                  ...settings,
+                                  secondScreen: { ...settings.secondScreen, showWelcomeMessage: e.target.checked }
+                                })}
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
+                            </label>
+                          </div>
+                          {settings.secondScreen?.showWelcomeMessage && (
+                            <div className="px-4 pb-4">
+                              <input
+                                type="text"
+                                value={settings.secondScreen?.welcomeMessage ?? ''}
+                                onChange={e => setSettings({
+                                  ...settings,
+                                  secondScreen: { ...settings.secondScreen, welcomeMessage: e.target.value }
+                                })}
+                                className="w-full px-4 py-3 border border-blue-200 dark:border-blue-800 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                placeholder="Welcome! Your order will appear here."
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Thank You Message */}
+                        <div className={`rounded-xl border-2 overflow-hidden transition-all ${
+                          settings.secondScreen?.showThankYouMessage
+                            ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                            : 'border-gray-200 dark:border-gray-700'
+                        }`}>
+                          <div className="flex items-center justify-between p-4 bg-white/50 dark:bg-gray-800/50">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl ${
+                                settings.secondScreen?.showThankYouMessage
+                                  ? 'bg-green-100 dark:bg-green-900/40'
+                                  : 'bg-gray-100 dark:bg-gray-800'
+                              }`}>
+                                ✅
+                              </div>
+                              <div>
+                                <p className={`font-medium text-sm ${
+                                  settings.secondScreen?.showThankYouMessage
+                                    ? 'text-green-700 dark:text-green-300'
+                                    : 'text-gray-900 dark:text-white'
+                                }`}>Thank You Message</p>
+                                <p className="text-xs text-gray-500">Shown after successful payment</p>
+                              </div>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={settings.secondScreen?.showThankYouMessage ?? true}
+                                onChange={e => setSettings({
+                                  ...settings,
+                                  secondScreen: { ...settings.secondScreen, showThankYouMessage: e.target.checked }
+                                })}
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                            </label>
+                          </div>
+                          {settings.secondScreen?.showThankYouMessage && (
+                            <div className="px-4 pb-4">
+                              <input
+                                type="text"
+                                value={settings.secondScreen?.thankYouMessage ?? ''}
+                                onChange={e => setSettings({
+                                  ...settings,
+                                  secondScreen: { ...settings.secondScreen, thankYouMessage: e.target.value }
+                                })}
+                                className="w-full px-4 py-3 border border-green-200 dark:border-green-800 rounded-lg focus:ring-2 focus:ring-green-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                placeholder="Thank you for your purchase!"
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Promotional Banner */}
+                        <div className={`rounded-xl border-2 overflow-hidden transition-all ${
+                          settings.secondScreen?.showPromotionalBanner
+                            ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20'
+                            : 'border-gray-200 dark:border-gray-700'
+                        }`}>
+                          <div className="flex items-center justify-between p-4 bg-white/50 dark:bg-gray-800/50">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl ${
+                                settings.secondScreen?.showPromotionalBanner
+                                  ? 'bg-orange-100 dark:bg-orange-900/40'
+                                  : 'bg-gray-100 dark:bg-gray-800'
+                              }`}>
+                                📢
+                              </div>
+                              <div>
+                                <p className={`font-medium text-sm ${
+                                  settings.secondScreen?.showPromotionalBanner
+                                    ? 'text-orange-700 dark:text-orange-300'
+                                    : 'text-gray-900 dark:text-white'
+                                }`}>Promotional Banner</p>
+                                <p className="text-xs text-gray-500">Scrolling text at bottom of display</p>
+                              </div>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={settings.secondScreen?.showPromotionalBanner ?? false}
+                                onChange={e => setSettings({
+                                  ...settings,
+                                  secondScreen: { ...settings.secondScreen, showPromotionalBanner: e.target.checked }
+                                })}
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+                            </label>
+                          </div>
+                          {settings.secondScreen?.showPromotionalBanner && (
+                            <div className="px-4 pb-4">
+                              <input
+                                type="text"
+                                value={settings.secondScreen?.promotionalMessage ?? ''}
+                                onChange={e => setSettings({
+                                  ...settings,
+                                  secondScreen: { ...settings.secondScreen, promotionalMessage: e.target.value }
+                                })}
+                                className="w-full px-4 py-3 border border-orange-200 dark:border-orange-800 rounded-lg focus:ring-2 focus:ring-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                placeholder="Special offer: 10% off on all items today!"
+                              />
+                              {/* Preview of scrolling text */}
+                              {settings.secondScreen?.promotionalMessage && (
+                                <div className="mt-3 overflow-hidden bg-orange-100 dark:bg-orange-900/30 rounded-lg py-2">
+                                  <p className="text-sm text-orange-700 dark:text-orange-300 whitespace-nowrap animate-marquee">
+                                    {settings.secondScreen.promotionalMessage} &nbsp;&nbsp;&nbsp; • &nbsp;&nbsp;&nbsp; {settings.secondScreen.promotionalMessage}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </Card>
+
+              {/* Setup Instructions */}
+              {settings.secondScreen?.enabled && (
+                <Card className="p-4 sm:p-6 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-800">
+                  <h3 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                    <Monitor className="w-5 h-5 text-blue-600" />
+                    How to Set Up Your Second Screen
+                  </h3>
+                  <ol className="space-y-2 text-sm text-gray-600 dark:text-gray-300">
+                    <li className="flex items-start gap-2">
+                      <span className="flex-shrink-0 w-6 h-6 bg-blue-100 dark:bg-blue-900/50 rounded-full flex items-center justify-center text-blue-700 dark:text-blue-300 font-medium text-xs">1</span>
+                      <span>Connect a second monitor or TV to your computer</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="flex-shrink-0 w-6 h-6 bg-blue-100 dark:bg-blue-900/50 rounded-full flex items-center justify-center text-blue-700 dark:text-blue-300 font-medium text-xs">2</span>
+                      <span>Extend your display (don't mirror) in system settings</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="flex-shrink-0 w-6 h-6 bg-blue-100 dark:bg-blue-900/50 rounded-full flex items-center justify-center text-blue-700 dark:text-blue-300 font-medium text-xs">3</span>
+                      <span>Click "Launch Display" and drag the window to your customer-facing screen</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="flex-shrink-0 w-6 h-6 bg-blue-100 dark:bg-blue-900/50 rounded-full flex items-center justify-center text-blue-700 dark:text-blue-300 font-medium text-xs">4</span>
+                      <span>Press F11 to make it fullscreen, then start selling!</span>
+                    </li>
+                  </ol>
+                </Card>
+              )}
+            </div>
           )}
 
           {/* Tax Tab */}

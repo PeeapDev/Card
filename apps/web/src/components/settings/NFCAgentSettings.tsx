@@ -396,18 +396,61 @@ export function NFCAgentSettings({ className = '', compact = false }: NFCAgentSe
 
 // Install Extension Modal Component
 function InstallExtensionModal({ onClose }: { onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+
+  const copyExtensionsUrl = () => {
+    navigator.clipboard.writeText('chrome://extensions');
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const downloadExtension = async () => {
+    setIsDownloading(true);
+    try {
+      // Fetch the file to ensure it exists and get the blob
+      const response = await fetch('/downloads/peeap-nfc-extension.zip');
+
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+      }
+
+      const blob = await response.blob();
+
+      if (blob.size === 0) {
+        throw new Error('Downloaded file is empty');
+      }
+
+      // Create blob URL and trigger download
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'peeap-nfc-extension.zip';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Download error:', error);
+      alert(`Failed to download extension: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again or contact support.`);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-white dark:bg-gray-800 px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
-              <Chrome className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+              <Chrome className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900 dark:text-white">Install NFC Extension</h3>
-              <p className="text-sm text-gray-500">Quick setup - no downloads needed</p>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Add NFC Extension to Chrome</h3>
+              <p className="text-sm text-gray-500">3 simple steps to enable NFC card reading</p>
             </div>
           </div>
           <button
@@ -419,112 +462,153 @@ function InstallExtensionModal({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6">
-          {/* Step 1 */}
+        <div className="p-6 space-y-8">
+
+          {/* Step 1: Download */}
           <div className="flex gap-4">
-            <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold flex-shrink-0">
+            <div className="w-10 h-10 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold flex-shrink-0 text-lg">
               1
             </div>
             <div className="flex-1">
-              <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
-                Load Extension in Chrome
+              <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                Download the Extension
               </h4>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                Open <code className="bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded text-sm">chrome://extensions</code> in your browser
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Click the button below to download the PeeAP NFC Reader extension
               </p>
-              <a
-                href="chrome://extensions"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium"
+              <button
+                onClick={downloadExtension}
+                disabled={isDownloading}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl font-medium transition-colors"
               >
-                <ExternalLink className="w-4 h-4" />
-                Open Extensions Page
-              </a>
+                {isDownloading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Downloading...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-5 h-5" />
+                    Download Extension (.zip)
+                  </>
+                )}
+              </button>
+              <p className="text-xs text-gray-500 mt-2">
+                After downloading, extract the ZIP file to a folder on your computer
+              </p>
             </div>
           </div>
 
-          {/* Step 2 */}
+          {/* Step 2: Open Extensions */}
           <div className="flex gap-4">
-            <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold flex-shrink-0">
+            <div className="w-10 h-10 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold flex-shrink-0 text-lg">
               2
             </div>
             <div className="flex-1">
-              <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
-                Enable Developer Mode
+              <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                Open Chrome Extensions Page
               </h4>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Toggle "Developer mode" switch in the top-right corner of the extensions page
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Copy and paste this URL into your Chrome address bar:
+              </p>
+              <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 rounded-lg p-3">
+                <code className="flex-1 text-sm font-mono text-gray-800 dark:text-gray-200">chrome://extensions</code>
+                <button
+                  onClick={copyExtensionsUrl}
+                  className="px-3 py-1.5 bg-white dark:bg-gray-600 hover:bg-gray-50 dark:hover:bg-gray-500 rounded-lg text-sm font-medium flex items-center gap-1 transition-colors"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-4 h-4 text-green-500" />
+                      <span className="text-green-600">Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      <span>Copy</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Then enable <strong>"Developer mode"</strong> toggle in the top-right corner
               </p>
             </div>
           </div>
 
-          {/* Step 3 */}
+          {/* Step 3: Load Extension */}
           <div className="flex gap-4">
-            <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold flex-shrink-0">
+            <div className="w-10 h-10 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold flex-shrink-0 text-lg">
               3
             </div>
             <div className="flex-1">
-              <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
-                Load Unpacked Extension
+              <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                Load the Extension
               </h4>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                Click "Load unpacked" and select the <code className="bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded text-sm">nfc-extension</code> folder
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Click <strong>"Load unpacked"</strong> button and select the extracted extension folder
               </p>
-              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 text-sm text-gray-600 dark:text-gray-400">
-                <span className="font-medium">Path:</span>
-                <br />
-                <code className="text-xs">/apps/nfc-extension</code>
-              </div>
-            </div>
-          </div>
 
-          {/* Step 4 */}
-          <div className="flex gap-4">
-            <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold flex-shrink-0">
-              4
-            </div>
-            <div className="flex-1">
-              <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
-                Connect Your NFC Reader
-              </h4>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Click the extension icon in Chrome toolbar and click "Connect NFC Reader"
-              </p>
+              {/* Visual guide */}
+              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-6 h-6 rounded bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-xs font-bold text-blue-600">1</div>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Click "Load unpacked" button</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-6 h-6 rounded bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-xs font-bold text-blue-600">2</div>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Navigate to the extracted folder</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-6 h-6 rounded bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-xs font-bold text-blue-600">3</div>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Click "Select Folder"</span>
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Success Notice */}
           <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4">
             <div className="flex items-start gap-3">
-              <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+              <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400 flex-shrink-0" />
               <div>
-                <p className="text-sm text-green-800 dark:text-green-300 font-medium">
-                  That's it!
+                <p className="font-medium text-green-800 dark:text-green-300">
+                  You're all set!
                 </p>
-                <p className="text-sm text-green-600 dark:text-green-400">
-                  Once installed, the extension will automatically detect when you're on PeeAP and enable NFC reading.
+                <p className="text-sm text-green-600 dark:text-green-400 mt-1">
+                  After installing, click the extension icon in Chrome toolbar and connect your NFC reader.
+                  This page will automatically detect when the extension is ready.
                 </p>
               </div>
             </div>
           </div>
 
           {/* Supported Readers */}
-          <div className="text-center text-sm text-gray-500">
-            <p className="mb-2">Supported readers:</p>
+          <div className="text-center">
+            <p className="text-sm text-gray-500 mb-3">Supported NFC Readers:</p>
             <div className="flex flex-wrap justify-center gap-2">
-              <span className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-xs">ACR122U</span>
-              <span className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-xs">ACR1252U</span>
-              <span className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-xs">PC/SC Compatible</span>
+              <span className="px-4 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-full text-sm font-medium">ACR122U</span>
+              <span className="px-4 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-full text-sm font-medium">ACR1252U</span>
+              <span className="px-4 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-full text-sm font-medium">PC/SC Compatible</span>
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-white dark:bg-gray-800 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="sticky bottom-0 bg-white dark:bg-gray-800 px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex gap-3">
           <button
             onClick={onClose}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors"
+            className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl font-medium transition-colors"
           >
-            Done
+            Close
+          </button>
+          <button
+            onClick={() => {
+              window.location.reload();
+            }}
+            className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors"
+          >
+            Check Connection
           </button>
         </div>
       </div>
