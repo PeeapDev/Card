@@ -8,7 +8,7 @@
 import { supabase } from '@/lib/supabase';
 import type { Wallet, Transaction, PaginatedResponse } from '@/types';
 
-export type WalletType = 'primary' | 'driver' | 'pot' | 'merchant';
+export type WalletType = 'primary' | 'driver' | 'pot' | 'merchant' | 'pos';
 
 export interface CreateWalletRequest {
   currency?: string;
@@ -148,8 +148,22 @@ export const walletService = {
   async createWallet(userId: string, data: CreateWalletRequest): Promise<ExtendedWallet> {
     // Generate external_id (required by database)
     const walletType = data.walletType || 'primary';
-    const prefix = walletType === 'driver' ? 'DRV' : walletType === 'merchant' ? 'MRC' : 'WAL';
+    const prefixMap: Record<WalletType, string> = {
+      primary: 'WAL',
+      driver: 'DRV',
+      merchant: 'MRC',
+      pos: 'POS',
+      pot: 'POT',
+    };
+    const prefix = prefixMap[walletType] || 'WAL';
     const externalId = `${prefix}-${data.currency || 'SLE'}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+
+    // Default names for special wallets
+    const defaultNames: Partial<Record<WalletType, string>> = {
+      driver: 'Driver Wallet',
+      pos: 'POS Wallet',
+      merchant: 'Merchant Wallet',
+    };
 
     const { data: wallet, error } = await supabase
       .from('wallets')
@@ -162,7 +176,7 @@ export const walletService = {
         daily_limit: data.dailyLimit || 5000,
         monthly_limit: data.monthlyLimit || 50000,
         wallet_type: walletType,
-        name: data.name || (walletType === 'driver' ? 'Driver Wallet' : null),
+        name: data.name || defaultNames[walletType] || null,
       })
       .select()
       .single();

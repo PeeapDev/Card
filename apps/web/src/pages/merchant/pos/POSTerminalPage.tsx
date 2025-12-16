@@ -69,8 +69,11 @@ import posService, {
 } from '@/services/pos.service';
 import { useOfflineSync } from '@/hooks/useOfflineSync';
 import { PaymentQRCode } from '@/components/payment/PaymentQRCode';
+import QRCode from 'react-qr-code';
 import { walletService } from '@/services/wallet.service';
 import { monimeService, MonimeTransaction } from '@/services/monime.service';
+import { notificationService } from '@/services/notification.service';
+import { POSWallet } from '@/components/pos/POSWallet';
 
 // Format currency - using Le (Leone) symbol
 const formatCurrency = (amount: number) => {
@@ -145,6 +148,8 @@ export function POSTerminalPage() {
   // Receipt Sharing
   const [receiptPhone, setReceiptPhone] = useState('');
   const [showShareReceipt, setShowShareReceipt] = useState(false);
+  const [sendingReceipt, setSendingReceipt] = useState(false);
+  const [receiptSent, setReceiptSent] = useState(false);
 
   // Cash Session / Daily Balance
   const [cashSession, setCashSession] = useState<POSCashSession | null>(null);
@@ -162,7 +167,13 @@ export function POSTerminalPage() {
   const [merchantWalletId, setMerchantWalletId] = useState<string | null>(null);
   const [qrPaymentReference, setQrPaymentReference] = useState<string | null>(null);
   const [qrPaymentStatus, setQrPaymentStatus] = useState<'pending' | 'paid' | null>(null);
+  const [qrExpectedAmount, setQrExpectedAmount] = useState<number | null>(null);
+  const [qrGeneratedAt, setQrGeneratedAt] = useState<string | null>(null);
+  const [checkoutSessionId, setCheckoutSessionId] = useState<string | null>(null);
+  const [checkoutSessionUrl, setCheckoutSessionUrl] = useState<string | null>(null);
+  const [creatingSession, setCreatingSession] = useState(false);
   const qrPollingRef = useRef<NodeJS.Timeout | null>(null);
+  const qrSubscriptionRef = useRef<any>(null);
 
   // Mobile Money Payment
   const [mobileMoneyPhone, setMobileMoneyPhone] = useState('');
@@ -552,6 +563,185 @@ export function POSTerminalPage() {
     posService.shareReceiptViaWhatsApp(receiptPhone, receiptText);
   };
 
+  // Send receipt notification to customer
+  const handleSendReceipt = async () => {
+    if (!lastSale || !receiptPhone) return;
+
+    setSendingReceipt(true);
+    try {
+      const items = (lastSale.items || []).map((item: any) => ({
+        name: item.product_name,
+        quantity: item.quantity,
+        price: item.unit_price,
+      }));
+
+      const result = await notificationService.sendReceiptNotification({
+        recipientPhone: receiptPhone,
+        businessName: business?.name || 'My Store',
+        businessPhone: business?.phone,
+        saleNumber: lastSale.sale_number,
+        totalAmount: lastSale.total_amount,
+        currency: 'NLe',
+        items,
+        paymentMethod: lastSale.payment_method || 'cash',
+        saleId: lastSale.id,
+        cashierName: lastSale.cashier_name,
+      });
+
+      if (result.success) {
+        setReceiptSent(true);
+        setTimeout(() => setReceiptSent(false), 3000);
+      } else {
+        alert(result.error || 'Failed to send receipt');
+      }
+    } catch (error) {
+      console.error('Send receipt error:', error);
+      alert('Failed to send receipt. Please try again.');
+    } finally {
+      setSendingReceipt(false);
+    }
+  };
+
+  // Print receipt
+  const handlePrintReceipt = () => {
+    if (!lastSale) return;
+
+    const businessName = business?.name || 'My Store';
+    const businessPhone = business?.phone || '';
+    const businessAddress = business?.address || '';
+
+    // Create a new window for printing
+    const printWindow = window.open('', '_blank', 'width=300,height=600');
+    if (!printWindow) {
+      alert('Please allow popups to print receipts');
+      return;
+    }
+
+    const receiptHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Receipt #${lastSale.sale_number}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            width: 280px;
+            margin: 0 auto;
+            padding: 10px;
+          }
+          .header { text-align: center; margin-bottom: 10px; border-bottom: 1px dashed #000; padding-bottom: 10px; }
+          .header h1 { font-size: 16px; font-weight: bold; margin-bottom: 5px; }
+          .header p { font-size: 11px; }
+          .info { margin: 10px 0; font-size: 11px; }
+          .info-row { display: flex; justify-content: space-between; }
+          .items { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 10px 0; margin: 10px 0; }
+          .item { margin-bottom: 5px; }
+          .item-name { font-weight: bold; }
+          .item-details { display: flex; justify-content: space-between; font-size: 11px; }
+          .totals { margin: 10px 0; }
+          .total-row { display: flex; justify-content: space-between; margin: 3px 0; }
+          .total-row.grand { font-weight: bold; font-size: 14px; border-top: 1px solid #000; padding-top: 5px; margin-top: 5px; }
+          .footer { text-align: center; margin-top: 15px; padding-top: 10px; border-top: 1px dashed #000; font-size: 11px; }
+          @media print {
+            body { width: 100%; }
+            @page { margin: 0; size: 80mm auto; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>${businessName}</h1>
+          ${businessAddress ? `<p>${businessAddress}</p>` : ''}
+          ${businessPhone ? `<p>Tel: ${businessPhone}</p>` : ''}
+        </div>
+
+        <div class="info">
+          <div class="info-row">
+            <span>Receipt #:</span>
+            <span>${lastSale.sale_number}</span>
+          </div>
+          <div class="info-row">
+            <span>Date:</span>
+            <span>${new Date(lastSale.created_at || Date.now()).toLocaleString()}</span>
+          </div>
+          <div class="info-row">
+            <span>Cashier:</span>
+            <span>${lastSale.cashier_name || 'Staff'}</span>
+          </div>
+          <div class="info-row">
+            <span>Payment:</span>
+            <span>${lastSale.payment_method?.replace('_', ' ').toUpperCase() || 'CASH'}</span>
+          </div>
+        </div>
+
+        <div class="items">
+          ${(lastSale.items || []).map((item: any) => `
+            <div class="item">
+              <div class="item-name">${item.product_name}</div>
+              <div class="item-details">
+                <span>${item.quantity} x NLe ${item.unit_price.toLocaleString()}</span>
+                <span>NLe ${item.total_price.toLocaleString()}</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="totals">
+          <div class="total-row">
+            <span>Subtotal:</span>
+            <span>NLe ${(lastSale.subtotal || 0).toLocaleString()}</span>
+          </div>
+          ${lastSale.discount_amount > 0 ? `
+            <div class="total-row">
+              <span>Discount:</span>
+              <span>-NLe ${lastSale.discount_amount.toLocaleString()}</span>
+            </div>
+          ` : ''}
+          ${lastSale.tax_amount > 0 ? `
+            <div class="total-row">
+              <span>Tax:</span>
+              <span>NLe ${lastSale.tax_amount.toLocaleString()}</span>
+            </div>
+          ` : ''}
+          <div class="total-row grand">
+            <span>TOTAL:</span>
+            <span>NLe ${(lastSale.total_amount || 0).toLocaleString()}</span>
+          </div>
+          ${lastSale.payment_details?.received ? `
+            <div class="total-row">
+              <span>Cash Received:</span>
+              <span>NLe ${lastSale.payment_details.received.toLocaleString()}</span>
+            </div>
+            <div class="total-row">
+              <span>Change:</span>
+              <span>NLe ${(lastSale.payment_details.change || 0).toLocaleString()}</span>
+            </div>
+          ` : ''}
+        </div>
+
+        <div class="footer">
+          <p>Thank you for your purchase!</p>
+          <p>Please come again</p>
+          ${lastSale.isOffline ? '<p style="margin-top:5px;color:#666;">[Offline Sale]</p>' : ''}
+        </div>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(receiptHTML);
+    printWindow.document.close();
+
+    // Wait for content to load then print
+    printWindow.onload = () => {
+      printWindow.focus();
+      printWindow.print();
+      // Close after printing (or if cancelled)
+      setTimeout(() => printWindow.close(), 1000);
+    };
+  };
+
   // Filter products
   useEffect(() => {
     let filtered = products;
@@ -686,7 +876,8 @@ export function POSTerminalPage() {
         }
       }
 
-      setLastSale(sale);
+      // Store sale with items for receipt printing
+      setLastSale({ ...sale, items: saleItems });
       setSaleComplete(true);
       setCart([]);
       offlineSync.clearCart();
@@ -711,40 +902,104 @@ export function POSTerminalPage() {
     }
   };
 
-  // QR Payment handlers
-  const handleQRGenerated = useCallback((qr: any) => {
-    setQrPaymentReference(qr.reference);
-    setQrPaymentStatus('pending');
+  // Create checkout session for QR payment
+  const createCheckoutSession = useCallback(async () => {
+    if (!merchantId || !merchantWalletId || totalAmount <= 0) return;
 
-    // Start polling for payment status by checking transactions
+    setCreatingSession(true);
+    setQrPaymentStatus(null);
+    setCheckoutSessionId(null);
+    setCheckoutSessionUrl(null);
+
+    // Clean up any existing polling
     if (qrPollingRef.current) {
       clearInterval(qrPollingRef.current);
+      qrPollingRef.current = null;
     }
 
-    qrPollingRef.current = setInterval(async () => {
-      try {
-        // Check if a transaction with this reference exists
-        const { data: transactions } = await supabase
-          .from('transactions')
-          .select('id, status, amount')
-          .eq('reference', qr.reference)
-          .eq('status', 'COMPLETED')
-          .limit(1);
+    try {
+      const API_BASE = import.meta.env.VITE_API_URL || 'https://peeap.vercel.app/api';
+      const posReference = `POS-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
-        if (transactions && transactions.length > 0) {
-          setQrPaymentStatus('paid');
-          if (qrPollingRef.current) {
-            clearInterval(qrPollingRef.current);
-            qrPollingRef.current = null;
+      const response = await fetch(`${API_BASE}/router/checkout/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: totalAmount,
+          currency: 'SLE',
+          description: `POS Sale - ${cart.length} item(s)`,
+          recipientId: merchantId,
+          recipientWalletId: merchantWalletId,
+          recipientName: business?.name || 'POS Terminal',
+          reference: posReference,
+          metadata: {
+            source: 'pos',
+            posReference,
+            itemCount: cart.length,
+          },
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.sessionId) {
+        const sessionUrl = `${window.location.origin}/checkout/pay/${data.sessionId}`;
+        setCheckoutSessionId(data.sessionId);
+        setCheckoutSessionUrl(sessionUrl);
+        setQrPaymentReference(posReference);
+        setQrPaymentStatus('pending');
+        setQrGeneratedAt(new Date().toISOString());
+
+        console.log('[POS] Checkout session created:', data.sessionId);
+
+        // Start polling for session status
+        qrPollingRef.current = setInterval(async () => {
+          try {
+            const statusResponse = await fetch(`${API_BASE}/router/checkout/sessions/${data.sessionId}`);
+            const sessionData = await statusResponse.json();
+
+            console.log('[POS] Session status:', sessionData.status);
+
+            if (sessionData.status === 'COMPLETE' || sessionData.status === 'PAID') {
+              console.log('[POS] Payment confirmed!');
+              setQrPaymentStatus('paid');
+
+              if (qrPollingRef.current) {
+                clearInterval(qrPollingRef.current);
+                qrPollingRef.current = null;
+              }
+
+              // Auto-complete the sale
+              setTimeout(() => processSale(), 500);
+            } else if (sessionData.status === 'EXPIRED' || sessionData.status === 'CANCELLED') {
+              console.log('[POS] Session expired/cancelled');
+              if (qrPollingRef.current) {
+                clearInterval(qrPollingRef.current);
+                qrPollingRef.current = null;
+              }
+              setQrPaymentStatus(null);
+            }
+          } catch (error) {
+            console.error('Error checking session status:', error);
           }
-          // Auto-complete the sale when payment is received
-          processSale();
-        }
-      } catch (error) {
-        console.error('Error checking QR payment status:', error);
+        }, 2000); // Poll every 2 seconds
+      } else {
+        console.error('[POS] Failed to create checkout session:', data);
+        alert('Failed to create payment session. Please try again.');
       }
-    }, 3000); // Poll every 3 seconds
-  }, [processSale]);
+    } catch (error) {
+      console.error('[POS] Error creating checkout session:', error);
+      alert('Failed to create payment session. Please try again.');
+    } finally {
+      setCreatingSession(false);
+    }
+  }, [merchantId, merchantWalletId, totalAmount, cart.length, business?.name, processSale]);
+
+  // Legacy QR handler (for fallback)
+  const handleQRGenerated = useCallback((qr: any) => {
+    // This is now just a fallback - the main flow uses createCheckoutSession
+    setQrPaymentReference(qr.reference);
+  }, []);
 
   // Cleanup polling on unmount or payment method change
   useEffect(() => {
@@ -755,14 +1010,24 @@ export function POSTerminalPage() {
     };
   }, []);
 
+  // Create checkout session when QR payment method is selected
   useEffect(() => {
-    if (paymentMethod !== 'qr' && qrPollingRef.current) {
-      clearInterval(qrPollingRef.current);
-      qrPollingRef.current = null;
+    if (paymentMethod === 'qr' && totalAmount > 0 && !checkoutSessionId && !creatingSession) {
+      createCheckoutSession();
+    } else if (paymentMethod !== 'qr') {
+      // Cleanup when switching away from QR
+      if (qrPollingRef.current) {
+        clearInterval(qrPollingRef.current);
+        qrPollingRef.current = null;
+      }
       setQrPaymentStatus(null);
       setQrPaymentReference(null);
+      setQrExpectedAmount(null);
+      setQrGeneratedAt(null);
+      setCheckoutSessionId(null);
+      setCheckoutSessionUrl(null);
     }
-  }, [paymentMethod]);
+  }, [paymentMethod, totalAmount, checkoutSessionId, creatingSession, createCheckoutSession]);
 
   // Mobile Money Payment handlers - Redirect to Monime for payment
   const initiateMobileMoneyPayment = async () => {
@@ -1303,6 +1568,11 @@ export function POSTerminalPage() {
                 </button>
               )}
             </div>
+          </div>
+
+          {/* POS Wallet Section */}
+          <div className="p-3 border-b border-gray-100 dark:border-gray-700">
+            <POSWallet compact />
           </div>
 
           {/* Cart Items */}
@@ -1889,9 +2159,9 @@ export function POSTerminalPage() {
                 <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 mb-4">
                   <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1">
                     <Send className="w-4 h-4" />
-                    Share Receipt
+                    Send Receipt to Customer
                   </p>
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center gap-2 mb-3">
                     <input
                       type="tel"
                       value={receiptPhone}
@@ -1900,21 +2170,49 @@ export function POSTerminalPage() {
                       className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                     />
                   </div>
+                  {/* Primary Send Button */}
+                  <button
+                    onClick={handleSendReceipt}
+                    disabled={!receiptPhone || sendingReceipt || receiptSent}
+                    className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors mb-2 ${
+                      receiptSent
+                        ? 'bg-green-500 text-white'
+                        : 'bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white'
+                    }`}
+                  >
+                    {sendingReceipt ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Sending...
+                      </>
+                    ) : receiptSent ? (
+                      <>
+                        <Check className="w-4 h-4" />
+                        Receipt Sent!
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4" />
+                        Send Receipt
+                      </>
+                    )}
+                  </button>
+                  {/* Alternative share options */}
                   <div className="flex gap-2">
                     <button
                       onClick={handleShareSMS}
                       disabled={!receiptPhone}
-                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white rounded-lg text-sm font-medium transition-colors"
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 disabled:opacity-50 text-gray-700 dark:text-gray-200 rounded-lg text-xs font-medium transition-colors"
                     >
-                      <MessageSquare className="w-4 h-4" />
-                      SMS
+                      <MessageSquare className="w-3 h-3" />
+                      SMS App
                     </button>
                     <button
                       onClick={handleShareWhatsApp}
                       disabled={!receiptPhone}
-                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white rounded-lg text-sm font-medium transition-colors"
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 disabled:opacity-50 text-gray-700 dark:text-gray-200 rounded-lg text-xs font-medium transition-colors"
                     >
-                      <MessageSquare className="w-4 h-4" />
+                      <MessageSquare className="w-3 h-3" />
                       WhatsApp
                     </button>
                   </div>
@@ -1924,10 +2222,7 @@ export function POSTerminalPage() {
                   <Button
                     variant="outline"
                     className="flex-1"
-                    onClick={() => {
-                      // TODO: Print receipt
-                      alert('Print functionality coming soon');
-                    }}
+                    onClick={handlePrintReceipt}
                   >
                     <Receipt className="w-4 h-4 mr-2" />
                     Print
@@ -1939,6 +2234,7 @@ export function POSTerminalPage() {
                       setSaleComplete(false);
                       setLastSale(null);
                       setReceiptPhone('');
+                      setReceiptSent(false);
                     }}
                   >
                     New Sale
@@ -2216,30 +2512,62 @@ export function POSTerminalPage() {
                             <div className="py-8">
                               <Check className="w-16 h-16 mx-auto text-green-500 mb-4" />
                               <p className="text-lg font-semibold text-green-600">Payment Received!</p>
+                              <p className="text-sm text-gray-500 mt-2">Processing sale...</p>
                             </div>
-                          ) : (
+                          ) : creatingSession ? (
+                            <div className="py-8">
+                              <Loader2 className="w-12 h-12 mx-auto text-primary-500 animate-spin mb-4" />
+                              <p className="text-sm text-gray-600">Creating payment session...</p>
+                            </div>
+                          ) : checkoutSessionUrl ? (
                             <>
-                              <PaymentQRCode
-                                userId={merchantId}
-                                walletId={merchantWalletId}
-                                amount={totalAmount}
-                                type="dynamic"
-                                merchantName={business?.name || 'POS Terminal'}
-                                description={`POS Sale - ${cart.length} item(s)`}
-                                onGenerated={handleQRGenerated}
-                                size={180}
-                                currency="SLE"
-                              />
-                              {qrPaymentStatus === 'pending' && (
-                                <div className="mt-4 flex items-center justify-center gap-2 text-sm text-blue-600">
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                  <span>Waiting for payment...</span>
-                                </div>
-                              )}
+                              {/* Amount display */}
+                              <div className="mb-4">
+                                <p className="text-sm text-gray-500">Amount to pay</p>
+                                <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                                  {formatCurrency(totalAmount)}
+                                </p>
+                              </div>
+
+                              {/* QR Code */}
+                              <div className="p-4 bg-white rounded-xl shadow-lg inline-block">
+                                <QRCode
+                                  value={checkoutSessionUrl}
+                                  size={180}
+                                  level="M"
+                                />
+                              </div>
+
+                              {/* Waiting indicator */}
+                              <div className="mt-4 flex items-center justify-center gap-2 text-sm text-blue-600">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <span>Waiting for payment...</span>
+                              </div>
+
                               <p className="mt-2 text-xs text-gray-500">
-                                Customer scans with Peeap app to pay
+                                Customer scans to open checkout page
                               </p>
+
+                              {/* Refresh button */}
+                              <button
+                                onClick={createCheckoutSession}
+                                className="mt-3 text-xs text-primary-600 hover:text-primary-700 flex items-center gap-1 mx-auto"
+                              >
+                                <RefreshCw className="w-3 h-3" />
+                                Generate new QR
+                              </button>
                             </>
+                          ) : (
+                            <div className="py-8">
+                              <QrCode className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                              <p className="text-sm text-gray-500 mb-3">Ready to generate payment QR</p>
+                              <button
+                                onClick={createCheckoutSession}
+                                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
+                              >
+                                Generate QR Code
+                              </button>
+                            </div>
                           )}
                         </div>
                       ) : (
