@@ -14,6 +14,8 @@ import marketplaceService, {
   MarketplaceStore,
   MarketplaceCartItem,
 } from '@/services/marketplace.service';
+import { walletService, ExtendedWallet } from '@/services/wallet.service';
+import { monimeService } from '@/services/monime.service';
 import {
   ArrowLeft,
   Store,
@@ -31,6 +33,8 @@ import {
   User,
   MessageSquare,
   BadgeCheck,
+  Plus,
+  ExternalLink,
 } from 'lucide-react';
 
 // Format currency
@@ -53,6 +57,11 @@ export function MarketplaceCheckoutPage() {
   const [cart, setCart] = useState<MarketplaceCartItem[]>([]);
   const [cartId, setCartId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [wallet, setWallet] = useState<ExtendedWallet | null>(null);
+  const [walletLoading, setWalletLoading] = useState(true);
+  const [showDepositModal, setShowDepositModal] = useState(false);
+  const [depositAmount, setDepositAmount] = useState(0);
+  const [depositLoading, setDepositLoading] = useState(false);
 
   // Form state
   const [fulfillmentType, setFulfillmentType] = useState<FulfillmentType>('delivery');
@@ -69,12 +78,37 @@ export function MarketplaceCheckoutPage() {
     }
   }, [isAuthenticated, navigate]);
 
+  // Check for deposit callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('deposited') === 'true') {
+      // Refresh wallet after successful deposit
+      loadWallet();
+      // Remove query params
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
   // Load data
   useEffect(() => {
     if (storeId && user?.id) {
       loadData();
+      loadWallet();
     }
   }, [storeId, user?.id]);
+
+  const loadWallet = async () => {
+    if (!user?.id) return;
+    try {
+      setWalletLoading(true);
+      const walletData = await walletService.getWalletByUserId(user.id);
+      setWallet(walletData as ExtendedWallet | null);
+    } catch (error) {
+      console.error('Error loading wallet:', error);
+    } finally {
+      setWalletLoading(false);
+    }
+  };
 
   // Set default values from user
   useEffect(() => {
@@ -128,12 +162,55 @@ export function MarketplaceCheckoutPage() {
     : 0;
   const total = subtotal + deliveryFee;
 
+  // Wallet balance helpers
+  const walletBalance = wallet?.balance || 0;
+  const insufficientFunds = paymentMethod === 'wallet' && walletBalance < total;
+  const amountNeeded = total - walletBalance;
+
   // Validation
   const canCheckout = () => {
     if (!customerName.trim() || !customerPhone.trim()) return false;
     if (fulfillmentType === 'delivery' && !deliveryAddress.trim()) return false;
     if (store?.minimum_order && subtotal < store.minimum_order) return false;
+    if (paymentMethod === 'wallet' && insufficientFunds) return false;
     return true;
+  };
+
+  // Handle deposit via Monime
+  const handleDeposit = async () => {
+    if (!wallet?.id) {
+      setError('Wallet not found. Please refresh the page.');
+      return;
+    }
+
+    setDepositLoading(true);
+    try {
+      const response = await monimeService.initiateDeposit({
+        walletId: wallet.id,
+        amount: depositAmount,
+        successUrl: `${window.location.origin}/marketplace/checkout/${storeId}?deposited=true`,
+        cancelUrl: `${window.location.origin}/marketplace/checkout/${storeId}?cancelled=true`,
+        description: `Deposit for marketplace order at ${store?.store_name || 'store'}`,
+      });
+
+      if (response.paymentUrl) {
+        // Redirect to Monime checkout
+        window.location.href = response.paymentUrl;
+      } else {
+        setError('Failed to initiate deposit. Please try again.');
+      }
+    } catch (error: any) {
+      console.error('Deposit error:', error);
+      setError(error.message || 'Failed to initiate deposit.');
+    } finally {
+      setDepositLoading(false);
+    }
+  };
+
+  // Open deposit modal with suggested amount
+  const openDepositModal = () => {
+    setDepositAmount(Math.ceil(amountNeeded / 1000) * 1000); // Round up to nearest 1000
+    setShowDepositModal(true);
   };
 
   // Place order
@@ -423,12 +500,42 @@ export function MarketplaceCheckoutPage() {
                 <p className={`font-medium ${paymentMethod === 'wallet' ? 'text-primary-600' : 'text-gray-900 dark:text-white'}`}>
                   Peeap Wallet
                 </p>
-                <p className="text-sm text-gray-500">Pay from your wallet balance</p>
+                <p className="text-sm text-gray-500">
+                  {walletLoading ? (
+                    'Loading balance...'
+                  ) : (
+                    <>Balance: <span className={walletBalance >= total ? 'text-green-600' : 'text-red-500'}>{formatCurrency(walletBalance)}</span></>
+                  )}
+                </p>
               </div>
               {paymentMethod === 'wallet' && (
                 <Check className="w-5 h-5 text-primary-600" />
               )}
             </button>
+
+            {/* Insufficient balance warning & deposit option */}
+            {paymentMethod === 'wallet' && insufficientFunds && (
+              <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm text-yellow-700 dark:text-yellow-400 font-medium">
+                      Insufficient wallet balance
+                    </p>
+                    <p className="text-xs text-yellow-600 dark:text-yellow-500 mt-1">
+                      You need {formatCurrency(amountNeeded)} more to complete this order.
+                    </p>
+                    <button
+                      onClick={openDepositModal}
+                      className="mt-3 flex items-center gap-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm font-medium transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Deposit via Mobile Money
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <button
               onClick={() => setPaymentMethod('mobile_money')}
@@ -528,6 +635,96 @@ export function MarketplaceCheckoutPage() {
           </Button>
         </div>
       </div>
+
+      {/* Deposit Modal */}
+      {showDepositModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => !depositLoading && setShowDepositModal(false)}
+          />
+          <div className="relative bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              Deposit to Wallet
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              Add funds via Mobile Money to complete your order
+            </p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Amount to Deposit
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">Le</span>
+                  <input
+                    type="number"
+                    value={depositAmount}
+                    onChange={(e) => setDepositAmount(Math.max(0, parseInt(e.target.value) || 0))}
+                    min={amountNeeded}
+                    step={1000}
+                    className="w-full pl-10 pr-4 py-3 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 focus:ring-2 focus:ring-primary-500 text-lg font-semibold"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Minimum required: {formatCurrency(amountNeeded)}
+                </p>
+              </div>
+
+              {/* Quick amount buttons */}
+              <div className="flex flex-wrap gap-2">
+                {[5000, 10000, 20000, 50000].map(amount => (
+                  <button
+                    key={amount}
+                    onClick={() => setDepositAmount(amount)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      depositAmount === amount
+                        ? 'bg-primary-600 text-white'
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                    }`}
+                  >
+                    {formatCurrency(amount)}
+                  </button>
+                ))}
+              </div>
+
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  You'll be redirected to complete payment via Mobile Money (Orange Money, Africell Money). After payment, you'll return here to complete your order.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowDepositModal(false)}
+                disabled={depositLoading}
+                className="flex-1 px-4 py-3 border border-gray-200 dark:border-gray-700 rounded-xl font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeposit}
+                disabled={depositLoading || depositAmount < amountNeeded}
+                className="flex-1 px-4 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {depositLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <ExternalLink className="w-4 h-4" />
+                    Deposit {formatCurrency(depositAmount)}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
