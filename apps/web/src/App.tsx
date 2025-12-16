@@ -41,6 +41,11 @@ import { CashOutPage } from '@/pages/CashOutPage';
 import { SpendingAnalyticsPage } from '@/pages/SpendingAnalyticsPage';
 import { WithdrawPage } from '@/pages/WithdrawPage';
 
+// Marketplace Pages
+import { MarketplacePage } from '@/pages/MarketplacePage';
+import { StorefrontPage } from '@/pages/StorefrontPage';
+import { MarketplaceCheckoutPage } from '@/pages/MarketplaceCheckoutPage';
+
 // Admin Pages
 import { AdminDashboard } from '@/pages/admin/AdminDashboard';
 import { AuthorizationPage } from '@/pages/admin/AuthorizationPage';
@@ -109,19 +114,19 @@ import { MerchantSubscriptionsPage } from '@/pages/merchant/MerchantSubscription
 import { MerchantProfilePage } from '@/pages/merchant/MerchantProfilePage';
 import { CreateBusinessPage } from '@/pages/merchant/CreateBusinessPage';
 import { CreateDeveloperBusinessPage } from '@/pages/merchant/CreateDeveloperBusinessPage';
-import { MerchantShopsPage } from '@/pages/merchant/MerchantShopsPage';
+import { MerchantBusinessesPage } from '@/pages/merchant/MerchantBusinessesPage';
 import { MerchantUpgradePage } from '@/pages/merchant/MerchantUpgradePage';
 import { MerchantSubscriptionPage } from '@/pages/merchant/MerchantSubscriptionPage';
 import { CollectPaymentPage } from '@/pages/merchant/CollectPaymentPage';
 import { DriverWalletPage } from '@/pages/merchant/DriverWalletPage';
-import { ShopDetailPage } from '@/pages/merchant/ShopDetailPage';
-import { ShopTransactionsPage } from '@/pages/merchant/ShopTransactionsPage';
-import { ShopDisputesPage } from '@/pages/merchant/ShopDisputesPage';
-import { ShopSettingsPage } from '@/pages/merchant/ShopSettingsPage';
+import { MerchantBusinessDetailPage } from '@/pages/merchant/BusinessDetailPage';
+import { MerchantBusinessTransactionsPage } from '@/pages/merchant/BusinessTransactionsPage';
+import { MerchantBusinessDisputesPage } from '@/pages/merchant/BusinessDisputesPage';
+import { MerchantBusinessSettingsPage } from '@/pages/merchant/BusinessSettingsPage';
 import { MerchantSupportPage } from '@/pages/merchant/MerchantSupportPage';
 import { MerchantNotificationsPage } from '@/pages/merchant/MerchantNotificationsPage';
 // POS Pages
-import { POSTerminalPage, POSProductsPage, POSSalesPage, POSSetupWizard, POSReportsPage, POSStaffPage, POSInventoryPage, POSLoyaltyPage, POSSettingsPage, POSKitchenDisplayPage, POSTableManagementPage, POSCustomersPage, POSSuppliersPage, POSDiscountsPage, POSPurchaseOrdersPage } from '@/pages/merchant/pos';
+import { POSTerminalPage, POSProductsPage, POSSalesPage, POSSetupWizard, POSReportsPage, POSStaffPage, POSInventoryPage, POSLoyaltyPage, POSSettingsPage, POSKitchenDisplayPage, POSTableManagementPage, POSCustomersPage, POSSuppliersPage, POSDiscountsPage, POSPurchaseOrdersPage, POSMarketplacePage } from '@/pages/merchant/pos';
 import { POSAppPage } from '@/pages/merchant/apps/POSAppPage';
 // User Notifications
 import { UserNotificationsPage } from '@/pages/UserNotificationsPage';
@@ -414,6 +419,17 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+              {/* Marketplace Routes - Public */}
+              <Route path="/marketplace" element={<MarketplacePage />} />
+              <Route path="/marketplace/store/:storeSlug" element={<StorefrontPage />} />
+              <Route
+                path="/marketplace/checkout/:storeId"
+                element={
+                  <ProtectedRoute>
+                    <MarketplaceCheckoutPage />
+                  </ProtectedRoute>
+                }
+              />
               {/* Admin Routes */}
               <Route
                 path="/admin"
@@ -627,7 +643,7 @@ function App() {
                 path="/admin/businesses/:businessId"
                 element={
                   <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
-                    <BusinessDetailPage />
+                    <MerchantBusinessDetailPage />
                   </RoleBasedRoute>
                 }
               />
@@ -770,10 +786,10 @@ function App() {
                 }
               />
               <Route
-                path="/merchant/shops"
+                path="/merchant/businesses"
                 element={
                   <RoleBasedRoute allowedRoles={['merchant']}>
-                    <MerchantShopsPage />
+                    <MerchantBusinessesPage />
                   </RoleBasedRoute>
                 }
               />
@@ -786,34 +802,34 @@ function App() {
                 }
               />
               <Route
-                path="/merchant/shops/:businessId"
+                path="/merchant/businesses/:businessId"
                 element={
                   <RoleBasedRoute allowedRoles={['merchant']}>
-                    <ShopDetailPage />
+                    <MerchantBusinessDetailPage />
                   </RoleBasedRoute>
                 }
               />
               <Route
-                path="/merchant/shops/:businessId/transactions"
+                path="/merchant/businesses/:businessId/transactions"
                 element={
                   <RoleBasedRoute allowedRoles={['merchant']}>
-                    <ShopTransactionsPage />
+                    <MerchantBusinessTransactionsPage />
                   </RoleBasedRoute>
                 }
               />
               <Route
-                path="/merchant/shops/:businessId/disputes"
+                path="/merchant/businesses/:businessId/disputes"
                 element={
                   <RoleBasedRoute allowedRoles={['merchant']}>
-                    <ShopDisputesPage />
+                    <MerchantBusinessDisputesPage />
                   </RoleBasedRoute>
                 }
               />
               <Route
-                path="/merchant/shops/:businessId/settings"
+                path="/merchant/businesses/:businessId/settings"
                 element={
                   <RoleBasedRoute allowedRoles={['merchant']}>
-                    <ShopSettingsPage />
+                    <MerchantBusinessSettingsPage />
                   </RoleBasedRoute>
                 }
               />
@@ -935,6 +951,14 @@ function App() {
                 element={
                   <RoleBasedRoute allowedRoles={['merchant']}>
                     <POSTableManagementPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/pos/marketplace"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <POSMarketplacePage />
                   </RoleBasedRoute>
                 }
               />
@@ -1093,6 +1117,11 @@ function App() {
                   <Route path="/withdraw" element={<ProtectedRoute><WithdrawPage /></ProtectedRoute>} />
                   <Route path="/analytics" element={<ProtectedRoute><SpendingAnalyticsPage /></ProtectedRoute>} />
 
+                  {/* Marketplace Routes */}
+                  <Route path="/marketplace" element={<MarketplacePage />} />
+                  <Route path="/marketplace/store/:storeSlug" element={<StorefrontPage />} />
+                  <Route path="/marketplace/checkout/:storeId" element={<ProtectedRoute><MarketplaceCheckoutPage /></ProtectedRoute>} />
+
                   {/* Admin Routes */}
                   <Route path="/admin" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><AdminDashboard /></RoleBasedRoute>} />
                   <Route path="/admin/accounts" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><AccountsPage /></RoleBasedRoute>} />
@@ -1121,7 +1150,7 @@ function App() {
                   <Route path="/admin/pots" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><PotsManagementPage /></RoleBasedRoute>} />
                   <Route path="/admin/business-categories" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><BusinessCategoriesPage /></RoleBasedRoute>} />
                   <Route path="/admin/businesses" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><BusinessesPage /></RoleBasedRoute>} />
-                  <Route path="/admin/businesses/:businessId" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><BusinessDetailPage /></RoleBasedRoute>} />
+                  <Route path="/admin/businesses/:businessId" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><MerchantBusinessDetailPage /></RoleBasedRoute>} />
                   <Route path="/admin/webhooks" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><WebhooksPage /></RoleBasedRoute>} />
                   <Route path="/admin/compliance" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><CompliancePage /></RoleBasedRoute>} />
                   <Route path="/admin/developers" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><DevelopersPage /></RoleBasedRoute>} />
@@ -1150,15 +1179,15 @@ function App() {
                   <Route path="/merchant/settings" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantSettingsPage /></RoleBasedRoute>} />
                   <Route path="/merchant/support" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantSupportPage /></RoleBasedRoute>} />
                   <Route path="/merchant/notifications" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantNotificationsPage /></RoleBasedRoute>} />
-                  <Route path="/merchant/shops" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantShopsPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/businesses" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantBusinessesPage /></RoleBasedRoute>} />
                   <Route path="/merchant/collect-payment" element={<RoleBasedRoute allowedRoles={['merchant']}><CollectPaymentPage /></RoleBasedRoute>} />
                   <Route path="/merchant/driver-wallet" element={<RoleBasedRoute allowedRoles={['merchant']}><DriverWalletPage /></RoleBasedRoute>} />
                   <Route path="/merchant/upgrade" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantUpgradePage /></RoleBasedRoute>} />
                   <Route path="/merchant/subscription" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantSubscriptionPage /></RoleBasedRoute>} />
-                  <Route path="/merchant/shops/:businessId" element={<RoleBasedRoute allowedRoles={['merchant']}><ShopDetailPage /></RoleBasedRoute>} />
-                  <Route path="/merchant/shops/:businessId/transactions" element={<RoleBasedRoute allowedRoles={['merchant']}><ShopTransactionsPage /></RoleBasedRoute>} />
-                  <Route path="/merchant/shops/:businessId/disputes" element={<RoleBasedRoute allowedRoles={['merchant']}><ShopDisputesPage /></RoleBasedRoute>} />
-                  <Route path="/merchant/shops/:businessId/settings" element={<RoleBasedRoute allowedRoles={['merchant']}><ShopSettingsPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/businesses/:businessId" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantBusinessDetailPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/businesses/:businessId/transactions" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantBusinessTransactionsPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/businesses/:businessId/disputes" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantBusinessDisputesPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/businesses/:businessId/settings" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantBusinessSettingsPage /></RoleBasedRoute>} />
                   <Route path="/merchant/developer/create-business" element={<RoleBasedRoute allowedRoles={['merchant']}><CreateDeveloperBusinessPage /></RoleBasedRoute>} />
                   <Route path="/merchant/developer/:businessId" element={<RoleBasedRoute allowedRoles={['merchant']}><BusinessIntegrationPage /></RoleBasedRoute>} />
                   <Route path="/merchant/developer/*" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantDeveloperPage /></RoleBasedRoute>} />
@@ -1179,6 +1208,7 @@ function App() {
                   <Route path="/merchant/pos/suppliers" element={<RoleBasedRoute allowedRoles={['merchant']}><POSSuppliersPage /></RoleBasedRoute>} />
                   <Route path="/merchant/pos/discounts" element={<RoleBasedRoute allowedRoles={['merchant']}><POSDiscountsPage /></RoleBasedRoute>} />
                   <Route path="/merchant/pos/purchase-orders" element={<RoleBasedRoute allowedRoles={['merchant']}><POSPurchaseOrdersPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/pos/marketplace" element={<RoleBasedRoute allowedRoles={['merchant']}><POSMarketplacePage /></RoleBasedRoute>} />
                   <Route path="/merchant/*" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantDashboard /></RoleBasedRoute>} />
 
                   {/* Agent Routes */}

@@ -1,6 +1,6 @@
 /**
- * Merchant Shops Page
- * Lists all businesses/shops created by the merchant
+ * Merchant Businesses Page
+ * Lists all businesses created by the merchant
  * Allows access to each business's transactions, disputes, and settings
  */
 
@@ -31,13 +31,13 @@ import { Card } from '@/components/ui/Card';
 import { businessService, MerchantBusiness } from '@/services/business.service';
 import { useDeveloperMode } from '@/context/DeveloperModeContext';
 
-export function MerchantShopsPage() {
+export function MerchantBusinessesPage() {
   const [businesses, setBusinesses] = useState<MerchantBusiness[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalRevenue: 0,
     totalTransactions: 0,
-    activeShops: 0,
+    activeBusinesses: 0,
     pendingApprovals: 0,
   });
 
@@ -66,7 +66,7 @@ export function MerchantShopsPage() {
       setStats({
         totalRevenue: 0, // TODO: Fetch from transactions
         totalTransactions: 0, // TODO: Fetch from transactions
-        activeShops: activeCount,
+        activeBusinesses: activeCount,
         pendingApprovals: pendingCount,
       });
     } catch (error) {
@@ -92,7 +92,7 @@ export function MerchantShopsPage() {
     );
   };
 
-  const handleCreateShop = () => {
+  const handleCreateBusiness = () => {
     if (!canCreateMore) {
       navigate('/merchant/upgrade');
     } else if (isDeveloperMode) {
@@ -118,7 +118,7 @@ export function MerchantShopsPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">My Shops</h1>
+            <h1 className="text-2xl font-bold text-gray-900">My Businesses</h1>
             <p className="text-gray-500">Manage your businesses and view their performance</p>
           </div>
           <div className="flex items-center gap-3">
@@ -132,7 +132,7 @@ export function MerchantShopsPage() {
               </button>
             )}
             <button
-              onClick={handleCreateShop}
+              onClick={handleCreateBusiness}
               disabled={!canCreateMore && !isDeveloperMode}
               className={`px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium ${
                 canCreateMore
@@ -143,7 +143,7 @@ export function MerchantShopsPage() {
               {canCreateMore ? (
                 <>
                   <Plus className="w-4 h-4" />
-                  Create Shop
+                  Create Business
                 </>
               ) : (
                 <>
@@ -165,7 +165,7 @@ export function MerchantShopsPage() {
                 </div>
                 <div>
                   <h3 className="font-medium text-amber-900">Upgrade to Merchant+</h3>
-                  <p className="text-sm text-amber-700">Create up to {MERCHANT_PLUS_LIMIT} shops and unlock premium features</p>
+                  <p className="text-sm text-amber-700">Create up to {MERCHANT_PLUS_LIMIT} businesses and unlock premium features</p>
                 </div>
               </div>
               <button
@@ -186,7 +186,7 @@ export function MerchantShopsPage() {
                 <Building2 className="w-5 h-5 text-green-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Total Shops</p>
+                <p className="text-sm text-gray-500">Total Businesses</p>
                 <p className="text-xl font-bold text-gray-900">{businesses.length}/{currentLimit}</p>
               </div>
             </div>
@@ -197,8 +197,8 @@ export function MerchantShopsPage() {
                 <CheckCircle className="w-5 h-5 text-blue-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Active Shops</p>
-                <p className="text-xl font-bold text-gray-900">{stats.activeShops}</p>
+                <p className="text-sm text-gray-500">Active Businesses</p>
+                <p className="text-xl font-bold text-gray-900">{stats.activeBusinesses}</p>
               </div>
             </div>
           </Card>
@@ -226,20 +226,20 @@ export function MerchantShopsPage() {
           </Card>
         </div>
 
-        {/* Shops List */}
+        {/* Businesses List */}
         {businesses.length === 0 ? (
           <Card className="p-8 text-center">
             <Store className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No shops yet</h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No businesses yet</h3>
             <p className="text-gray-500 mb-4 max-w-md mx-auto">
-              Create your first shop to start accepting payments and managing your business.
+              Create your first business to start accepting payments and managing your operations.
             </p>
             <button
-              onClick={handleCreateShop}
+              onClick={handleCreateBusiness}
               className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 inline-flex items-center gap-2"
             >
               <Plus className="w-5 h-5" />
-              Create Your First Shop
+              Create Your First Business
             </button>
           </Card>
         ) : (
@@ -250,7 +250,7 @@ export function MerchantShopsPage() {
                   {/* Business Info */}
                   <div
                     className="flex-1 p-5 cursor-pointer"
-                    onClick={() => navigate(`/merchant/shops/${business.id}`)}
+                    onClick={() => navigate(`/merchant/businesses/${business.id}`)}
                   >
                     <div className="flex items-start gap-4">
                       {business.logo_url ? (
@@ -294,28 +294,28 @@ export function MerchantShopsPage() {
                   {/* Quick Actions */}
                   <div className="flex sm:flex-col border-t sm:border-t-0 sm:border-l border-gray-100 bg-gray-50">
                     <button
-                      onClick={() => navigate(`/merchant/shops/${business.id}`)}
+                      onClick={() => navigate(`/merchant/businesses/${business.id}`)}
                       className="flex-1 sm:flex-none px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 flex items-center justify-center gap-2"
                     >
                       <BarChart3 className="w-4 h-4" />
                       <span className="hidden sm:inline">Dashboard</span>
                     </button>
                     <button
-                      onClick={() => navigate(`/merchant/shops/${business.id}/transactions`)}
+                      onClick={() => navigate(`/merchant/businesses/${business.id}/transactions`)}
                       className="flex-1 sm:flex-none px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 flex items-center justify-center gap-2 border-l sm:border-l-0 sm:border-t border-gray-100"
                     >
                       <ArrowLeftRight className="w-4 h-4" />
                       <span className="hidden sm:inline">Transactions</span>
                     </button>
                     <button
-                      onClick={() => navigate(`/merchant/shops/${business.id}/disputes`)}
+                      onClick={() => navigate(`/merchant/businesses/${business.id}/disputes`)}
                       className="flex-1 sm:flex-none px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 flex items-center justify-center gap-2 border-l sm:border-l-0 sm:border-t border-gray-100"
                     >
                       <AlertTriangle className="w-4 h-4" />
                       <span className="hidden sm:inline">Disputes</span>
                     </button>
                     <button
-                      onClick={() => navigate(`/merchant/shops/${business.id}/settings`)}
+                      onClick={() => navigate(`/merchant/businesses/${business.id}/settings`)}
                       className="flex-1 sm:flex-none px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 flex items-center justify-center gap-2 border-l sm:border-l-0 sm:border-t border-gray-100"
                     >
                       <Settings className="w-4 h-4" />

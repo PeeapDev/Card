@@ -16,6 +16,7 @@ import {
   HelpCircle,
   Smartphone,
   Store,
+  ShoppingBag,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { NotificationBell } from '@/components/ui/NotificationBell';
@@ -34,6 +35,7 @@ const navItems = [
   { path: '/send', label: 'Send Money', icon: Send },
   { path: '/receive', label: 'Receive Money', icon: QrCode },
   { path: '/payout', label: 'Mobile Money Payout', icon: Smartphone },
+  { path: '/marketplace', label: 'Shop', icon: ShoppingBag },
   { path: '/pots', label: 'Savings Pots', icon: PiggyBank },
   { path: '/cards', label: 'Cards', icon: CreditCard },
   { path: '/transactions', label: 'Transactions', icon: ArrowLeftRight },

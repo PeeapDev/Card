@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Wallet, CreditCard, ArrowUpRight, ArrowDownRight, TrendingUp, Send, Users, QrCode, Smartphone, Building2 } from 'lucide-react';
+import { Wallet, CreditCard, ArrowUpRight, ArrowDownRight, TrendingUp, Send, Users, QrCode, Smartphone, Building2, ShoppingBag } from 'lucide-react';
 import { MotionCard, CardHeader, CardTitle, CardDescription } from '@/components/ui';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useAuth } from '@/context/AuthContext';
@@ -12,6 +12,7 @@ import { UserSearch, SearchResult } from '@/components/ui/UserSearch';
 import { ScanToPayModal } from '@/components/payment/ScanToPayModal';
 import { SendToMobileMoneyModal } from '@/components/payment/SendToMobileMoneyModal';
 import { PendingSubscriptionPaymentsCompact } from '@/components/subscriptions/PendingSubscriptionPayments';
+import { ProductCarousel } from '@/components/marketplace/ProductCarousel';
 import { clsx } from 'clsx';
 import { currencyService, Currency } from '@/services/currency.service';
 
@@ -90,16 +91,29 @@ export function DashboardPage() {
   return (
     <MainLayout>
       <div className="space-y-8">
-        {/* Welcome section */}
+        {/* Header with Welcome + Send Money Search */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
+          className="flex flex-col md:flex-row md:items-center md:justify-between gap-4"
         >
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Welcome back, {user?.firstName}!
-          </h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">Here's what's happening with your account.</p>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+              Welcome back, {user?.firstName}!
+            </h1>
+            <p className="text-gray-500 dark:text-gray-400 mt-1">Here's what's happening with your account.</p>
+          </div>
+
+          {/* Compact Send Money Search */}
+          <div className="w-full md:w-80 lg:w-96">
+            <UserSearch
+              placeholder="Send money to @user or phone..."
+              excludeUserId={user?.id}
+              onSelect={handleUserSelect}
+              compact
+            />
+          </div>
         </motion.div>
 
         {/* Stats grid */}
@@ -213,33 +227,8 @@ export function DashboardPage() {
           </motion.div>
         </motion.div>
 
-        {/* Quick Send Money - Global User Search */}
-        <MotionCard className="p-6" delay={0.4} glowEffect>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center">
-              <Send className="w-5 h-5 text-primary-600 dark:text-primary-400" />
-            </div>
-            <div>
-              <h2 className="font-semibold text-gray-900 dark:text-white">Send Money</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Search for a user to send money instantly</p>
-            </div>
-          </div>
-          <UserSearch
-            placeholder="Search by @username, phone, or name..."
-            excludeUserId={user?.id}
-            onSelect={handleUserSelect}
-          />
-          <div className="mt-3 flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-            <span className="flex items-center gap-1">
-              <Users className="w-3 h-3" />
-              Search by name
-            </span>
-            <span>•</span>
-            <span>@username</span>
-            <span>•</span>
-            <span>Phone number</span>
-          </div>
-        </MotionCard>
+        {/* Product Carousel - Auto-sliding banner */}
+        <ProductCarousel />
 
         {/* Pending Subscription Payments */}
         <PendingSubscriptionPaymentsCompact />
@@ -386,6 +375,15 @@ export function DashboardPage() {
                     <CreditCard className="w-6 h-6 text-purple-600 dark:text-purple-400" />
                   </div>
                   <span className="text-sm font-medium text-gray-900 dark:text-white">New Card</span>
+                </Link>
+                <Link
+                  to="/marketplace"
+                  className="flex flex-col items-center p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <div className="w-12 h-12 bg-pink-100 dark:bg-pink-900/30 rounded-full flex items-center justify-center mb-2">
+                    <ShoppingBag className="w-6 h-6 text-pink-600 dark:text-pink-400" />
+                  </div>
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">Shop</span>
                 </Link>
               </div>
             </MotionCard>

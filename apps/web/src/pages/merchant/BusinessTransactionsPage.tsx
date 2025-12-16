@@ -1,6 +1,6 @@
 /**
- * Shop Transactions Page
- * Lists all transactions for a specific business/shop
+ * Business Transactions Page
+ * Lists all transactions for a specific business
  */
 
 import { useState, useEffect } from 'react';
@@ -46,7 +46,7 @@ interface Transaction {
   metadata?: Record<string, unknown>;
 }
 
-export function ShopTransactionsPage() {
+export function MerchantBusinessTransactionsPage() {
   const { businessId } = useParams<{ businessId: string }>();
   const navigate = useNavigate();
   const [business, setBusiness] = useState<MerchantBusiness | null>(null);
@@ -227,10 +227,10 @@ export function ShopTransactionsPage() {
           <Store className="w-12 h-12 text-gray-300 mx-auto mb-4" />
           <h2 className="text-lg font-medium text-gray-900 mb-2">Business not found</h2>
           <button
-            onClick={() => navigate('/merchant/shops')}
+            onClick={() => navigate('/merchant/businesses')}
             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
           >
-            Back to My Shops
+            Back to My Businesses
           </button>
         </div>
       </MerchantLayout>
@@ -244,16 +244,16 @@ export function ShopTransactionsPage() {
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-4">
             <button
-              onClick={() => navigate(`/merchant/shops/${businessId}`)}
+              onClick={() => navigate(`/merchant/businesses/${businessId}`)}
               className="p-2 hover:bg-gray-100 rounded-lg"
             >
               <ArrowLeft className="w-5 h-5 text-gray-600" />
             </button>
             <div>
               <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-                <Link to="/merchant/shops" className="hover:text-green-600">My Shops</Link>
+                <Link to="/merchant/businesses" className="hover:text-green-600">My Businesses</Link>
                 <span>/</span>
-                <Link to={`/merchant/shops/${businessId}`} className="hover:text-green-600">{business.name}</Link>
+                <Link to={`/merchant/businesses/${businessId}`} className="hover:text-green-600">{business.name}</Link>
                 <span>/</span>
                 <span className="text-gray-900">Transactions</span>
               </div>

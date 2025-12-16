@@ -1,6 +1,6 @@
 /**
- * Shop Detail Page
- * Dashboard for a specific business/shop showing stats and quick actions
+ * Business Detail Page
+ * Dashboard for a specific business showing stats and quick actions
  */
 
 import { useState, useEffect } from 'react';
@@ -61,7 +61,7 @@ interface Dispute {
   created_at: string;
 }
 
-export function ShopDetailPage() {
+export function MerchantBusinessDetailPage() {
   const { businessId } = useParams<{ businessId: string }>();
   const navigate = useNavigate();
   const [business, setBusiness] = useState<MerchantBusiness | null>(null);
@@ -198,10 +198,10 @@ export function ShopDetailPage() {
           <h2 className="text-lg font-medium text-gray-900 mb-2">Business not found</h2>
           <p className="text-gray-500 mb-4">The business you're looking for doesn't exist or you don't have access.</p>
           <button
-            onClick={() => navigate('/merchant/shops')}
+            onClick={() => navigate('/merchant/businesses')}
             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
           >
-            Back to My Shops
+            Back to My Businesses
           </button>
         </div>
       </MerchantLayout>
@@ -215,7 +215,7 @@ export function ShopDetailPage() {
         <div className="flex items-start justify-between">
           <div className="flex items-start gap-4">
             <button
-              onClick={() => navigate('/merchant/shops')}
+              onClick={() => navigate('/merchant/businesses')}
               className="p-2 hover:bg-gray-100 rounded-lg mt-1"
             >
               <ArrowLeft className="w-5 h-5 text-gray-600" />
@@ -263,7 +263,7 @@ export function ShopDetailPage() {
               Developer
             </Link>
             <Link
-              to={`/merchant/shops/${business.id}/settings`}
+              to={`/merchant/businesses/${business.id}/settings`}
               className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center gap-2 text-sm font-medium"
             >
               <Settings className="w-4 h-4" />
@@ -323,7 +323,7 @@ export function ShopDetailPage() {
         {/* Quick Links */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Link
-            to={`/merchant/shops/${business.id}/transactions`}
+            to={`/merchant/businesses/${business.id}/transactions`}
             className="p-4 bg-white border border-gray-200 rounded-xl hover:shadow-md transition-shadow flex items-center gap-4"
           >
             <div className="p-3 bg-blue-100 rounded-lg">
@@ -335,7 +335,7 @@ export function ShopDetailPage() {
             </div>
           </Link>
           <Link
-            to={`/merchant/shops/${business.id}/disputes`}
+            to={`/merchant/businesses/${business.id}/disputes`}
             className="p-4 bg-white border border-gray-200 rounded-xl hover:shadow-md transition-shadow flex items-center gap-4"
           >
             <div className="p-3 bg-yellow-100 rounded-lg">
@@ -359,7 +359,7 @@ export function ShopDetailPage() {
             </div>
           </Link>
           <Link
-            to={`/merchant/shops/${business.id}/settings`}
+            to={`/merchant/businesses/${business.id}/settings`}
             className="p-4 bg-white border border-gray-200 rounded-xl hover:shadow-md transition-shadow flex items-center gap-4"
           >
             <div className="p-3 bg-gray-100 rounded-lg">
@@ -379,7 +379,7 @@ export function ShopDetailPage() {
             <div className="flex items-center justify-between p-4 border-b border-gray-100">
               <h2 className="font-semibold text-gray-900">Recent Transactions</h2>
               <Link
-                to={`/merchant/shops/${business.id}/transactions`}
+                to={`/merchant/businesses/${business.id}/transactions`}
                 className="text-sm text-green-600 hover:text-green-700 flex items-center gap-1"
               >
                 View All
@@ -434,7 +434,7 @@ export function ShopDetailPage() {
             <div className="flex items-center justify-between p-4 border-b border-gray-100">
               <h2 className="font-semibold text-gray-900">Recent Disputes</h2>
               <Link
-                to={`/merchant/shops/${business.id}/disputes`}
+                to={`/merchant/businesses/${business.id}/disputes`}
                 className="text-sm text-green-600 hover:text-green-700 flex items-center gap-1"
               >
                 View All

@@ -68,7 +68,7 @@ const baseNavItems: NavItem[] = [
   { id: 'dashboard', path: '/merchant', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'collect-payment', path: '/merchant/collect-payment', label: 'Collect Payment', icon: Car },
   { id: 'driver-wallet', path: '/merchant/driver-wallet', label: 'Driver Wallet', icon: Wallet },
-  { id: 'shops', path: '/merchant/shops', label: 'My Shops', icon: Building2 },
+  { id: 'businesses', path: '/merchant/businesses', label: 'My Businesses', icon: Building2 },
   { id: 'transactions', path: '/merchant/transactions', label: 'Transactions', icon: ArrowLeftRight },
   { id: 'payouts', path: '/merchant/payouts', label: 'Payouts', icon: DollarSign },
   { id: 'refunds', path: '/merchant/refunds', label: 'Refunds', icon: RefreshCw },

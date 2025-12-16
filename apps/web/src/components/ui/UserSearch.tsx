@@ -36,6 +36,7 @@ interface UserSearchProps {
   className?: string;
   excludeUserId?: string;
   autoFocus?: boolean;
+  compact?: boolean;
 }
 
 // Fuse.js configuration for fuzzy search
@@ -60,6 +61,7 @@ export function UserSearch({
   className,
   excludeUserId,
   autoFocus = false,
+  compact = false,
 }: UserSearchProps) {
   const { user } = useAuth();
   const [query, setQuery] = useState('');
@@ -265,7 +267,10 @@ export function UserSearch({
           placeholder={isInitialLoading ? 'Loading users...' : placeholder}
           autoFocus={autoFocus}
           disabled={isInitialLoading}
-          className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 disabled:bg-gray-100"
+          className={clsx(
+            "w-full pr-10 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 dark:text-white dark:bg-gray-800 disabled:bg-gray-100 dark:disabled:bg-gray-700",
+            compact ? "pl-10 py-2 text-sm rounded-lg" : "pl-10 py-3 rounded-xl"
+          )}
         />
         {query && (
           <button
