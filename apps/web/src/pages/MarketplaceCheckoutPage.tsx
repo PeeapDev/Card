@@ -12,7 +12,7 @@ import { Button } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
 import marketplaceService, {
   MarketplaceStore,
-  CartItem,
+  MarketplaceCartItem,
 } from '@/services/marketplace.service';
 import {
   ArrowLeft,
@@ -50,7 +50,8 @@ export function MarketplaceCheckoutPage() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [store, setStore] = useState<MarketplaceStore | null>(null);
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cart, setCart] = useState<MarketplaceCartItem[]>([]);
+  const [cartId, setCartId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Form state
@@ -78,8 +79,9 @@ export function MarketplaceCheckoutPage() {
   // Set default values from user
   useEffect(() => {
     if (user) {
-      setCustomerName(user.user_metadata?.full_name || `${user.user_metadata?.first_name || ''} ${user.user_metadata?.last_name || ''}`.trim() || '');
-      setCustomerPhone(user.phone || user.user_metadata?.phone || '');
+      const metadata = (user as any).user_metadata || {};
+      setCustomerName(metadata.full_name || `${metadata.first_name || ''} ${metadata.last_name || ''}`.trim() || '');
+      setCustomerPhone((user as any).phone || metadata.phone || '');
     }
   }, [user]);
 
@@ -104,12 +106,13 @@ export function MarketplaceCheckoutPage() {
       }
 
       // Load cart
-      const cartItems = await marketplaceService.getCart(user.id, storeData.id);
-      if (cartItems.length === 0) {
+      const cartData = await marketplaceService.getCart(user.id, storeData.id);
+      if (!cartData || !cartData.items || cartData.items.length === 0) {
         navigate(`/marketplace/store/${storeData.store_slug || storeData.id}`);
         return;
       }
-      setCart(cartItems);
+      setCartId(cartData.id);
+      setCart(cartData.items);
     } catch (error) {
       console.error('Error loading checkout data:', error);
       setError('Failed to load checkout data');
@@ -119,7 +122,7 @@ export function MarketplaceCheckoutPage() {
   };
 
   // Calculate totals
-  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const subtotal = cart.reduce((sum, item) => sum + (item.unit_price || item.product?.price || 0) * item.quantity, 0);
   const deliveryFee = fulfillmentType === 'delivery' && store?.offers_delivery
     ? (store.free_delivery_minimum && subtotal >= store.free_delivery_minimum ? 0 : store.delivery_fee)
     : 0;
@@ -142,21 +145,38 @@ export function MarketplaceCheckoutPage() {
 
     try {
       const orderData = {
-        fulfillment_type: fulfillmentType,
-        customer_name: customerName,
-        customer_phone: customerPhone,
-        delivery_address: fulfillmentType === 'delivery' ? deliveryAddress : undefined,
-        delivery_notes: deliveryNotes || undefined,
-        payment_method: paymentMethod,
+        customerId: user.id,
+        customerName: customerName,
+        customerPhone: customerPhone,
+        storeId: store.id,
+        orderType: fulfillmentType,
+        deliveryAddress: fulfillmentType === 'delivery' ? deliveryAddress : undefined,
+        deliveryInstructions: deliveryNotes || undefined,
+        paymentMethod: paymentMethod,
+        items: cart.map(item => ({
+          productId: item.product_id,
+          listingId: item.listing_id || undefined,
+          productName: item.product?.name || 'Product',
+          productImageUrl: item.product?.image_url || undefined,
+          quantity: item.quantity,
+          unitPrice: item.unit_price || item.product?.price || 0,
+          notes: item.notes || undefined,
+          modifiers: item.modifiers || [],
+        })),
         subtotal,
-        delivery_fee: deliveryFee,
-        total,
+        deliveryFee: deliveryFee,
+        serviceFee: 0,
+        taxAmount: 0,
+        discountAmount: 0,
+        totalAmount: total,
       };
 
-      const order = await marketplaceService.createOrder(user.id, store.id, cart, orderData);
+      const order = await marketplaceService.createOrder(orderData);
 
       // Clear cart
-      await marketplaceService.clearCart(user.id, store.id);
+      if (cartId) {
+        await marketplaceService.clearCart(cartId);
+      }
 
       // Redirect to success/confirmation page
       navigate(`/marketplace/order/${order.id}?success=true`);
@@ -228,10 +248,10 @@ export function MarketplaceCheckoutPage() {
             {cart.map(item => (
               <div key={item.id} className="flex justify-between text-sm">
                 <span className="text-gray-600 dark:text-gray-400">
-                  {item.listing?.product?.name || 'Product'} x {item.quantity}
+                  {item.product?.name || 'Product'} x {item.quantity}
                 </span>
                 <span className="text-gray-900 dark:text-white">
-                  {formatCurrency(item.price * item.quantity)}
+                  {formatCurrency((item.unit_price || item.product?.price || 0) * item.quantity)}
                 </span>
               </div>
             ))}

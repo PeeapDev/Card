@@ -14,7 +14,7 @@ import { useAuth } from '@/context/AuthContext';
 import marketplaceService, {
   MarketplaceStore,
   MarketplaceListing,
-  CartItem,
+  MarketplaceCartItem,
 } from '@/services/marketplace.service';
 import {
   ArrowLeft,
@@ -65,7 +65,7 @@ export function StorefrontPage() {
   const [loading, setLoading] = useState(true);
   const [store, setStore] = useState<MarketplaceStore | null>(null);
   const [products, setProducts] = useState<MarketplaceListing[]>([]);
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cart, setCart] = useState<MarketplaceCartItem[]>([]);
   const [cartTotal, setCartTotal] = useState(0);
   const [showCart, setShowCart] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -88,7 +88,7 @@ export function StorefrontPage() {
 
   // Calculate cart total
   useEffect(() => {
-    const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const total = cart.reduce((sum, item) => sum + (item.unit_price || item.product?.price || 0) * item.quantity, 0);
     setCartTotal(total);
   }, [cart]);
 
@@ -121,8 +121,8 @@ export function StorefrontPage() {
     if (!user?.id || !store?.id) return;
 
     try {
-      const cartItems = await marketplaceService.getCart(user.id, store.id);
-      setCart(cartItems);
+      const cartData = await marketplaceService.getCart(user.id, store.id);
+      setCart(cartData?.items || []);
     } catch (error) {
       console.error('Error loading cart:', error);
     }
@@ -134,17 +134,23 @@ export function StorefrontPage() {
       return;
     }
 
-    if (!user?.id || !store?.id) return;
+    if (!user?.id || !store?.id || !listing.product) return;
 
     setAddingToCart(listing.id);
     try {
       // Check if already in cart
-      const existingItem = cart.find(item => item.listing_id === listing.id);
+      const existingItem = cart.find(item => item.product_id === listing.product_id);
 
       if (existingItem) {
         await marketplaceService.updateCartItem(existingItem.id, existingItem.quantity + 1);
       } else {
-        await marketplaceService.addToCart(user.id, store.id, listing.id, 1);
+        await marketplaceService.addToCart(
+          user.id,
+          store.id,
+          listing.product_id,
+          1,
+          listing.product.price
+        );
       }
 
       await loadCart();
@@ -181,7 +187,7 @@ export function StorefrontPage() {
   // Get unique categories from products
   const categories = [...new Set(
     products
-      .filter(p => p.product?.category_id)
+      .filter(p => p.product?.category)
       .map(p => p.product?.category?.name)
       .filter(Boolean)
   )];
@@ -216,7 +222,7 @@ export function StorefrontPage() {
     const dayName = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][now.getDay()];
     const hours = store.operating_hours[dayName];
 
-    if (!hours || hours.closed) return false;
+    if (!hours || (hours as any).closed) return false;
 
     const currentTime = now.getHours() * 60 + now.getMinutes();
     const [openHours, openMins] = hours.open.split(':').map(Number);
@@ -519,7 +525,7 @@ function ProductCard({
   const product = listing.product;
   if (!product) return null;
 
-  const outOfStock = product.track_inventory && product.stock_quantity === 0;
+  const outOfStock = (product as any).track_inventory && (product as any).stock_quantity === 0;
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
@@ -587,7 +593,7 @@ function CartSidebar({
   storeOpen,
   isMobile = false,
 }: {
-  cart: CartItem[];
+  cart: MarketplaceCartItem[];
   store: MarketplaceStore;
   total: number;
   onUpdateQuantity: (itemId: string, quantity: number) => void;
@@ -627,10 +633,10 @@ function CartSidebar({
           <div key={item.id} className="flex items-center gap-3">
             <div className="flex-1 min-w-0">
               <p className="font-medium text-gray-900 dark:text-white text-sm truncate">
-                {item.listing?.product?.name || 'Product'}
+                {item.product?.name || 'Product'}
               </p>
               <p className="text-sm text-gray-500">
-                {formatCurrency(item.price)} x {item.quantity}
+                {formatCurrency(item.unit_price || item.product?.price || 0)} x {item.quantity}
               </p>
             </div>
             <div className="flex items-center gap-1">

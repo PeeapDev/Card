@@ -549,6 +549,8 @@ class MarketplaceService {
       cart = newCart;
     }
 
+    if (!cart) throw new Error('Failed to create or retrieve cart');
+
     // Check if item already exists
     const { data: existing } = await supabase
       .from('marketplace_cart_items')
@@ -795,7 +797,7 @@ class MarketplaceService {
     notes?: string
   ): Promise<MarketplaceOrder> {
     const timestamp = new Date().toISOString();
-    const statusTimestamp: Record<string, string> = {};
+    const statusTimestamp: Record<string, string | null> = {};
 
     switch (status) {
       case 'confirmed':

@@ -987,7 +987,7 @@ export function HostedCheckoutPage() {
                 <p className="text-gray-500 text-sm flex items-center justify-center gap-1">
                   Paid to {session.merchantName}
                   {session.merchantIsVerified && (
-                    <BadgeCheck className="w-4 h-4 text-blue-500 inline-block" title="Verified Business" />
+                    <span title="Verified Business"><BadgeCheck className="w-4 h-4 text-blue-500 inline-block" /></span>
                   )}
                 </p>
               )}
@@ -1081,7 +1081,7 @@ export function HostedCheckoutPage() {
                 <div className="ml-3">
                   <p className="font-semibold text-gray-900 flex items-center gap-1">
                     {session?.merchantName || 'Checkout'}
-                    {session?.merchantIsVerified && <BadgeCheck className="w-4 h-4 text-blue-500" title="Verified Business" />}
+                    {session?.merchantIsVerified && <span title="Verified Business"><BadgeCheck className="w-4 h-4 text-blue-500" /></span>}
                   </p>
                   <p className="text-sm text-gray-500">Sign in to continue</p>
                 </div>
@@ -1261,7 +1261,7 @@ export function HostedCheckoutPage() {
                 <div className="ml-3 flex-1 text-center">
                   <p className="font-semibold text-gray-900 inline-flex items-center justify-center gap-1">
                     {session?.merchantName || 'Checkout'}
-                    {session?.merchantIsVerified && <BadgeCheck className="w-4 h-4 text-blue-500" title="Verified Business" />}
+                    {session?.merchantIsVerified && <span title="Verified Business"><BadgeCheck className="w-4 h-4 text-blue-500" /></span>}
                   </p>
                 </div>
               </div>
@@ -1322,7 +1322,7 @@ export function HostedCheckoutPage() {
                 <div className="ml-3">
                   <p className="font-semibold text-gray-900 flex items-center gap-1">
                     {session?.merchantName || 'Checkout'}
-                    {session?.merchantIsVerified && <BadgeCheck className="w-4 h-4 text-blue-500" title="Verified Business" />}
+                    {session?.merchantIsVerified && <span title="Verified Business"><BadgeCheck className="w-4 h-4 text-blue-500" /></span>}
                   </p>
                   <p className="text-sm text-gray-500">Pay with Peeap Card</p>
                 </div>

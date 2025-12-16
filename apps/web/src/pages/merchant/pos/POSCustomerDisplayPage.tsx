@@ -178,7 +178,7 @@ export function POSCustomerDisplayPage() {
     const loadSettings = async () => {
       if (merchantId) {
         try {
-          const savedSettings = await indexedDBService.getSetting<POSSettings>(`pos_settings_${merchantId}`, null);
+          const savedSettings = await indexedDBService.getSetting<POSSettings>(`pos_settings_${merchantId}`, undefined);
           if (savedSettings) {
             setSettings(savedSettings);
           }

@@ -166,30 +166,31 @@ export function POSPaymentCallbackPage() {
       // Create sale record
       const saleRecord = {
         merchant_id: saleData.merchantId,
-        items: saleData.cart.map(item => ({
-          product_id: item.id,
-          name: item.name,
-          quantity: item.quantity,
-          price: item.price,
-          total: item.price * item.quantity,
-        })),
         subtotal: saleData.totalAmount - saleData.taxAmount + saleData.discountAmount,
         tax_amount: saleData.taxAmount,
         discount_amount: saleData.discountAmount,
         total_amount: saleData.totalAmount,
-        payment_method: 'mobile_money',
-        payment_status: 'completed',
-        monime_transaction_id: saleData.monimeTransactionId,
+        payment_method: 'mobile_money' as const,
+        payment_status: 'completed' as const,
+        payment_reference: saleData.monimeTransactionId,
         customer_phone: saleData.customerPhone,
-        mobile_money_provider: saleData.mobileMoneyProvider,
+        status: 'completed' as const,
+        items: [] as any[],
       };
 
-      await posService.createSale(saleRecord);
+      // Create sale items array
+      const saleItems = saleData.cart.map(item => ({
+        product_id: item.id,
+        product_name: item.name,
+        quantity: item.quantity,
+        unit_price: item.price,
+        discount_amount: 0,
+        tax_amount: 0,
+        total_price: item.price * item.quantity,
+      }));
 
-      // Update inventory for each item
-      for (const item of saleData.cart) {
-        await posService.decrementProductStock(item.id, item.quantity);
-      }
+      // createSale automatically handles inventory updates
+      await posService.createSale(saleRecord, saleItems);
     } catch (error) {
       console.error('Error completing sale:', error);
       // Don't throw - the payment was successful, just log the error
@@ -230,7 +231,7 @@ export function POSPaymentCallbackPage() {
             <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
               <p className="text-sm text-gray-500 dark:text-gray-400">Amount</p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                {formatCurrency(pendingSale.totalAmount, { code: 'SLE', symbol: 'Le', decimals: 0 })}
+                {formatCurrency(pendingSale.totalAmount)}
               </p>
             </div>
           )}
@@ -299,7 +300,7 @@ export function POSPaymentCallbackPage() {
                 </span>
               </div>
               <p className="text-4xl font-bold text-green-600 dark:text-green-400">
-                {formatCurrency(pendingSale.totalAmount, { code: 'SLE', symbol: 'Le', decimals: 0 })}
+                {formatCurrency(pendingSale.totalAmount)}
               </p>
               <div className="mt-4 pt-4 border-t border-green-200 dark:border-green-800">
                 <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -368,7 +369,7 @@ export function POSPaymentCallbackPage() {
             <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-xl p-4 mb-6 border border-yellow-200 dark:border-yellow-800">
               <p className="text-sm text-gray-500 dark:text-gray-400">Unpaid Amount</p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                {formatCurrency(pendingSale.totalAmount, { code: 'SLE', symbol: 'Le', decimals: 0 })}
+                {formatCurrency(pendingSale.totalAmount)}
               </p>
             </div>
           )}
@@ -417,7 +418,7 @@ export function POSPaymentCallbackPage() {
           <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 mb-6 border border-red-200 dark:border-red-800">
             <p className="text-sm text-gray-500 dark:text-gray-400">Amount Due</p>
             <p className="text-2xl font-bold text-gray-900 dark:text-white">
-              {formatCurrency(pendingSale.totalAmount, { code: 'SLE', symbol: 'Le', decimals: 0 })}
+              {formatCurrency(pendingSale.totalAmount)}
             </p>
           </div>
         )}

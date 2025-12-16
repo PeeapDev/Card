@@ -114,7 +114,7 @@ export function CheckoutSuccessPage() {
           {merchantName && (
             <p className="text-gray-500 text-sm mt-2 flex items-center justify-center gap-1">
               Paid to {merchantName}
-              {merchantVerified && <BadgeCheck className="w-4 h-4 text-blue-500" title="Verified Business" />}
+              {merchantVerified && <span title="Verified Business"><BadgeCheck className="w-4 h-4 text-blue-500" /></span>}
             </p>
           )}
         </div>
@@ -132,7 +132,7 @@ export function CheckoutSuccessPage() {
                 <span className="text-gray-500">Merchant</span>
                 <span className="font-medium text-gray-900 flex items-center gap-1">
                   {merchantName}
-                  {merchantVerified && <BadgeCheck className="w-4 h-4 text-blue-500" title="Verified Business" />}
+                  {merchantVerified && <span title="Verified Business"><BadgeCheck className="w-4 h-4 text-blue-500" /></span>}
                 </span>
               </div>
             )}

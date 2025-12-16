@@ -222,7 +222,7 @@ export function POSMarketplacePage() {
   };
 
   // Update order status
-  const updateOrderStatus = async (orderId: string, newStatus: string) => {
+  const updateOrderStatus = async (orderId: string, newStatus: MarketplaceOrder['status']) => {
     setUpdatingOrder(orderId);
     try {
       await marketplaceService.updateOrderStatus(orderId, newStatus);
@@ -240,8 +240,8 @@ export function POSMarketplacePage() {
   };
 
   // Get next status in workflow
-  const getNextStatus = (currentStatus: string, fulfillmentType: string) => {
-    const workflow: Record<string, Record<string, string>> = {
+  const getNextStatus = (currentStatus: string, orderType: string): MarketplaceOrder['status'] | null => {
+    const workflow: Record<string, Record<string, MarketplaceOrder['status']>> = {
       delivery: {
         pending: 'confirmed',
         confirmed: 'preparing',
@@ -257,7 +257,7 @@ export function POSMarketplacePage() {
         ready: 'completed',
       },
     };
-    return workflow[fulfillmentType]?.[currentStatus] || null;
+    return workflow[orderType]?.[currentStatus] || null;
   };
 
   // Filter orders
@@ -604,12 +604,12 @@ export function POSMarketplacePage() {
                             {order.customer_name}
                           </span>
                           <span className="flex items-center gap-1">
-                            {order.fulfillment_type === 'delivery' ? (
+                            {order.order_type === 'delivery' ? (
                               <Truck className="w-4 h-4" />
                             ) : (
                               <Package className="w-4 h-4" />
                             )}
-                            {order.fulfillment_type === 'delivery' ? 'Delivery' : 'Pickup'}
+                            {order.order_type === 'delivery' ? 'Delivery' : 'Pickup'}
                           </span>
                         </div>
 
@@ -618,7 +618,7 @@ export function POSMarketplacePage() {
                             {order.items?.length || 0} items
                           </span>
                           <span className="font-semibold text-gray-900 dark:text-white">
-                            {formatCurrency(order.total)}
+                            {formatCurrency(order.total_amount)}
                           </span>
                         </div>
                       </button>
@@ -673,15 +673,15 @@ export function POSMarketplacePage() {
                             <Phone className="w-4 h-4 text-gray-400" />
                             {selectedOrder.customer_phone}
                           </p>
-                          {selectedOrder.fulfillment_type === 'delivery' && selectedOrder.delivery_address && (
+                          {selectedOrder.order_type === 'delivery' && selectedOrder.delivery_address && (
                             <p className="flex items-start gap-2">
                               <MapPin className="w-4 h-4 text-gray-400 mt-0.5" />
                               {selectedOrder.delivery_address}
                             </p>
                           )}
-                          {selectedOrder.delivery_notes && (
+                          {selectedOrder.delivery_instructions && (
                             <p className="text-gray-500 italic mt-2">
-                              Note: {selectedOrder.delivery_notes}
+                              Note: {selectedOrder.delivery_instructions}
                             </p>
                           )}
                         </div>
@@ -697,7 +697,7 @@ export function POSMarketplacePage() {
                                 {item.quantity}x {item.product_name}
                               </span>
                               <span className="text-gray-900 dark:text-white">
-                                {formatCurrency(item.price * item.quantity)}
+                                {formatCurrency(item.unit_price * item.quantity)}
                               </span>
                             </div>
                           ))}
@@ -715,7 +715,7 @@ export function POSMarketplacePage() {
                           )}
                           <div className="flex justify-between font-semibold">
                             <span>Total</span>
-                            <span>{formatCurrency(selectedOrder.total)}</span>
+                            <span>{formatCurrency(selectedOrder.total_amount)}</span>
                           </div>
                         </div>
                       </div>
@@ -724,7 +724,7 @@ export function POSMarketplacePage() {
                       {!['completed', 'cancelled'].includes(selectedOrder.status) && (
                         <div className="flex gap-2">
                           {(() => {
-                            const nextStatus = getNextStatus(selectedOrder.status, selectedOrder.fulfillment_type);
+                            const nextStatus = getNextStatus(selectedOrder.status, selectedOrder.order_type);
                             if (!nextStatus) return null;
                             const nextConfig = ORDER_STATUS_CONFIG[nextStatus];
                             const NextIcon = nextConfig?.icon || Check;

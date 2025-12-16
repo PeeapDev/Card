@@ -775,7 +775,7 @@ export function BusinessCheckoutPage() {
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Payment Successful!</h1>
           <p className="text-gray-600 mb-2 flex items-center justify-center gap-1 flex-wrap">
             Thank you for your payment of {formatAmount(parseFloat(amount))} to {business?.name}
-            {business?.is_verified && <BadgeCheck className="w-4 h-4 text-blue-500" title="Verified Business" />}
+            {business?.is_verified && <span title="Verified Business"><BadgeCheck className="w-4 h-4 text-blue-500" /></span>}
           </p>
           {(paymentId || paymentReference) && (
             <p className="text-xs text-gray-400 mb-6 font-mono">
@@ -843,7 +843,7 @@ export function BusinessCheckoutPage() {
                 <div>
                   <p className="font-semibold text-gray-900 flex items-center gap-1">
                     {business?.name}
-                    {business?.is_verified && <BadgeCheck className="w-4 h-4 text-blue-500" title="Verified Business" />}
+                    {business?.is_verified && <span title="Verified Business"><BadgeCheck className="w-4 h-4 text-blue-500" /></span>}
                   </p>
                   <p className="text-xs text-gray-500">
                     {urlMode === 'test' && (
@@ -1014,7 +1014,7 @@ export function BusinessCheckoutPage() {
                 )}
                 <h2 className="text-lg font-semibold text-gray-900 flex items-center justify-center gap-1">
                   {business?.name}
-                  {business?.is_verified && <BadgeCheck className="w-5 h-5 text-blue-500" title="Verified Business" />}
+                  {business?.is_verified && <span title="Verified Business"><BadgeCheck className="w-5 h-5 text-blue-500" /></span>}
                 </h2>
               </div>
 
