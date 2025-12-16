@@ -56,7 +56,7 @@ export function PaymentCheckoutPage() {
   const formatAmount = (amount: number, currency: string) => {
     // SLE is a whole number currency, no division by 100 needed
     if (currency === 'SLE' || currency === 'SLL') {
-      return `Le ${new Intl.NumberFormat('en-US', { minimumFractionDigits: 0 }).format(amount)}`;
+      return `NLe ${new Intl.NumberFormat('en-US', { minimumFractionDigits: 0 }).format(amount)}`;
     }
     return new Intl.NumberFormat('en-US', {
       style: 'currency',

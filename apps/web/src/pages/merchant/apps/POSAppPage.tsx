@@ -497,7 +497,7 @@ export function POSAppPage() {
   };
 
   const formatCurrency = (amount: number) => {
-    return `Le ${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    return `NLe ${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
   };
 
   const formatTime = (isoString: string) => {
@@ -760,7 +760,7 @@ export function POSAppPage() {
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                       <XAxis dataKey="hour" tick={{ fontSize: 10 }} interval={3} />
-                      <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `Le ${v >= 1000 ? (v/1000).toFixed(0) + 'K' : v}`} />
+                      <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `NLe ${v >= 1000 ? (v/1000).toFixed(0) + 'K' : v}`} />
                       <Tooltip
                         formatter={(value: number, name: string) => [
                           name === 'revenue' ? formatCurrency(value) : value,
@@ -858,7 +858,7 @@ export function POSAppPage() {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={categoryData} layout="vertical">
                       <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" horizontal={false} />
-                      <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v) => `Le ${v >= 1000 ? (v/1000).toFixed(0) + 'K' : v}`} />
+                      <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v) => `NLe ${v >= 1000 ? (v/1000).toFixed(0) + 'K' : v}`} />
                       <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={80} />
                       <Tooltip formatter={(value: number) => formatCurrency(value)} />
                       <Bar dataKey="revenue" fill="#10B981" radius={[0, 4, 4, 0]} />

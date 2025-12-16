@@ -61,16 +61,16 @@ import {
 // Format currency - using Le (Leone) symbol
 const formatCurrency = (amount: number) => {
   if (amount >= 1000000) {
-    return `Le ${(amount / 1000000).toFixed(1)}M`;
+    return `NLe ${(amount / 1000000).toFixed(1)}M`;
   }
   if (amount >= 1000) {
-    return `Le ${(amount / 1000).toFixed(1)}K`;
+    return `NLe ${(amount / 1000).toFixed(1)}K`;
   }
-  return `Le ${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  return `NLe ${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 };
 
 const formatFullCurrency = (amount: number) => {
-  return `Le ${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  return `NLe ${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 };
 
 // Colors for charts

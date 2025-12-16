@@ -26,7 +26,7 @@ import marketplaceService, { MarketplaceOrder } from '@/services/marketplace.ser
 
 // Format currency for Sierra Leone
 const formatCurrency = (amount: number) => {
-  return `Le ${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  return `NLe ${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 };
 
 // Order status configuration

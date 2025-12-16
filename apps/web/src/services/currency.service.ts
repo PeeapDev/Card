@@ -133,7 +133,7 @@ export function clearCurrencyCache(): void {
  */
 function getDefaultCurrencies(): Currency[] {
   return [
-    { code: 'SLE', name: 'Sierra Leone Leone', symbol: 'Le', isDefault: true, isActive: true },
+    { code: 'SLE', name: 'Sierra Leone New Leone', symbol: 'NLe', isDefault: true, isActive: true },
     { code: 'USD', name: 'US Dollar', symbol: '$', isDefault: false, isActive: true },
   ];
 }

@@ -194,7 +194,7 @@ export function CashOutPage() {
   };
 
   const formatCurrency = (amount: number) => {
-    return `Le ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `NLe ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const formatDate = (dateString: string) => {

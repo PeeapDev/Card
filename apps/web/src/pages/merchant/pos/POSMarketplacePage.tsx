@@ -55,7 +55,7 @@ import {
 
 // Format currency - using Le (Leone) symbol
 const formatCurrency = (amount: number) => {
-  return `Le ${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  return `NLe ${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 };
 
 // Days of the week
