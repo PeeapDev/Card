@@ -190,6 +190,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ========== ANALYTICS ENDPOINTS ==========
     } else if (path === 'analytics/pageview' || path === 'analytics/pageview/') {
       return await handleAnalyticsPageView(req, res);
+    } else if (path === 'analytics/pageview/duration' || path === 'analytics/pageview/duration/') {
+      return await handleAnalyticsPageViewDuration(req, res);
     } else if (path === 'analytics/summary' || path === 'analytics/summary/') {
       return await handleAnalyticsSummary(req, res);
     } else if (path === 'analytics/pages' || path === 'analytics/pages/') {
@@ -2581,6 +2583,9 @@ async function handleCheckoutSessions(req: VercelRequest, res: VercelResponse) {
       recipientId,
       recipientWalletId,
       recipientName,
+      // Payment guards - for tracking and verification
+      reference,
+      note,
     } = req.body;
 
     // Either merchantId OR recipientId is required (for P2P payments)
@@ -2615,6 +2620,10 @@ async function handleCheckoutSessions(req: VercelRequest, res: VercelResponse) {
         payment_methods: paymentMethods || { qr: true, card: true, mobile: true },
         metadata: {
           ...metadata,
+          // Store payment guards for verification
+          reference,
+          note,
+          expectedAmount: amount,
           // Store P2P recipient info in metadata
           ...(isP2P && {
             type: 'p2p',
@@ -2638,6 +2647,9 @@ async function handleCheckoutSessions(req: VercelRequest, res: VercelResponse) {
       sessionId: session.external_id,
       url: `${frontendUrl}/checkout/pay/${session.external_id}`,
       expiresAt: session.expires_at,
+      reference,
+      note,
+      amount,
     });
   } catch (error: any) {
     console.error('[Checkout] Error:', error);
@@ -2661,7 +2673,15 @@ async function handleCheckoutSessionById(req: VercelRequest, res: VercelResponse
       return res.status(404).json({ error: 'Session not found' });
     }
 
-    return res.status(200).json(session);
+    // Extract reference and note from metadata for verification
+    const metadata = session.metadata || {};
+    return res.status(200).json({
+      ...session,
+      id: session.external_id,
+      reference: metadata.reference || null,
+      note: metadata.note || null,
+      expectedAmount: metadata.expectedAmount || session.amount,
+    });
   } catch (error: any) {
     console.error('[Checkout] Get session error:', error);
     return res.status(500).json({ error: error.message });
@@ -6133,6 +6153,39 @@ async function handleAnalyticsPageView(req: VercelRequest, res: VercelResponse) 
     return res.status(200).json({ success: true, id: data.id });
   } catch (error: any) {
     console.error('[Analytics] PageView error:', error);
+    return res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+}
+
+async function handleAnalyticsPageViewDuration(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const { sessionId, pagePath, durationSeconds } = req.body;
+
+    if (!sessionId || !pagePath) {
+      return res.status(400).json({ error: 'sessionId and pagePath are required' });
+    }
+
+    const { error } = await supabase
+      .from('page_views')
+      .update({
+        duration_seconds: durationSeconds || 0,
+        is_bounce: false
+      })
+      .eq('session_id', sessionId)
+      .eq('page_path', pagePath);
+
+    if (error) {
+      console.error('[Analytics] Duration update error:', error);
+      return res.status(500).json({ error: 'Failed to update duration' });
+    }
+
+    return res.status(200).json({ success: true });
+  } catch (error: any) {
+    console.error('[Analytics] Duration error:', error);
     return res.status(500).json({ error: error.message || 'Internal server error' });
   }
 }
