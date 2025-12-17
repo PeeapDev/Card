@@ -3,7 +3,7 @@
  * Tracks page views, user sessions, and visitor information
  */
 
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase';
 
 interface PageViewData {
   sessionId: string;
@@ -130,7 +130,7 @@ class AnalyticsTrackingService {
 
     try {
       console.log('[Analytics] Tracking page view:', path);
-      const { data, error } = await supabase.from('page_views').insert({
+      const { data, error } = await supabaseAdmin.from('page_views').insert({
         session_id: this.sessionId,
         user_id: userId || null,
         page_path: path,
@@ -173,7 +173,7 @@ class AnalyticsTrackingService {
 
     if (duration > 0 && duration < 3600) { // Ignore durations > 1 hour (likely idle)
       try {
-        await supabase
+        await supabaseAdmin
           .from('page_views')
           .update({
             duration_seconds: duration,
