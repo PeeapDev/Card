@@ -72,9 +72,9 @@ export function WebsiteAnalyticsPage() {
       };
 
       const [summaryRes, pagesRes, visitorsRes] = await Promise.all([
-        fetch(`${API_URL}/analytics/summary?period=${period}`, { headers }),
-        fetch(`${API_URL}/analytics/pages?period=${period}`, { headers }),
-        fetch(`${API_URL}/analytics/visitors?period=${period}`, { headers }),
+        fetch(`${API_URL}/api/analytics/summary?period=${period}`, { headers }),
+        fetch(`${API_URL}/api/analytics/pages?period=${period}`, { headers }),
+        fetch(`${API_URL}/api/analytics/visitors?period=${period}`, { headers }),
       ]);
 
       if (!summaryRes.ok) {
