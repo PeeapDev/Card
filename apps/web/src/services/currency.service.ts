@@ -91,6 +91,23 @@ export function formatCurrencySync(amount: number, currencyCode: string, currenc
 }
 
 /**
+ * Format amount with currency symbol (sync version - uses hardcoded symbols)
+ * Returns format: "NLe 5.00" (with space after symbol)
+ * This is a simple synchronous method for quick formatting
+ */
+export function formatAmount(amount: number, currencyCode: string = 'SLE'): string {
+  const symbols: Record<string, string> = {
+    SLE: 'NLe',
+    USD: '$',
+    EUR: '€',
+    GBP: '£',
+  };
+  const symbol = symbols[currencyCode] || currencyCode;
+  const formattedAmount = amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${symbol} ${formattedAmount}`;
+}
+
+/**
  * Set default currency (updates in-memory cache only - no database table)
  */
 export async function setDefaultCurrency(code: string): Promise<boolean> {
@@ -145,6 +162,7 @@ export const currencyService = {
   getCurrencySymbol,
   formatCurrency,
   formatCurrencySync,
+  formatAmount,
   setDefaultCurrency,
   clearCurrencyCache,
 };
