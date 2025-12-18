@@ -1198,49 +1198,55 @@ export function AdminDashboard() {
           </section>
         </div>
 
-        {/* Floating System Float Button */}
-        <button
-          onClick={() => setFloatPanelOpen(!floatPanelOpen)}
-          className={`fixed bottom-6 right-6 z-50 p-4 rounded-full shadow-lg transition-all duration-300 ${
-            floatPanelOpen
-              ? 'bg-gray-600 hover:bg-gray-700'
-              : 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700'
-          } text-white`}
-          title="System Float Management"
-        >
-          {floatPanelOpen ? (
-            <X className="w-6 h-6" />
-          ) : (
-            <Banknote className="w-6 h-6" />
-          )}
-        </button>
-
-        {/* Floating System Float Panel */}
-        <AnimatePresence>
-          {floatPanelOpen && (
+        {/* System Float Button - Top Right */}
+        <div className="fixed top-20 right-6 z-50">
+          <button
+            onClick={() => setFloatPanelOpen(!floatPanelOpen)}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-lg transition-all duration-300 ${
+              floatPanelOpen
+                ? 'bg-gray-700 hover:bg-gray-800'
+                : 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700'
+            } text-white`}
+            title="System Float Management"
+          >
+            <Banknote className="w-5 h-5" />
+            <span className="text-sm font-medium">System Float</span>
             <motion.div
-              initial={{ opacity: 0, x: 100, scale: 0.95 }}
-              animate={{ opacity: 1, x: 0, scale: 1 }}
-              exit={{ opacity: 0, x: 100, scale: 0.95 }}
+              animate={{ rotate: floatPanelOpen ? 180 : 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed bottom-24 right-6 z-40 max-h-[calc(100vh-150px)] overflow-y-auto"
             >
-              <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 space-y-4">
-                <SystemFloatSidebar
-                  key={floatSidebarKey}
-                  onOpenFloat={handleOpenFloat}
-                  onReplenishFloat={handleReplenishFloat}
-                  onCloseFloat={handleCloseFloat}
-                  onViewHistory={handleViewHistory}
-                />
-                {/* Mobile Money Float Card */}
-                <div className="px-4 pb-4">
-                  <MobileMoneyFloatCard />
-                </div>
-              </div>
+              <ArrowDown className="w-4 h-4" />
             </motion.div>
-          )}
-        </AnimatePresence>
+          </button>
+
+          {/* Floating System Float Panel - Slides Down */}
+          <AnimatePresence>
+            {floatPanelOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: -20, scaleY: 0.95 }}
+                animate={{ opacity: 1, y: 0, scaleY: 1 }}
+                exit={{ opacity: 0, y: -20, scaleY: 0.95 }}
+                transition={{ duration: 0.25, ease: 'easeOut' }}
+                style={{ transformOrigin: 'top' }}
+                className="absolute top-14 right-0 w-80 max-h-[calc(100vh-180px)] overflow-y-auto"
+              >
+                <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700">
+                  <SystemFloatSidebar
+                    key={floatSidebarKey}
+                    onOpenFloat={handleOpenFloat}
+                    onReplenishFloat={handleReplenishFloat}
+                    onCloseFloat={handleCloseFloat}
+                    onViewHistory={handleViewHistory}
+                  />
+                  {/* Mobile Money Float Card */}
+                  <div className="px-4 pb-4">
+                    <MobileMoneyFloatCard />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
 
       {/* Float Management Modal */}
