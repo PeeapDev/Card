@@ -44,7 +44,8 @@ interface Bank {
 type DestinationType = 'momo' | 'bank';
 type Step = 'select' | 'form' | 'processing' | 'success' | 'error';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'https://peeap.vercel.app/api';
+// Use relative path for same-origin API requests (avoids CORS issues and ensures correct deployment)
+const API_BASE = '/api';
 
 const PROVIDER_DISPLAY: Record<string, { name: string; color: string; icon: string; bgColor: string }> = {
   'm17': { name: 'Orange Money', color: 'text-orange-600', icon: 'OM', bgColor: 'bg-orange-100' },
@@ -395,6 +396,14 @@ export function WithdrawPage() {
         }),
       });
 
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Non-JSON response:', text);
+        throw new Error('Service temporarily unavailable. Please try again later.');
+      }
+
       const data = await response.json();
 
       if (!response.ok || !data.success) {
@@ -406,7 +415,12 @@ export function WithdrawPage() {
       refetchWallets();
     } catch (err: any) {
       console.error('Withdraw error:', err);
-      setError(err.message || 'Withdrawal failed. Please try again.');
+      // Handle JSON parse errors specifically
+      if (err.name === 'SyntaxError' && err.message.includes('JSON')) {
+        setError('Service temporarily unavailable. Please try again later.');
+      } else {
+        setError(err.message || 'Withdrawal failed. Please try again.');
+      }
       setStep('error');
     }
   };
