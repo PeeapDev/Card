@@ -232,22 +232,29 @@ export function AdminDashboard() {
 
       try {
         const { data: { session } } = await supabase.auth.getSession();
+        console.log('[Dashboard] Session exists:', !!session, 'Has token:', !!session?.access_token);
         if (session?.access_token) {
           // Use relative URL to go through same-origin proxy (my.peeap.com/api/*)
+          console.log('[Dashboard] Fetching analytics...');
           const analyticsRes = await fetch(`/api/analytics/summary?period=24h`, {
             headers: {
               'Authorization': `Bearer ${session.access_token}`,
               'Content-Type': 'application/json',
             },
           });
+          console.log('[Dashboard] Analytics response status:', analyticsRes.status);
           if (analyticsRes.ok) {
             const analyticsData = await analyticsRes.json();
+            console.log('[Dashboard] Analytics data:', analyticsData);
             pageViewsToday = analyticsData.totalViews || 0;
             uniqueVisitorsToday = analyticsData.uniqueVisitors || 0;
             pageViewsTotal = analyticsData.totalViews || 0; // Will show 24h total
           } else {
-            console.error('[Dashboard] Analytics API error:', await analyticsRes.text());
+            const errorText = await analyticsRes.text();
+            console.error('[Dashboard] Analytics API error:', analyticsRes.status, errorText);
           }
+        } else {
+          console.warn('[Dashboard] No session/token available for analytics');
         }
       } catch (err) {
         console.error('[Dashboard] Analytics fetch error:', err);
