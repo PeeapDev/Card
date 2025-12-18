@@ -6216,7 +6216,7 @@ async function handleAnalyticsSummary(req: VercelRequest, res: VercelResponse) {
       .eq('id', user.id)
       .single();
 
-    if (!userData || !['admin', 'superadmin'].includes(userData.roles)) {
+    if (!userData || !(userData.roles?.includes('admin') || userData.roles?.includes('superadmin'))) {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
@@ -6326,7 +6326,7 @@ async function handleAnalyticsPages(req: VercelRequest, res: VercelResponse) {
       .eq('id', user.id)
       .single();
 
-    if (!userData || !['admin', 'superadmin'].includes(userData.roles)) {
+    if (!userData || !(userData.roles?.includes('admin') || userData.roles?.includes('superadmin'))) {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
@@ -6398,7 +6398,7 @@ async function handleAnalyticsVisitors(req: VercelRequest, res: VercelResponse) 
       .eq('id', user.id)
       .single();
 
-    if (!userData || !['admin', 'superadmin'].includes(userData.roles)) {
+    if (!userData || !(userData.roles?.includes('admin') || userData.roles?.includes('superadmin'))) {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
