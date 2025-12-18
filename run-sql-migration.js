@@ -16,8 +16,10 @@ async function runMigration() {
     await client.connect();
     console.log('Connected!');
 
-    // Read the SQL file
-    const sql = fs.readFileSync('./scripts/migrations/030_checkout_sessions.sql', 'utf8');
+    // Read the SQL file from command line argument or default
+    const migrationFile = process.argv[2] || './scripts/migrations/048_checkout_sessions_test_mode.sql';
+    console.log('Running migration file:', migrationFile);
+    const sql = fs.readFileSync(migrationFile, 'utf8');
 
     console.log('Running migration...');
     await client.query(sql);

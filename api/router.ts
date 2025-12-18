@@ -864,6 +864,26 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
               .eq('id', pendingTx.id);
 
             console.log('[Deposit Success] Wallet credited:', { walletId, amount, newBalance });
+
+            // Credit the mobile money float - money came into the platform
+            // Detect provider from session or default to Orange Money
+            const providerId = sessionStatus.providerId || pendingTx.metadata?.providerId || 'm17';
+            try {
+              await supabase.rpc('credit_mobile_money_float', {
+                p_provider_id: providerId,
+                p_amount: amount,
+                p_fee: 0,
+                p_reference: String(sessionId),
+                p_description: `Deposit from user - ${pendingTx.description || 'Mobile Money Deposit'}`,
+                p_transaction_id: pendingTx.id,
+                p_user_id: wallet.user_id || null,
+                p_currency: currency,
+              });
+              console.log('[Deposit Success] Mobile money float credited:', { providerId, amount });
+            } catch (floatErr) {
+              console.error('[Deposit Success] Failed to credit mobile money float:', floatErr);
+              // Don't fail the deposit if float update fails
+            }
           }
         }
       }
@@ -1075,6 +1095,24 @@ async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse
             console.error('[CheckoutPay] Transaction insert error:', txError);
           }
           console.log('[CheckoutPay] Merchant wallet credited:', { merchantOwnerId, amount: paymentAmount, ref: transactionRef });
+
+          // Credit mobile money float - money came into the platform via mobile money
+          try {
+            await supabase.rpc('credit_mobile_money_float', {
+              p_provider_id: 'm17', // Default to Orange Money for now
+              p_amount: paymentAmount,
+              p_fee: 0,
+              p_reference: transactionRef,
+              p_description: `Checkout payment from ${session.metadata?.payerName || 'Customer'} to ${session.merchant_name}`,
+              p_transaction_id: null,
+              p_user_id: merchantOwnerId,
+              p_currency: session.currency_code || 'SLE',
+            });
+            console.log('[CheckoutPay] Mobile money float credited:', { amount: paymentAmount });
+          } catch (floatErr) {
+            console.error('[CheckoutPay] Failed to credit mobile money float:', floatErr);
+            // Don't fail the payment if float update fails
+          }
 
           // Send notification to merchant (use owner's user_id)
           await supabase.from('user_notifications').insert({
@@ -4581,6 +4619,26 @@ async function handleUserCashout(req: VercelRequest, res: VercelResponse) {
           },
         })
         .eq('reference', externalId);
+
+      // Debit mobile money float when payout is completed (money going out to provider)
+      if (updateData.status === 'COMPLETED' && destinationType === 'momo') {
+        try {
+          await supabase.rpc('debit_mobile_money_float', {
+            p_provider_id: providerId,
+            p_amount: amount,
+            p_fee: fee,
+            p_reference: externalId,
+            p_description: `Payout to ${providerName} - ${normalizedAccountNumber}`,
+            p_transaction_id: payout.id,
+            p_user_id: userId,
+            p_currency: currency,
+          });
+          console.log('[UserCashout] Mobile money float debited:', { providerId, amount });
+        } catch (floatErr) {
+          console.error('[UserCashout] Failed to debit mobile money float:', floatErr);
+          // Don't fail the payout if float update fails
+        }
+      }
 
       // Create notification
       await supabase.from('user_notifications').insert({
