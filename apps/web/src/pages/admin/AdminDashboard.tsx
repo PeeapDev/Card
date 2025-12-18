@@ -21,6 +21,7 @@ import { MotionCard } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
 import { currencyService, Currency } from '@/services/currency.service';
+import { API_URL } from '@/config/urls';
 import { adminNotificationService, AdminNotification } from '@/services/adminNotification.service';
 import { useAuth } from '@/context/AuthContext';
 import { SystemFloatSidebar } from '@/components/admin/SystemFloatSidebar';
@@ -225,21 +226,30 @@ export function AdminDashboard() {
       const { data: wallets } = await supabase.from('wallets').select('balance');
       const totalVolume = wallets?.reduce((sum, w) => sum + (w.balance || 0), 0) || 0;
 
-      // Fetch page views analytics
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
+      // Fetch page views analytics via API (bypasses RLS)
+      let pageViewsToday = 0;
+      let pageViewsTotal = 0;
+      let uniqueVisitorsToday = 0;
 
-      const { count: pageViewsTotal } = await supabase
-        .from('page_views')
-        .select('*', { count: 'exact', head: true });
-
-      const { data: todayViews } = await supabase
-        .from('page_views')
-        .select('session_id')
-        .gte('created_at', todayStart.toISOString());
-
-      const pageViewsToday = todayViews?.length || 0;
-      const uniqueVisitorsToday = new Set(todayViews?.map(v => v.session_id)).size;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          const analyticsRes = await fetch(`${API_URL}/api/analytics/summary?period=24h`, {
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+              'Content-Type': 'application/json',
+            },
+          });
+          if (analyticsRes.ok) {
+            const analyticsData = await analyticsRes.json();
+            pageViewsToday = analyticsData.totalViews || 0;
+            uniqueVisitorsToday = analyticsData.uniqueVisitors || 0;
+            pageViewsTotal = analyticsData.totalViews || 0; // Will show 24h total
+          }
+        }
+      } catch (err) {
+        console.error('[Dashboard] Analytics fetch error:', err);
+      }
 
       // Calculate stats
       setStats({
