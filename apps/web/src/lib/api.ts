@@ -2,7 +2,11 @@
  * API client utility for making requests to the backend
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+// Ensure API_BASE_URL ends with /api for proper routing
+const envApiUrl = import.meta.env.VITE_API_URL;
+const API_BASE_URL = envApiUrl
+  ? (envApiUrl.endsWith('/api') ? envApiUrl : `${envApiUrl}/api`)
+  : '/api';
 
 interface RequestOptions extends RequestInit {
   params?: Record<string, string>;

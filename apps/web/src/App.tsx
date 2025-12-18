@@ -128,6 +128,9 @@ import { MerchantNotificationsPage } from '@/pages/merchant/MerchantNotification
 // POS Pages
 import { POSTerminalPage, POSProductsPage, POSSalesPage, POSSetupWizard, POSReportsPage, POSStaffPage, POSInventoryPage, POSLoyaltyPage, POSSettingsPage, POSKitchenDisplayPage, POSCustomerDisplayPage, POSTableManagementPage, POSCustomersPage, POSSuppliersPage, POSDiscountsPage, POSPurchaseOrdersPage, POSMarketplacePage, POSPaymentCallbackPage } from '@/pages/merchant/pos';
 import { POSAppPage } from '@/pages/merchant/apps/POSAppPage';
+// Events Pages
+import { EventsAppPage } from '@/pages/merchant/apps/EventsAppPage';
+import { EventsSetupWizard, EventsListPage, EventFormPage, EventDetailsPage, EventTicketTypesPage, EventStaffPage, EventScannerPage, EventAnalyticsPage, EventWalletPage } from '@/pages/merchant/events';
 // User Notifications
 import { UserNotificationsPage } from '@/pages/UserNotificationsPage';
 // Staff POS
@@ -1211,6 +1214,18 @@ function App() {
                   <Route path="/merchant/pos/purchase-orders" element={<RoleBasedRoute allowedRoles={['merchant']}><POSPurchaseOrdersPage /></RoleBasedRoute>} />
                   <Route path="/merchant/pos/marketplace" element={<RoleBasedRoute allowedRoles={['merchant']}><POSMarketplacePage /></RoleBasedRoute>} />
                   <Route path="/merchant/pos/payment/callback" element={<POSPaymentCallbackPage />} />
+                  {/* Events App Routes */}
+                  <Route path="/merchant/apps/events" element={<RoleBasedRoute allowedRoles={['merchant']}><EventsAppPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/events/setup" element={<RoleBasedRoute allowedRoles={['merchant']}><EventsSetupWizard /></RoleBasedRoute>} />
+                  <Route path="/merchant/events" element={<RoleBasedRoute allowedRoles={['merchant']}><EventsListPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/events/create" element={<RoleBasedRoute allowedRoles={['merchant']}><EventFormPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/events/:eventId" element={<RoleBasedRoute allowedRoles={['merchant']}><EventDetailsPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/events/:eventId/edit" element={<RoleBasedRoute allowedRoles={['merchant']}><EventFormPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/events/:eventId/tickets" element={<RoleBasedRoute allowedRoles={['merchant']}><EventTicketTypesPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/events/:eventId/staff" element={<RoleBasedRoute allowedRoles={['merchant']}><EventStaffPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/events/:eventId/scanner" element={<RoleBasedRoute allowedRoles={['merchant']}><EventScannerPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/events/:eventId/analytics" element={<RoleBasedRoute allowedRoles={['merchant']}><EventAnalyticsPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/events/:eventId/wallet" element={<RoleBasedRoute allowedRoles={['merchant']}><EventWalletPage /></RoleBasedRoute>} />
                   <Route path="/merchant/*" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantDashboard /></RoleBasedRoute>} />
 
                   {/* Agent Routes */}

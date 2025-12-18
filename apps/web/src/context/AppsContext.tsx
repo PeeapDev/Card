@@ -9,6 +9,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import posService from '@/services/pos.service';
+import eventService from '@/services/event.service';
 
 export interface AppConfig {
   id: string;
@@ -35,6 +36,7 @@ const DEFAULT_APPS: Record<string, boolean> = {
   pos: false, // POS disabled by default until user enables it
   fuel_station: false,
   transportation: false,
+  events: false, // Events disabled by default until user enables it
 };
 
 interface AppsProviderProps {
@@ -71,12 +73,15 @@ export function AppsProvider({ children }: AppsProviderProps) {
       // Check POS setup status from database
       const posEnabled = await posService.isPOSSetupCompleted(merchantId);
 
+      // Check Events setup status from database
+      const eventsEnabled = await eventService.isEventsSetupCompleted(merchantId);
+
       // Update state with database values
       setEnabledApps(prev => {
         const newState = {
           ...prev,
           pos: posEnabled,
-          // Add other apps here as they get database support
+          events: eventsEnabled,
         };
 
         // Update localStorage cache
@@ -122,19 +127,17 @@ export function AppsProvider({ children }: AppsProviderProps) {
     }
 
     // Persist to database
-    if (user?.id && appId === 'pos') {
+    if (user?.id) {
       try {
-        if (newValue) {
-          // When enabling POS, mark setup as completed
+        if (appId === 'pos') {
           await posService.savePOSSettings({
             merchant_id: user.id,
-            setup_completed: true,
+            setup_completed: newValue,
           });
-        } else {
-          // When disabling POS, mark setup as not completed
-          await posService.savePOSSettings({
+        } else if (appId === 'events') {
+          await eventService.saveEventsSettings({
             merchant_id: user.id,
-            setup_completed: false,
+            setup_completed: newValue,
           });
         }
       } catch (error) {
@@ -164,12 +167,19 @@ export function AppsProvider({ children }: AppsProviderProps) {
     }
 
     // Persist to database
-    if (user?.id && appId === 'pos') {
+    if (user?.id) {
       try {
-        await posService.savePOSSettings({
-          merchant_id: user.id,
-          setup_completed: true,
-        });
+        if (appId === 'pos') {
+          await posService.savePOSSettings({
+            merchant_id: user.id,
+            setup_completed: true,
+          });
+        } else if (appId === 'events') {
+          await eventService.saveEventsSettings({
+            merchant_id: user.id,
+            setup_completed: true,
+          });
+        }
       } catch (error) {
         console.error('Error enabling app in database:', error);
       }
@@ -192,12 +202,19 @@ export function AppsProvider({ children }: AppsProviderProps) {
     }
 
     // Persist to database
-    if (user?.id && appId === 'pos') {
+    if (user?.id) {
       try {
-        await posService.savePOSSettings({
-          merchant_id: user.id,
-          setup_completed: false,
-        });
+        if (appId === 'pos') {
+          await posService.savePOSSettings({
+            merchant_id: user.id,
+            setup_completed: false,
+          });
+        } else if (appId === 'events') {
+          await eventService.saveEventsSettings({
+            merchant_id: user.id,
+            setup_completed: false,
+          });
+        }
       } catch (error) {
         console.error('Error disabling app in database:', error);
       }

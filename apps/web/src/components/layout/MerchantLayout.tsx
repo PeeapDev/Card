@@ -25,6 +25,7 @@ import {
   Wallet,
   CreditCard,
   Repeat,
+  Calendar,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useDeveloperMode } from '@/context/DeveloperModeContext';
@@ -85,6 +86,7 @@ const appNavItems: Record<string, NavItem> = {
   pos: { id: 'pos', path: '/merchant/apps/pos', label: 'Point of Sale', icon: ShoppingCart },
   fuel_station: { id: 'fuel-station', path: '/merchant/apps/fuel-station', label: 'Fuel Station', icon: Car },
   transportation: { id: 'transportation', path: '/merchant/apps/transportation', label: 'Transportation', icon: Car },
+  events: { id: 'events', path: '/merchant/apps/events', label: 'Events', icon: Calendar },
 };
 
 // Sortable nav item component
@@ -232,6 +234,7 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
   const isPosEnabled = isAppEnabled('pos');
   const isFuelStationEnabled = isAppEnabled('fuel_station');
   const isTransportationEnabled = isAppEnabled('transportation');
+  const isEventsEnabled = isAppEnabled('events');
 
   // Build the complete list of available nav items (base + enabled apps)
   const availableNavItems = useMemo(() => {
@@ -239,8 +242,9 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
     if (isPosEnabled) items.push(appNavItems.pos);
     if (isFuelStationEnabled) items.push(appNavItems.fuel_station);
     if (isTransportationEnabled) items.push(appNavItems.transportation);
+    if (isEventsEnabled) items.push(appNavItems.events);
     return items;
-  }, [isPosEnabled, isFuelStationEnabled, isTransportationEnabled]);
+  }, [isPosEnabled, isFuelStationEnabled, isTransportationEnabled, isEventsEnabled]);
 
   // Update nav items when available items change (e.g., app enabled/disabled)
   useEffect(() => {
