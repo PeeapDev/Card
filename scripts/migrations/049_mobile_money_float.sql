@@ -241,7 +241,7 @@ CREATE POLICY "superadmin_view_float" ON mobile_money_float
   USING (
     EXISTS (
       SELECT 1 FROM users u
-      WHERE u.id = auth.uid() AND 'superadmin' = ANY(u.roles)
+      WHERE u.id = auth.uid() AND u.role IN ('SUPERADMIN', 'SUPER_ADMIN', 'ADMIN')
     )
   );
 
@@ -250,7 +250,7 @@ CREATE POLICY "superadmin_manage_float" ON mobile_money_float
   USING (
     EXISTS (
       SELECT 1 FROM users u
-      WHERE u.id = auth.uid() AND 'superadmin' = ANY(u.roles)
+      WHERE u.id = auth.uid() AND u.role IN ('SUPERADMIN', 'SUPER_ADMIN', 'ADMIN')
     )
   );
 
@@ -259,7 +259,7 @@ CREATE POLICY "superadmin_view_float_history" ON mobile_money_float_history
   USING (
     EXISTS (
       SELECT 1 FROM users u
-      WHERE u.id = auth.uid() AND 'superadmin' = ANY(u.roles)
+      WHERE u.id = auth.uid() AND u.role IN ('SUPERADMIN', 'SUPER_ADMIN', 'ADMIN')
     )
   );
 
