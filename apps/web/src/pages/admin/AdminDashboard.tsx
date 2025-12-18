@@ -21,7 +21,6 @@ import { MotionCard } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
 import { currencyService, Currency } from '@/services/currency.service';
-import { API_URL } from '@/config/urls';
 import { adminNotificationService, AdminNotification } from '@/services/adminNotification.service';
 import { useAuth } from '@/context/AuthContext';
 import { SystemFloatSidebar } from '@/components/admin/SystemFloatSidebar';
@@ -234,7 +233,8 @@ export function AdminDashboard() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.access_token) {
-          const analyticsRes = await fetch(`${API_URL}/api/analytics/summary?period=24h`, {
+          // Use relative URL to go through same-origin proxy (my.peeap.com/api/*)
+          const analyticsRes = await fetch(`/api/analytics/summary?period=24h`, {
             headers: {
               'Authorization': `Bearer ${session.access_token}`,
               'Content-Type': 'application/json',
@@ -245,6 +245,8 @@ export function AdminDashboard() {
             pageViewsToday = analyticsData.totalViews || 0;
             uniqueVisitorsToday = analyticsData.uniqueVisitors || 0;
             pageViewsTotal = analyticsData.totalViews || 0; // Will show 24h total
+          } else {
+            console.error('[Dashboard] Analytics API error:', await analyticsRes.text());
           }
         }
       } catch (err) {
