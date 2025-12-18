@@ -2,21 +2,14 @@
 -- Tracks the balance held with mobile money providers (Orange Money, Africell, etc.)
 -- This represents actual money held with providers that can be used for payouts
 
--- Drop existing policies if they exist
-DROP POLICY IF EXISTS "superadmin_view_float" ON mobile_money_float;
-DROP POLICY IF EXISTS "superadmin_manage_float" ON mobile_money_float;
-DROP POLICY IF EXISTS "superadmin_view_float_history" ON mobile_money_float_history;
-DROP POLICY IF EXISTS "no_update_float_history" ON mobile_money_float_history;
-DROP POLICY IF EXISTS "no_delete_float_history" ON mobile_money_float_history;
-
 -- Drop existing functions if they exist
 DROP FUNCTION IF EXISTS credit_mobile_money_float(VARCHAR, DECIMAL, DECIMAL, VARCHAR, TEXT, UUID, UUID, VARCHAR);
 DROP FUNCTION IF EXISTS debit_mobile_money_float(VARCHAR, DECIMAL, DECIMAL, VARCHAR, TEXT, UUID, UUID, VARCHAR);
 DROP FUNCTION IF EXISTS get_mobile_money_float_summary();
 
--- Drop existing tables if they exist (history first due to foreign key)
-DROP TABLE IF EXISTS mobile_money_float_history;
-DROP TABLE IF EXISTS mobile_money_float;
+-- Drop existing tables if they exist (this also drops policies automatically)
+DROP TABLE IF EXISTS mobile_money_float_history CASCADE;
+DROP TABLE IF EXISTS mobile_money_float CASCADE;
 
 -- Mobile Money Float table - tracks balance per provider
 CREATE TABLE mobile_money_float (
@@ -89,7 +82,6 @@ DECLARE
   v_new_balance DECIMAL(20, 2);
   v_history_id UUID;
 BEGIN
-  -- Get or create float record
   SELECT * INTO v_float_record
   FROM mobile_money_float
   WHERE provider_id = p_provider_id AND currency = p_currency
@@ -243,7 +235,7 @@ $$;
 ALTER TABLE mobile_money_float ENABLE ROW LEVEL SECURITY;
 ALTER TABLE mobile_money_float_history ENABLE ROW LEVEL SECURITY;
 
--- RLS Policies - using roles array
+-- RLS Policies
 CREATE POLICY "superadmin_view_float" ON mobile_money_float
   FOR SELECT TO authenticated
   USING (
@@ -271,7 +263,6 @@ CREATE POLICY "superadmin_view_float_history" ON mobile_money_float_history
     )
   );
 
--- Prevent modification of history (immutable audit log)
 CREATE POLICY "no_update_float_history" ON mobile_money_float_history
   FOR UPDATE TO authenticated
   USING (false);
