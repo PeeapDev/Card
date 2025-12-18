@@ -22,6 +22,7 @@ import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
 import { currencyService, Currency } from '@/services/currency.service';
 import { adminNotificationService, AdminNotification } from '@/services/adminNotification.service';
+import { authService } from '@/services/auth.service';
 import { useAuth } from '@/context/AuthContext';
 import { SystemFloatSidebar } from '@/components/admin/SystemFloatSidebar';
 import { FloatManagementModal } from '@/components/admin/FloatManagementModal';
@@ -235,14 +236,15 @@ export function AdminDashboard() {
       let uniqueVisitorsToday = 0;
 
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        console.log('[Dashboard] Session exists:', !!session, 'Has token:', !!session?.access_token);
-        if (session?.access_token) {
+        // Use authService for token (app uses custom auth, not Supabase auth)
+        const accessToken = authService.getAccessToken();
+        console.log('[Dashboard] Has access token:', !!accessToken);
+        if (accessToken) {
           // Use relative URL to go through same-origin proxy (my.peeap.com/api/*)
           console.log('[Dashboard] Fetching analytics...');
           const analyticsRes = await fetch(`/api/analytics/summary?period=24h`, {
             headers: {
-              'Authorization': `Bearer ${session.access_token}`,
+              'Authorization': `Bearer ${accessToken}`,
               'Content-Type': 'application/json',
             },
           });
@@ -258,7 +260,7 @@ export function AdminDashboard() {
             console.error('[Dashboard] Analytics API error:', analyticsRes.status, errorText);
           }
         } else {
-          console.warn('[Dashboard] No session/token available for analytics');
+          console.warn('[Dashboard] No access token available for analytics');
         }
       } catch (err) {
         console.error('[Dashboard] Analytics fetch error:', err);
