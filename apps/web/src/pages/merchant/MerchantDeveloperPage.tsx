@@ -490,93 +490,175 @@ const { paymentUrl } = await response.json();
  *   - Any iframe/sandboxed environment
  *   - Environments with strict CSP policies
  *
- * This SDK uses REDIRECT-ONLY flow (no iframes, no popups)
+ * ✅ ZERO API CALLS - Uses direct URL redirect (CSP-safe)
  * ============================================================================
  */
 
-<!-- STEP 1: Add V0-Compatible SDK Script -->
-<script src="${checkoutUrl}/embed/peeap-v0.js"></script>
+// ============================================================================
+// OPTION 1: SIMPLE DIRECT REDIRECT (Recommended for v0.dev)
+// ============================================================================
+// No SDK needed! Just redirect to URL with parameters.
+// This bypasses ALL CSP restrictions.
 
-<!-- STEP 2: Initialize & Create Payment -->
 <script>
-// Initialize Peeap V0 SDK
-PeeapV0.init({
-  publicKey: '${publicKey}',
-
-  // Called when payment succeeds (after redirect back)
-  onSuccess: function(payment) {
-    // Update your UI or redirect
-  },
-
-  // Called on error
-  onError: function(error) {
-    console.error('Payment failed:', error.message);
-    alert('Payment failed: ' + error.message);
-  },
-
-  // Called when user cancels
-  onCancel: function() {
-  }
-});
-
-// Function to trigger payment (redirects to hosted checkout)
+// Simple payment function - NO external scripts, NO API calls
 function payWithPeeap(amount, description, reference) {
-  PeeapV0.pay({
-    amount: amount,           // New Leone (SLE): 50 = Le 50.00
-    currency: 'SLE',
-    description: description || 'Payment',
-    reference: reference,     // Optional: your order ID
-    // After payment, user returns to current page with ?peeap_ref=xxx&peeap_status=success
-  });
+  var publicKey = '${publicKey}';
+  var redirectUrl = window.location.href.split('?')[0];
+
+  // Build checkout URL with all parameters
+  var checkoutUrl = '${apiUrl}/api/checkout/quick?' +
+    'pk=' + encodeURIComponent(publicKey) +
+    '&amount=' + encodeURIComponent(amount) +
+    '&currency=SLE' +
+    '&description=' + encodeURIComponent(description || 'Payment') +
+    '&reference=' + encodeURIComponent(reference || 'ref_' + Date.now()) +
+    '&redirect_url=' + encodeURIComponent(redirectUrl + '?peeap_status=success&peeap_ref=' + (reference || 'ref_' + Date.now()));
+
+  // Redirect to hosted checkout (server creates session)
+  window.location.href = checkoutUrl;
 }
+
+// Check for payment callback on page load
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  var status = params.get('peeap_status');
+  var ref = params.get('peeap_ref');
+
+  if (status === 'success' && ref) {
+    // Payment successful! Handle it here
+    console.log('Payment successful! Reference:', ref);
+    alert('Payment successful! Reference: ' + ref);
+
+    // Clean URL
+    if (window.history.replaceState) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  } else if (status === 'cancelled') {
+    console.log('Payment was cancelled');
+  }
+})();
 </script>
 
-<!-- STEP 3: Add Payment Button -->
+<!-- Payment Button -->
 <button onclick="payWithPeeap(50, 'Order #12345', 'order_12345')">
   Pay Le 50.00
 </button>
 
-/**
- * ============================================================================
- * HOW IT WORKS (Redirect Flow)
- * ============================================================================
- * 1. User clicks payment button
- * 2. SDK creates checkout session via API
- * 3. User is REDIRECTED to ${checkoutUrl}/checkout/pay/{sessionId}
- * 4. User completes payment on hosted checkout
- * 5. User is redirected back to your site with callback params:
- *    ?peeap_ref=order_12345&peeap_status=success
- * 6. SDK detects callback params and triggers onSuccess
- *
- * This completely avoids all CSP/iframe/sandbox restrictions!
- * ============================================================================
- */
 
-/**
- * ============================================================================
- * OPTIONAL: Custom Redirect URL
- * ============================================================================
- */
-PeeapV0.pay({
-  amount: 100,
-  currency: 'SLE',
-  description: 'Premium Plan',
-  reference: 'plan_001',
-  redirectUrl: 'https://yoursite.com/payment-complete'  // Custom return URL
+// ============================================================================
+// OPTION 2: WITH SDK (If external scripts work in your environment)
+// ============================================================================
+
+<script src="${checkoutUrl}/embed/peeap-v0.js"></script>
+<script>
+PeeapV0.init({
+  publicKey: '${publicKey}',
+  onSuccess: function(payment) {
+    console.log('Payment success:', payment.reference);
+  },
+  onError: function(error) {
+    alert('Payment failed: ' + error.message);
+  }
 });
 
+// Use payDirect for v0.dev (no fetch calls)
+function payWithPeeapSDK(amount, description, reference) {
+  PeeapV0.payDirect({
+    amount: amount,
+    currency: 'SLE',
+    description: description,
+    reference: reference
+  });
+}
+</script>
+
+
+// ============================================================================
+// HOW IT WORKS (Zero API Calls)
+// ============================================================================
 /**
- * ============================================================================
- * OPTIONAL: Generate Payment Link Without Redirect
- * ============================================================================
+ * 1. User clicks payment button
+ * 2. Browser redirects to: ${apiUrl}/api/checkout/quick?pk=...&amount=...
+ * 3. SERVER creates checkout session (not browser - bypasses CSP!)
+ * 4. Server redirects to: ${checkoutUrl}/checkout/pay/{sessionId}
+ * 5. User completes payment on hosted checkout
+ * 6. User redirected back with: ?peeap_status=success&peeap_ref=xxx
+ * 7. Your page detects callback params and shows success
+ *
+ * ✅ No fetch() calls from browser
+ * ✅ No external script dependencies (Option 1)
+ * ✅ Works in v0.dev, StackBlitz, CodeSandbox
+ * ✅ Bypasses all CSP/iframe/sandbox restrictions
  */
-PeeapV0.createPaymentLink({
-  amount: 100,
-  currency: 'SLE',
-  description: 'Invoice #1234'
-}).then(function(result) {
-  // Share this URL or open in new tab
-});`;
+
+
+// ============================================================================
+// SUBSCRIPTION BILLING (Recurring Payments)
+// ============================================================================
+/**
+ * For subscriptions in v0.dev, use direct links to your subscription plans.
+ * Create plans in your Peeap Dashboard, then use the subscribe URL.
+ */
+
+// Subscribe button - direct link to hosted subscription checkout
+<a href="${checkoutUrl}/subscribe/{plan_id}?email={customer_email}&redirect_url={your_site}">
+  Subscribe to Premium Plan
+</a>
+
+// Or build the URL dynamically:
+<script>
+function subscribeUser(planId, customerEmail) {
+  var redirectUrl = window.location.href.split('?')[0];
+  var subscribeUrl = '${checkoutUrl}/subscribe/' + planId +
+    '?email=' + encodeURIComponent(customerEmail) +
+    '&redirect_url=' + encodeURIComponent(redirectUrl + '?subscription_status=active');
+
+  window.location.href = subscribeUrl;
+}
+</script>
+
+<button onclick="subscribeUser('plan_monthly_100', 'user@example.com')">
+  Subscribe - Le 100/month
+</button>
+
+// Check subscription callback
+<script>
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  if (params.get('subscription_status') === 'active') {
+    console.log('Subscription activated!');
+    alert('Welcome! Your subscription is now active.');
+  }
+})();
+</script>
+
+
+// ============================================================================
+// QUICK REFERENCE - URL Parameters
+// ============================================================================
+/**
+ * One-time Payment:
+ * ${apiUrl}/api/checkout/quick?
+ *   pk=${publicKey}
+ *   &amount=50
+ *   &currency=SLE
+ *   &description=Order%20123
+ *   &reference=order_123
+ *   &redirect_url=https://yoursite.com/success
+ *   &email=customer@email.com  (optional)
+ *   &phone=+23276123456        (optional)
+ *
+ * Subscription:
+ * ${checkoutUrl}/subscribe/{plan_id}?
+ *   email=customer@email.com
+ *   &redirect_url=https://yoursite.com/subscribed
+ *
+ * Callback Parameters (on redirect back):
+ *   ?peeap_status=success|cancelled|failed
+ *   &peeap_ref=your_reference
+ *   &session_id=cs_xxx
+ */`;
   };
 
   // Server-Side Integration Script

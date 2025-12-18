@@ -2393,20 +2393,65 @@ async function handleCheckoutQuick(req: VercelRequest, res: VercelResponse) {
     const url = new URL(req.url || '', `http://${req.headers.host}`);
     const params = url.searchParams;
 
-    const merchantId = params.get('merchant_id');
+    // Support both merchant_id (legacy) and pk (public key - v0 SDK)
+    let merchantId = params.get('merchant_id');
+    const publicKey = params.get('pk');
     const amount = params.get('amount');
-    const currency = params.get('currency') || 'SLE';
+    let currency = params.get('currency') || 'SLE';
     const description = params.get('description') || 'Payment';
     const successUrl = params.get('success_url');
     const cancelUrl = params.get('cancel_url');
-    const merchantName = params.get('merchant_name');
-    const merchantLogo = params.get('merchant_logo');
-    const brandColor = params.get('brand_color') || '#4F46E5';
+    let merchantName = params.get('merchant_name');
+    let merchantLogo = params.get('merchant_logo');
+    let brandColor = params.get('brand_color') || '#4F46E5';
     const reference = params.get('reference');
+    const redirectUrl = params.get('redirect_url');
+    const customerEmail = params.get('email');
+    const customerPhone = params.get('phone');
+
+    // If public key provided, look up the business
+    let business: any = null;
+    let isTestMode = false;
+
+    if (publicKey) {
+      const isLiveKey = publicKey.startsWith('pk_live_');
+      const isTestKey = publicKey.startsWith('pk_test_');
+
+      if (!isLiveKey && !isTestKey) {
+        return res.status(400).send(errorPage('Invalid public key format'));
+      }
+
+      isTestMode = isTestKey;
+      const keyColumn = isLiveKey ? 'live_public_key' : 'test_public_key';
+
+      const { data: biz, error: bizError } = await supabase
+        .from('merchant_businesses')
+        .select('*')
+        .eq(keyColumn, publicKey)
+        .eq('status', 'ACTIVE')
+        .single();
+
+      if (bizError || !biz) {
+        console.error('[Quick Checkout] Business lookup failed:', bizError);
+        return res.status(400).send(errorPage('Invalid public key or business not active'));
+      }
+
+      business = biz;
+      merchantId = biz.id;
+      merchantName = merchantName || biz.business_name;
+      merchantLogo = merchantLogo || biz.logo_url;
+      brandColor = brandColor || biz.brand_color || '#4F46E5';
+    }
 
     // Validate required params
-    if (!merchantId) {
-      return res.status(400).send(errorPage('merchant_id is required'));
+    if (!merchantId && !publicKey) {
+      return res.status(400).send(errorPage('merchant_id or pk (public key) is required'));
+    }
+
+    // Normalize currency
+    currency = (currency || 'SLE').toUpperCase().trim();
+    if (currency === 'NLE' || currency === 'LE' || currency === 'LEONE') {
+      currency = 'SLE';
     }
 
     const amountNum = parseFloat(amount || '0');
@@ -2419,6 +2464,10 @@ async function handleCheckoutQuick(req: VercelRequest, res: VercelResponse) {
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
     const frontendUrl = process.env.FRONTEND_URL || 'https://checkout.peeap.com';
 
+    // Use redirect_url if provided, otherwise success_url
+    const finalSuccessUrl = redirectUrl || successUrl || `${frontendUrl}/payment/success`;
+    const finalCancelUrl = cancelUrl || (redirectUrl ? redirectUrl + (redirectUrl.includes('?') ? '&' : '?') + 'status=cancelled' : `${frontendUrl}/payment/cancel`);
+
     const { data: session, error } = await supabase
       .from('checkout_sessions')
       .insert({
@@ -2426,16 +2475,18 @@ async function handleCheckoutQuick(req: VercelRequest, res: VercelResponse) {
         merchant_id: merchantId,
         status: 'OPEN',
         amount: amountNum,
-        currency_code: currency.toUpperCase(),
+        currency_code: currency,
         description,
         merchant_name: merchantName,
         merchant_logo_url: merchantLogo,
         brand_color: brandColor,
-        success_url: successUrl || `${frontendUrl}/payment/success`,
-        cancel_url: cancelUrl || `${frontendUrl}/payment/cancel`,
+        success_url: finalSuccessUrl,
+        cancel_url: finalCancelUrl,
         payment_methods: { qr: true, card: true, mobile: true },
-        metadata: reference ? { reference } : null,
+        metadata: { reference, customer_email: customerEmail, customer_phone: customerPhone },
         expires_at: expiresAt.toISOString(),
+        is_test_mode: isTestMode,
+        reference: reference,
       })
       .select()
       .single();
