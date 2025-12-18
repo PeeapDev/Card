@@ -30,7 +30,10 @@ import {
   UserCheck,
   CreditCardIcon,
   RefreshCw,
+  Banknote,
+  X,
 } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
 import {
   AreaChart,
   Area,
@@ -57,6 +60,7 @@ import { authService } from '@/services/auth.service';
 import { useAuth } from '@/context/AuthContext';
 import { SystemFloatSidebar } from '@/components/admin/SystemFloatSidebar';
 import { FloatManagementModal } from '@/components/admin/FloatManagementModal';
+import { MobileMoneyFloatCard } from '@/components/admin/MobileMoneyFloatCard';
 
 interface DashboardStats {
   totalAccounts: number;
@@ -189,6 +193,7 @@ export function AdminDashboard() {
   const [floatModalMode, setFloatModalMode] = useState<'open' | 'replenish' | 'close' | 'history'>('open');
   const [floatModalCurrency, setFloatModalCurrency] = useState<string | undefined>();
   const [floatSidebarKey, setFloatSidebarKey] = useState(0);
+  const [floatPanelOpen, setFloatPanelOpen] = useState(false);
 
   useEffect(() => {
     currencyService.getDefaultCurrency().then(setDefaultCurrency);
@@ -632,9 +637,9 @@ export function AdminDashboard() {
 
   return (
     <AdminLayout>
-      <div className="flex gap-6">
+      <div className="relative">
         {/* Main Content */}
-        <div className="flex-1 space-y-8">
+        <div className="space-y-8">
           {/* Header */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
@@ -1193,16 +1198,49 @@ export function AdminDashboard() {
           </section>
         </div>
 
-        {/* System Float Sidebar */}
-        <div className="hidden xl:block flex-shrink-0">
-          <SystemFloatSidebar
-            key={floatSidebarKey}
-            onOpenFloat={handleOpenFloat}
-            onReplenishFloat={handleReplenishFloat}
-            onCloseFloat={handleCloseFloat}
-            onViewHistory={handleViewHistory}
-          />
-        </div>
+        {/* Floating System Float Button */}
+        <button
+          onClick={() => setFloatPanelOpen(!floatPanelOpen)}
+          className={`fixed bottom-6 right-6 z-50 p-4 rounded-full shadow-lg transition-all duration-300 ${
+            floatPanelOpen
+              ? 'bg-gray-600 hover:bg-gray-700'
+              : 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700'
+          } text-white`}
+          title="System Float Management"
+        >
+          {floatPanelOpen ? (
+            <X className="w-6 h-6" />
+          ) : (
+            <Banknote className="w-6 h-6" />
+          )}
+        </button>
+
+        {/* Floating System Float Panel */}
+        <AnimatePresence>
+          {floatPanelOpen && (
+            <motion.div
+              initial={{ opacity: 0, x: 100, scale: 0.95 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 100, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              className="fixed bottom-24 right-6 z-40 max-h-[calc(100vh-150px)] overflow-y-auto"
+            >
+              <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 space-y-4">
+                <SystemFloatSidebar
+                  key={floatSidebarKey}
+                  onOpenFloat={handleOpenFloat}
+                  onReplenishFloat={handleReplenishFloat}
+                  onCloseFloat={handleCloseFloat}
+                  onViewHistory={handleViewHistory}
+                />
+                {/* Mobile Money Float Card */}
+                <div className="px-4 pb-4">
+                  <MobileMoneyFloatCard />
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Float Management Modal */}
