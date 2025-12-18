@@ -6196,16 +6196,40 @@ async function handleAnalyticsSummary(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Verify admin access
+    // Verify admin access using session token (app uses custom auth, not Supabase auth)
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
     const token = authHeader.substring(7);
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    let authenticatedUserId: string | null = null;
 
-    if (authError || !user) {
+    // Try to verify as session token from sso_tokens table
+    const { data: session } = await supabase
+      .from('sso_tokens')
+      .select('user_id, expires_at')
+      .eq('token', token)
+      .single();
+
+    if (session) {
+      if (new Date(session.expires_at) < new Date()) {
+        return res.status(401).json({ error: 'Session expired' });
+      }
+      authenticatedUserId = session.user_id;
+    } else {
+      // Fallback: try legacy base64 JWT token
+      try {
+        const payload = JSON.parse(atob(token));
+        if (payload.userId && payload.exp && payload.exp > Date.now()) {
+          authenticatedUserId = payload.userId;
+        }
+      } catch {
+        // Not a valid token format
+      }
+    }
+
+    if (!authenticatedUserId) {
       return res.status(401).json({ error: 'Invalid token' });
     }
 
@@ -6213,7 +6237,7 @@ async function handleAnalyticsSummary(req: VercelRequest, res: VercelResponse) {
     const { data: userData } = await supabase
       .from('users')
       .select('roles')
-      .eq('id', user.id)
+      .eq('id', authenticatedUserId)
       .single();
 
     if (!userData || !(userData.roles?.includes('admin') || userData.roles?.includes('superadmin'))) {
@@ -6307,23 +6331,45 @@ async function handleAnalyticsPages(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Verify admin access (same as summary)
+    // Verify admin access using session token (app uses custom auth)
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
     const token = authHeader.substring(7);
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    let authenticatedUserId: string | null = null;
 
-    if (authError || !user) {
+    const { data: session } = await supabase
+      .from('sso_tokens')
+      .select('user_id, expires_at')
+      .eq('token', token)
+      .single();
+
+    if (session) {
+      if (new Date(session.expires_at) < new Date()) {
+        return res.status(401).json({ error: 'Session expired' });
+      }
+      authenticatedUserId = session.user_id;
+    } else {
+      try {
+        const payload = JSON.parse(atob(token));
+        if (payload.userId && payload.exp && payload.exp > Date.now()) {
+          authenticatedUserId = payload.userId;
+        }
+      } catch {
+        // Not a valid token format
+      }
+    }
+
+    if (!authenticatedUserId) {
       return res.status(401).json({ error: 'Invalid token' });
     }
 
     const { data: userData } = await supabase
       .from('users')
       .select('roles')
-      .eq('id', user.id)
+      .eq('id', authenticatedUserId)
       .single();
 
     if (!userData || !(userData.roles?.includes('admin') || userData.roles?.includes('superadmin'))) {
@@ -6379,23 +6425,45 @@ async function handleAnalyticsVisitors(req: VercelRequest, res: VercelResponse) 
   }
 
   try {
-    // Verify admin access
+    // Verify admin access using session token (app uses custom auth)
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
     const token = authHeader.substring(7);
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    let authenticatedUserId: string | null = null;
 
-    if (authError || !user) {
+    const { data: session } = await supabase
+      .from('sso_tokens')
+      .select('user_id, expires_at')
+      .eq('token', token)
+      .single();
+
+    if (session) {
+      if (new Date(session.expires_at) < new Date()) {
+        return res.status(401).json({ error: 'Session expired' });
+      }
+      authenticatedUserId = session.user_id;
+    } else {
+      try {
+        const payload = JSON.parse(atob(token));
+        if (payload.userId && payload.exp && payload.exp > Date.now()) {
+          authenticatedUserId = payload.userId;
+        }
+      } catch {
+        // Not a valid token format
+      }
+    }
+
+    if (!authenticatedUserId) {
       return res.status(401).json({ error: 'Invalid token' });
     }
 
     const { data: userData } = await supabase
       .from('users')
       .select('roles')
-      .eq('id', user.id)
+      .eq('id', authenticatedUserId)
       .single();
 
     if (!userData || !(userData.roles?.includes('admin') || userData.roles?.includes('superadmin'))) {
