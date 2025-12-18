@@ -238,32 +238,22 @@ export function AdminDashboard() {
       try {
         // Use authService for token (app uses custom auth, not Supabase auth)
         const accessToken = authService.getAccessToken();
-        console.log('[Dashboard] Has access token:', !!accessToken);
         if (accessToken) {
-          // Use relative URL to go through same-origin proxy (my.peeap.com/api/*)
-          console.log('[Dashboard] Fetching analytics...');
           const analyticsRes = await fetch(`/api/analytics/summary?period=24h`, {
             headers: {
               'Authorization': `Bearer ${accessToken}`,
               'Content-Type': 'application/json',
             },
           });
-          console.log('[Dashboard] Analytics response status:', analyticsRes.status);
           if (analyticsRes.ok) {
             const analyticsData = await analyticsRes.json();
-            console.log('[Dashboard] Analytics data:', analyticsData);
             pageViewsToday = analyticsData.totalViews || 0;
             uniqueVisitorsToday = analyticsData.uniqueVisitors || 0;
-            pageViewsTotal = analyticsData.totalViews || 0; // Will show 24h total
-          } else {
-            const errorText = await analyticsRes.text();
-            console.error('[Dashboard] Analytics API error:', analyticsRes.status, errorText);
+            pageViewsTotal = analyticsData.totalViews || 0;
           }
-        } else {
-          console.warn('[Dashboard] No access token available for analytics');
         }
       } catch (err) {
-        console.error('[Dashboard] Analytics fetch error:', err);
+        // Analytics fetch failed silently - non-critical
       }
 
       // Calculate stats
