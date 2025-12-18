@@ -107,8 +107,12 @@ export function AdminDashboard() {
 
   useEffect(() => {
     currencyService.getDefaultCurrency().then(setDefaultCurrency);
-    fetchDashboardData();
-    fetchAdminNotifications();
+
+    // Only fetch data when user is authenticated
+    if (user) {
+      fetchDashboardData();
+      fetchAdminNotifications();
+    }
 
     // Subscribe to new notifications
     const unsubscribe = adminNotificationService.subscribeToNotifications((notification) => {
@@ -119,7 +123,7 @@ export function AdminDashboard() {
     return () => {
       unsubscribe();
     };
-  }, []);
+  }, [user]); // Re-run when user changes (login/logout)
 
   const fetchAdminNotifications = async () => {
     try {
