@@ -54,6 +54,26 @@ export interface MonimeAnalyticsResponse {
   recentTransactions: MonimeTransaction[];
 }
 
+export interface MonimeBalanceAccount {
+  id: string;
+  name: string;
+  balance: number;
+  balanceMinorUnits: number;
+}
+
+export interface MonimeBalanceResponse {
+  success: boolean;
+  balance: number; // Primary currency balance (SLE)
+  balancesByCurrency: Record<string, {
+    totalBalance: number;
+    totalBalanceMinorUnits: number;
+    currency: string;
+    accounts: MonimeBalanceAccount[];
+  }>;
+  accountCount: number;
+  updatedAt: string;
+}
+
 // Cache for analytics data (5 minute TTL)
 let analyticsCache: {
   data: MonimeAnalyticsResponse | null;
@@ -62,7 +82,18 @@ let analyticsCache: {
   data: null,
   timestamp: 0,
 };
+
+// Cache for balance data (1 minute TTL - more frequent for balance)
+let balanceCache: {
+  data: MonimeBalanceResponse | null;
+  timestamp: number;
+} = {
+  data: null,
+  timestamp: 0,
+};
+
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const BALANCE_CACHE_TTL = 1 * 60 * 1000; // 1 minute
 
 export const monimeAnalyticsService = {
   /**
@@ -218,10 +249,56 @@ export const monimeAnalyticsService = {
   },
 
   /**
+   * Get Monime account balance
+   * Returns the available balance in Monime financial accounts
+   */
+  async getBalance(forceRefresh: boolean = false): Promise<MonimeBalanceResponse | null> {
+    // Check cache first
+    const now = Date.now();
+    if (!forceRefresh && balanceCache.data && (now - balanceCache.timestamp) < BALANCE_CACHE_TTL) {
+      return balanceCache.data;
+    }
+
+    try {
+      const response = await api.get<MonimeBalanceResponse>('/monime/balance');
+
+      if (response.success) {
+        balanceCache = {
+          data: response,
+          timestamp: now,
+        };
+        return response;
+      }
+
+      console.error('[MonimeAnalytics] Balance API returned unsuccessful response');
+      return null;
+    } catch (error) {
+      console.error('[MonimeAnalytics] Error fetching balance:', error);
+      // Return cached data if available, even if expired
+      if (balanceCache.data) {
+        return balanceCache.data;
+      }
+      return null;
+    }
+  },
+
+  /**
+   * Get primary currency balance (usually SLE)
+   */
+  async getPrimaryBalance(): Promise<number> {
+    const balance = await this.getBalance();
+    return balance?.balance || 0;
+  },
+
+  /**
    * Clear the cache - call this when you want fresh data
    */
   clearCache(): void {
     analyticsCache = {
+      data: null,
+      timestamp: 0,
+    };
+    balanceCache = {
       data: null,
       timestamp: 0,
     };

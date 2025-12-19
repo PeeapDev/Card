@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 import { createMonimeService, MonimeError } from './services/monime';
 import { sendEmailWithConfig, SmtpConfig } from './services/email';
+import { sendNotification, storeNotification, getNotificationHistory, getUsersWithTokens, getTokenStats, SendNotificationRequest } from './services/push-notification';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -154,6 +155,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleMonimeWebhook(req, res);
     } else if (path === 'monime/setup-webhook' || path === 'monime/setup-webhook/') {
       return await handleMonimeSetupWebhook(req, res);
+    } else if (path === 'monime/balance' || path === 'monime/balance/') {
+      return await handleMonimeBalance(req, res);
     } else if (path === 'deposit/verify' || path === 'deposit/verify/') {
       return await handleDepositVerify(req, res);
     } else if (path === 'payouts' || path === 'payouts/') {
@@ -204,6 +207,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleAnalyticsPages(req, res);
     } else if (path === 'analytics/visitors' || path === 'analytics/visitors/') {
       return await handleAnalyticsVisitors(req, res);
+    // ========== PUSH NOTIFICATION ENDPOINTS ==========
+    } else if (path === 'notifications/send' || path === 'notifications/send/') {
+      return await handleNotificationSend(req, res);
+    } else if (path === 'notifications/history' || path === 'notifications/history/') {
+      return await handleNotificationHistory(req, res);
+    } else if (path === 'notifications/users' || path === 'notifications/users/') {
+      return await handleNotificationUsers(req, res);
+    } else if (path === 'notifications/stats' || path === 'notifications/stats/') {
+      return await handleNotificationStats(req, res);
     } else if (path === 'debug/transactions' || path.startsWith('debug/transactions')) {
       // Debug endpoint to check transactions
       const ref = req.query.ref as string;
@@ -921,6 +933,26 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
               console.error('[Deposit Success] Failed to credit system float:', floatErr);
               // Don't fail the deposit if float update fails
             }
+
+            // Create notification for the user
+            try {
+              await supabase.from('notifications').insert({
+                user_id: pendingTx.user_id,
+                type: 'deposit',
+                title: 'Deposit Successful',
+                message: `Your deposit of ${amount} ${currency} has been credited to your wallet.`,
+                icon: 'wallet',
+                action_url: '/wallets',
+                action_data: { amount, currency, transactionId: pendingTx.id },
+                source_service: 'deposit',
+                source_id: pendingTx.id,
+                is_read: false,
+                priority: 'normal'
+              });
+              console.log('[Deposit Success] Notification created for user:', pendingTx.user_id);
+            } catch (notifErr) {
+              console.error('[Deposit Success] Failed to create notification:', notifErr);
+            }
           }
         } else {
           console.log('[Deposit Success] No pending transaction found for sessionId:', sessionId);
@@ -1136,6 +1168,109 @@ async function handleMonimeSetupWebhook(req: VercelRequest, res: VercelResponse)
   } catch (error: any) {
     console.error('[Monime Setup Webhook] Error:', error);
     return res.status(500).json({ error: error.message });
+  }
+}
+
+/**
+ * Get Monime financial account balances
+ * GET /api/monime/balance
+ * Returns the total balance available in Monime accounts
+ */
+async function handleMonimeBalance(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    // Verify admin authentication
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Missing authorization token' });
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    // Check if user is admin
+    const { data: userData } = await supabase
+      .from('users')
+      .select('role, roles')
+      .eq('id', user.id)
+      .single();
+
+    const isAdmin = userData?.role === 'SUPERADMIN' || userData?.role === 'ADMIN' ||
+                    userData?.roles?.includes('admin') || userData?.roles?.includes('superadmin');
+
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const monimeService = await createMonimeService(supabase, SETTINGS_ID);
+
+    // Get all financial accounts with balances
+    const accounts = await monimeService.getFinancialAccounts(true);
+
+    // Calculate total balance per currency
+    const balancesByCurrency: Record<string, {
+      totalBalance: number;
+      totalBalanceMinorUnits: number;
+      currency: string;
+      accounts: Array<{
+        id: string;
+        name: string;
+        balance: number;
+        balanceMinorUnits: number;
+      }>;
+    }> = {};
+
+    for (const account of accounts) {
+      const currency = account.currency || 'SLE';
+      const balanceMinorUnits = account.balance?.available?.value || 0;
+      // Convert from minor units (cents) to display units
+      const balance = balanceMinorUnits / 100;
+
+      if (!balancesByCurrency[currency]) {
+        balancesByCurrency[currency] = {
+          totalBalance: 0,
+          totalBalanceMinorUnits: 0,
+          currency,
+          accounts: [],
+        };
+      }
+
+      balancesByCurrency[currency].totalBalance += balance;
+      balancesByCurrency[currency].totalBalanceMinorUnits += balanceMinorUnits;
+      balancesByCurrency[currency].accounts.push({
+        id: account.id,
+        name: account.name,
+        balance,
+        balanceMinorUnits,
+      });
+    }
+
+    // Get the primary balance (usually SLE)
+    const primaryCurrency = 'SLE';
+    const primaryBalance = balancesByCurrency[primaryCurrency]?.totalBalance || 0;
+
+    return res.status(200).json({
+      success: true,
+      balance: primaryBalance,
+      balancesByCurrency,
+      accountCount: accounts.length,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    console.error('[Monime Balance] Error:', error);
+
+    if (error instanceof MonimeError) {
+      return res.status(error.statusCode).json({ error: error.message, code: error.code });
+    }
+
+    return res.status(500).json({ error: error.message || 'Failed to fetch balance' });
   }
 }
 
@@ -2060,8 +2195,11 @@ async function handleMonimeDeposit(req: VercelRequest, res: VercelResponse) {
     console.log('[MonimeDeposit] Checkout created:', result.monimeSessionId);
 
     // Store deposit record for tracking
-    await supabase.from('transactions').insert({
+    const externalId = `dep_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const { error: txError } = await supabase.from('transactions').insert({
+      user_id: wallet.user_id,
       wallet_id: walletId,
+      external_id: externalId,
       type: 'DEPOSIT',
       amount: amount,
       currency: currency,
@@ -2074,6 +2212,10 @@ async function handleMonimeDeposit(req: VercelRequest, res: VercelResponse) {
         initiatedAt: new Date().toISOString(),
       },
     });
+
+    if (txError) {
+      console.error('[MonimeDeposit] Failed to create transaction record:', txError);
+    }
 
     return res.status(200).json({
       paymentUrl: result.paymentUrl,
@@ -3835,6 +3977,197 @@ async function handleTestEmail(req: VercelRequest, res: VercelResponse) {
 }
 
 // ============================================================================
+// PUSH NOTIFICATION HANDLERS
+// ============================================================================
+
+/**
+ * Send push notification to users
+ * POST /api/notifications/send
+ */
+async function handleNotificationSend(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    // Verify admin authorization
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const token = authHeader.slice(7);
+
+    // Verify the token and get user info
+    const { data: { user }, error: authError } = await supabaseAnon.auth.getUser(token);
+
+    if (authError || !user) {
+      // Try custom session token
+      const { data: session } = await supabase
+        .from('sessions')
+        .select('user_id')
+        .eq('token', token)
+        .eq('is_active', true)
+        .gt('expires_at', new Date().toISOString())
+        .single();
+
+      if (!session) {
+        return res.status(401).json({ error: 'Invalid or expired token' });
+      }
+
+      // Get user role
+      const { data: userData } = await supabase
+        .from('users')
+        .select('id, role')
+        .eq('id', session.user_id)
+        .single();
+
+      if (!userData || !['admin', 'superadmin'].includes(userData.role)) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      // Process notification
+      const { title, body, icon, data: notifData, targetType, targetIds } = req.body;
+
+      if (!title || !body) {
+        return res.status(400).json({ error: 'title and body are required' });
+      }
+
+      const request: SendNotificationRequest = {
+        notification: {
+          title,
+          body,
+          icon: icon || '/icons/icon-192x192.png',
+          data: notifData || { type: 'admin_broadcast' },
+        },
+        role: targetType === 'all' ? 'all' : targetType,
+        userIds: targetType === 'specific' ? targetIds : undefined,
+      };
+
+      const result = await sendNotification(request);
+
+      // Store notification history
+      await storeNotification(userData.id, request, result);
+
+      return res.status(200).json({
+        success: true,
+        ...result,
+      });
+    }
+
+    // Check if user is admin (via Supabase auth)
+    const { data: userData } = await supabase
+      .from('users')
+      .select('id, role')
+      .eq('id', user.id)
+      .single();
+
+    if (!userData || !['admin', 'superadmin'].includes(userData.role)) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    // Process notification
+    const { title, body, icon, data: notifData, targetType, targetIds } = req.body;
+
+    if (!title || !body) {
+      return res.status(400).json({ error: 'title and body are required' });
+    }
+
+    const request: SendNotificationRequest = {
+      notification: {
+        title,
+        body,
+        icon: icon || '/icons/icon-192x192.png',
+        data: notifData || { type: 'admin_broadcast' },
+      },
+      role: targetType === 'all' ? 'all' : targetType,
+      userIds: targetType === 'specific' ? targetIds : undefined,
+    };
+
+    const result = await sendNotification(request);
+
+    // Store notification history
+    await storeNotification(userData.id, request, result);
+
+    return res.status(200).json({
+      success: true,
+      ...result,
+    });
+  } catch (error: any) {
+    console.error('[NotificationSend] Error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to send notification' });
+  }
+}
+
+/**
+ * Get notification history
+ * GET /api/notifications/history
+ */
+async function handleNotificationHistory(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const limit = parseInt(req.query.limit as string) || 50;
+    const history = await getNotificationHistory(limit);
+
+    return res.status(200).json({
+      success: true,
+      notifications: history,
+    });
+  } catch (error: any) {
+    console.error('[NotificationHistory] Error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to fetch history' });
+  }
+}
+
+/**
+ * Get users with active FCM tokens
+ * GET /api/notifications/users
+ */
+async function handleNotificationUsers(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const users = await getUsersWithTokens();
+
+    return res.status(200).json({
+      success: true,
+      users,
+      count: users.length,
+    });
+  } catch (error: any) {
+    console.error('[NotificationUsers] Error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to fetch users' });
+  }
+}
+
+/**
+ * Get token statistics
+ * GET /api/notifications/stats
+ */
+async function handleNotificationStats(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const stats = await getTokenStats();
+
+    return res.status(200).json({
+      success: true,
+      ...stats,
+    });
+  } catch (error: any) {
+    console.error('[NotificationStats] Error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to fetch stats' });
+  }
+}
+
+// ============================================================================
 // MOBILE MONEY HANDLERS
 // ============================================================================
 
@@ -4149,6 +4482,19 @@ async function handleMobileMoneySend(req: VercelRequest, res: VercelResponse) {
           },
         })
         .eq('id', transaction.id);
+
+      // Debit system float - money going out via mobile money
+      try {
+        await supabase.rpc('debit_system_float', {
+          p_currency: currency,
+          p_amount: amount,
+          p_transaction_id: transaction.id,
+          p_description: `Mobile Money Payout to ${fullPhoneNumber}`,
+        });
+        console.log('[MobileMoneySend] System float debited:', { amount, currency });
+      } catch (floatErr) {
+        console.error('[MobileMoneySend] Failed to debit system float:', floatErr);
+      }
 
       // Create notification
       await supabase.from('user_notifications').insert({
@@ -5263,6 +5609,21 @@ async function handleMerchantWithdraw(req: VercelRequest, res: VercelResponse) {
         })
         .eq('reference', externalId);
 
+      // Debit system float when payout is completed (money going out via mobile money)
+      if (updateData.status === 'COMPLETED') {
+        try {
+          await supabase.rpc('debit_system_float', {
+            p_currency: currency,
+            p_amount: amount,
+            p_transaction_id: payout.id,
+            p_description: `Merchant Withdrawal - ${merchant.business_name} - ${providerName}`,
+          });
+          console.log('[MerchantWithdraw] System float debited:', { amount, currency });
+        } catch (floatErr) {
+          console.error('[MerchantWithdraw] Failed to debit system float:', floatErr);
+        }
+      }
+
       // Create notification
       await supabase.from('user_notifications').insert({
         user_id: userId,
@@ -5337,19 +5698,37 @@ async function handlePayoutBanks(req: VercelRequest, res: VercelResponse) {
     const url = new URL(req.url || '', `http://${req.headers.host}`);
     const country = url.searchParams.get('country') || 'SL';
 
-    const monimeService = await createMonimeService(supabase, SETTINGS_ID);
+    let monimeService;
+    try {
+      monimeService = await createMonimeService(supabase, SETTINGS_ID);
+    } catch (err: any) {
+      // If Monime is not configured, return empty banks list
+      console.log('[PayoutBanks] Monime not configured, returning empty banks list');
+      return res.status(200).json({ banks: [] });
+    }
+
     const banks = await monimeService.getBanks(country);
 
     return res.status(200).json({
       banks: banks.map((b: any) => ({
-        id: b.providerId,
+        providerId: b.providerId || b.id,
         name: b.name,
         country: b.country,
+        status: b.status || { active: true },
+        featureSet: b.featureSet || {
+          payout: { canPayTo: true },
+          payment: { canPayFrom: true },
+          kycVerification: { canVerifyAccount: false },
+        },
       })),
     });
   } catch (error: any) {
     console.error('[PayoutBanks] Error:', error);
     if (error instanceof MonimeError) {
+      // If module is disabled, return empty list instead of error
+      if (error.code === 'MODULE_DISABLED') {
+        return res.status(200).json({ banks: [] });
+      }
       return res.status(error.statusCode).json({ error: error.message, code: error.code });
     }
     return res.status(500).json({ error: error.message || 'Failed to get banks' });

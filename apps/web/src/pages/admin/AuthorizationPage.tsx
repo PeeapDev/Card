@@ -61,9 +61,11 @@ export function AuthorizationPage() {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
+      // Only fetch card-related transactions (payments), not deposits/transfers
       const { data: transactions, error } = await supabase
         .from('transactions')
         .select('*')
+        .in('type', ['PAYMENT', 'CARD_PAYMENT', 'POS_PAYMENT', 'NFC_PAYMENT'])
         .gte('created_at', today.toISOString())
         .order('created_at', { ascending: false });
 

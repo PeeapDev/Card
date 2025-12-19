@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Wallet, Plus, ArrowDownRight, ArrowUpRight, MoreVertical, Snowflake, Send, QrCode, Copy, CheckCircle, Search, User, X, AlertCircle, PiggyBank, ChevronDown, Loader2, XCircle, ArrowLeftRight, Smartphone } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { Wallet, Plus, ArrowDownRight, ArrowUpRight, MoreVertical, Snowflake, Send, QrCode, Copy, CheckCircle, Search, User, X, AlertCircle, Package, ChevronDown, Loader2, XCircle, ArrowLeftRight, Smartphone, Trash2 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, Button } from '@/components/ui';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { CreatePotModal } from '@/components/pots';
@@ -25,6 +26,7 @@ interface Recipient {
 export function WalletsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const { data: wallets, isLoading, refetch } = useWallets();
   const createWallet = useCreateWallet();
@@ -51,7 +53,8 @@ export function WalletsPage() {
     const message = searchParams.get('message');
 
     if (depositStatus) {
-      // Refetch wallets to get updated balance
+      // Invalidate wallet cache and refetch to get updated balance
+      queryClient.invalidateQueries({ queryKey: ['wallets'] });
       refetch();
 
       if (depositStatus === 'success') {
@@ -66,7 +69,7 @@ export function WalletsPage() {
       // Clear the URL params after showing toast
       setSearchParams({});
     }
-  }, [searchParams, setSearchParams, refetch]);
+  }, [searchParams, setSearchParams, refetch, queryClient]);
 
   // Auto-dismiss toast after 5 seconds
   useEffect(() => {
@@ -103,6 +106,7 @@ export function WalletsPage() {
   const [newWalletCurrency, setNewWalletCurrency] = useState<'USD' | 'SLE'>('SLE');
   const [newWalletName, setNewWalletName] = useState('');
   const [createWalletError, setCreateWalletError] = useState('');
+  const [createWalletStep, setCreateWalletStep] = useState<1 | 2>(1);
 
   // Internal transfer state (between own wallets)
   const [internalTransferAmount, setInternalTransferAmount] = useState('');
@@ -113,6 +117,15 @@ export function WalletsPage() {
 
   // Wallet menu state
   const [openMenuWalletId, setOpenMenuWalletId] = useState<string | null>(null);
+
+  // Delete wallet state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [walletToDelete, setWalletToDelete] = useState<WalletType | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
+  // Set as main wallet state
+  const [setMainLoading, setSetMainLoading] = useState<string | null>(null);
 
   // Transfer state
   const [transferAmount, setTransferAmount] = useState('');
@@ -222,6 +235,7 @@ export function WalletsPage() {
       setShowCreateModal(false);
       setNewWalletCurrency('SLE'); // Reset to default
       setNewWalletName(''); // Reset name
+      setCreateWalletStep(1); // Reset step
     } catch (error: any) {
       console.error('Failed to create wallet:', error);
       setCreateWalletError(error.message || 'Failed to create wallet. Please try again.');
@@ -287,9 +301,31 @@ export function WalletsPage() {
     return `${wallet.currency} Wallet`;
   };
 
+  // Get the main/default wallet ID from user or first wallet
+  const getMainWalletId = (): string | null => {
+    if (!wallets || wallets.length === 0) return null;
+
+    // Check if user has a default wallet set
+    const userWithDefault = user as any;
+    if (userWithDefault?.defaultWalletId) return userWithDefault.defaultWalletId;
+    if (userWithDefault?.default_wallet_id) return userWithDefault.default_wallet_id;
+
+    // Check for wallet explicitly marked as primary
+    const primaryWallet = (wallets as any[]).find((w: any) => w.walletType === 'primary');
+    if (primaryWallet) return primaryWallet.id;
+
+    // Otherwise, first SLE wallet is main
+    const firstSleWallet = (wallets as any[]).find((w: any) => w.currency === 'SLE');
+    if (firstSleWallet) return firstSleWallet.id;
+
+    // Fallback to first wallet
+    return wallets[0]?.id || null;
+  };
+
   // Check if wallet is the primary/main wallet
   const isPrimaryWallet = (wallet: any): boolean => {
-    return wallet.walletType === 'primary' || !wallet.walletType;
+    const mainWalletId = getMainWalletId();
+    return wallet.id === mainWalletId;
   };
 
   // Get other wallets for transfer (excluding current one)
@@ -300,6 +336,96 @@ export function WalletsPage() {
   // Check if wallet can send to general users (only main wallet can)
   const canSendToUsers = (wallet: any): boolean => {
     return isPrimaryWallet(wallet);
+  };
+
+  // Get the main/primary wallet
+  const getMainWallet = () => {
+    return wallets?.find(w => isPrimaryWallet(w));
+  };
+
+  // Handle setting a wallet as the main/default wallet
+  const handleSetAsMain = async (wallet: WalletType) => {
+    if (!user) return;
+
+    setSetMainLoading(wallet.id);
+    try {
+      // Update the user's default wallet
+      const { error } = await supabase
+        .from('users')
+        .update({ default_wallet_id: wallet.id })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      // Also update the wallet type to 'primary' and remove from old primary
+      const currentMain = getMainWallet();
+      if (currentMain && currentMain.id !== wallet.id) {
+        // Remove primary from old wallet
+        await supabase
+          .from('wallets')
+          .update({ wallet_type: null })
+          .eq('id', currentMain.id);
+      }
+
+      // Set new wallet as primary
+      await supabase
+        .from('wallets')
+        .update({ wallet_type: 'primary' })
+        .eq('id', wallet.id);
+
+      // Refresh wallets and user
+      refetch();
+      window.location.reload(); // Reload to update user context
+    } catch (error: any) {
+      console.error('Failed to set wallet as main:', error);
+    } finally {
+      setSetMainLoading(null);
+      setOpenMenuWalletId(null);
+    }
+  };
+
+  // Handle delete wallet
+  const handleDeleteWallet = async () => {
+    if (!walletToDelete) return;
+
+    // Check if this is the main wallet
+    const isMain = isPrimaryWallet(walletToDelete);
+    if (isMain) {
+      setDeleteError('Cannot delete main wallet. Set another wallet as main first.');
+      return;
+    }
+
+    setDeleteLoading(true);
+    setDeleteError('');
+
+    try {
+      const mainWallet = getMainWallet();
+
+      // If wallet has balance, transfer to main wallet first
+      if (walletToDelete.balance > 0 && mainWallet && mainWallet.id !== walletToDelete.id) {
+        await walletService.transferBetweenOwnWallets(
+          walletToDelete.id,
+          mainWallet.id,
+          walletToDelete.balance,
+          `Auto-transfer before wallet deletion`
+        );
+      }
+
+      // Delete the wallet (soft delete - mark as CLOSED)
+      await walletService.deleteWallet(walletToDelete.id, false);
+
+      // Refresh wallets
+      refetch();
+
+      // Close modal
+      setShowDeleteModal(false);
+      setWalletToDelete(null);
+    } catch (error: any) {
+      console.error('Failed to delete wallet:', error);
+      setDeleteError(error.message || 'Failed to delete wallet. Please try again.');
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   const handleDeposit = async () => {
@@ -437,10 +563,10 @@ export function WalletsPage() {
                     className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
                   >
                     <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
-                      <PiggyBank className="w-5 h-5 text-green-600" />
+                      <Package className="w-5 h-5 text-green-600" />
                     </div>
                     <div className="text-left">
-                      <p className="font-medium text-gray-900">Savings Pot</p>
+                      <p className="font-medium text-gray-900">Cash Box</p>
                       <p className="text-xs text-gray-500">Locked savings goal</p>
                     </div>
                   </button>
@@ -476,7 +602,7 @@ export function WalletsPage() {
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium text-gray-900">{getWalletDisplayName(wallet)}</p>
                         {isPrimaryWallet(wallet) && (
-                          <span className="px-1.5 py-0.5 text-xs font-medium bg-primary-100 text-primary-700 rounded">
+                          <span className="px-2 py-0.5 text-xs font-bold bg-green-500 text-white rounded-full shadow-sm">
                             Main
                           </span>
                         )}
@@ -560,6 +686,22 @@ export function WalletsPage() {
                             Receive
                           </button>
 
+                          {/* Set as Main - only for non-primary wallets */}
+                          {!isPrimaryWallet(wallet) && (
+                            <button
+                              onClick={() => handleSetAsMain(wallet)}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                              disabled={setMainLoading === wallet.id}
+                            >
+                              {setMainLoading === wallet.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <CheckCircle className="w-4 h-4" />
+                              )}
+                              Set as Main Wallet
+                            </button>
+                          )}
+
                           {/* Freeze/Unfreeze */}
                           <button
                             onClick={() => {
@@ -571,6 +713,24 @@ export function WalletsPage() {
                             <Snowflake className={clsx('w-4 h-4', wallet.status === 'FROZEN' ? 'text-blue-500' : '')} />
                             {wallet.status === 'FROZEN' ? 'Unfreeze' : 'Freeze'}
                           </button>
+
+                          {/* Delete - only for non-primary wallets */}
+                          {!isPrimaryWallet(wallet) && (
+                            <>
+                              <div className="border-t border-gray-100 my-1" />
+                              <button
+                                onClick={() => {
+                                  setOpenMenuWalletId(null);
+                                  setWalletToDelete(wallet);
+                                  setShowDeleteModal(true);
+                                }}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                Delete Wallet
+                              </button>
+                            </>
+                          )}
                         </div>
                       </>
                     )}
@@ -670,111 +830,158 @@ export function WalletsPage() {
                 Create Wallet
               </Button>
               <Button variant="outline" onClick={() => setShowCreatePotModal(true)}>
-                <PiggyBank className="w-4 h-4 mr-2" />
-                Create Pot
+                <Package className="w-4 h-4 mr-2" />
+                Create Cash Box
               </Button>
             </div>
           </Card>
         )}
       </div>
 
-      {/* Create Wallet Modal */}
+      {/* Create Wallet Modal - Two Step Process */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
           <Card className="w-full max-w-md">
             <CardHeader>
               <CardTitle>Create New Wallet</CardTitle>
             </CardHeader>
-            <p className="text-gray-500 mb-4">Name your wallet and choose the currency.</p>
 
-            {/* Wallet Name Input */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Wallet Name
-              </label>
-              <input
-                type="text"
-                value={newWalletName}
-                onChange={(e) => setNewWalletName(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                placeholder="e.g., My Savings, Business Wallet"
-                maxLength={50}
-              />
-              <p className="text-xs text-gray-400 mt-1">Optional - leave blank for default name</p>
-            </div>
-
-            {/* Currency Selection */}
-            <div className="mb-6 space-y-3">
-              <button
-                onClick={() => setNewWalletCurrency('SLE')}
-                className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all ${
-                  newWalletCurrency === 'SLE'
-                    ? 'border-primary-500 bg-primary-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                  newWalletCurrency === 'SLE' ? 'bg-primary-100' : 'bg-gray-100'
-                }`}>
-                  <span className="text-xl font-bold text-primary-600">Le</span>
-                </div>
-                <div className="text-left flex-1">
-                  <p className="font-semibold text-gray-900">Leone Wallet (SLE)</p>
-                  <p className="text-sm text-gray-500">For mobile money payouts</p>
-                </div>
-                {newWalletCurrency === 'SLE' && (
-                  <CheckCircle className="w-5 h-5 text-primary-600" />
-                )}
-              </button>
-
-              <button
-                onClick={() => setNewWalletCurrency('USD')}
-                className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all ${
-                  newWalletCurrency === 'USD'
-                    ? 'border-primary-500 bg-primary-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                  newWalletCurrency === 'USD' ? 'bg-primary-100' : 'bg-gray-100'
-                }`}>
-                  <span className="text-xl font-bold text-green-600">$</span>
-                </div>
-                <div className="text-left flex-1">
-                  <p className="font-semibold text-gray-900">US Dollar Wallet (USD)</p>
-                  <p className="text-sm text-gray-500">For international transactions</p>
-                </div>
-                {newWalletCurrency === 'USD' && (
-                  <CheckCircle className="w-5 h-5 text-primary-600" />
-                )}
-              </button>
-            </div>
-
-            {/* Error Message */}
-            {createWalletError && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                <span className="text-sm">{createWalletError}</span>
+            {/* Step indicator */}
+            <div className="flex items-center gap-2 mb-4">
+              <div className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium ${
+                createWalletStep === 1 ? 'bg-primary-600 text-white' : 'bg-primary-100 text-primary-600'
+              }`}>
+                1
               </div>
+              <div className={`flex-1 h-1 rounded ${createWalletStep === 2 ? 'bg-primary-600' : 'bg-gray-200'}`} />
+              <div className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium ${
+                createWalletStep === 2 ? 'bg-primary-600 text-white' : 'bg-gray-200 text-gray-500'
+              }`}>
+                2
+              </div>
+            </div>
+
+            {/* Step 1: Name your wallet */}
+            {createWalletStep === 1 && (
+              <>
+                <p className="text-gray-500 mb-4">Give your wallet a name</p>
+
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Wallet Name
+                  </label>
+                  <input
+                    type="text"
+                    value={newWalletName}
+                    onChange={(e) => setNewWalletName(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="e.g., My Savings, Business Wallet"
+                    maxLength={50}
+                    autoFocus
+                  />
+                  <p className="text-xs text-gray-400 mt-1">Optional - leave blank for default name</p>
+                </div>
+
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      setShowCreateModal(false);
+                      setCreateWalletError('');
+                      setNewWalletCurrency('SLE');
+                      setNewWalletName('');
+                      setCreateWalletStep(1);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    onClick={() => setCreateWalletStep(2)}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </>
             )}
 
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => {
-                  setShowCreateModal(false);
-                  setCreateWalletError('');
-                  setNewWalletCurrency('SLE');
-                  setNewWalletName('');
-                }}
-              >
-                Cancel
-              </Button>
-              <Button className="flex-1" onClick={handleCreateWallet} isLoading={createWallet.isPending}>
-                Create Wallet
-              </Button>
-            </div>
+            {/* Step 2: Choose currency */}
+            {createWalletStep === 2 && (
+              <>
+                <p className="text-gray-500 mb-4">
+                  {newWalletName ? `Choose currency for "${newWalletName}"` : 'Choose the wallet currency'}
+                </p>
+
+                {/* Currency Selection */}
+                <div className="mb-6 space-y-3">
+                  <button
+                    onClick={() => setNewWalletCurrency('SLE')}
+                    className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all ${
+                      newWalletCurrency === 'SLE'
+                        ? 'border-primary-500 bg-primary-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                      newWalletCurrency === 'SLE' ? 'bg-primary-100' : 'bg-gray-100'
+                    }`}>
+                      <span className="text-xl font-bold text-primary-600">Le</span>
+                    </div>
+                    <div className="text-left flex-1">
+                      <p className="font-semibold text-gray-900">Leone Wallet (SLE)</p>
+                      <p className="text-sm text-gray-500">For mobile money payouts</p>
+                    </div>
+                    {newWalletCurrency === 'SLE' && (
+                      <CheckCircle className="w-5 h-5 text-primary-600" />
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => setNewWalletCurrency('USD')}
+                    className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all ${
+                      newWalletCurrency === 'USD'
+                        ? 'border-primary-500 bg-primary-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                      newWalletCurrency === 'USD' ? 'bg-primary-100' : 'bg-gray-100'
+                    }`}>
+                      <span className="text-xl font-bold text-green-600">$</span>
+                    </div>
+                    <div className="text-left flex-1">
+                      <p className="font-semibold text-gray-900">US Dollar Wallet (USD)</p>
+                      <p className="text-sm text-gray-500">For international transactions</p>
+                    </div>
+                    {newWalletCurrency === 'USD' && (
+                      <CheckCircle className="w-5 h-5 text-primary-600" />
+                    )}
+                  </button>
+                </div>
+
+                {/* Error Message */}
+                {createWalletError && (
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    <span className="text-sm">{createWalletError}</span>
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setCreateWalletStep(1)}
+                  >
+                    Back
+                  </Button>
+                  <Button className="flex-1" onClick={handleCreateWallet} isLoading={createWallet.isPending}>
+                    Create Wallet
+                  </Button>
+                </div>
+              </>
+            )}
           </Card>
         </div>
       )}
@@ -1242,7 +1449,7 @@ export function WalletsPage() {
                     <div className="flex items-center gap-2">
                       <p className="font-medium text-gray-900">{getWalletDisplayName(selectedWallet)}</p>
                       {isPrimaryWallet(selectedWallet) && (
-                        <span className="px-1.5 py-0.5 text-xs font-medium bg-primary-100 text-primary-700 rounded">
+                        <span className="px-2 py-0.5 text-xs font-bold bg-green-500 text-white rounded-full">
                           Main
                         </span>
                       )}
@@ -1345,6 +1552,90 @@ export function WalletsPage() {
                 </div>
               </div>
             )}
+          </Card>
+        </div>
+      )}
+
+      {/* Delete Wallet Confirmation Modal */}
+      {showDeleteModal && walletToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <Card className="w-full max-w-md">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-red-100 rounded-lg">
+                <Trash2 className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Delete Wallet</h2>
+                <p className="text-sm text-gray-500">This action cannot be undone</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {/* Wallet info */}
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-gray-900">{getWalletDisplayName(walletToDelete)}</p>
+                    <p className="text-sm text-gray-500">{walletToDelete.currency}</p>
+                  </div>
+                  <p className="text-lg font-bold text-gray-900">
+                    {formatCurrency(walletToDelete.balance, walletToDelete.currency)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Transfer notice */}
+              {walletToDelete.balance > 0 && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-amber-800">Remaining balance will be transferred</p>
+                      <p className="text-sm text-amber-700">
+                        {formatCurrency(walletToDelete.balance, walletToDelete.currency)} will be automatically transferred to your Main Wallet before deletion.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Warning */}
+              <p className="text-sm text-gray-600">
+                Are you sure you want to delete this wallet? All transaction history for this wallet will be preserved but the wallet will no longer be accessible.
+              </p>
+
+              {/* Error Message */}
+              {deleteError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span className="text-sm">{deleteError}</span>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setWalletToDelete(null);
+                    setDeleteError('');
+                  }}
+                  disabled={deleteLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1 bg-red-600 hover:bg-red-700"
+                  onClick={handleDeleteWallet}
+                  isLoading={deleteLoading}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete Wallet
+                </Button>
+              </div>
+            </div>
           </Card>
         </div>
       )}

@@ -30,6 +30,7 @@ import {
   PROVIDER_INFO,
 } from '@/services/mobileMoneyFloat.service';
 import { currencyService } from '@/services/currency.service';
+import { monimeAnalyticsService, MonimeBalanceResponse } from '@/services/monimeAnalytics.service';
 import { supabase } from '@/lib/supabase';
 
 interface MobileMoneyFloatCardProps {
@@ -48,33 +49,54 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
   const [recentTransactions, setRecentTransactions] = useState<MobileMoneyFloatHistory[]>([]);
   const [expanded, setExpanded] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
+  const [monimeBalance, setMonimeBalance] = useState<MonimeBalanceResponse | null>(null);
+  const [monimeLoading, setMonimeLoading] = useState(true);
 
   useEffect(() => {
     loadData();
+    loadMonimeBalance();
 
-    // Set up real-time subscriptions
+    // Set up real-time subscriptions using system_float tables
     const floatSubscription = supabase
-      .channel('mobile-money-float-changes')
+      .channel('system-float-changes')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'mobile_money_float' },
+        { event: '*', schema: 'public', table: 'system_float' },
         () => {
           loadData();
         }
       )
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'mobile_money_float_history' },
+        { event: 'INSERT', schema: 'public', table: 'system_float_history' },
         () => {
           loadData();
         }
       )
       .subscribe();
 
+    // Refresh Monime balance every 60 seconds
+    const monimeInterval = setInterval(() => {
+      loadMonimeBalance();
+    }, 60000);
+
     return () => {
       floatSubscription.unsubscribe();
+      clearInterval(monimeInterval);
     };
   }, []);
+
+  const loadMonimeBalance = async () => {
+    setMonimeLoading(true);
+    try {
+      const balance = await monimeAnalyticsService.getBalance();
+      setMonimeBalance(balance);
+    } catch (error) {
+      console.error('Error loading Monime balance:', error);
+    } finally {
+      setMonimeLoading(false);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -94,9 +116,9 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
     }
   };
 
-  const formatCurrency = (amount: number, currency: string = 'SLE'): string => {
-    const symbol = currency === 'SLE' ? 'Le' : currency;
-    return `${symbol} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  // Use currency service formatAmount which handles NLe conversion (divides by 1000)
+  const formatCurrency = (amount: number): string => {
+    return currencyService.formatAmount(amount, 'SLE');
   };
 
   const formatTime = (dateString: string | null): string => {
@@ -122,8 +144,8 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
               <Smartphone className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-semibold">Mobile Money Float</h3>
-              <p className="text-sm text-orange-100">Provider Balances</p>
+              <h3 className="font-semibold">Float Activity</h3>
+              <p className="text-sm text-orange-100">Real-time Transactions</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -142,6 +164,53 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
 
       {expanded && (
         <div className="p-4 space-y-4">
+          {/* Monime Gateway Balance */}
+          <div className="p-4 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-xl border border-indigo-200 dark:border-indigo-800">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg">
+                  <Wallet className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-indigo-900 dark:text-indigo-100">Monime Gateway</h4>
+                  <p className="text-xs text-indigo-600 dark:text-indigo-400">Available for Payouts</p>
+                </div>
+              </div>
+              <button
+                onClick={loadMonimeBalance}
+                disabled={monimeLoading}
+                className="p-1.5 text-indigo-600 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 rounded-lg"
+              >
+                <RefreshCw className={`w-4 h-4 ${monimeLoading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+            {monimeLoading && !monimeBalance ? (
+              <div className="flex items-center justify-center py-2">
+                <RefreshCw className="w-5 h-5 animate-spin text-indigo-400" />
+              </div>
+            ) : monimeBalance ? (
+              <div className="space-y-2">
+                <div className="flex items-baseline gap-2">
+                  <p className="text-3xl font-bold text-indigo-700 dark:text-indigo-300">
+                    {formatCurrency(monimeBalance.balance)}
+                  </p>
+                  <span className="text-sm text-indigo-500 dark:text-indigo-400">SLE</span>
+                </div>
+                {monimeBalance.accountCount > 0 && (
+                  <p className="text-xs text-indigo-500 dark:text-indigo-400">
+                    {monimeBalance.accountCount} account{monimeBalance.accountCount > 1 ? 's' : ''} •
+                    Updated {new Date(monimeBalance.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                <AlertCircle className="w-4 h-4" />
+                <span className="text-sm">Unable to fetch Monime balance</span>
+              </div>
+            )}
+          </div>
+
           {/* Today's Summary */}
           <div className="grid grid-cols-3 gap-3">
             <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
@@ -182,8 +251,8 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
             ) : floats.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <Smartphone className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p>No mobile money float data</p>
-                <p className="text-xs">Run the migration to initialize</p>
+                <p>No float data available</p>
+                <p className="text-xs">Open a float to get started</p>
               </div>
             ) : (
               floats.map((float) => {
@@ -211,7 +280,7 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
                       </div>
                       <div className="text-right">
                         <p className={`text-xl font-bold ${providerInfo.color}`}>
-                          {formatCurrency(float.currentBalance, float.currency)}
+                          {formatCurrency(float.currentBalance)}
                         </p>
                         <p className="text-xs text-gray-500">Current Balance</p>
                       </div>
@@ -294,7 +363,7 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
               ) : (
                 recentTransactions.map((tx) => {
                   const providerInfo = PROVIDER_INFO[tx.providerId];
-                  const isDeposit = tx.transactionType === 'deposit' || tx.transactionType === 'replenishment';
+                  const isDeposit = tx.transactionType === 'credit' || tx.transactionType === 'replenish';
 
                   return (
                     <div

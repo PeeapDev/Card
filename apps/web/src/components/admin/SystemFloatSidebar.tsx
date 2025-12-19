@@ -165,34 +165,42 @@ export function SystemFloatSidebar({
     }
   };
 
+  // Convert old Leone to New Leone (divide by 1000) for SLE currency
+  const convertToNLe = (amount: number, currency: string): number => {
+    return currency === 'SLE' ? amount / 1000 : amount;
+  };
+
   const formatAmount = (amount: number, currency: string): string => {
     const curr = currencies.find(c => c.code === currency);
     const symbol = curr?.symbol || currency;
+    const displayAmount = convertToNLe(amount, currency);
 
-    if (amount >= 1000000) {
-      return `${symbol} ${(amount / 1000000).toFixed(2)}M`;
-    } else if (amount >= 1000) {
-      return `${symbol} ${(amount / 1000).toFixed(1)}K`;
+    if (displayAmount >= 1000000) {
+      return `${symbol} ${(displayAmount / 1000000).toFixed(2)}M`;
+    } else if (displayAmount >= 1000) {
+      return `${symbol} ${(displayAmount / 1000).toFixed(1)}K`;
     }
-    return `${symbol} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `${symbol} ${displayAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const formatFullAmount = (amount: number, currency: string): string => {
     const curr = currencies.find(c => c.code === currency);
     const symbol = curr?.symbol || currency;
-    return `${symbol} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const displayAmount = convertToNLe(amount, currency);
+    return `${symbol} ${displayAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const formatProfit = (amount: number): string => {
     const defaultCurrency = currencies.find(c => c.isDefault) || currencies[0];
-    const symbol = defaultCurrency?.symbol || 'Le';
+    const symbol = defaultCurrency?.symbol || 'NLe';
+    const displayAmount = convertToNLe(amount, defaultCurrency?.code || 'SLE');
 
-    if (amount >= 1000000) {
-      return `${symbol} ${(amount / 1000000).toFixed(2)}M`;
-    } else if (amount >= 1000) {
-      return `${symbol} ${(amount / 1000).toFixed(1)}K`;
+    if (displayAmount >= 1000000) {
+      return `${symbol} ${(displayAmount / 1000000).toFixed(2)}M`;
+    } else if (displayAmount >= 1000) {
+      return `${symbol} ${(displayAmount / 1000).toFixed(1)}K`;
     }
-    return `${symbol} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `${symbol} ${displayAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const getUtilizationColor = (percentage: number): string => {
