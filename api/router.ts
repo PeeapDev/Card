@@ -150,6 +150,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleMonimeAnalytics(req, res);
     } else if (path === 'monime/transactions' || path === 'monime/transactions/') {
       return await handleMonimeTransactions(req, res);
+    } else if (path === 'monime/webhook' || path === 'monime/webhook/') {
+      return await handleMonimeWebhook(req, res);
+    } else if (path === 'deposit/verify' || path === 'deposit/verify/') {
+      return await handleDepositVerify(req, res);
     } else if (path === 'payouts' || path === 'payouts/') {
       return await handlePayouts(req, res);
     } else if (path === 'payouts/user/cashout' || path === 'payouts/user/cashout/') {
@@ -943,6 +947,233 @@ async function handleDepositCancel(req: VercelRequest, res: VercelResponse) {
     redirectUrl.searchParams.set('deposit', 'error');
     redirectUrl.searchParams.set('message', error.message || 'Unknown error');
     return res.redirect(302, redirectUrl.toString());
+  }
+}
+
+/**
+ * Handle Monime webhook notifications
+ * This receives payment status updates from Monime for deposits and checkouts
+ */
+async function handleMonimeWebhook(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const payload = req.body;
+    console.log('[Monime Webhook] Received:', JSON.stringify(payload));
+
+    // Get webhook secret for verification
+    const { data: settings } = await supabase
+      .from('payment_settings')
+      .select('monime_webhook_secret')
+      .eq('id', SETTINGS_ID)
+      .single();
+
+    // TODO: Verify webhook signature if Monime provides one
+    // const signature = req.headers['x-monime-signature'];
+
+    const eventType = payload.type || payload.event;
+    const sessionId = payload.data?.id || payload.data?.sessionId || payload.sessionId;
+    const status = payload.data?.status || payload.status;
+
+    console.log('[Monime Webhook] Event:', eventType, 'Session:', sessionId, 'Status:', status);
+
+    if (status === 'completed' || status === 'COMPLETED' || eventType === 'checkout.session.completed') {
+      // Find pending transaction with this session ID
+      const { data: pendingTx, error: txError } = await supabase
+        .from('transactions')
+        .select('*, wallets!inner(id, balance, user_id)')
+        .eq('reference', sessionId)
+        .eq('status', 'PENDING')
+        .single();
+
+      if (txError || !pendingTx) {
+        console.log('[Monime Webhook] No pending transaction found for session:', sessionId);
+        return res.status(200).json({ received: true, message: 'No pending transaction' });
+      }
+
+      const walletId = pendingTx.wallet_id;
+      const amount = pendingTx.amount;
+      const currency = pendingTx.currency;
+      const currentBalance = parseFloat(pendingTx.wallets?.balance?.toString() || '0');
+      const newBalance = currentBalance + amount;
+
+      // Credit wallet
+      await supabase
+        .from('wallets')
+        .update({ balance: newBalance, updated_at: new Date().toISOString() })
+        .eq('id', walletId);
+
+      // Update transaction
+      await supabase
+        .from('transactions')
+        .update({
+          status: 'COMPLETED',
+          metadata: {
+            ...pendingTx.metadata,
+            completedAt: new Date().toISOString(),
+            completedVia: 'webhook',
+          }
+        })
+        .eq('id', pendingTx.id);
+
+      // Credit system float
+      try {
+        await supabase.rpc('credit_system_float', {
+          p_currency: currency,
+          p_amount: amount,
+          p_transaction_id: pendingTx.id,
+          p_description: `Mobile Money Deposit (webhook) - ${pendingTx.description || 'User deposit'}`,
+        });
+        console.log('[Monime Webhook] System float credited:', { amount, currency });
+      } catch (floatErr) {
+        console.error('[Monime Webhook] Failed to credit system float:', floatErr);
+      }
+
+      console.log('[Monime Webhook] Deposit completed:', { walletId, amount, newBalance });
+    }
+
+    return res.status(200).json({ received: true });
+  } catch (error: any) {
+    console.error('[Monime Webhook] Error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+/**
+ * Manually verify and complete a pending deposit
+ * Use this to recover deposits where the redirect failed
+ */
+async function handleDepositVerify(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const { sessionId, walletId, transactionId } = req.body;
+
+    if (!sessionId && !transactionId) {
+      return res.status(400).json({ error: 'sessionId or transactionId is required' });
+    }
+
+    console.log('[Deposit Verify] Request:', { sessionId, walletId, transactionId });
+
+    // Find the pending transaction
+    let query = supabase
+      .from('transactions')
+      .select('*')
+      .eq('status', 'PENDING')
+      .eq('type', 'DEPOSIT');
+
+    if (transactionId) {
+      query = query.eq('id', transactionId);
+    } else if (sessionId) {
+      query = query.eq('reference', sessionId);
+    }
+
+    const { data: pendingTx, error: txError } = await query.single();
+
+    if (txError || !pendingTx) {
+      // Check if already completed
+      const { data: completedTx } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('reference', sessionId || '')
+        .eq('status', 'COMPLETED')
+        .single();
+
+      if (completedTx) {
+        return res.status(200).json({
+          success: true,
+          message: 'Transaction already completed',
+          transaction: completedTx
+        });
+      }
+
+      return res.status(404).json({ error: 'No pending deposit found' });
+    }
+
+    // Verify with Monime
+    const monimeService = await createMonimeService(supabase, SETTINGS_ID);
+    const monimeSessionId = pendingTx.reference || pendingTx.metadata?.monimeSessionId;
+
+    if (!monimeSessionId) {
+      return res.status(400).json({ error: 'No Monime session ID found on transaction' });
+    }
+
+    const sessionStatus = await monimeService.getCheckoutSession(monimeSessionId);
+    console.log('[Deposit Verify] Monime status:', sessionStatus);
+
+    if (sessionStatus.status !== 'completed') {
+      return res.status(400).json({
+        error: 'Payment not completed on Monime',
+        monimeStatus: sessionStatus.status
+      });
+    }
+
+    // Get wallet
+    const { data: wallet } = await supabase
+      .from('wallets')
+      .select('id, balance, user_id')
+      .eq('id', pendingTx.wallet_id)
+      .single();
+
+    if (!wallet) {
+      return res.status(404).json({ error: 'Wallet not found' });
+    }
+
+    const amount = pendingTx.amount;
+    const currency = pendingTx.currency;
+    const currentBalance = parseFloat(wallet.balance?.toString() || '0');
+    const newBalance = currentBalance + amount;
+
+    // Credit wallet
+    await supabase
+      .from('wallets')
+      .update({ balance: newBalance, updated_at: new Date().toISOString() })
+      .eq('id', wallet.id);
+
+    // Update transaction
+    await supabase
+      .from('transactions')
+      .update({
+        status: 'COMPLETED',
+        metadata: {
+          ...pendingTx.metadata,
+          completedAt: new Date().toISOString(),
+          completedVia: 'manual_verify',
+          monimeStatus: sessionStatus.status,
+        }
+      })
+      .eq('id', pendingTx.id);
+
+    // Credit system float
+    try {
+      await supabase.rpc('credit_system_float', {
+        p_currency: currency,
+        p_amount: amount,
+        p_transaction_id: pendingTx.id,
+        p_description: `Mobile Money Deposit (verified) - ${pendingTx.description || 'User deposit'}`,
+      });
+      console.log('[Deposit Verify] System float credited:', { amount, currency });
+    } catch (floatErr) {
+      console.error('[Deposit Verify] Failed to credit system float:', floatErr);
+    }
+
+    console.log('[Deposit Verify] Deposit completed:', { walletId: wallet.id, amount, newBalance });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Deposit verified and completed',
+      amount,
+      currency,
+      newBalance,
+      transactionId: pendingTx.id,
+    });
+  } catch (error: any) {
+    console.error('[Deposit Verify] Error:', error);
+    return res.status(500).json({ error: error.message });
   }
 }
 
