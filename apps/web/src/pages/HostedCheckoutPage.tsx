@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
+import confetti from 'canvas-confetti';
 import {
   Smartphone,
   QrCode,
@@ -360,21 +361,55 @@ export function HostedCheckoutPage() {
     }
   }, [isAuthenticated, user, selectedMethod, step]);
 
-  // Auto-redirect on success after showing thank you page
+  // Fire canvas confetti burst
+  const fireSuccessConfetti = useCallback(() => {
+    // Center burst
+    confetti({
+      particleCount: 100,
+      spread: 70,
+      origin: { y: 0.6 },
+      colors: ['#10B981', '#34D399', '#6EE7B7', '#FFD700', '#FFA500', '#FF6B6B'],
+    });
+    // Left burst
+    setTimeout(() => {
+      confetti({
+        particleCount: 50,
+        angle: 60,
+        spread: 55,
+        origin: { x: 0 },
+        colors: ['#10B981', '#34D399', '#6EE7B7'],
+      });
+    }, 150);
+    // Right burst
+    setTimeout(() => {
+      confetti({
+        particleCount: 50,
+        angle: 120,
+        spread: 55,
+        origin: { x: 1 },
+        colors: ['#10B981', '#34D399', '#6EE7B7'],
+      });
+    }, 300);
+  }, []);
+
+  // Auto-redirect on success after showing thank you page (FAST - under 3 seconds)
   useEffect(() => {
-    if (step === 'success' && session?.successUrl) {
-      // Play sound on success
+    if (step === 'success') {
+      // Play sound and confetti immediately
       playSound('success');
+      fireSuccessConfetti();
 
-      // Auto redirect after 4 seconds
-      const redirectTimer = setTimeout(() => {
-        const redirectUrl = buildSuccessRedirectUrl(session.successUrl!, session, paymentMethodUsed || 'unknown');
-        window.location.href = redirectUrl;
-      }, 4000);
+      // Auto redirect after 2 seconds (1.5s display + 0.5s buffer)
+      if (session?.successUrl) {
+        const redirectTimer = setTimeout(() => {
+          const redirectUrl = buildSuccessRedirectUrl(session.successUrl!, session, paymentMethodUsed || 'unknown');
+          window.location.href = redirectUrl;
+        }, 2000);
 
-      return () => clearTimeout(redirectTimer);
+        return () => clearTimeout(redirectTimer);
+      }
     }
-  }, [step, session?.successUrl]);
+  }, [step, session?.successUrl, fireSuccessConfetti]);
 
   const loadSession = async () => {
     // Skip loading for invalid/placeholder sessionIds
@@ -928,58 +963,24 @@ export function HostedCheckoutPage() {
   }
 
   if (step === 'success') {
-    // Generate confetti items once to avoid re-renders
-    const confettiItems = Array.from({ length: 50 }, (_, i) => ({
-      id: i,
-      left: `${Math.random() * 100}%`,
-      delay: `${Math.random() * 3}s`,
-      duration: `${3 + Math.random() * 2}s`,
-      color: ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8'][Math.floor(Math.random() * 8)],
-      rotation: `rotate(${Math.random() * 360}deg)`,
-    }));
-
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-400 via-emerald-500 to-teal-600 flex items-center justify-center p-4 relative overflow-hidden">
-        {/* Confetti animation */}
-        <div className="absolute inset-0 pointer-events-none">
-          {confettiItems.map((item) => (
-            <div
-              key={item.id}
-              className="absolute animate-confetti"
-              style={{
-                left: item.left,
-                top: `-10%`,
-                animationDelay: item.delay,
-                animationDuration: item.duration,
-              }}
-            >
-              <div
-                className="w-3 h-3 rounded-sm"
-                style={{
-                  backgroundColor: item.color,
-                  transform: item.rotation,
-                }}
-              />
-            </div>
-          ))}
-        </div>
-
-        {/* Success card */}
-        <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 text-center relative z-10 animate-success-pop">
+        {/* Success card - Fast, clean design */}
+        <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 text-center relative z-10 animate-in zoom-in-95 duration-300">
           {/* Animated checkmark */}
           <div className="relative w-24 h-24 mx-auto mb-6">
-            <div className="absolute inset-0 bg-green-100 rounded-full animate-ping-slow opacity-75"></div>
+            <div className="absolute inset-0 bg-green-100 rounded-full animate-ping opacity-50"></div>
             <div className="absolute inset-0 bg-green-100 rounded-full"></div>
-            <div className="absolute inset-2 bg-green-500 rounded-full flex items-center justify-center animate-success-check">
+            <div className="absolute inset-2 bg-green-500 rounded-full flex items-center justify-center">
               <CheckCircle className="w-12 h-12 text-white" />
             </div>
           </div>
 
-          <h1 className="text-3xl font-bold text-gray-900 mb-3">Thank You!</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Thank You!</h1>
           <p className="text-gray-600 mb-4">Payment Successful</p>
 
           {session && (
-            <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl p-4 mb-6">
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl p-4 mb-4">
               <p className="text-4xl font-bold text-green-600 mb-1">
                 {formatAmount(session.amount, session.currencyCode)}
               </p>
@@ -995,24 +996,19 @@ export function HostedCheckoutPage() {
           )}
 
           {session?.successUrl ? (
-            <>
-              <div className="flex items-center justify-center gap-2 text-gray-400 text-sm mb-6">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Redirecting you back in 4 seconds...</span>
+            <div className="flex items-center justify-center gap-2 text-gray-400 text-sm">
+              <div className="flex space-x-1">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
               </div>
-
-              <button
-                onClick={() => window.location.href = buildSuccessRedirectUrl(session.successUrl!, session, paymentMethodUsed || 'unknown')}
-                className="w-full py-4 px-6 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-semibold hover:from-green-600 hover:to-emerald-700 transition-all transform hover:scale-[1.02] shadow-lg"
-              >
-                Return to {session.merchantName || 'Merchant'} Now
-              </button>
-            </>
+              <span>Returning to {session.merchantName || 'merchant'}...</span>
+            </div>
           ) : (
             <p className="text-gray-500 text-sm">You can close this window</p>
           )}
 
-          <div className="mt-6 pt-4 border-t border-gray-100">
+          <div className="mt-4 pt-3 border-t border-gray-100">
             <div className="flex items-center justify-center gap-2 text-gray-400 text-xs">
               <Shield className="w-3 h-3" />
               <span>Secured by Peeap</span>
@@ -1020,31 +1016,6 @@ export function HostedCheckoutPage() {
           </div>
         </div>
 
-        {/* CSS for animations */}
-        <style>{`
-          @keyframes confetti {
-            0% { transform: translateY(0) rotate(0deg); opacity: 1; }
-            100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
-          }
-          @keyframes success-pop {
-            0% { transform: scale(0.5); opacity: 0; }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); opacity: 1; }
-          }
-          @keyframes success-check {
-            0% { transform: scale(0) rotate(-45deg); }
-            50% { transform: scale(1.2) rotate(0deg); }
-            100% { transform: scale(1) rotate(0deg); }
-          }
-          @keyframes ping-slow {
-            0% { transform: scale(1); opacity: 0.75; }
-            100% { transform: scale(1.5); opacity: 0; }
-          }
-          .animate-confetti { animation: confetti linear forwards; }
-          .animate-success-pop { animation: success-pop 0.5s ease-out forwards; }
-          .animate-success-check { animation: success-check 0.6s ease-out 0.2s forwards; transform: scale(0); }
-          .animate-ping-slow { animation: ping-slow 2s cubic-bezier(0, 0, 0.2, 1) infinite; }
-        `}</style>
       </div>
     );
   }

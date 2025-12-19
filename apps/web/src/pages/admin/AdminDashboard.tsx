@@ -25,15 +25,12 @@ import {
   Activity,
   Store,
   ArrowUp,
-  ArrowDown,
   CircleDollarSign,
   UserCheck,
   CreditCardIcon,
   RefreshCw,
   Banknote,
-  X,
 } from 'lucide-react';
-import { AnimatePresence } from 'framer-motion';
 import {
   AreaChart,
   Area,
@@ -48,19 +45,19 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   Legend,
 } from 'recharts';
+import { SafeResponsiveContainer } from '@/components/charts/SafeResponsiveContainer';
 import { MotionCard } from '@/components/ui/Card';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase, supabaseAdmin } from '@/lib/supabase';
 import { currencyService, Currency } from '@/services/currency.service';
 import { adminNotificationService, AdminNotification } from '@/services/adminNotification.service';
 import { authService } from '@/services/auth.service';
 import { useAuth } from '@/context/AuthContext';
-import { SystemFloatSidebar } from '@/components/admin/SystemFloatSidebar';
 import { FloatManagementModal } from '@/components/admin/FloatManagementModal';
-import { MobileMoneyFloatCard } from '@/components/admin/MobileMoneyFloatCard';
+import { FloatOverviewModal } from '@/components/admin/FloatOverviewModal';
 
 interface DashboardStats {
   totalAccounts: number;
@@ -189,11 +186,11 @@ export function AdminDashboard() {
   const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
 
   // System Float Modal state
+  const [floatOverviewOpen, setFloatOverviewOpen] = useState(false);
   const [floatModalOpen, setFloatModalOpen] = useState(false);
   const [floatModalMode, setFloatModalMode] = useState<'open' | 'replenish' | 'close' | 'history'>('open');
   const [floatModalCurrency, setFloatModalCurrency] = useState<string | undefined>();
   const [floatSidebarKey, setFloatSidebarKey] = useState(0);
-  const [floatPanelOpen, setFloatPanelOpen] = useState(false);
 
   useEffect(() => {
     currencyService.getDefaultCurrency().then(setDefaultCurrency);
@@ -663,62 +660,15 @@ export function AdminDashboard() {
                 </div>
               </div>
 
-              {/* System Float Button in Header */}
-              <div className="relative">
-                <button
-                  onClick={() => setFloatPanelOpen(!floatPanelOpen)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg shadow-sm transition-all duration-200 ${
-                    floatPanelOpen
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white'
-                  }`}
-                  title="System Float Management"
-                >
-                  <Banknote className="w-4 h-4" />
-                  <span className="text-sm font-medium hidden sm:inline">System Float</span>
-                  <motion.div
-                    animate={{ rotate: floatPanelOpen ? 180 : 0 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <ArrowDown className="w-3 h-3" />
-                  </motion.div>
-                </button>
-
-                {/* System Float Panel - Slides Down from Header */}
-                <AnimatePresence>
-                  {floatPanelOpen && (
-                    <>
-                      {/* Backdrop */}
-                      <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-40"
-                        onClick={() => setFloatPanelOpen(false)}
-                      />
-                      <motion.div
-                        initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                        transition={{ duration: 0.2, ease: 'easeOut' }}
-                        className="absolute top-12 right-0 z-50 w-80 max-h-[calc(100vh-120px)] overflow-y-auto rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
-                      >
-                        <SystemFloatSidebar
-                          key={floatSidebarKey}
-                          onOpenFloat={handleOpenFloat}
-                          onReplenishFloat={handleReplenishFloat}
-                          onCloseFloat={handleCloseFloat}
-                          onViewHistory={handleViewHistory}
-                        />
-                        {/* Mobile Money Float Card */}
-                        <div className="px-4 pb-4">
-                          <MobileMoneyFloatCard />
-                        </div>
-                      </motion.div>
-                    </>
-                  )}
-                </AnimatePresence>
-              </div>
+              {/* System Float Button */}
+              <button
+                onClick={() => setFloatOverviewOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg shadow-sm bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white transition-all duration-200"
+                title="System Float Management"
+              >
+                <Banknote className="w-4 h-4" />
+                <span className="text-sm font-medium">Float</span>
+              </button>
             </div>
           </div>
 
@@ -745,7 +695,11 @@ export function AdminDashboard() {
                     +12%
                   </span>
                 </div>
-                <p className="text-2xl font-bold mt-3">{currencySymbol}{formatCompactNumber(stats.totalVolume)}</p>
+                {loading ? (
+                  <Skeleton className="h-8 w-24 mt-3 bg-white/20" />
+                ) : (
+                  <p className="text-2xl font-bold mt-3">{currencySymbol}{formatCompactNumber(stats.totalVolume)}</p>
+                )}
                 <p className="text-sm text-indigo-100 mt-1">Total Volume</p>
               </MotionCard>
 
@@ -755,12 +709,20 @@ export function AdminDashboard() {
                   <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
                     <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                   </div>
-                  <span className="text-xs text-green-600 dark:text-green-400 flex items-center">
-                    <ArrowUp className="w-3 h-3" />
-                    {stats.activeAccounts}
-                  </span>
+                  {loading ? (
+                    <Skeleton className="h-4 w-8" />
+                  ) : (
+                    <span className="text-xs text-green-600 dark:text-green-400 flex items-center">
+                      <ArrowUp className="w-3 h-3" />
+                      {stats.activeAccounts}
+                    </span>
+                  )}
                 </div>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-3">{stats.totalAccounts.toLocaleString()}</p>
+                {loading ? (
+                  <Skeleton className="h-8 w-20 mt-3" />
+                ) : (
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-3">{stats.totalAccounts.toLocaleString()}</p>
+                )}
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Total Users</p>
               </MotionCard>
 
@@ -770,11 +732,19 @@ export function AdminDashboard() {
                   <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
                     <BarChart3 className="w-5 h-5 text-green-600 dark:text-green-400" />
                   </div>
-                  <span className="text-xs text-green-600 dark:text-green-400 flex items-center">
-                    {stats.successfulTransactions} completed
-                  </span>
+                  {loading ? (
+                    <Skeleton className="h-4 w-16" />
+                  ) : (
+                    <span className="text-xs text-green-600 dark:text-green-400 flex items-center">
+                      {stats.successfulTransactions} completed
+                    </span>
+                  )}
                 </div>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-3">{stats.totalTransactions.toLocaleString()}</p>
+                {loading ? (
+                  <Skeleton className="h-8 w-20 mt-3" />
+                ) : (
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-3">{stats.totalTransactions.toLocaleString()}</p>
+                )}
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Total Transactions</p>
               </MotionCard>
 
@@ -784,11 +754,19 @@ export function AdminDashboard() {
                   <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
                     <CreditCard className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                   </div>
-                  <span className="text-xs text-purple-600 dark:text-purple-400">
-                    {stats.activeCards} active
-                  </span>
+                  {loading ? (
+                    <Skeleton className="h-4 w-12" />
+                  ) : (
+                    <span className="text-xs text-purple-600 dark:text-purple-400">
+                      {stats.activeCards} active
+                    </span>
+                  )}
                 </div>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-3">{stats.totalCards.toLocaleString()}</p>
+                {loading ? (
+                  <Skeleton className="h-8 w-16 mt-3" />
+                ) : (
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-3">{stats.totalCards.toLocaleString()}</p>
+                )}
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Cards Issued</p>
               </MotionCard>
             </motion.div>
@@ -810,76 +788,80 @@ export function AdminDashboard() {
               {/* Transaction Trend Chart */}
               <MotionCard className="lg:col-span-2 p-6" delay={0.4}>
                 <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">Transaction Trends (Last 7 Days)</h3>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={transactionChartData}>
-                      <defs>
-                        <linearGradient id="transactionGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={CHART_COLORS.primary} stopOpacity={0.3} />
-                          <stop offset="95%" stopColor={CHART_COLORS.primary} stopOpacity={0} />
-                        </linearGradient>
-                        <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={CHART_COLORS.secondary} stopOpacity={0.3} />
-                          <stop offset="95%" stopColor={CHART_COLORS.secondary} stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
-                      <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 12 }} />
-                      <YAxis tick={{ fill: '#9ca3af', fontSize: 12 }} />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Legend />
-                      <Area
-                        type="monotone"
-                        dataKey="transactions"
-                        stroke={CHART_COLORS.primary}
-                        fill="url(#transactionGradient)"
-                        name="Transactions"
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="revenue"
-                        stroke={CHART_COLORS.secondary}
-                        fill="url(#revenueGradient)"
-                        name="Revenue"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
+                <SafeResponsiveContainer height={256} className="h-64">
+                  <AreaChart data={transactionChartData}>
+                    <defs>
+                      <linearGradient id="transactionGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={CHART_COLORS.primary} stopOpacity={0.3} />
+                        <stop offset="95%" stopColor={CHART_COLORS.primary} stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={CHART_COLORS.secondary} stopOpacity={0.3} />
+                        <stop offset="95%" stopColor={CHART_COLORS.secondary} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+                    <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 12 }} />
+                    <YAxis tick={{ fill: '#9ca3af', fontSize: 12 }} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend />
+                    <Area
+                      type="monotone"
+                      dataKey="transactions"
+                      stroke={CHART_COLORS.primary}
+                      fill="url(#transactionGradient)"
+                      name="Transactions"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="revenue"
+                      stroke={CHART_COLORS.secondary}
+                      fill="url(#revenueGradient)"
+                      name="Revenue"
+                    />
+                  </AreaChart>
+                </SafeResponsiveContainer>
               </MotionCard>
 
               {/* Transaction Type Distribution */}
               <MotionCard className="p-6" delay={0.5}>
                 <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">Transaction Types</h3>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={transactionTypeData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={50}
-                        outerRadius={80}
-                        paddingAngle={2}
-                        dataKey="value"
-                        label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
-                        labelLine={false}
-                      >
-                        {transactionTypeData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip content={<CustomTooltip />} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
+                <SafeResponsiveContainer height={256} className="h-64">
+                  <PieChart>
+                    <Pie
+                      data={transactionTypeData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={80}
+                      paddingAngle={2}
+                      dataKey="value"
+                      label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
+                      labelLine={false}
+                    >
+                      {transactionTypeData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<CustomTooltip />} />
+                  </PieChart>
+                </SafeResponsiveContainer>
                 {/* Quick Stats */}
                 <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                   <div className="text-center">
-                    <p className="text-lg font-bold text-green-600 dark:text-green-400">{stats.successfulTransactions}</p>
+                    {loading ? (
+                      <Skeleton className="h-5 w-12 mx-auto" />
+                    ) : (
+                      <p className="text-lg font-bold text-green-600 dark:text-green-400">{stats.successfulTransactions}</p>
+                    )}
                     <p className="text-xs text-gray-500 dark:text-gray-400">Successful</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-lg font-bold text-red-600 dark:text-red-400">{stats.failedTransactions}</p>
+                    {loading ? (
+                      <Skeleton className="h-5 w-10 mx-auto" />
+                    ) : (
+                      <p className="text-lg font-bold text-red-600 dark:text-red-400">{stats.failedTransactions}</p>
+                    )}
                     <p className="text-xs text-gray-500 dark:text-gray-400">Failed</p>
                   </div>
                 </div>
@@ -908,7 +890,11 @@ export function AdminDashboard() {
                       <Store className="w-4 h-4 text-orange-600 dark:text-orange-400" />
                     </div>
                     <div>
-                      <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.totalMerchants}</p>
+                      {loading ? (
+                        <Skeleton className="h-6 w-10" />
+                      ) : (
+                        <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.totalMerchants}</p>
+                      )}
                       <p className="text-xs text-gray-500 dark:text-gray-400">Merchants</p>
                     </div>
                   </div>
@@ -919,7 +905,11 @@ export function AdminDashboard() {
                       <UserCheck className="w-4 h-4 text-green-600 dark:text-green-400" />
                     </div>
                     <div>
-                      <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.activeMerchants}</p>
+                      {loading ? (
+                        <Skeleton className="h-6 w-8" />
+                      ) : (
+                        <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.activeMerchants}</p>
+                      )}
                       <p className="text-xs text-gray-500 dark:text-gray-400">Active</p>
                     </div>
                   </div>
@@ -930,7 +920,11 @@ export function AdminDashboard() {
                       <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div>
-                      <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.totalCustomers}</p>
+                      {loading ? (
+                        <Skeleton className="h-6 w-10" />
+                      ) : (
+                        <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.totalCustomers}</p>
+                      )}
                       <p className="text-xs text-gray-500 dark:text-gray-400">Customers</p>
                     </div>
                   </div>
@@ -941,7 +935,11 @@ export function AdminDashboard() {
                       <ShieldCheck className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                     </div>
                     <div>
-                      <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.verifiedCustomers}</p>
+                      {loading ? (
+                        <Skeleton className="h-6 w-8" />
+                      ) : (
+                        <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.verifiedCustomers}</p>
+                      )}
                       <p className="text-xs text-gray-500 dark:text-gray-400">Verified</p>
                     </div>
                   </div>
@@ -951,17 +949,15 @@ export function AdminDashboard() {
               {/* Business Growth Chart */}
               <MotionCard className="lg:col-span-2 p-6" delay={0.8}>
                 <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">Business Registrations (Last 30 Days)</h3>
-                <div className="h-52">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={businessChartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
-                      <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} />
-                      <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Bar dataKey="businesses" fill={CHART_COLORS.tertiary} name="New Businesses" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                <SafeResponsiveContainer height={208} className="h-52">
+                  <BarChart data={businessChartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+                    <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} />
+                    <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar dataKey="businesses" fill={CHART_COLORS.tertiary} name="New Businesses" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </SafeResponsiveContainer>
               </MotionCard>
             </div>
           </section>
@@ -986,11 +982,19 @@ export function AdminDashboard() {
                     <div className="p-2 bg-white/20 rounded-lg">
                       <Calendar className="w-5 h-5" />
                     </div>
-                    <span className="text-xs bg-white/20 px-2 py-1 rounded-full">
-                      {stats.publishedEvents} published
-                    </span>
+                    {loading ? (
+                      <Skeleton className="h-5 w-20 bg-white/20" />
+                    ) : (
+                      <span className="text-xs bg-white/20 px-2 py-1 rounded-full">
+                        {stats.publishedEvents} published
+                      </span>
+                    )}
                   </div>
-                  <p className="text-3xl font-bold mt-3">{stats.totalEvents}</p>
+                  {loading ? (
+                    <Skeleton className="h-9 w-16 mt-3 bg-white/20" />
+                  ) : (
+                    <p className="text-3xl font-bold mt-3">{stats.totalEvents}</p>
+                  )}
                   <p className="text-sm text-purple-100 mt-1">Total Events</p>
                 </MotionCard>
 
@@ -1000,7 +1004,11 @@ export function AdminDashboard() {
                       <div className="p-2 bg-cyan-100 dark:bg-cyan-900/30 rounded-lg w-fit mx-auto mb-2">
                         <Ticket className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
                       </div>
-                      <p className="text-xl font-bold text-gray-900 dark:text-white">{formatCompactNumber(stats.totalTicketsSold)}</p>
+                      {loading ? (
+                        <Skeleton className="h-6 w-12 mx-auto" />
+                      ) : (
+                        <p className="text-xl font-bold text-gray-900 dark:text-white">{formatCompactNumber(stats.totalTicketsSold)}</p>
+                      )}
                       <p className="text-xs text-gray-500 dark:text-gray-400">Tickets Sold</p>
                     </div>
                   </MotionCard>
@@ -1009,7 +1017,11 @@ export function AdminDashboard() {
                       <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg w-fit mx-auto mb-2">
                         <DollarSign className="w-5 h-5 text-green-600 dark:text-green-400" />
                       </div>
-                      <p className="text-xl font-bold text-gray-900 dark:text-white">{currencySymbol}{formatCompactNumber(stats.eventRevenue)}</p>
+                      {loading ? (
+                        <Skeleton className="h-6 w-16 mx-auto" />
+                      ) : (
+                        <p className="text-xl font-bold text-gray-900 dark:text-white">{currencySymbol}{formatCompactNumber(stats.eventRevenue)}</p>
+                      )}
                       <p className="text-xs text-gray-500 dark:text-gray-400">Revenue</p>
                     </div>
                   </MotionCard>
@@ -1019,20 +1031,18 @@ export function AdminDashboard() {
               {/* Events Chart */}
               <MotionCard className="lg:col-span-2 p-6" delay={1}>
                 <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">Events & Ticket Sales (Last 6 Months)</h3>
-                <div className="h-52">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={eventChartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
-                      <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 12 }} />
-                      <YAxis yAxisId="left" tick={{ fill: '#9ca3af', fontSize: 12 }} />
-                      <YAxis yAxisId="right" orientation="right" tick={{ fill: '#9ca3af', fontSize: 12 }} />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Legend />
-                      <Bar yAxisId="left" dataKey="events" fill={CHART_COLORS.purple} name="Events Created" radius={[4, 4, 0, 0]} />
-                      <Bar yAxisId="right" dataKey="tickets" fill={CHART_COLORS.cyan} name="Tickets Sold" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                <SafeResponsiveContainer height={208} className="h-52">
+                  <BarChart data={eventChartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+                    <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 12 }} />
+                    <YAxis yAxisId="left" tick={{ fill: '#9ca3af', fontSize: 12 }} />
+                    <YAxis yAxisId="right" orientation="right" tick={{ fill: '#9ca3af', fontSize: 12 }} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend />
+                    <Bar yAxisId="left" dataKey="events" fill={CHART_COLORS.purple} name="Events Created" radius={[4, 4, 0, 0]} />
+                    <Bar yAxisId="right" dataKey="tickets" fill={CHART_COLORS.cyan} name="Tickets Sold" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </SafeResponsiveContainer>
               </MotionCard>
             </div>
           </section>
@@ -1223,38 +1233,73 @@ export function AdminDashboard() {
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
               <MotionCard className="p-4 text-center" delay={1.2}>
                 <CreditCardIcon className="w-6 h-6 mx-auto mb-2 text-blue-500" />
-                <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.virtualCards.toLocaleString()}</p>
+                {loading ? (
+                  <Skeleton className="h-6 w-10 mx-auto" />
+                ) : (
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.virtualCards.toLocaleString()}</p>
+                )}
                 <p className="text-xs text-gray-500 dark:text-gray-400">Virtual Cards</p>
               </MotionCard>
               <MotionCard className="p-4 text-center" delay={1.25}>
                 <CreditCard className="w-6 h-6 mx-auto mb-2 text-purple-500" />
-                <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.physicalCards.toLocaleString()}</p>
+                {loading ? (
+                  <Skeleton className="h-6 w-10 mx-auto" />
+                ) : (
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.physicalCards.toLocaleString()}</p>
+                )}
                 <p className="text-xs text-gray-500 dark:text-gray-400">Physical Cards</p>
               </MotionCard>
               <MotionCard className="p-4 text-center" delay={1.3}>
                 <ShieldCheck className="w-6 h-6 mx-auto mb-2 text-green-500" />
-                <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.verifiedCustomers}</p>
+                {loading ? (
+                  <Skeleton className="h-6 w-10 mx-auto" />
+                ) : (
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.verifiedCustomers}</p>
+                )}
                 <p className="text-xs text-gray-500 dark:text-gray-400">Verified Users</p>
               </MotionCard>
               <MotionCard className="p-4 text-center" delay={1.35}>
                 <Clock className="w-6 h-6 mx-auto mb-2 text-yellow-500" />
-                <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.pendingTransactions}</p>
+                {loading ? (
+                  <Skeleton className="h-6 w-10 mx-auto" />
+                ) : (
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.pendingTransactions}</p>
+                )}
                 <p className="text-xs text-gray-500 dark:text-gray-400">Pending Txns</p>
               </MotionCard>
               <MotionCard className="p-4 text-center" delay={1.4}>
                 <Eye className="w-6 h-6 mx-auto mb-2 text-indigo-500" />
-                <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.uniqueVisitorsToday}</p>
+                {loading ? (
+                  <Skeleton className="h-6 w-10 mx-auto" />
+                ) : (
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.uniqueVisitorsToday}</p>
+                )}
                 <p className="text-xs text-gray-500 dark:text-gray-400">Unique Visitors</p>
               </MotionCard>
               <MotionCard className="p-4 text-center" delay={1.45}>
                 <Activity className="w-6 h-6 mx-auto mb-2 text-cyan-500" />
-                <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.activeDevelopers}</p>
+                {loading ? (
+                  <Skeleton className="h-6 w-10 mx-auto" />
+                ) : (
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.activeDevelopers}</p>
+                )}
                 <p className="text-xs text-gray-500 dark:text-gray-400">Active Devs</p>
               </MotionCard>
             </div>
           </section>
         </div>
       </div>
+
+      {/* Float Overview Modal */}
+      <FloatOverviewModal
+        isOpen={floatOverviewOpen}
+        onClose={() => setFloatOverviewOpen(false)}
+        onOpenFloat={handleOpenFloat}
+        onReplenishFloat={handleReplenishFloat}
+        onCloseFloat={handleCloseFloat}
+        onViewHistory={handleViewHistory}
+        sidebarKey={floatSidebarKey}
+      />
 
       {/* Float Management Modal */}
       <FloatManagementModal

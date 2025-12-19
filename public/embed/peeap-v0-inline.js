@@ -1,15 +1,41 @@
 /**
- * PEEAP V0 INLINE SDK v2.0.0
+ * PEEAP V0 INLINE SDK v2.1.0
  *
  * FOR V0.DEV AND OTHER SANDBOXED ENVIRONMENTS
  *
  * This version works entirely without API calls - just direct redirects.
  * Copy this ENTIRE script inline into your v0 project.
  *
+ * ============================================================================
+ * ⚠️  IMPORTANT: CREATE A SUCCESS PAGE FIRST!
+ * ============================================================================
+ * Before integrating payments, you MUST create a "Thank You" / Success page.
+ * Set the redirectUrl option to point to your success page.
+ *
+ * Your success page will receive these URL parameters:
+ *   ?peeap_status=success&peeap_ref=order_123&session_id=cs_xxx
+ *
+ * Example:
+ *   PeeapV0.payDirect({
+ *     publicKey: 'pk_live_xxx',
+ *     amount: 50,
+ *     currency: 'SLE',
+ *     description: 'Order #123',
+ *     reference: 'order_123',
+ *     redirectUrl: 'https://yoursite.com/payment-success'  // <-- YOUR SUCCESS PAGE
+ *   });
+ * ============================================================================
+ *
+ * TECHNICAL NOTE: Uses window.open() instead of window.location.href
+ * v0.dev runs previews in sandboxed iframes that block top-level navigation.
+ * window.location.href will show "This content is blocked" error.
+ * window.open() opens in a new tab, bypassing the sandbox restriction.
+ *
  * USAGE IN V0.DEV:
  * ================
- * 1. Copy this entire script into a <script> tag in your component
- * 2. Or import it as a module
+ * 1. First, create a success page at /payment-success (or similar)
+ * 2. Copy this entire script into a <script> tag in your component
+ * 3. Set redirectUrl to your success page URL
  *
  * TWO MODES:
  * ==========
@@ -18,7 +44,8 @@
  *     publicKey: 'pk_live_xxx',
  *     amount: 50,
  *     currency: 'SLE',
- *     description: 'Order #123'
+ *     description: 'Order #123',
+ *     redirectUrl: '/payment-success'
  *   });
  *
  * Mode 2: Pre-generated Session (from your backend)
@@ -28,7 +55,7 @@
 (function(window) {
   'use strict';
 
-  var VERSION = '2.0.0';
+  var VERSION = '2.1.0';
   var CHECKOUT_URL = 'https://checkout.peeap.com';
   var API_URL = 'https://api.peeap.com';
 
@@ -146,8 +173,11 @@
         checkoutUrl += '&phone=' + encodeURIComponent(options.customerPhone);
       }
 
-      console.log('[PeeapV0] Redirecting to quick checkout:', checkoutUrl);
-      window.location.href = checkoutUrl;
+      // IMPORTANT: Use window.open() instead of window.location.href
+      // v0.dev runs previews in sandboxed iframes that block top-level navigation
+      // window.location.href will show "This content is blocked" error
+      console.log('[PeeapV0] Opening quick checkout in new tab:', checkoutUrl);
+      window.open(checkoutUrl, '_blank');
     },
 
     /**
@@ -161,8 +191,9 @@
       }
 
       var checkoutUrl = CHECKOUT_URL + '/checkout/pay/' + sessionId;
-      console.log('[PeeapV0] Opening checkout:', checkoutUrl);
-      window.location.href = checkoutUrl;
+      // Use window.open() for v0.dev sandbox compatibility
+      console.log('[PeeapV0] Opening checkout in new tab:', checkoutUrl);
+      window.open(checkoutUrl, '_blank');
     },
 
     /**
@@ -217,7 +248,8 @@
       .then(function(response) { return response.json(); })
       .then(function(data) {
         if (data.paymentUrl) {
-          window.location.href = data.paymentUrl;
+          // Use window.open() for consistency and sandbox compatibility
+          window.open(data.paymentUrl, '_blank');
           return { sessionId: data.sessionId, paymentUrl: data.paymentUrl };
         }
         throw new Error(data.error || 'Failed to create session');

@@ -44,13 +44,9 @@ export function Modal({
   const titleId = useRef(generateId('modal-title'));
   const descriptionId = useRef(generateId('modal-desc'));
 
-  // Handle escape key
-  const escapeHandler = useCallback(
-    handleEscapeKey(() => {
-      if (closeOnEscape) onClose();
-    }),
-    [closeOnEscape, onClose]
-  );
+  // Handle escape key - use ref to avoid re-running effect
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   // Trap focus and restore on close
   useEffect(() => {
@@ -60,12 +56,42 @@ export function Modal({
     previousActiveElement.current = document.activeElement as HTMLElement;
 
     // Add escape key listener
+    const escapeHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && closeOnEscape) {
+        onCloseRef.current();
+      }
+    };
     document.addEventListener('keydown', escapeHandler);
 
-    // Trap focus within modal
+    // Trap focus within modal (only set up tab trapping, don't auto-focus)
+    const element = modalRef.current;
     let cleanup: (() => void) | undefined;
-    if (modalRef.current) {
-      cleanup = trapFocus(modalRef.current);
+    if (element) {
+      const focusableElements = element.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key !== 'Tab') return;
+        if (e.shiftKey) {
+          if (document.activeElement === firstElement) {
+            e.preventDefault();
+            lastElement?.focus();
+          }
+        } else {
+          if (document.activeElement === lastElement) {
+            e.preventDefault();
+            firstElement?.focus();
+          }
+        }
+      };
+
+      element.addEventListener('keydown', handleKeyDown);
+      // Focus first element only on initial open
+      firstElement?.focus();
+      cleanup = () => element.removeEventListener('keydown', handleKeyDown);
     }
 
     // Prevent body scroll
@@ -79,7 +105,7 @@ export function Modal({
       // Restore focus to previous element
       previousActiveElement.current?.focus();
     };
-  }, [isOpen, escapeHandler]);
+  }, [isOpen, closeOnEscape]); // Only depend on isOpen and closeOnEscape
 
   if (!isOpen) return null;
 

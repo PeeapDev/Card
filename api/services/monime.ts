@@ -289,8 +289,28 @@ export class MonimeService {
   /**
    * Get available banks for payout
    */
-  async getBanks(country: string = 'SL'): Promise<Array<{ providerId: string; name: string; country: string }>> {
-    const response = await this.request<{ result: Array<{ providerId: string; name: string; country: string }> }>(
+  async getBanks(country: string = 'SL'): Promise<Array<{
+    providerId: string;
+    name: string;
+    country: string;
+    status?: { active: boolean };
+    featureSet?: {
+      payout?: { canPayTo: boolean };
+      payment?: { canPayFrom: boolean };
+      kycVerification?: { canVerifyAccount: boolean };
+    };
+  }>> {
+    const response = await this.request<{ result: Array<{
+      providerId: string;
+      name: string;
+      country: string;
+      status?: { active: boolean };
+      featureSet?: {
+        payout?: { canPayTo: boolean };
+        payment?: { canPayFrom: boolean };
+        kycVerification?: { canVerifyAccount: boolean };
+      };
+    }> }>(
       `/banks?country=${country}`,
       'GET'
     );
@@ -356,14 +376,116 @@ export class MonimeService {
   }
 
   /**
-   * Get financial accounts (to get source account ID for payouts)
+   * Get financial accounts with balances
+   * Used to get available funds for payouts
    */
-  async getFinancialAccounts(): Promise<Array<{ id: string; name: string; currency: string; balance: { value: number } }>> {
-    const response = await this.request<{ result: Array<{ id: string; name: string; currency: string; balance: { value: number } }> }>(
-      '/financial-accounts',
+  async getFinancialAccounts(withBalance: boolean = true): Promise<Array<{
+    id: string;
+    name: string;
+    currency: string;
+    uvan?: string;
+    balance?: {
+      available: {
+        currency: string;
+        value: number; // In minor units (cents)
+      };
+    };
+  }>> {
+    const response = await this.request<{
+      result: Array<{
+        id: string;
+        name: string;
+        currency: string;
+        uvan?: string;
+        balance?: {
+          available: {
+            currency: string;
+            value: number;
+          };
+        };
+      }>;
+    }>(
+      `/financial-accounts?withBalance=${withBalance}`,
       'GET'
     );
     return response.result || [];
+  }
+
+  /**
+   * Get a specific financial account with balance
+   */
+  async getFinancialAccount(accountId: string, withBalance: boolean = true): Promise<{
+    id: string;
+    name: string;
+    currency: string;
+    uvan?: string;
+    balance?: {
+      available: {
+        currency: string;
+        value: number;
+      };
+    };
+  } | null> {
+    const response = await this.request<{
+      result: {
+        id: string;
+        name: string;
+        currency: string;
+        uvan?: string;
+        balance?: {
+          available: {
+            currency: string;
+            value: number;
+          };
+        };
+      };
+    }>(
+      `/financial-accounts/${accountId}?withBalance=${withBalance}`,
+      'GET'
+    );
+    return response.result || null;
+  }
+
+  /**
+   * Get total available balance across all financial accounts
+   * Returns balance in display units (converted from minor units)
+   */
+  async getTotalBalance(currency: string = 'SLE'): Promise<{
+    totalBalance: number;
+    accounts: Array<{
+      id: string;
+      name: string;
+      currency: string;
+      balance: number;
+    }>;
+  }> {
+    const accounts = await this.getFinancialAccounts(true);
+
+    let totalBalance = 0;
+    const accountBalances: Array<{
+      id: string;
+      name: string;
+      currency: string;
+      balance: number;
+    }> = [];
+
+    for (const account of accounts) {
+      if (account.balance?.available && account.currency === currency) {
+        const balanceInDisplayUnits = fromMonimeAmount(account.balance.available.value, account.currency);
+        totalBalance += balanceInDisplayUnits;
+        accountBalances.push({
+          id: account.id,
+          name: account.name,
+          currency: account.currency,
+          balance: balanceInDisplayUnits,
+        });
+      }
+    }
+
+    return {
+      totalBalance,
+      accounts: accountBalances,
+    };
   }
 
   /**
@@ -563,6 +685,81 @@ export class MonimeService {
         userId: params.userId,
         walletId: params.walletId,
         description: params.description || 'Send to Mobile Money',
+      },
+    });
+
+    if (!response.result) {
+      throw new MonimeError('Invalid response from Monime', 'INVALID_RESPONSE', 500);
+    }
+
+    // Calculate total fee
+    let totalFee = 0;
+    if (response.result.fees) {
+      totalFee = response.result.fees.reduce((sum, fee) => {
+        return sum + fromMonimeAmount(fee.amount.value, fee.amount.currency);
+      }, 0);
+    }
+
+    return {
+      payoutId: response.result.id,
+      status: response.result.status,
+      fees: response.result.fees,
+      totalFee,
+    };
+  }
+
+  /**
+   * Helper: Send money to bank account
+   * This is for platform-to-bank transfers
+   * @param params.amount - Amount in display units (e.g., 100 SLE)
+   * @param params.currency - Currency code (default: SLE)
+   * @param params.accountNumber - Bank account number
+   * @param params.providerId - Bank provider ID from /banks endpoint (e.g., 'slb001', 'slb004')
+   * @param params.financialAccountId - Monime financial account ID for source funds
+   */
+  async sendToBankAccount(params: {
+    amount: number;
+    currency: string;
+    accountNumber: string;
+    providerId: string;
+    financialAccountId: string;
+    userId: string;
+    walletId: string;
+    description?: string;
+  }): Promise<{
+    payoutId: string;
+    status: string;
+    fees?: Array<{ name: string; amount: { currency: string; value: number } }>;
+    totalFee?: number;
+  }> {
+    const currency = params.currency || 'SLE';
+    const monimeAmount = toMonimeAmount(params.amount, currency);
+
+    console.log('[Monime] Sending to bank account:', {
+      amount: params.amount,
+      monimeAmount,
+      accountNumber: params.accountNumber,
+      providerId: params.providerId,
+    });
+
+    const response = await this.createPayout({
+      amount: {
+        currency: currency,
+        value: monimeAmount,
+      },
+      destination: {
+        type: 'bank',
+        providerId: params.providerId,
+        accountNumber: params.accountNumber,
+      },
+      source: {
+        financialAccountId: params.financialAccountId,
+      },
+      metadata: {
+        type: 'bank_transfer',
+        userId: params.userId,
+        walletId: params.walletId,
+        description: params.description || 'Bank Transfer',
       },
     });
 

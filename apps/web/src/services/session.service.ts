@@ -3,9 +3,12 @@
  *
  * Manages user sessions with database-backed tokens stored in HTTP-only cookies.
  * NO localStorage is used for security.
+ *
+ * Note: We use supabaseAdmin because this app uses custom JWT auth,
+ * not Supabase Auth. auth.uid() returns NULL, so RLS policies fail.
  */
 
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase';
 import type { User, UserRole } from '@/types';
 import Cookies from 'js-cookie';
 
@@ -31,7 +34,7 @@ export const sessionService = {
     const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
 
     // Store session in database
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('sso_tokens')
       .insert({
         user_id: userId,
@@ -69,7 +72,7 @@ export const sessionService = {
 
     // Check session in database
     // Accept sessions for 'peeap-pay' or 'my' (both refer to the main web app)
-    const { data: session, error: sessionError } = await supabase
+    const { data: session, error: sessionError } = await supabaseAdmin
       .from('sso_tokens')
       .select('user_id, expires_at, used_at')
       .eq('token', token)
@@ -90,7 +93,7 @@ export const sessionService = {
     }
 
     // Get user data
-    const { data: dbUser, error: userError } = await supabase
+    const { data: dbUser, error: userError } = await supabaseAdmin
       .from('users')
       .select('*')
       .eq('id', session.user_id)
@@ -102,7 +105,7 @@ export const sessionService = {
     }
 
     // Update last activity
-    await supabase
+    await supabaseAdmin
       .from('sso_tokens')
       .update({ used_at: new Date().toISOString() })
       .eq('token', token);
@@ -121,6 +124,7 @@ export const sessionService = {
       firstName: dbUser.first_name,
       lastName: dbUser.last_name,
       phone: dbUser.phone,
+      profilePicture: dbUser.profile_picture || undefined,
       roles: userRoles,
       kycStatus: dbUser.kyc_status,
       kycTier: dbUser.kyc_tier,
@@ -149,7 +153,7 @@ export const sessionService = {
   async deleteSession(token?: string): Promise<void> {
     const sessionToken = token || Cookies.get(SESSION_COOKIE_NAME);
     if (sessionToken) {
-      await supabase
+      await supabaseAdmin
         .from('sso_tokens')
         .delete()
         .eq('token', sessionToken);
@@ -180,7 +184,7 @@ export const sessionService = {
 
     const newExpiresAt = new Date(Date.now() + SESSION_DURATION_MS);
 
-    await supabase
+    await supabaseAdmin
       .from('sso_tokens')
       .update({ expires_at: newExpiresAt.toISOString() })
       .eq('token', token);

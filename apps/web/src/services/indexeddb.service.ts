@@ -117,7 +117,7 @@ export interface LocalSalesReport {
 }
 
 const DB_NAME = 'peeap_pos_db';
-const DB_VERSION = 5; // Bumped to 5 for suppliers, discounts, purchase orders
+const DB_VERSION = 7; // Bumped to 7 for admin notifications
 
 // Store names
 export const STORES = {
@@ -142,6 +142,14 @@ export const STORES = {
   SUPPLIERS: 'suppliers',
   DISCOUNTS: 'discounts',
   PURCHASE_ORDERS: 'purchase_orders',
+  // Event Management stores
+  EVENTS: 'events',
+  EVENT_TICKET_TYPES: 'event_ticket_types',
+  EVENT_TICKETS: 'event_tickets',
+  EVENT_STAFF: 'event_staff',
+  EVENT_SCANS: 'event_scans',
+  // Admin Notifications store
+  ADMIN_NOTIFICATIONS: 'admin_notifications',
 } as const;
 
 let db: IDBDatabase | null = null;
@@ -315,6 +323,61 @@ export const initDB = (): Promise<IDBDatabase> => {
         poStore.createIndex('supplier_id', 'supplier_id', { unique: false });
         poStore.createIndex('status', 'status', { unique: false });
         poStore.createIndex('order_date', 'order_date', { unique: false });
+      }
+
+      // ================== Event Management Stores ==================
+
+      // Events store
+      if (!database.objectStoreNames.contains(STORES.EVENTS)) {
+        const eventStore = database.createObjectStore(STORES.EVENTS, { keyPath: 'id' });
+        eventStore.createIndex('merchant_id', 'merchant_id', { unique: false });
+        eventStore.createIndex('status', 'status', { unique: false });
+        eventStore.createIndex('start_date', 'start_date', { unique: false });
+        eventStore.createIndex('end_date', 'end_date', { unique: false });
+      }
+
+      // Event ticket types store
+      if (!database.objectStoreNames.contains(STORES.EVENT_TICKET_TYPES)) {
+        const ticketTypeStore = database.createObjectStore(STORES.EVENT_TICKET_TYPES, { keyPath: 'id' });
+        ticketTypeStore.createIndex('event_id', 'event_id', { unique: false });
+        ticketTypeStore.createIndex('merchant_id', 'merchant_id', { unique: false });
+      }
+
+      // Event tickets (purchased) store
+      if (!database.objectStoreNames.contains(STORES.EVENT_TICKETS)) {
+        const ticketStore = database.createObjectStore(STORES.EVENT_TICKETS, { keyPath: 'id' });
+        ticketStore.createIndex('event_id', 'event_id', { unique: false });
+        ticketStore.createIndex('ticket_type_id', 'ticket_type_id', { unique: false });
+        ticketStore.createIndex('user_id', 'user_id', { unique: false });
+        ticketStore.createIndex('qr_code', 'qr_code', { unique: false });
+        ticketStore.createIndex('status', 'status', { unique: false });
+      }
+
+      // Event staff store
+      if (!database.objectStoreNames.contains(STORES.EVENT_STAFF)) {
+        const eventStaffStore = database.createObjectStore(STORES.EVENT_STAFF, { keyPath: 'id' });
+        eventStaffStore.createIndex('event_id', 'event_id', { unique: false });
+        eventStaffStore.createIndex('merchant_id', 'merchant_id', { unique: false });
+        eventStaffStore.createIndex('user_id', 'user_id', { unique: false });
+        eventStaffStore.createIndex('invitation_status', 'invitation_status', { unique: false });
+      }
+
+      // Event scans store (for analytics)
+      if (!database.objectStoreNames.contains(STORES.EVENT_SCANS)) {
+        const scanStore = database.createObjectStore(STORES.EVENT_SCANS, { keyPath: 'id' });
+        scanStore.createIndex('event_id', 'event_id', { unique: false });
+        scanStore.createIndex('ticket_id', 'ticket_id', { unique: false });
+        scanStore.createIndex('staff_id', 'staff_id', { unique: false });
+        scanStore.createIndex('scanned_at', 'scanned_at', { unique: false });
+      }
+
+      // ================== Admin Notifications Store ==================
+      if (!database.objectStoreNames.contains(STORES.ADMIN_NOTIFICATIONS)) {
+        const adminNotifStore = database.createObjectStore(STORES.ADMIN_NOTIFICATIONS, { keyPath: 'id' });
+        adminNotifStore.createIndex('type', 'type', { unique: false });
+        adminNotifStore.createIndex('status', 'status', { unique: false });
+        adminNotifStore.createIndex('priority', 'priority', { unique: false });
+        adminNotifStore.createIndex('created_at', 'created_at', { unique: false });
       }
 
     };
@@ -1027,6 +1090,370 @@ export const deletePurchaseOrder = async (orderId: string): Promise<void> => {
   await deleteByKey(STORES.PURCHASE_ORDERS, orderId);
 };
 
+// ================== Event Management Types ==================
+
+export type EventStatus = 'draft' | 'published' | 'cancelled' | 'completed';
+export type EventStaffInvitationStatus = 'pending' | 'accepted' | 'declined';
+export type EventTicketStatus = 'valid' | 'used' | 'cancelled' | 'refunded';
+
+export interface OfflineEvent {
+  id: string;
+  merchant_id: string;
+  title: string;
+  description?: string;
+  location?: string;
+  venue_name?: string;
+  address?: string;
+  city?: string;
+  country?: string;
+  start_date: string;
+  end_date: string;
+  timezone?: string;
+  cover_image?: string;
+  status: EventStatus;
+  is_free: boolean;
+  capacity?: number;
+  tickets_sold?: number;
+  total_revenue?: number;
+  settings?: {
+    require_approval?: boolean;
+    allow_refunds?: boolean;
+    refund_deadline_hours?: number;
+    max_tickets_per_order?: number;
+    show_remaining_tickets?: boolean;
+  };
+  created_at?: string;
+  updated_at?: string;
+  synced_at?: string;
+  pending_sync?: boolean;
+}
+
+export interface OfflineEventTicketType {
+  id: string;
+  event_id: string;
+  merchant_id: string;
+  name: string;
+  description?: string;
+  price: number;
+  currency?: string;
+  quantity_available: number;
+  quantity_sold?: number;
+  max_per_order?: number;
+  sale_start_date?: string;
+  sale_end_date?: string;
+  is_active: boolean;
+  sort_order?: number;
+  created_at?: string;
+  updated_at?: string;
+  synced_at?: string;
+  pending_sync?: boolean;
+}
+
+export interface OfflineEventTicket {
+  id: string;
+  event_id: string;
+  ticket_type_id: string;
+  user_id?: string;
+  merchant_id: string;
+  ticket_number: string;
+  qr_code: string;
+  status: EventTicketStatus;
+  purchaser_name?: string;
+  purchaser_email?: string;
+  purchaser_phone?: string;
+  attendee_name?: string;
+  price_paid: number;
+  currency?: string;
+  payment_reference?: string;
+  scanned_at?: string;
+  scanned_by?: string;
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
+  synced_at?: string;
+  pending_sync?: boolean;
+}
+
+export interface OfflineEventStaff {
+  id: string;
+  event_id: string;
+  merchant_id: string;
+  user_id: string;
+  invitation_status: EventStaffInvitationStatus;
+  wizard_completed: boolean;
+  invited_at?: string;
+  accepted_at?: string;
+  declined_at?: string;
+  scan_count?: number;
+  last_scan_at?: string;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+  synced_at?: string;
+  pending_sync?: boolean;
+}
+
+export interface OfflineEventScan {
+  id: string;
+  event_id: string;
+  ticket_id: string;
+  staff_id: string;
+  scanned_at: string;
+  scan_result: 'valid' | 'invalid' | 'already_used' | 'cancelled';
+  ticket_number?: string;
+  attendee_name?: string;
+  notes?: string;
+  synced_at?: string;
+  pending_sync?: boolean;
+}
+
+// ================== Event Management Functions ==================
+
+// Events
+export const saveEvents = async (events: OfflineEvent[], merchantId: string): Promise<void> => {
+  const eventsWithMeta: OfflineEvent[] = events.map(e => ({
+    ...e,
+    merchant_id: merchantId,
+    synced_at: new Date().toISOString(),
+  }));
+  await putMany(STORES.EVENTS, eventsWithMeta);
+};
+
+export const getEvents = async (merchantId: string): Promise<OfflineEvent[]> => {
+  return getAll<OfflineEvent>(STORES.EVENTS, 'merchant_id', merchantId);
+};
+
+export const getEventById = async (eventId: string): Promise<OfflineEvent | undefined> => {
+  return getByKey<OfflineEvent>(STORES.EVENTS, eventId);
+};
+
+export const getEventsByStatus = async (merchantId: string, status: EventStatus): Promise<OfflineEvent[]> => {
+  const events = await getEvents(merchantId);
+  return events.filter(e => e.status === status);
+};
+
+export const getUpcomingEvents = async (merchantId: string): Promise<OfflineEvent[]> => {
+  const events = await getEvents(merchantId);
+  const now = new Date().toISOString();
+  return events.filter(e => e.start_date > now && e.status === 'published');
+};
+
+export const saveEvent = async (event: Partial<OfflineEvent>): Promise<void> => {
+  const eventWithMeta: OfflineEvent = {
+    ...event as OfflineEvent,
+    synced_at: new Date().toISOString(),
+    pending_sync: true,
+  };
+  await put(STORES.EVENTS, eventWithMeta);
+};
+
+export const deleteEvent = async (eventId: string): Promise<void> => {
+  await deleteByKey(STORES.EVENTS, eventId);
+};
+
+// Event Ticket Types
+export const saveEventTicketTypes = async (ticketTypes: OfflineEventTicketType[], eventId: string): Promise<void> => {
+  const typesWithMeta: OfflineEventTicketType[] = ticketTypes.map(t => ({
+    ...t,
+    event_id: eventId,
+    synced_at: new Date().toISOString(),
+  }));
+  await putMany(STORES.EVENT_TICKET_TYPES, typesWithMeta);
+};
+
+export const getEventTicketTypes = async (eventId: string): Promise<OfflineEventTicketType[]> => {
+  return getAll<OfflineEventTicketType>(STORES.EVENT_TICKET_TYPES, 'event_id', eventId);
+};
+
+export const getEventTicketTypeById = async (ticketTypeId: string): Promise<OfflineEventTicketType | undefined> => {
+  return getByKey<OfflineEventTicketType>(STORES.EVENT_TICKET_TYPES, ticketTypeId);
+};
+
+export const saveEventTicketType = async (ticketType: Partial<OfflineEventTicketType>): Promise<void> => {
+  const typeWithMeta: OfflineEventTicketType = {
+    ...ticketType as OfflineEventTicketType,
+    synced_at: new Date().toISOString(),
+    pending_sync: true,
+  };
+  await put(STORES.EVENT_TICKET_TYPES, typeWithMeta);
+};
+
+export const deleteEventTicketType = async (ticketTypeId: string): Promise<void> => {
+  await deleteByKey(STORES.EVENT_TICKET_TYPES, ticketTypeId);
+};
+
+// Event Tickets (Purchased)
+export const saveEventTickets = async (tickets: OfflineEventTicket[], eventId: string): Promise<void> => {
+  const ticketsWithMeta: OfflineEventTicket[] = tickets.map(t => ({
+    ...t,
+    event_id: eventId,
+    synced_at: new Date().toISOString(),
+  }));
+  await putMany(STORES.EVENT_TICKETS, ticketsWithMeta);
+};
+
+export const getEventTickets = async (eventId: string): Promise<OfflineEventTicket[]> => {
+  return getAll<OfflineEventTicket>(STORES.EVENT_TICKETS, 'event_id', eventId);
+};
+
+export const getEventTicketById = async (ticketId: string): Promise<OfflineEventTicket | undefined> => {
+  return getByKey<OfflineEventTicket>(STORES.EVENT_TICKETS, ticketId);
+};
+
+export const getEventTicketByQRCode = async (qrCode: string): Promise<OfflineEventTicket | undefined> => {
+  const allTickets = await getAll<OfflineEventTicket>(STORES.EVENT_TICKETS);
+  return allTickets.find(t => t.qr_code === qrCode);
+};
+
+export const getUserEventTickets = async (userId: string): Promise<OfflineEventTicket[]> => {
+  return getAll<OfflineEventTicket>(STORES.EVENT_TICKETS, 'user_id', userId);
+};
+
+export const saveEventTicket = async (ticket: Partial<OfflineEventTicket>): Promise<void> => {
+  const ticketWithMeta: OfflineEventTicket = {
+    ...ticket as OfflineEventTicket,
+    synced_at: new Date().toISOString(),
+    pending_sync: true,
+  };
+  await put(STORES.EVENT_TICKETS, ticketWithMeta);
+};
+
+export const updateEventTicketStatus = async (ticketId: string, status: EventTicketStatus, scannedBy?: string): Promise<void> => {
+  const ticket = await getEventTicketById(ticketId);
+  if (ticket) {
+    ticket.status = status;
+    if (status === 'used' && scannedBy) {
+      ticket.scanned_at = new Date().toISOString();
+      ticket.scanned_by = scannedBy;
+    }
+    ticket.pending_sync = true;
+    await put(STORES.EVENT_TICKETS, ticket);
+  }
+};
+
+// Event Staff
+export const saveEventStaffList = async (staff: OfflineEventStaff[], eventId: string): Promise<void> => {
+  const staffWithMeta: OfflineEventStaff[] = staff.map(s => ({
+    ...s,
+    event_id: eventId,
+    synced_at: new Date().toISOString(),
+  }));
+  await putMany(STORES.EVENT_STAFF, staffWithMeta);
+};
+
+export const getEventStaff = async (eventId: string): Promise<OfflineEventStaff[]> => {
+  return getAll<OfflineEventStaff>(STORES.EVENT_STAFF, 'event_id', eventId);
+};
+
+export const getEventStaffById = async (staffId: string): Promise<OfflineEventStaff | undefined> => {
+  return getByKey<OfflineEventStaff>(STORES.EVENT_STAFF, staffId);
+};
+
+export const getEventStaffByUserId = async (userId: string): Promise<OfflineEventStaff[]> => {
+  return getAll<OfflineEventStaff>(STORES.EVENT_STAFF, 'user_id', userId);
+};
+
+export const getAcceptedEventStaffForUser = async (userId: string): Promise<OfflineEventStaff[]> => {
+  const allStaff = await getEventStaffByUserId(userId);
+  return allStaff.filter(s => s.invitation_status === 'accepted' && s.is_active);
+};
+
+export const saveEventStaffMember = async (staff: Partial<OfflineEventStaff>): Promise<void> => {
+  const staffWithMeta: OfflineEventStaff = {
+    ...staff as OfflineEventStaff,
+    synced_at: new Date().toISOString(),
+    pending_sync: true,
+  };
+  await put(STORES.EVENT_STAFF, staffWithMeta);
+};
+
+export const updateEventStaffWizardCompleted = async (staffId: string): Promise<void> => {
+  const staff = await getEventStaffById(staffId);
+  if (staff) {
+    staff.wizard_completed = true;
+    staff.pending_sync = true;
+    await put(STORES.EVENT_STAFF, staff);
+  }
+};
+
+export const deleteEventStaffMember = async (staffId: string): Promise<void> => {
+  await deleteByKey(STORES.EVENT_STAFF, staffId);
+};
+
+// Event Scans (Analytics)
+export const saveEventScans = async (scans: OfflineEventScan[], eventId: string): Promise<void> => {
+  const scansWithMeta: OfflineEventScan[] = scans.map(s => ({
+    ...s,
+    event_id: eventId,
+    synced_at: new Date().toISOString(),
+  }));
+  await putMany(STORES.EVENT_SCANS, scansWithMeta);
+};
+
+export const getEventScans = async (eventId: string): Promise<OfflineEventScan[]> => {
+  return getAll<OfflineEventScan>(STORES.EVENT_SCANS, 'event_id', eventId);
+};
+
+export const getEventScansByStaff = async (staffId: string): Promise<OfflineEventScan[]> => {
+  return getAll<OfflineEventScan>(STORES.EVENT_SCANS, 'staff_id', staffId);
+};
+
+export const addEventScan = async (scan: Partial<OfflineEventScan>): Promise<void> => {
+  const scanWithMeta: OfflineEventScan = {
+    ...scan as OfflineEventScan,
+    id: scan.id || `offline_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
+    scanned_at: scan.scanned_at || new Date().toISOString(),
+    synced_at: new Date().toISOString(),
+    pending_sync: true,
+  };
+  await put(STORES.EVENT_SCANS, scanWithMeta);
+};
+
+export const getEventAnalytics = async (eventId: string): Promise<{
+  totalTickets: number;
+  ticketsScanned: number;
+  ticketsByType: Record<string, { sold: number; scanned: number }>;
+  scansByStaff: Record<string, number>;
+  scansByHour: Record<string, number>;
+}> => {
+  const tickets = await getEventTickets(eventId);
+  const scans = await getEventScans(eventId);
+  const ticketTypes = await getEventTicketTypes(eventId);
+
+  const ticketsByType: Record<string, { sold: number; scanned: number }> = {};
+  ticketTypes.forEach(type => {
+    ticketsByType[type.id] = { sold: 0, scanned: 0 };
+  });
+
+  tickets.forEach(ticket => {
+    if (ticketsByType[ticket.ticket_type_id]) {
+      ticketsByType[ticket.ticket_type_id].sold++;
+      if (ticket.status === 'used') {
+        ticketsByType[ticket.ticket_type_id].scanned++;
+      }
+    }
+  });
+
+  const scansByStaff: Record<string, number> = {};
+  const scansByHour: Record<string, number> = {};
+
+  scans.forEach(scan => {
+    // By staff
+    scansByStaff[scan.staff_id] = (scansByStaff[scan.staff_id] || 0) + 1;
+    // By hour
+    const hour = new Date(scan.scanned_at).toISOString().slice(0, 13);
+    scansByHour[hour] = (scansByHour[hour] || 0) + 1;
+  });
+
+  return {
+    totalTickets: tickets.length,
+    ticketsScanned: tickets.filter(t => t.status === 'used').length,
+    ticketsByType,
+    scansByStaff,
+    scansByHour,
+  };
+};
+
 // ================== Support Ticket Caching Functions ==================
 
 // Save support tickets to cache
@@ -1142,6 +1569,156 @@ export const indexedDBService = {
   getPurchaseOrdersBySupplier,
   savePurchaseOrder,
   deletePurchaseOrder,
+  // Events
+  saveEvents,
+  getEvents,
+  getEventById,
+  getEventsByStatus,
+  getUpcomingEvents,
+  saveEvent,
+  deleteEvent,
+  // Event Ticket Types
+  saveEventTicketTypes,
+  getEventTicketTypes,
+  getEventTicketTypeById,
+  saveEventTicketType,
+  deleteEventTicketType,
+  // Event Tickets
+  saveEventTickets,
+  getEventTickets,
+  getEventTicketById,
+  getEventTicketByQRCode,
+  getUserEventTickets,
+  saveEventTicket,
+  updateEventTicketStatus,
+  // Event Staff
+  saveEventStaffList,
+  getEventStaff,
+  getEventStaffById,
+  getEventStaffByUserId,
+  getAcceptedEventStaffForUser,
+  saveEventStaffMember,
+  updateEventStaffWizardCompleted,
+  deleteEventStaffMember,
+  // Event Scans
+  saveEventScans,
+  getEventScans,
+  getEventScansByStaff,
+  addEventScan,
+  getEventAnalytics,
+};
+
+// ================== Admin Notification Types ==================
+
+export type AdminNotificationType =
+  | 'card_order'
+  | 'kyc_request'
+  | 'dispute'
+  | 'system'
+  | 'user_registration'
+  | 'transaction_flagged'
+  | 'support_ticket'
+  | 'business_verification'
+  | 'deposit'
+  | 'payout'
+  | 'withdrawal'
+  | 'transfer';
+
+export type AdminNotificationPriority = 'low' | 'medium' | 'high' | 'urgent';
+export type AdminNotificationStatus = 'unread' | 'read' | 'archived';
+
+export interface OfflineAdminNotification {
+  id: string;
+  type: AdminNotificationType;
+  title: string;
+  message: string;
+  priority: AdminNotificationPriority;
+  status: AdminNotificationStatus;
+  related_entity_type?: string;
+  related_entity_id?: string;
+  metadata?: Record<string, unknown>;
+  action_url?: string;
+  read_by?: string;
+  read_at?: string;
+  created_at: string;
+  updated_at: string;
+  synced_at?: string;
+  pending_sync?: boolean;
+}
+
+// ================== Admin Notification Functions ==================
+
+export const saveAdminNotifications = async (notifications: OfflineAdminNotification[]): Promise<void> => {
+  const notifsWithMeta: OfflineAdminNotification[] = notifications.map(n => ({
+    ...n,
+    synced_at: new Date().toISOString(),
+  }));
+  await putMany(STORES.ADMIN_NOTIFICATIONS, notifsWithMeta);
+};
+
+export const getAdminNotifications = async (): Promise<OfflineAdminNotification[]> => {
+  const all = await getAll<OfflineAdminNotification>(STORES.ADMIN_NOTIFICATIONS);
+  // Sort by created_at descending
+  return all.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+};
+
+export const getAdminNotificationById = async (id: string): Promise<OfflineAdminNotification | undefined> => {
+  return getByKey<OfflineAdminNotification>(STORES.ADMIN_NOTIFICATIONS, id);
+};
+
+export const getUnreadAdminNotifications = async (): Promise<OfflineAdminNotification[]> => {
+  const all = await getAdminNotifications();
+  return all.filter(n => n.status === 'unread');
+};
+
+export const getAdminNotificationsByType = async (type: AdminNotificationType): Promise<OfflineAdminNotification[]> => {
+  const all = await getAdminNotifications();
+  return all.filter(n => n.type === type);
+};
+
+export const saveAdminNotification = async (notification: Partial<OfflineAdminNotification>): Promise<void> => {
+  const notifWithMeta: OfflineAdminNotification = {
+    ...notification as OfflineAdminNotification,
+    synced_at: new Date().toISOString(),
+    pending_sync: true,
+  };
+  await put(STORES.ADMIN_NOTIFICATIONS, notifWithMeta);
+};
+
+export const markAdminNotificationAsRead = async (id: string, readBy?: string): Promise<void> => {
+  const notification = await getAdminNotificationById(id);
+  if (notification) {
+    notification.status = 'read';
+    notification.read_at = new Date().toISOString();
+    notification.read_by = readBy;
+    notification.pending_sync = true;
+    await put(STORES.ADMIN_NOTIFICATIONS, notification);
+  }
+};
+
+export const markAllAdminNotificationsAsRead = async (readBy?: string): Promise<void> => {
+  const unread = await getUnreadAdminNotifications();
+  const updated = unread.map(n => ({
+    ...n,
+    status: 'read' as const,
+    read_at: new Date().toISOString(),
+    read_by: readBy,
+    pending_sync: true,
+  }));
+  await putMany(STORES.ADMIN_NOTIFICATIONS, updated);
+};
+
+export const deleteAdminNotification = async (id: string): Promise<void> => {
+  await deleteByKey(STORES.ADMIN_NOTIFICATIONS, id);
+};
+
+export const clearAdminNotifications = async (): Promise<void> => {
+  await clearStore(STORES.ADMIN_NOTIFICATIONS);
+};
+
+export const getAdminNotificationUnreadCount = async (): Promise<number> => {
+  const unread = await getUnreadAdminNotifications();
+  return unread.length;
 };
 
 export default indexedDBService;

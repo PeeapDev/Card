@@ -1,4 +1,4 @@
-import { ReactNode, useState, useEffect, useCallback } from 'react';
+import { ReactNode, useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import {
@@ -12,18 +12,24 @@ import {
   X,
   Send,
   QrCode,
-  PiggyBank,
+  Package,
   HelpCircle,
   Smartphone,
   Store,
   ShoppingBag,
+  Calendar,
+  Ticket,
+  Settings,
+  ChevronDown,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useUserApps } from '@/context/UserAppsContext';
 import { NotificationBell } from '@/components/ui/NotificationBell';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { NFCIndicator } from '@/components/nfc';
 import { supabase } from '@/lib/supabase';
 import { SkipLink } from '@/components/ui/SkipLink';
+import { ProfileAvatar } from '@/components/ui/ProfileAvatar';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -36,26 +42,42 @@ const navItems = [
   { path: '/receive', label: 'Receive Money', icon: QrCode },
   { path: '/payout', label: 'Mobile Money Payout', icon: Smartphone },
   { path: '/marketplace', label: 'Shop', icon: ShoppingBag },
-  { path: '/pots', label: 'Savings Pots', icon: PiggyBank },
+  // Cash Box is added dynamically based on user settings
   { path: '/cards', label: 'Cards', icon: CreditCard },
   { path: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
-  { path: '/profile', label: 'Profile', icon: User },
   { path: '/support', label: 'Help & Support', icon: HelpCircle },
 ];
 
 export function MainLayout({ children }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [hasStaffPositions, setHasStaffPositions] = useState(false);
+  const [hasEventStaffPositions, setHasEventStaffPositions] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const { user, logout } = useAuth();
+  const { isAppEnabled } = useUserApps();
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Check if user has any active staff positions
+  // Close user menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Check if user has any active staff positions (POS and Events)
   useEffect(() => {
     const checkStaffPositions = async () => {
       if (!user?.id) return;
       try {
-        const { data, error } = await supabase
+        // Check POS staff positions
+        const { data: posData, error: posError } = await supabase
           .from('pos_staff')
           .select('id')
           .eq('user_id', user.id)
@@ -63,8 +85,20 @@ export function MainLayout({ children }: MainLayoutProps) {
           .eq('is_active', true)
           .limit(1);
 
-        if (!error && data && data.length > 0) {
+        if (!posError && posData && posData.length > 0) {
           setHasStaffPositions(true);
+        }
+
+        // Check Event staff positions
+        const { data: eventData, error: eventError } = await supabase
+          .from('event_staff')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('invitation_status', 'accepted')
+          .limit(1);
+
+        if (!eventError && eventData && eventData.length > 0) {
+          setHasEventStaffPositions(true);
         }
       } catch (error) {
         console.error('Error checking staff positions:', error);
@@ -79,14 +113,34 @@ export function MainLayout({ children }: MainLayoutProps) {
     navigate('/login');
   };
 
-  // Build nav items dynamically - add POS if user has staff positions
-  const dynamicNavItems = hasStaffPositions
-    ? [
-        ...navItems.slice(0, 5), // Dashboard to Payout
-        { path: '/dashboard/pos', label: 'Staff POS', icon: Store },
-        ...navItems.slice(5), // Remaining items
-      ]
-    : navItems;
+  // Build nav items dynamically - add POS, Events, and Cash Box based on user settings
+  const dynamicNavItems = (() => {
+    let items = [...navItems];
+    const insertIndex = 6; // After Shop (index 5 in base array)
+    let addedCount = 0;
+
+    // Add Staff POS if user has staff positions
+    if (hasStaffPositions) {
+      items.splice(insertIndex + addedCount, 0, { path: '/dashboard/pos', label: 'Staff POS', icon: Store });
+      addedCount++;
+    }
+
+    // Add Events if enabled in user apps
+    if (isAppEnabled('events')) {
+      items.splice(insertIndex + addedCount, 0, { path: '/events', label: 'Events', icon: Calendar });
+      addedCount++;
+      items.splice(insertIndex + addedCount, 0, { path: '/my-tickets', label: 'My Tickets', icon: Ticket });
+      addedCount++;
+    }
+
+    // Add Cash Box if enabled in user apps (setup completed)
+    if (isAppEnabled('cashbox')) {
+      items.splice(insertIndex + addedCount, 0, { path: '/pots', label: 'Cash Box', icon: Package });
+      addedCount++;
+    }
+
+    return items;
+  })();
 
   // Handle keyboard navigation for mobile menu
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -157,31 +211,6 @@ export function MainLayout({ children }: MainLayoutProps) {
               );
             })}
           </nav>
-
-          {/* User section */}
-          <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-            <div className="flex items-center mb-4">
-              <div className="w-10 h-10 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center">
-                <span className="text-primary-700 dark:text-primary-400 font-medium">
-                  {user?.firstName?.charAt(0)}{user?.lastName?.charAt(0)}
-                </span>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-900 dark:text-white">
-                  {user?.firstName} {user?.lastName}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">{user?.email}</p>
-              </div>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="flex items-center w-full px-4 py-2 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-              aria-label="Sign out of your account"
-            >
-              <LogOut className="w-5 h-5 mr-3" aria-hidden="true" />
-              Sign out
-            </button>
-          </div>
         </div>
       </aside>
 
@@ -203,7 +232,7 @@ export function MainLayout({ children }: MainLayoutProps) {
               </button>
             </div>
 
-            {/* Right side - KYC Status, Theme, Notifications */}
+            {/* Right side - KYC Status, Theme, Notifications, User Menu */}
             <div className="flex items-center space-x-4 ml-auto">
               <span className="text-sm text-gray-500 dark:text-gray-400 hidden sm:inline">
                 KYC Status:{' '}
@@ -222,6 +251,79 @@ export function MainLayout({ children }: MainLayoutProps) {
               <NFCIndicator />
               <ThemeToggle />
               <NotificationBell />
+
+              {/* User Avatar Dropdown */}
+              <div className="relative" ref={userMenuRef}>
+                <button
+                  onClick={() => setUserMenuOpen(!userMenuOpen)}
+                  className="flex items-center gap-2 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                  aria-expanded={userMenuOpen}
+                  aria-haspopup="true"
+                >
+                  <ProfileAvatar
+                    firstName={user?.firstName}
+                    lastName={user?.lastName}
+                    profilePicture={user?.profilePicture}
+                    size="sm"
+                    className="w-9 h-9 border-2 border-gray-200 dark:border-gray-600"
+                  />
+                  <ChevronDown
+                    className={clsx(
+                      'w-4 h-4 text-gray-500 dark:text-gray-400 transition-transform hidden sm:block',
+                      userMenuOpen && 'rotate-180'
+                    )}
+                  />
+                </button>
+
+                {/* Dropdown Menu */}
+                {userMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-2 z-50">
+                    {/* User Info */}
+                    <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                        {user?.firstName} {user?.lastName}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                        {user?.email}
+                      </p>
+                    </div>
+
+                    {/* Menu Items */}
+                    <div className="py-1">
+                      <Link
+                        to="/profile"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                      >
+                        <User className="w-4 h-4" />
+                        Profile
+                      </Link>
+                      <Link
+                        to="/settings"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                      >
+                        <Settings className="w-4 h-4" />
+                        Settings
+                      </Link>
+                    </div>
+
+                    {/* Logout */}
+                    <div className="border-t border-gray-100 dark:border-gray-700 pt-1">
+                      <button
+                        onClick={() => {
+                          setUserMenuOpen(false);
+                          handleLogout();
+                        }}
+                        className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        Sign out
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </header>

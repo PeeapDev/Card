@@ -1,10 +1,10 @@
 /**
- * Pot Card Component
+ * Cash Box Card Component
  *
- * Displays a pot summary card with progress, status, and quick actions
+ * Displays a cash box summary card with progress, status, and quick actions
  */
 
-import { PiggyBank, Lock, Unlock, TrendingUp, Calendar, AlertCircle } from 'lucide-react';
+import { Package, Lock, Unlock, TrendingUp, Calendar, AlertCircle } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { Pot } from '@/types';
 
@@ -42,16 +42,16 @@ export function PotCard({ pot, onClick, className }: PotCardProps) {
     });
   };
 
-  // Get pot icon component
-  const getPotIcon = () => {
+  // Get cash box icon component
+  const getCashBoxIcon = () => {
     switch (pot.icon) {
-      case 'piggy-bank':
+      case 'package':
       default:
-        return PiggyBank;
+        return Package;
     }
   };
 
-  const IconComponent = getPotIcon();
+  const IconComponent = getCashBoxIcon();
 
   return (
     <div

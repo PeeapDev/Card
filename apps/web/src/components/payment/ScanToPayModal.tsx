@@ -93,6 +93,15 @@ export function ScanToPayModal({ isOpen, onClose }: ScanToPayModalProps) {
       return;
     }
 
+    // Check if this is an event ticket QR code
+    if (result.isEventTicket && result.eventTicket) {
+      console.log('[ScanToPayModal] Event ticket detected:', result.eventTicket);
+      // Close modal and redirect to event validation page
+      onClose();
+      navigate(`/events/${result.eventTicket.eventId}/validate/${result.eventTicket.ticketNumber}`);
+      return;
+    }
+
     // Check if this is a checkout session QR code
     if (result.checkoutSessionId) {
       console.log('[ScanToPayModal] Checkout session detected, redirecting to:', `/scan-pay/${result.checkoutSessionId}`);

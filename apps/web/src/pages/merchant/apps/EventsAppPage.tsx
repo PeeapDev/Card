@@ -11,6 +11,7 @@ import { MerchantLayout } from '@/components/layout/MerchantLayout';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
+import { useApps } from '@/context/AppsContext';
 import eventService, { Event } from '@/services/event.service';
 import { currencyService } from '@/services/currency.service';
 import {
@@ -39,6 +40,7 @@ interface EventStats {
 export function EventsAppPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isAppEnabled, hasLoadedFromDB, isLoading: appsLoading } = useApps();
   const [loading, setLoading] = useState(true);
   const [checkingSetup, setCheckingSetup] = useState(true);
   const [events, setEvents] = useState<Event[]>([]);
@@ -49,26 +51,22 @@ export function EventsAppPage() {
     totalRevenue: 0,
   });
 
-  // Check if setup is completed
+  // Check if setup is completed - wait for AppsContext to load from DB first
   useEffect(() => {
-    const checkSetup = async () => {
-      if (!user?.id) return;
+    // Wait for AppsContext to finish loading from database
+    if (!hasLoadedFromDB || appsLoading) return;
+    if (!user?.id) return;
 
-      try {
-        const isCompleted = await eventService.isEventsSetupCompleted(user.id);
-        if (!isCompleted) {
-          navigate('/merchant/events/setup', { replace: true });
-          return;
-        }
-        setCheckingSetup(false);
-      } catch (error) {
-        console.error('Error checking setup:', error);
-        setCheckingSetup(false);
-      }
-    };
+    // Use the app enabled state from AppsContext (which already queried the DB)
+    const eventsEnabled = isAppEnabled('events');
 
-    checkSetup();
-  }, [user, navigate]);
+    if (!eventsEnabled) {
+      navigate('/merchant/events/setup', { replace: true });
+      return;
+    }
+
+    setCheckingSetup(false);
+  }, [user, navigate, hasLoadedFromDB, appsLoading, isAppEnabled]);
 
   // Load events and calculate stats
   useEffect(() => {
@@ -102,7 +100,7 @@ export function EventsAppPage() {
     loadData();
   }, [user, checkingSetup]);
 
-  if (checkingSetup) {
+  if (checkingSetup || appsLoading || !hasLoadedFromDB) {
     return (
       <MerchantLayout>
         <div className="flex items-center justify-center h-64">

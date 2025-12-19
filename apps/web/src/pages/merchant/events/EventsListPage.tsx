@@ -10,6 +10,7 @@ import { MerchantLayout } from '@/components/layout/MerchantLayout';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
+import { useApps } from '@/context/AppsContext';
 import eventService, { Event, EventStatus } from '@/services/event.service';
 import { currencyService } from '@/services/currency.service';
 import {
@@ -45,6 +46,7 @@ const statusFilters: { value: EventStatus | 'all'; label: string }[] = [
 export function EventsListPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isAppEnabled, hasLoadedFromDB, isLoading: appsLoading } = useApps();
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<Event[]>([]);
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
@@ -52,10 +54,22 @@ export function EventsListPage() {
   const [statusFilter, setStatusFilter] = useState<EventStatus | 'all'>('all');
   const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null);
 
-  // Load events
+  // Check if events app is enabled - redirect to setup if not
+  useEffect(() => {
+    if (!hasLoadedFromDB || appsLoading) return;
+    if (!user?.id) return;
+
+    if (!isAppEnabled('events')) {
+      navigate('/merchant/events/setup', { replace: true });
+    }
+  }, [user, navigate, hasLoadedFromDB, appsLoading, isAppEnabled]);
+
+  // Load events - wait for AppsContext to load first
   useEffect(() => {
     const loadEvents = async () => {
       if (!user?.id) return;
+      if (!hasLoadedFromDB || appsLoading) return;
+      if (!isAppEnabled('events')) return;
 
       setLoading(true);
       try {
@@ -69,7 +83,7 @@ export function EventsListPage() {
     };
 
     loadEvents();
-  }, [user]);
+  }, [user, hasLoadedFromDB, appsLoading, isAppEnabled]);
 
   // Filter events
   useEffect(() => {
@@ -219,7 +233,7 @@ export function EventsListPage() {
         </div>
 
         {/* Events List */}
-        {loading ? (
+        {loading || appsLoading || !hasLoadedFromDB ? (
           <div className="flex items-center justify-center h-64">
             <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
           </div>

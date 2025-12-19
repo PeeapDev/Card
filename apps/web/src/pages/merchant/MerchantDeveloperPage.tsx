@@ -467,6 +467,36 @@ const { paymentUrl } = await response.json();
  * Business: ${business.name}
  * Mode: ${isLive ? 'LIVE' : 'SANDBOX (Test Mode)'}
  *
+ * ============================================================================
+ * ⚠️  STEP 1: CREATE A SUCCESS PAGE FIRST (REQUIRED!)
+ * ============================================================================
+ * Before integrating payments, you MUST create a "Thank You" / Success page
+ * that will be shown to customers after successful payment.
+ *
+ * Your success page should:
+ *   1. Display order confirmation message
+ *   2. Show the product/order details (name, amount, reference)
+ *   3. Provide next steps (download link, order tracking, etc.)
+ *
+ * Example success page URL: /payment-success or /thank-you or /order-complete
+ *
+ * The success page will receive these URL parameters:
+ *   ?peeap_status=success
+ *   &peeap_ref=order_12345    (your order reference)
+ *   &session_id=cs_xxx        (Peeap session ID)
+ *
+ * EXAMPLE SUCCESS PAGE CODE:
+ * --------------------------
+ * // In your success page component:
+ * const params = new URLSearchParams(window.location.search);
+ * const status = params.get('peeap_status');   // 'success'
+ * const reference = params.get('peeap_ref');   // 'order_12345'
+ * const sessionId = params.get('session_id');  // 'cs_xxx'
+ *
+ * // Use the reference to look up order details from your database/state
+ * // Display: "Thank you! Your order #order_12345 was successful!"
+ *
+ * ============================================================================
  * ⚠️  IMPORTANT: SIERRA LEONE CURRENCY (READ CAREFULLY)
  * ============================================================================
  * Sierra Leone REDENOMINATED its currency in 2022:
@@ -495,16 +525,36 @@ const { paymentUrl } = await response.json();
  */
 
 // ============================================================================
-// OPTION 1: SIMPLE DIRECT REDIRECT (Recommended for v0.dev)
+// STEP 2: INTEGRATE PAYMENT BUTTON
 // ============================================================================
-// No SDK needed! Just redirect to URL with parameters.
-// This bypasses ALL CSP restrictions.
+// No SDK needed! Opens checkout in new tab.
+// Uses window.open() to bypass v0.dev sandbox restrictions.
+// NOTE: window.location.href does NOT work in v0.dev due to iframe sandbox!
 
 <script>
+// ⚠️  IMPORTANT: Set this to YOUR success page URL!
+// This is where customers go after successful payment.
+// Make sure you created this page first (see STEP 1 above).
+var SUCCESS_PAGE_URL = window.location.origin + '/payment-success';
+// Examples:
+//   '/payment-success'
+//   '/thank-you'
+//   '/order-complete'
+//   'https://yoursite.com/payment-success'
+
 // Simple payment function - NO external scripts, NO API calls
+// Opens checkout in new tab (required for v0.dev sandboxed iframes)
 function payWithPeeap(amount, description, reference) {
   var publicKey = '${publicKey}';
-  var redirectUrl = window.location.href.split('?')[0];
+
+  // Generate reference if not provided (use your order ID here)
+  var paymentRef = reference || 'order_' + Date.now();
+
+  // Build the redirect URL - points to YOUR success page
+  // The success page will receive: ?peeap_status=success&peeap_ref=order_123
+  var redirectUrl = SUCCESS_PAGE_URL +
+    '?peeap_status=success' +
+    '&peeap_ref=' + encodeURIComponent(paymentRef);
 
   // Build checkout URL with all parameters
   var checkoutUrl = '${apiUrl}/api/checkout/quick?' +
@@ -512,11 +562,12 @@ function payWithPeeap(amount, description, reference) {
     '&amount=' + encodeURIComponent(amount) +
     '&currency=SLE' +
     '&description=' + encodeURIComponent(description || 'Payment') +
-    '&reference=' + encodeURIComponent(reference || 'ref_' + Date.now()) +
-    '&redirect_url=' + encodeURIComponent(redirectUrl + '?peeap_status=success&peeap_ref=' + (reference || 'ref_' + Date.now()));
+    '&reference=' + encodeURIComponent(paymentRef) +
+    '&redirect_url=' + encodeURIComponent(redirectUrl);
 
-  // Redirect to hosted checkout (server creates session)
-  window.location.href = checkoutUrl;
+  // IMPORTANT: Use window.open() NOT window.location.href
+  // v0.dev runs in sandboxed iframe that blocks top-level navigation
+  window.open(checkoutUrl, '_blank');
 }
 
 // Check for payment callback on page load
@@ -544,6 +595,86 @@ function payWithPeeap(amount, description, reference) {
 <button onclick="payWithPeeap(50, 'Order #12345', 'order_12345')">
   Pay Le 50.00
 </button>
+
+
+// ============================================================================
+// STEP 3: CREATE YOUR SUCCESS PAGE (EXAMPLE)
+// ============================================================================
+// This is a complete example of a success page component.
+// Create this page at the URL you set in SUCCESS_PAGE_URL above.
+// File: /pages/payment-success.tsx (or payment-success.jsx)
+
+// --- START OF SUCCESS PAGE COMPONENT ---
+import { useEffect, useState } from 'react';
+
+export default function PaymentSuccessPage() {
+  const [paymentInfo, setPaymentInfo] = useState(null);
+
+  useEffect(() => {
+    // Get payment info from URL parameters
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get('peeap_status');
+    const reference = params.get('peeap_ref');
+    const sessionId = params.get('session_id');
+
+    if (status === 'success' && reference) {
+      setPaymentInfo({
+        status: status,
+        reference: reference,
+        sessionId: sessionId
+      });
+
+      // Optional: Clean the URL after reading params
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
+  if (!paymentInfo) {
+    return <div>Loading payment details...</div>;
+  }
+
+  return (
+    <div style={{ textAlign: 'center', padding: '50px', fontFamily: 'system-ui' }}>
+      <div style={{ fontSize: '60px', marginBottom: '20px' }}>✅</div>
+      <h1 style={{ color: '#10B981', marginBottom: '10px' }}>Payment Successful!</h1>
+      <p style={{ color: '#6B7280', marginBottom: '30px' }}>
+        Thank you for your purchase. Your payment has been processed.
+      </p>
+
+      <div style={{
+        background: '#F3F4F6',
+        padding: '20px',
+        borderRadius: '10px',
+        maxWidth: '400px',
+        margin: '0 auto'
+      }}>
+        <h3 style={{ marginBottom: '15px' }}>Order Details</h3>
+        <p><strong>Order Reference:</strong> {paymentInfo.reference}</p>
+        <p><strong>Status:</strong> <span style={{ color: '#10B981' }}>Completed</span></p>
+        {paymentInfo.sessionId && (
+          <p><strong>Transaction ID:</strong> {paymentInfo.sessionId}</p>
+        )}
+      </div>
+
+      <div style={{ marginTop: '30px' }}>
+        <a href="/" style={{
+          background: '#4F46E5',
+          color: 'white',
+          padding: '12px 24px',
+          borderRadius: '8px',
+          textDecoration: 'none'
+        }}>
+          Continue Shopping
+        </a>
+      </div>
+
+      <p style={{ marginTop: '30px', color: '#9CA3AF', fontSize: '14px' }}>
+        A confirmation email has been sent to your email address.
+      </p>
+    </div>
+  );
+}
+// --- END OF SUCCESS PAGE COMPONENT ---
 
 
 // ============================================================================
@@ -579,17 +710,23 @@ function payWithPeeapSDK(amount, description, reference) {
 // ============================================================================
 /**
  * 1. User clicks payment button
- * 2. Browser redirects to: ${apiUrl}/api/checkout/quick?pk=...&amount=...
- * 3. SERVER creates checkout session (not browser - bypasses CSP!)
- * 4. Server redirects to: ${checkoutUrl}/checkout/pay/{sessionId}
- * 5. User completes payment on hosted checkout
- * 6. User redirected back with: ?peeap_status=success&peeap_ref=xxx
- * 7. Your page detects callback params and shows success
+ * 2. window.open() opens checkout in NEW TAB (bypasses iframe sandbox)
+ * 3. Browser navigates to: ${apiUrl}/api/checkout/quick?pk=...&amount=...
+ * 4. SERVER creates checkout session (not browser - bypasses CSP!)
+ * 5. Server redirects to: ${checkoutUrl}/checkout/pay/{sessionId}
+ * 6. User completes payment on hosted checkout
+ * 7. User redirected back with: ?peeap_status=success&peeap_ref=xxx
+ * 8. Your page detects callback params and shows success
  *
  * ✅ No fetch() calls from browser
  * ✅ No external script dependencies (Option 1)
  * ✅ Works in v0.dev, StackBlitz, CodeSandbox
  * ✅ Bypasses all CSP/iframe/sandbox restrictions
+ *
+ * ⚠️  WHY window.open() INSTEAD OF window.location.href?
+ * v0.dev runs previews in sandboxed iframes that block top-level navigation.
+ * Using window.location.href will show "This content is blocked" error.
+ * window.open() opens in a new tab, bypassing the sandbox restriction.
  */
 
 
@@ -614,7 +751,8 @@ function subscribeUser(planId, customerEmail) {
     '?email=' + encodeURIComponent(customerEmail) +
     '&redirect_url=' + encodeURIComponent(redirectUrl + '?subscription_status=active');
 
-  window.location.href = subscribeUrl;
+  // Use window.open() for v0.dev sandbox compatibility
+  window.open(subscribeUrl, '_blank');
 }
 </script>
 

@@ -247,6 +247,7 @@ export interface POSStaff {
   invited_at?: string;
   accepted_at?: string;
   declined_at?: string;
+  wizard_completed?: boolean;
   created_at?: string;
   updated_at?: string;
 }

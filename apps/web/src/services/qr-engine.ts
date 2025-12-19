@@ -11,7 +11,7 @@ import { supabase } from '@/lib/supabase';
 import { currencyService } from './currency.service';
 
 export interface QRPaymentData {
-  type: 'payment' | 'request' | 'merchant';
+  type: 'payment' | 'request' | 'merchant' | 'event_ticket';
   version: string;
   userId: string;
   walletId?: string;
@@ -22,6 +22,9 @@ export interface QRPaymentData {
   merchantName?: string;
   description?: string;
   metadata?: Record<string, any>;
+  // Event ticket specific fields
+  eventId?: string;
+  ticketNumber?: string;
 }
 
 export interface GeneratedQR {
@@ -42,6 +45,12 @@ export interface QRValidationResult {
     walletId: string;
   };
   checkoutSessionId?: string; // For URL-based checkout QR codes
+  // Event ticket specific fields
+  isEventTicket?: boolean;
+  eventTicket?: {
+    eventId: string;
+    ticketNumber: string;
+  };
 }
 
 class QREngineService {
@@ -287,9 +296,28 @@ class QREngineService {
   }
 
   /**
+   * Parse event ticket QR code
+   * Format: PEEAP-EVT-{eventId}-{ticketNumber}
+   */
+  private parseEventTicketQR(qrData: string): { eventId: string; ticketNumber: string } | null {
+    // Check for PEEAP-EVT- prefix
+    const eventTicketPattern = /^PEEAP-EVT-([0-9a-f-]+)-(.+)$/i;
+    const match = qrData.match(eventTicketPattern);
+
+    if (match) {
+      return {
+        eventId: match[1],
+        ticketNumber: match[2],
+      };
+    }
+
+    return null;
+  }
+
+  /**
    * Check if QR data is a URL and extract payment info
    */
-  private parseURLQR(qrData: string): { type: 'checkout' | 'pay' | 'qr' | 'scan-pay' | 'wallet' | 'user'; id: string; walletId?: string; userId?: string } | null {
+  private parseURLQR(qrData: string): { type: 'checkout' | 'pay' | 'qr' | 'scan-pay' | 'wallet' | 'user' | 'event-ticket'; id: string; walletId?: string; userId?: string; eventId?: string; ticketNumber?: string } | null {
     try {
       // Check if it's a URL (case-insensitive)
       const lowerData = qrData.toLowerCase();
@@ -307,6 +335,23 @@ class QREngineService {
       if (scanPayMatch) {
         console.log('[QR Engine] Matched scan-pay pattern, sessionId:', scanPayMatch[1]);
         return { type: 'scan-pay', id: scanPayMatch[1] };
+      }
+
+      // Handle /events/{eventId}/validate/{ticketNumber} format (event ticket)
+      const eventTicketMatch = pathname.match(/\/events\/([^/]+)\/validate\/([^/]+)$/);
+      if (eventTicketMatch) {
+        console.log('[QR Engine] Matched event ticket pattern, eventId:', eventTicketMatch[1], 'ticketNumber:', eventTicketMatch[2]);
+        return { type: 'event-ticket', id: eventTicketMatch[2], eventId: eventTicketMatch[1], ticketNumber: eventTicketMatch[2] };
+      }
+
+      // Handle /ticket/{ticketNumber} format (event ticket)
+      const ticketMatch = pathname.match(/\/ticket\/([^/]+)$/);
+      if (ticketMatch) {
+        // Check for event ID in query params
+        const eventId = url.searchParams.get('event');
+        if (eventId) {
+          return { type: 'event-ticket', id: ticketMatch[1], eventId, ticketNumber: ticketMatch[1] };
+        }
       }
 
       // Handle /pay/{sessionId} format (hosted checkout)
@@ -375,10 +420,52 @@ class QREngineService {
     const cleanedData = qrData.trim();
     console.log('[QR Engine] validateQR called with:', cleanedData.substring(0, 100), 'length:', cleanedData.length);
 
-    // First, check if it's a URL-based QR code
+    // First, check if it's an event ticket QR code (PEEAP-EVT-{eventId}-{ticketNumber})
+    const eventTicketData = this.parseEventTicketQR(cleanedData);
+    if (eventTicketData) {
+      console.log('[QR Engine] Event ticket parsed:', eventTicketData);
+      return {
+        valid: true,
+        isEventTicket: true,
+        eventTicket: eventTicketData,
+        data: {
+          type: 'event_ticket',
+          version: this.QR_VERSION,
+          userId: '',
+          currency: '',
+          reference: eventTicketData.ticketNumber,
+          eventId: eventTicketData.eventId,
+          ticketNumber: eventTicketData.ticketNumber,
+        },
+      };
+    }
+
+    // Check if it's a URL-based QR code
     const urlData = this.parseURLQR(cleanedData);
     if (urlData) {
       console.log('[QR Engine] URL parsed successfully:', urlData);
+
+      // Handle event ticket URL
+      if (urlData.type === 'event-ticket' && urlData.eventId && urlData.ticketNumber) {
+        return {
+          valid: true,
+          isEventTicket: true,
+          eventTicket: {
+            eventId: urlData.eventId,
+            ticketNumber: urlData.ticketNumber,
+          },
+          data: {
+            type: 'event_ticket',
+            version: this.QR_VERSION,
+            userId: '',
+            currency: '',
+            reference: urlData.ticketNumber,
+            eventId: urlData.eventId,
+            ticketNumber: urlData.ticketNumber,
+          },
+        };
+      }
+
       if (urlData.type === 'scan-pay' || urlData.type === 'checkout') {
         // It's a checkout session QR - return the session ID for payment processing
         const result = {

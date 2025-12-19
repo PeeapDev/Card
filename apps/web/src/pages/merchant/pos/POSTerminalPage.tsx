@@ -68,8 +68,7 @@ import posService, {
   POSDiscount,
 } from '@/services/pos.service';
 import { useOfflineSync } from '@/hooks/useOfflineSync';
-import { PaymentQRCode } from '@/components/payment/PaymentQRCode';
-import QRCode from 'react-qr-code';
+import { PaymentReceiver } from '@/components/payment/PaymentReceiver';
 import { walletService } from '@/services/wallet.service';
 import { monimeService, MonimeTransaction } from '@/services/monime.service';
 import { notificationService } from '@/services/notification.service';
@@ -163,17 +162,9 @@ export function POSTerminalPage() {
   const [cashReason, setCashReason] = useState('');
   const [sessionProcessing, setSessionProcessing] = useState(false);
 
-  // QR Payment
+  // QR Payment - simplified with PaymentReceiver component
   const [merchantWalletId, setMerchantWalletId] = useState<string | null>(null);
-  const [qrPaymentReference, setQrPaymentReference] = useState<string | null>(null);
-  const [qrPaymentStatus, setQrPaymentStatus] = useState<'pending' | 'paid' | null>(null);
-  const [qrExpectedAmount, setQrExpectedAmount] = useState<number | null>(null);
-  const [qrGeneratedAt, setQrGeneratedAt] = useState<string | null>(null);
-  const [checkoutSessionId, setCheckoutSessionId] = useState<string | null>(null);
-  const [checkoutSessionUrl, setCheckoutSessionUrl] = useState<string | null>(null);
-  const [creatingSession, setCreatingSession] = useState(false);
-  const qrPollingRef = useRef<NodeJS.Timeout | null>(null);
-  const qrSubscriptionRef = useRef<any>(null);
+  const [qrPaymentReceived, setQrPaymentReceived] = useState(false);
 
   // Mobile Money Payment
   const [mobileMoneyPhone, setMobileMoneyPhone] = useState('');
@@ -902,132 +893,20 @@ export function POSTerminalPage() {
     }
   };
 
-  // Create checkout session for QR payment
-  const createCheckoutSession = useCallback(async () => {
-    if (!merchantId || !merchantWalletId || totalAmount <= 0) return;
+  // Handle QR payment received - using PaymentReceiver component
+  const handleQrPaymentReceived = useCallback((session: any) => {
+    console.log('[POS] QR Payment received:', session);
+    setQrPaymentReceived(true);
+    // Auto-complete the sale after short delay
+    setTimeout(() => processSale(), 500);
+  }, [processSale]);
 
-    setCreatingSession(true);
-    setQrPaymentStatus(null);
-    setCheckoutSessionId(null);
-    setCheckoutSessionUrl(null);
-
-    // Clean up any existing polling
-    if (qrPollingRef.current) {
-      clearInterval(qrPollingRef.current);
-      qrPollingRef.current = null;
-    }
-
-    try {
-      const API_BASE = import.meta.env.VITE_API_URL || 'https://peeap.vercel.app/api';
-      const posReference = `POS-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-
-      const response = await fetch(`${API_BASE}/router/checkout/sessions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: totalAmount,
-          currency: 'SLE',
-          description: `POS Sale - ${cart.length} item(s)`,
-          recipientId: merchantId,
-          recipientWalletId: merchantWalletId,
-          recipientName: business?.name || 'POS Terminal',
-          reference: posReference,
-          metadata: {
-            source: 'pos',
-            posReference,
-            itemCount: cart.length,
-          },
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.sessionId) {
-        const sessionUrl = `${window.location.origin}/checkout/pay/${data.sessionId}`;
-        setCheckoutSessionId(data.sessionId);
-        setCheckoutSessionUrl(sessionUrl);
-        setQrPaymentReference(posReference);
-        setQrPaymentStatus('pending');
-        setQrGeneratedAt(new Date().toISOString());
-
-        console.log('[POS] Checkout session created:', data.sessionId);
-
-        // Start polling for session status
-        qrPollingRef.current = setInterval(async () => {
-          try {
-            const statusResponse = await fetch(`${API_BASE}/router/checkout/sessions/${data.sessionId}`);
-            const sessionData = await statusResponse.json();
-
-            console.log('[POS] Session status:', sessionData.status);
-
-            if (sessionData.status === 'COMPLETE' || sessionData.status === 'PAID') {
-              console.log('[POS] Payment confirmed!');
-              setQrPaymentStatus('paid');
-
-              if (qrPollingRef.current) {
-                clearInterval(qrPollingRef.current);
-                qrPollingRef.current = null;
-              }
-
-              // Auto-complete the sale
-              setTimeout(() => processSale(), 500);
-            } else if (sessionData.status === 'EXPIRED' || sessionData.status === 'CANCELLED') {
-              console.log('[POS] Session expired/cancelled');
-              if (qrPollingRef.current) {
-                clearInterval(qrPollingRef.current);
-                qrPollingRef.current = null;
-              }
-              setQrPaymentStatus(null);
-            }
-          } catch (error) {
-            console.error('Error checking session status:', error);
-          }
-        }, 2000); // Poll every 2 seconds
-      } else {
-        console.error('[POS] Failed to create checkout session:', data);
-        alert('Failed to create payment session. Please try again.');
-      }
-    } catch (error) {
-      console.error('[POS] Error creating checkout session:', error);
-      alert('Failed to create payment session. Please try again.');
-    } finally {
-      setCreatingSession(false);
-    }
-  }, [merchantId, merchantWalletId, totalAmount, cart.length, business?.name, processSale]);
-
-  // Legacy QR handler (for fallback)
-  const handleQRGenerated = useCallback((qr: any) => {
-    // This is now just a fallback - the main flow uses createCheckoutSession
-    setQrPaymentReference(qr.reference);
-  }, []);
-
-  // Cleanup polling on unmount or payment method change
+  // Reset QR payment state when switching payment methods
   useEffect(() => {
-    return () => {
-      if (qrPollingRef.current) {
-        clearInterval(qrPollingRef.current);
-      }
-    };
-  }, []);
-
-  // Create checkout session when QR payment method is selected
-  useEffect(() => {
-    if (paymentMethod === 'qr' && totalAmount > 0 && !checkoutSessionId && !creatingSession) {
-      createCheckoutSession();
-    } else if (paymentMethod !== 'qr') {
-      // Cleanup when switching away from QR
-      if (qrPollingRef.current) {
-        clearInterval(qrPollingRef.current);
-        qrPollingRef.current = null;
-      }
-      setQrPaymentStatus(null);
-      setQrPaymentReference(null);
-      setQrExpectedAmount(null);
-      setQrGeneratedAt(null);
-      setCheckoutSessionId(null);
-      setCheckoutSessionUrl(null);
+    if (paymentMethod !== 'qr') {
+      setQrPaymentReceived(false);
     }
-  }, [paymentMethod, totalAmount, checkoutSessionId, creatingSession, createCheckoutSession]);
+  }, [paymentMethod]);
 
   // Mobile Money Payment handlers - Redirect to Monime for payment
   const initiateMobileMoneyPayment = async () => {
@@ -2503,78 +2382,38 @@ export function POSTerminalPage() {
                     </div>
                   )}
 
-                  {/* QR Code Payment */}
+                  {/* QR Code Payment - Using standardized PaymentReceiver component */}
                   {paymentMethod === 'qr' && (
                     <div className="bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-6">
-                      {merchantId && merchantWalletId ? (
-                        <div className="text-center">
-                          {qrPaymentStatus === 'paid' ? (
-                            <div className="py-8">
-                              <Check className="w-16 h-16 mx-auto text-green-500 mb-4" />
-                              <p className="text-lg font-semibold text-green-600">Payment Received!</p>
-                              <p className="text-sm text-gray-500 mt-2">Processing sale...</p>
-                            </div>
-                          ) : creatingSession ? (
-                            <div className="py-8">
-                              <Loader2 className="w-12 h-12 mx-auto text-primary-500 animate-spin mb-4" />
-                              <p className="text-sm text-gray-600">Creating payment session...</p>
-                            </div>
-                          ) : checkoutSessionUrl ? (
-                            <>
-                              {/* Amount display */}
-                              <div className="mb-4">
-                                <p className="text-sm text-gray-500">Amount to pay</p>
-                                <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                                  {formatCurrency(totalAmount)}
-                                </p>
-                              </div>
-
-                              {/* QR Code */}
-                              <div className="p-4 bg-white rounded-xl shadow-lg inline-block">
-                                <QRCode
-                                  value={checkoutSessionUrl}
-                                  size={180}
-                                  level="M"
-                                />
-                              </div>
-
-                              {/* Waiting indicator */}
-                              <div className="mt-4 flex items-center justify-center gap-2 text-sm text-blue-600">
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                                <span>Waiting for payment...</span>
-                              </div>
-
-                              <p className="mt-2 text-xs text-gray-500">
-                                Customer scans to open checkout page
-                              </p>
-
-                              {/* Refresh button */}
-                              <button
-                                onClick={createCheckoutSession}
-                                className="mt-3 text-xs text-primary-600 hover:text-primary-700 flex items-center gap-1 mx-auto"
-                              >
-                                <RefreshCw className="w-3 h-3" />
-                                Generate new QR
-                              </button>
-                            </>
-                          ) : (
-                            <div className="py-8">
-                              <QrCode className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-                              <p className="text-sm text-gray-500 mb-3">Ready to generate payment QR</p>
-                              <button
-                                onClick={createCheckoutSession}
-                                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
-                              >
-                                Generate QR Code
-                              </button>
-                            </div>
-                          )}
-                        </div>
+                      {merchantId && merchantWalletId && totalAmount > 0 ? (
+                        <PaymentReceiver
+                          walletId={merchantWalletId}
+                          userId={merchantId}
+                          amount={totalAmount}
+                          currency="SLE"
+                          note={`POS Sale - ${cart.length} item(s) - ${formatCurrency(totalAmount)}`}
+                          description={`POS Sale - ${cart.length} item(s)`}
+                          merchantName={business?.name || 'POS Terminal'}
+                          referencePrefix="POS"
+                          onPaymentReceived={handleQrPaymentReceived}
+                          metadata={{
+                            source: 'pos',
+                            itemCount: cart.length,
+                            businessId: business?.id,
+                            businessName: business?.name,
+                          }}
+                          qrSize={180}
+                          showAmount={true}
+                          currencySymbol="NLe"
+                          strictVerification={true}
+                        />
                       ) : (
                         <div className="text-center py-4">
                           <QrCode className="w-16 h-16 mx-auto text-gray-400 mb-2" />
                           <p className="text-sm text-gray-500">
-                            Wallet not configured for QR payments
+                            {totalAmount <= 0
+                              ? 'Add items to cart to enable QR payment'
+                              : 'Wallet not configured for QR payments'}
                           </p>
                         </div>
                       )}

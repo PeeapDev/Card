@@ -12,7 +12,7 @@
  * - Ticket scanning and analytics
  */
 
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseAdmin } from '@/lib/supabase';
 
 // ================== Types ==================
 
@@ -28,6 +28,7 @@ export interface Event {
   merchant_id: string;
   title: string;
   description?: string;
+  category?: string;
   location?: string;
   venue_name?: string;
   address?: string;
@@ -42,6 +43,7 @@ export interface Event {
   capacity?: number;
   tickets_sold?: number;
   total_revenue?: number;
+  min_price?: number;
   settings?: {
     require_approval?: boolean;
     allow_refunds?: boolean;
@@ -198,7 +200,8 @@ export interface EventStaffPayment {
 // ================== Event Functions ==================
 
 export const getEvents = async (merchantId: string): Promise<Event[]> => {
-  const { data, error } = await supabase
+  // Use supabaseAdmin to bypass RLS
+  const { data, error } = await supabaseAdmin
     .from('events')
     .select('*')
     .eq('merchant_id', merchantId)
@@ -209,21 +212,20 @@ export const getEvents = async (merchantId: string): Promise<Event[]> => {
 };
 
 export const getEventById = async (eventId: string): Promise<Event | null> => {
-  const { data, error } = await supabase
+  // Use supabaseAdmin to bypass RLS
+  const { data, error } = await supabaseAdmin
     .from('events')
     .select('*')
     .eq('id', eventId)
-    .single();
+    .maybeSingle();
 
-  if (error) {
-    if (error.code === 'PGRST116') return null;
-    throw error;
-  }
+  if (error) throw error;
   return data;
 };
 
 export const getEventsByStatus = async (merchantId: string, status: EventStatus): Promise<Event[]> => {
-  const { data, error } = await supabase
+  // Use supabaseAdmin to bypass RLS
+  const { data, error } = await supabaseAdmin
     .from('events')
     .select('*')
     .eq('merchant_id', merchantId)
@@ -235,7 +237,8 @@ export const getEventsByStatus = async (merchantId: string, status: EventStatus)
 };
 
 export const getUpcomingEvents = async (merchantId: string): Promise<Event[]> => {
-  const { data, error } = await supabase
+  // Use supabaseAdmin to bypass RLS
+  const { data, error } = await supabaseAdmin
     .from('events')
     .select('*')
     .eq('merchant_id', merchantId)
@@ -248,7 +251,8 @@ export const getUpcomingEvents = async (merchantId: string): Promise<Event[]> =>
 };
 
 export const createEvent = async (event: Partial<Event>): Promise<Event> => {
-  const { data, error } = await supabase
+  // Use supabaseAdmin to bypass RLS - authorization is handled by the app
+  const { data, error } = await supabaseAdmin
     .from('events')
     .insert({
       ...event,
@@ -265,7 +269,7 @@ export const createEvent = async (event: Partial<Event>): Promise<Event> => {
 };
 
 export const updateEvent = async (eventId: string, updates: Partial<Event>): Promise<Event> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('events')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', eventId)
@@ -277,7 +281,8 @@ export const updateEvent = async (eventId: string, updates: Partial<Event>): Pro
 };
 
 export const deleteEvent = async (eventId: string): Promise<void> => {
-  const { error } = await supabase
+  // Use supabaseAdmin to bypass RLS
+  const { error } = await supabaseAdmin
     .from('events')
     .delete()
     .eq('id', eventId);
@@ -297,10 +302,37 @@ export const completeEvent = async (eventId: string): Promise<Event> => {
   return updateEvent(eventId, { status: 'completed' });
 };
 
+export const getPublishedEvents = async (): Promise<Event[]> => {
+  // Use supabaseAdmin to bypass RLS for public event discovery
+  const { data, error } = await supabaseAdmin
+    .from('events')
+    .select('*')
+    .eq('status', 'published')
+    .gte('end_date', new Date().toISOString())
+    .order('start_date', { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+};
+
+export const getPublishedEventById = async (eventId: string): Promise<Event | null> => {
+  // Use supabaseAdmin to bypass RLS for public event viewing
+  const { data, error } = await supabaseAdmin
+    .from('events')
+    .select('*')
+    .eq('id', eventId)
+    .eq('status', 'published')
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+};
+
 // ================== Ticket Type Functions ==================
 
 export const getEventTicketTypes = async (eventId: string): Promise<EventTicketType[]> => {
-  const { data, error } = await supabase
+  // Use supabaseAdmin to bypass RLS - needed for public ticket purchasing
+  const { data, error } = await supabaseAdmin
     .from('event_ticket_types')
     .select('*')
     .eq('event_id', eventId)
@@ -311,21 +343,19 @@ export const getEventTicketTypes = async (eventId: string): Promise<EventTicketT
 };
 
 export const getEventTicketTypeById = async (ticketTypeId: string): Promise<EventTicketType | null> => {
-  const { data, error } = await supabase
+  // Use supabaseAdmin to bypass RLS
+  const { data, error } = await supabaseAdmin
     .from('event_ticket_types')
     .select('*')
     .eq('id', ticketTypeId)
-    .single();
+    .maybeSingle();
 
-  if (error) {
-    if (error.code === 'PGRST116') return null;
-    throw error;
-  }
+  if (error) throw error;
   return data;
 };
 
 export const createEventTicketType = async (ticketType: Partial<EventTicketType>): Promise<EventTicketType> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('event_ticket_types')
     .insert({
       ...ticketType,
@@ -341,7 +371,7 @@ export const createEventTicketType = async (ticketType: Partial<EventTicketType>
 };
 
 export const updateEventTicketType = async (ticketTypeId: string, updates: Partial<EventTicketType>): Promise<EventTicketType> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('event_ticket_types')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', ticketTypeId)
@@ -353,7 +383,8 @@ export const updateEventTicketType = async (ticketTypeId: string, updates: Parti
 };
 
 export const deleteEventTicketType = async (ticketTypeId: string): Promise<void> => {
-  const { error } = await supabase
+  // Use supabaseAdmin to bypass RLS
+  const { error } = await supabaseAdmin
     .from('event_ticket_types')
     .delete()
     .eq('id', ticketTypeId);
@@ -364,7 +395,8 @@ export const deleteEventTicketType = async (ticketTypeId: string): Promise<void>
 // ================== Ticket Functions ==================
 
 export const getEventTickets = async (eventId: string): Promise<EventTicket[]> => {
-  const { data, error } = await supabase
+  // Use supabaseAdmin to bypass RLS
+  const { data, error } = await supabaseAdmin
     .from('event_tickets')
     .select('*')
     .eq('event_id', eventId)
@@ -375,49 +407,44 @@ export const getEventTickets = async (eventId: string): Promise<EventTicket[]> =
 };
 
 export const getEventTicketById = async (ticketId: string): Promise<EventTicket | null> => {
-  const { data, error } = await supabase
+  // Use supabaseAdmin to bypass RLS
+  const { data, error } = await supabaseAdmin
     .from('event_tickets')
     .select('*')
     .eq('id', ticketId)
-    .single();
+    .maybeSingle();
 
-  if (error) {
-    if (error.code === 'PGRST116') return null;
-    throw error;
-  }
+  if (error) throw error;
   return data;
 };
 
 export const getEventTicketByQRCode = async (qrCode: string): Promise<EventTicket | null> => {
-  const { data, error } = await supabase
+  // Use supabaseAdmin to bypass RLS
+  const { data, error } = await supabaseAdmin
     .from('event_tickets')
     .select('*')
     .eq('qr_code', qrCode)
-    .single();
+    .maybeSingle();
 
-  if (error) {
-    if (error.code === 'PGRST116') return null;
-    throw error;
-  }
+  if (error) throw error;
   return data;
 };
 
 export const getEventTicketByNumber = async (ticketNumber: string): Promise<EventTicket | null> => {
-  const { data, error } = await supabase
+  // Use supabaseAdmin to bypass RLS
+  const { data, error } = await supabaseAdmin
     .from('event_tickets')
     .select('*')
     .eq('ticket_number', ticketNumber)
-    .single();
+    .maybeSingle();
 
-  if (error) {
-    if (error.code === 'PGRST116') return null;
-    throw error;
-  }
+  if (error) throw error;
   return data;
 };
 
 export const getUserEventTickets = async (userId: string): Promise<EventTicket[]> => {
-  const { data, error } = await supabase
+  // Use supabaseAdmin to bypass RLS
+  const { data, error } = await supabaseAdmin
     .from('event_tickets')
     .select('*, events(*), event_ticket_types(*)')
     .eq('user_id', userId)
@@ -432,7 +459,7 @@ export const createEventTicket = async (ticket: Partial<EventTicket>): Promise<E
   const ticketNumber = `TKT-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
   const qrCode = `PEEAP-EVT-${ticket.event_id}-${ticketNumber}`;
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('event_tickets')
     .insert({
       ...ticket,
@@ -448,12 +475,12 @@ export const createEventTicket = async (ticket: Partial<EventTicket>): Promise<E
 
   // Update ticket type quantity sold
   if (ticket.ticket_type_id) {
-    await supabase.rpc('increment_ticket_type_sold', { ticket_type_id: ticket.ticket_type_id });
+    await supabaseAdmin.rpc('increment_ticket_type_sold', { ticket_type_id: ticket.ticket_type_id });
   }
 
   // Update event tickets sold and revenue
   if (ticket.event_id) {
-    await supabase.rpc('update_event_ticket_stats', {
+    await supabaseAdmin.rpc('update_event_ticket_stats', {
       p_event_id: ticket.event_id,
       p_price: ticket.price_paid || 0,
     });
@@ -477,7 +504,8 @@ export const updateEventTicketStatus = async (
     updates.scanned_by = scannedBy;
   }
 
-  const { data, error } = await supabase
+  // Use supabaseAdmin to bypass RLS
+  const { data, error } = await supabaseAdmin
     .from('event_tickets')
     .update(updates)
     .eq('id', ticketId)
@@ -491,9 +519,10 @@ export const updateEventTicketStatus = async (
 // ================== Event Staff Functions ==================
 
 export const getEventStaff = async (eventId: string): Promise<EventStaff[]> => {
-  const { data, error } = await supabase
+  // Use supabaseAdmin to bypass RLS
+  const { data, error } = await supabaseAdmin
     .from('event_staff')
-    .select('*, users(id, first_name, last_name, email, phone)')
+    .select('*, users!user_id(id, first_name, last_name, email, phone)')
     .eq('event_id', eventId)
     .order('created_at', { ascending: false });
 
@@ -502,9 +531,10 @@ export const getEventStaff = async (eventId: string): Promise<EventStaff[]> => {
 };
 
 export const getEventStaffById = async (staffId: string): Promise<EventStaff | null> => {
-  const { data, error } = await supabase
+  // Use supabaseAdmin to bypass RLS
+  const { data, error } = await supabaseAdmin
     .from('event_staff')
-    .select('*, users(id, first_name, last_name, email, phone), events(*)')
+    .select('*, users!user_id(id, first_name, last_name, email, phone), events(*)')
     .eq('id', staffId)
     .single();
 
@@ -516,7 +546,7 @@ export const getEventStaffById = async (staffId: string): Promise<EventStaff | n
 };
 
 export const getEventStaffByUserId = async (userId: string): Promise<EventStaff[]> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('event_staff')
     .select('*, events(*)')
     .eq('user_id', userId)
@@ -527,7 +557,7 @@ export const getEventStaffByUserId = async (userId: string): Promise<EventStaff[
 };
 
 export const getAcceptedEventStaffForUser = async (userId: string): Promise<EventStaff[]> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('event_staff')
     .select('*, events(*)')
     .eq('user_id', userId)
@@ -545,7 +575,7 @@ export const getActiveEventStaffForUser = async (userId: string): Promise<EventS
   const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
   const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('event_staff')
     .select('*, events!inner(*)')
     .eq('user_id', userId)
@@ -563,7 +593,7 @@ export const inviteEventStaff = async (
   merchantId: string,
   userId: string
 ): Promise<EventStaff> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('event_staff')
     .insert({
       event_id: eventId,
@@ -582,7 +612,7 @@ export const inviteEventStaff = async (
 };
 
 export const acceptEventStaffInvitation = async (staffId: string): Promise<EventStaff> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('event_staff')
     .update({
       invitation_status: 'accepted',
@@ -598,7 +628,7 @@ export const acceptEventStaffInvitation = async (staffId: string): Promise<Event
 };
 
 export const declineEventStaffInvitation = async (staffId: string): Promise<EventStaff> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('event_staff')
     .update({
       invitation_status: 'declined',
@@ -615,7 +645,7 @@ export const declineEventStaffInvitation = async (staffId: string): Promise<Even
 };
 
 export const updateEventStaffWizardCompleted = async (staffId: string): Promise<EventStaff> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('event_staff')
     .update({
       wizard_completed: true,
@@ -630,7 +660,7 @@ export const updateEventStaffWizardCompleted = async (staffId: string): Promise<
 };
 
 export const removeEventStaff = async (staffId: string): Promise<void> => {
-  const { error } = await supabase
+  const { error } = await supabaseAdmin
     .from('event_staff')
     .update({
       is_active: false,
@@ -642,7 +672,7 @@ export const removeEventStaff = async (staffId: string): Promise<void> => {
 };
 
 export const deleteEventStaff = async (staffId: string): Promise<void> => {
-  const { error } = await supabase
+  const { error } = await supabaseAdmin
     .from('event_staff')
     .delete()
     .eq('id', staffId);
@@ -743,7 +773,7 @@ export const scanTicket = async (
 };
 
 export const createEventScan = async (scan: Partial<EventScan>): Promise<EventScan> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('event_scans')
     .insert({
       ...scan,
@@ -757,9 +787,9 @@ export const createEventScan = async (scan: Partial<EventScan>): Promise<EventSc
 };
 
 export const getEventScans = async (eventId: string): Promise<EventScan[]> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('event_scans')
-    .select('*, event_staff(*, users(first_name, last_name))')
+    .select('*, event_staff(*, users!user_id(first_name, last_name))')
     .eq('event_id', eventId)
     .order('scanned_at', { ascending: false });
 
@@ -768,7 +798,7 @@ export const getEventScans = async (eventId: string): Promise<EventScan[]> => {
 };
 
 export const getEventScansByStaff = async (staffId: string): Promise<EventScan[]> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('event_scans')
     .select('*')
     .eq('staff_id', staffId)
@@ -779,12 +809,12 @@ export const getEventScansByStaff = async (staffId: string): Promise<EventScan[]
 };
 
 const incrementStaffScanCount = async (staffId: string): Promise<void> => {
-  const { error } = await supabase.rpc('increment_event_staff_scan_count', { staff_id: staffId });
+  const { error } = await supabaseAdmin.rpc('increment_event_staff_scan_count', { staff_id: staffId });
   if (error) {
     // Fallback to manual update if RPC doesn't exist
     const staff = await getEventStaffById(staffId);
     if (staff) {
-      await supabase
+      await supabaseAdmin
         .from('event_staff')
         .update({
           scan_count: (staff.scan_count || 0) + 1,
@@ -852,7 +882,7 @@ export const getEventAnalytics = async (eventId: string): Promise<EventAnalytics
 // ================== Wallet Functions ==================
 
 export const getEventWallet = async (eventId: string): Promise<EventWallet | null> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('event_wallets')
     .select('*')
     .eq('event_id', eventId)
@@ -869,7 +899,7 @@ export const getEventWalletTransactions = async (
   walletId: string,
   limit: number = 50
 ): Promise<EventWalletTransaction[]> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('event_wallet_transactions')
     .select('*, recipient:users!recipient_id(id, first_name, last_name, email)')
     .eq('wallet_id', walletId)
@@ -884,7 +914,7 @@ export const getEventWalletTransactionsByType = async (
   walletId: string,
   type: WalletTransactionType
 ): Promise<EventWalletTransaction[]> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('event_wallet_transactions')
     .select('*, recipient:users!recipient_id(id, first_name, last_name, email)')
     .eq('wallet_id', walletId)
@@ -903,7 +933,7 @@ export const transferToStaff = async (
   description?: string
 ): Promise<{ success: boolean; transaction?: EventWalletTransaction; message: string }> => {
   // Get wallet to check balance
-  const { data: wallet, error: walletError } = await supabase
+  const { data: wallet, error: walletError } = await supabaseAdmin
     .from('event_wallets')
     .select('*')
     .eq('id', walletId)
@@ -918,7 +948,7 @@ export const transferToStaff = async (
   }
 
   // Get staff user details
-  const { data: staffUser, error: staffError } = await supabase
+  const { data: staffUser, error: staffError } = await supabaseAdmin
     .from('users')
     .select('id, first_name, last_name, email')
     .eq('id', staffUserId)
@@ -929,7 +959,7 @@ export const transferToStaff = async (
   }
 
   // Deduct from wallet
-  const { error: updateError } = await supabase
+  const { error: updateError } = await supabaseAdmin
     .from('event_wallets')
     .update({
       balance: wallet.balance - amount,
@@ -943,7 +973,7 @@ export const transferToStaff = async (
 
   // Create transaction record
   const reference = `STAFF-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-  const { data: transaction, error: txError } = await supabase
+  const { data: transaction, error: txError } = await supabaseAdmin
     .from('event_wallet_transactions')
     .insert({
       wallet_id: walletId,
@@ -963,7 +993,7 @@ export const transferToStaff = async (
 
   if (txError) {
     // Rollback wallet balance
-    await supabase
+    await supabaseAdmin
       .from('event_wallets')
       .update({ balance: wallet.balance })
       .eq('id', walletId);
@@ -971,7 +1001,7 @@ export const transferToStaff = async (
   }
 
   // Credit to user's main wallet
-  const { error: creditError } = await supabase.rpc('credit_user_wallet', {
+  const { error: creditError } = await supabaseAdmin.rpc('credit_user_wallet', {
     p_user_id: staffUserId,
     p_amount: amount,
     p_currency: wallet.currency,
@@ -1000,7 +1030,7 @@ export const transferToMainWallet = async (
   description?: string
 ): Promise<{ success: boolean; transaction?: EventWalletTransaction; message: string }> => {
   // Get wallet to check balance
-  const { data: wallet, error: walletError } = await supabase
+  const { data: wallet, error: walletError } = await supabaseAdmin
     .from('event_wallets')
     .select('*')
     .eq('id', walletId)
@@ -1015,7 +1045,7 @@ export const transferToMainWallet = async (
   }
 
   // Deduct from event wallet
-  const { error: updateError } = await supabase
+  const { error: updateError } = await supabaseAdmin
     .from('event_wallets')
     .update({
       balance: wallet.balance - amount,
@@ -1029,7 +1059,7 @@ export const transferToMainWallet = async (
 
   // Create transaction record
   const reference = `MAIN-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-  const { data: transaction, error: txError } = await supabase
+  const { data: transaction, error: txError } = await supabaseAdmin
     .from('event_wallet_transactions')
     .insert({
       wallet_id: walletId,
@@ -1049,7 +1079,7 @@ export const transferToMainWallet = async (
 
   if (txError) {
     // Rollback wallet balance
-    await supabase
+    await supabaseAdmin
       .from('event_wallets')
       .update({ balance: wallet.balance })
       .eq('id', walletId);
@@ -1057,7 +1087,7 @@ export const transferToMainWallet = async (
   }
 
   // Credit to merchant's main wallet
-  const { error: creditError } = await supabase.rpc('credit_user_wallet', {
+  const { error: creditError } = await supabaseAdmin.rpc('credit_user_wallet', {
     p_user_id: merchantId,
     p_amount: amount,
     p_currency: wallet.currency,
@@ -1079,7 +1109,7 @@ export const transferToMainWallet = async (
 // ================== Staff Payment Request Functions ==================
 
 export const getStaffPayments = async (eventId: string): Promise<EventStaffPayment[]> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('event_staff_payments')
     .select('*, staff:users!staff_id(id, first_name, last_name, email, phone)')
     .eq('event_id', eventId)
@@ -1093,7 +1123,7 @@ export const getStaffPaymentsByStatus = async (
   eventId: string,
   status: StaffPaymentStatus
 ): Promise<EventStaffPayment[]> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('event_staff_payments')
     .select('*, staff:users!staff_id(id, first_name, last_name, email, phone)')
     .eq('event_id', eventId)
@@ -1107,7 +1137,7 @@ export const getStaffPaymentsByStatus = async (
 export const createStaffPaymentRequest = async (
   payment: Partial<EventStaffPayment>
 ): Promise<EventStaffPayment> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('event_staff_payments')
     .insert({
       ...payment,
@@ -1126,7 +1156,7 @@ export const approveStaffPayment = async (
   approverId: string
 ): Promise<{ success: boolean; payment?: EventStaffPayment; message: string }> => {
   // Get payment details
-  const { data: payment, error: paymentError } = await supabase
+  const { data: payment, error: paymentError } = await supabaseAdmin
     .from('event_staff_payments')
     .select('*')
     .eq('id', paymentId)
@@ -1154,7 +1184,7 @@ export const approveStaffPayment = async (
   }
 
   // Update payment status
-  const { data: updatedPayment, error: updateError } = await supabase
+  const { data: updatedPayment, error: updateError } = await supabaseAdmin
     .from('event_staff_payments')
     .update({
       status: 'completed',
@@ -1182,7 +1212,7 @@ export const rejectStaffPayment = async (
   paymentId: string,
   rejectedBy: string
 ): Promise<EventStaffPayment> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('event_staff_payments')
     .update({
       status: 'rejected',
@@ -1214,7 +1244,7 @@ export interface EventsSettings {
 }
 
 export const isEventsSetupCompleted = async (merchantId: string): Promise<boolean> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('events_settings')
     .select('setup_completed')
     .eq('merchant_id', merchantId)
@@ -1225,7 +1255,7 @@ export const isEventsSetupCompleted = async (merchantId: string): Promise<boolea
 };
 
 export const getEventsSettings = async (merchantId: string): Promise<EventsSettings | null> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('events_settings')
     .select('*')
     .eq('merchant_id', merchantId)
@@ -1238,7 +1268,7 @@ export const getEventsSettings = async (merchantId: string): Promise<EventsSetti
 export const saveEventsSettings = async (
   settings: Partial<EventsSettings> & { merchant_id: string }
 ): Promise<EventsSettings | null> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('events_settings')
     .upsert(
       { ...settings, updated_at: new Date().toISOString() },
@@ -1259,6 +1289,8 @@ export const eventService = {
   getEventById,
   getEventsByStatus,
   getUpcomingEvents,
+  getPublishedEvents,
+  getPublishedEventById,
   createEvent,
   updateEvent,
   deleteEvent,

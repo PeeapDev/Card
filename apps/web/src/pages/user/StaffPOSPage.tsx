@@ -523,12 +523,11 @@ export default function StaffPOSPage() {
     loadStaffPositions();
   }, [user?.id]);
 
-  // Check if should show wizard
+  // Check if should show wizard (from database, not localStorage)
   useEffect(() => {
     if (activeStaff) {
-      const wizardKey = `staff_pos_wizard_${activeStaff.id}`;
-      const hasSeenWizard = localStorage.getItem(wizardKey);
-      if (!hasSeenWizard) {
+      // Use database field instead of localStorage for persistence across devices
+      if (!activeStaff.wizard_completed) {
         setShowWizard(true);
       }
     }
@@ -853,9 +852,16 @@ export default function StaffPOSPage() {
     return matchesSearch && matchesCategory && product.is_active;
   });
 
-  const handleWizardComplete = () => {
-    if (activeStaff) {
-      localStorage.setItem(`staff_pos_wizard_${activeStaff.id}`, 'true');
+  const handleWizardComplete = async () => {
+    if (activeStaff?.id) {
+      try {
+        // Save wizard completion to database for persistence across devices
+        await posService.updateStaff(activeStaff.id, { wizard_completed: true });
+        // Update local state
+        setActiveStaff({ ...activeStaff, wizard_completed: true });
+      } catch (error) {
+        console.error('Failed to save wizard completion:', error);
+      }
     }
     setShowWizard(false);
   };

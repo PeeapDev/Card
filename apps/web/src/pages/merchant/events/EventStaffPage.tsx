@@ -4,7 +4,7 @@
  * Manage staff members who can scan tickets.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
 import { Card } from '@/components/ui/Card';
@@ -13,6 +13,7 @@ import { Modal } from '@/components/ui/Modal';
 import { useAuth } from '@/context/AuthContext';
 import eventService, { Event, EventStaff } from '@/services/event.service';
 import { supabase } from '@/lib/supabase';
+import { notificationService } from '@/services/notification.service';
 import {
   ArrowLeft,
   Plus,
@@ -27,6 +28,8 @@ import {
   QrCode,
   Send,
   Search,
+  User,
+  X,
 } from 'lucide-react';
 
 interface UserSearchResult {
@@ -35,6 +38,23 @@ interface UserSearchResult {
   last_name: string;
   email: string;
   phone: string;
+}
+
+// Debounce hook for search
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
 }
 
 export function EventStaffPage() {
@@ -49,6 +69,11 @@ export function EventStaffPage() {
   const [searchResults, setSearchResults] = useState<UserSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [inviting, setInviting] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Debounced search query for real-time search
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
   useEffect(() => {
     const loadData = async () => {
@@ -72,21 +97,33 @@ export function EventStaffPage() {
     loadData();
   }, [eventId]);
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
+  // Auto-search when debounced query changes
+  useEffect(() => {
+    if (debouncedSearchQuery.trim().length >= 2) {
+      handleSearch(debouncedSearchQuery);
+    } else {
+      setSearchResults([]);
+      setHasSearched(false);
+    }
+  }, [debouncedSearchQuery]);
+
+  const handleSearch = async (query: string) => {
+    if (!query.trim() || query.length < 2) return;
 
     setSearching(true);
+    setHasSearched(true);
     try {
-      // Search users by email or phone
+      // Search users by name, email, or phone
+      const searchTerm = query.toLowerCase().trim();
       const { data, error } = await supabase
         .from('users')
         .select('id, first_name, last_name, email, phone')
-        .or(`email.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%`)
-        .limit(10);
+        .or(`first_name.ilike.%${searchTerm}%,last_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`)
+        .limit(15);
 
       if (error) throw error;
 
-      // Filter out users already added as staff
+      // Filter out users already added as staff and current user
       const staffUserIds = new Set(staff.map((s) => s.user_id));
       const filtered = (data || []).filter((u) => u.id !== user?.id && !staffUserIds.has(u.id));
 
@@ -99,13 +136,27 @@ export function EventStaffPage() {
   };
 
   const handleInvite = async (userId: string) => {
-    if (!eventId || !user?.id) return;
+    if (!eventId || !user?.id || !event) return;
 
     setInviting(true);
     try {
       const newStaff = await eventService.inviteEventStaff(eventId, user.id, userId);
       setStaff([...staff, newStaff]);
       setSearchResults(searchResults.filter((u) => u.id !== userId));
+
+      // Send notification to invited user
+      try {
+        await notificationService.sendEventStaffInvitation({
+          userId: userId,
+          eventId: eventId,
+          eventTitle: event.title,
+          eventDate: event.start_date,
+          merchantName: user.firstName + ' ' + user.lastName,
+          staffId: newStaff.id!,
+        });
+      } catch (notifError) {
+        console.warn('Failed to send invitation notification:', notifError);
+      }
     } catch (error) {
       console.error('Error inviting staff:', error);
       alert('Failed to invite staff member');
@@ -287,51 +338,84 @@ export function EventStaffPage() {
             setShowModal(false);
             setSearchQuery('');
             setSearchResults([]);
+            setHasSearched(false);
           }}
           title="Invite Staff Member"
         >
           <Modal.Body>
             <div className="space-y-4">
               <p className="text-gray-600 dark:text-gray-400">
-                Search for users by email or phone number to invite them as event staff.
+                Search for users by name, email, or phone number to invite them as event staff.
               </p>
 
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500"
-                    placeholder="Search by email or phone..."
-                  />
-                </div>
-                <Button
-                  onClick={handleSearch}
-                  disabled={searching || !searchQuery.trim()}
-                  className="bg-purple-600 hover:bg-purple-700"
-                >
-                  {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Search'}
-                </Button>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-10 py-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  placeholder="Start typing a name, email, or phone..."
+                  autoFocus
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => {
+                      setSearchQuery('');
+                      setSearchResults([]);
+                      setHasSearched(false);
+                      searchInputRef.current?.focus();
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"
+                  >
+                    <X className="w-4 h-4 text-gray-400" />
+                  </button>
+                )}
               </div>
 
+              {/* Search Status */}
+              {searching && (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-5 h-5 animate-spin text-purple-600 mr-2" />
+                  <span className="text-gray-500 dark:text-gray-400">Searching...</span>
+                </div>
+              )}
+
               {/* Search Results */}
-              {searchResults.length > 0 && (
-                <div className="space-y-2 max-h-64 overflow-y-auto">
+              {!searching && searchResults.length > 0 && (
+                <div className="space-y-2 max-h-72 overflow-y-auto">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                    {searchResults.length} user{searchResults.length !== 1 ? 's' : ''} found
+                  </p>
                   {searchResults.map((result) => (
                     <div
                       key={result.id}
-                      className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                      className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                     >
-                      <div>
-                        <p className="font-medium text-gray-900 dark:text-white">
-                          {result.first_name} {result.last_name}
-                        </p>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                          {result.email || result.phone}
-                        </p>
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center">
+                          <User className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900 dark:text-white">
+                            {result.first_name} {result.last_name}
+                          </p>
+                          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                            {result.email && (
+                              <span className="flex items-center gap-1">
+                                <Mail className="w-3 h-3" />
+                                {result.email}
+                              </span>
+                            )}
+                            {result.phone && (
+                              <span className="flex items-center gap-1">
+                                <Phone className="w-3 h-3" />
+                                {result.phone}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
                       <Button
                         onClick={() => handleInvite(result.id)}
@@ -353,10 +437,27 @@ export function EventStaffPage() {
                 </div>
               )}
 
-              {searchQuery && searchResults.length === 0 && !searching && (
-                <p className="text-center text-gray-500 dark:text-gray-400 py-4">
-                  No users found matching "{searchQuery}"
-                </p>
+              {/* No Results */}
+              {!searching && hasSearched && searchResults.length === 0 && (
+                <div className="text-center py-8">
+                  <Users className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+                  <p className="text-gray-500 dark:text-gray-400">
+                    No users found matching "{searchQuery}"
+                  </p>
+                  <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
+                    Make sure they have an account on the platform
+                  </p>
+                </div>
+              )}
+
+              {/* Initial State */}
+              {!searching && !hasSearched && searchQuery.length < 2 && (
+                <div className="text-center py-8">
+                  <Search className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+                  <p className="text-gray-500 dark:text-gray-400">
+                    Type at least 2 characters to search
+                  </p>
+                </div>
               )}
             </div>
           </Modal.Body>
@@ -367,6 +468,7 @@ export function EventStaffPage() {
                 setShowModal(false);
                 setSearchQuery('');
                 setSearchResults([]);
+                setHasSearched(false);
               }}
             >
               Close

@@ -311,13 +311,17 @@ export function EventScannerPage() {
 
         {/* Scanner Area */}
         <Card className={`p-6 ${resultStyles.bg} dark:bg-opacity-20`}>
-          {cameraActive ? (
-            <div
-              id="scanner-container"
-              ref={scannerContainerRef}
-              className="w-full aspect-square max-w-sm mx-auto rounded-lg overflow-hidden"
-            />
-          ) : (
+          {/* Scanner container - always rendered but hidden when not active */}
+          <div
+            id="scanner-container"
+            ref={scannerContainerRef}
+            className={`w-full aspect-square max-w-sm mx-auto rounded-lg overflow-hidden ${
+              cameraActive ? 'block' : 'hidden'
+            }`}
+          />
+
+          {/* Status display when camera is not active */}
+          {!cameraActive && (
             <div className="flex flex-col items-center justify-center py-12">
               {validating ? (
                 <Loader2 className="w-16 h-16 text-purple-600 animate-spin" />

@@ -20,8 +20,9 @@ export default defineConfig({
         secure: true,
       },
       '/api': {
-        target: 'http://localhost:3001',
+        target: 'https://api.peeap.com',
         changeOrigin: true,
+        secure: true,
       },
     },
   },

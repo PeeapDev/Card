@@ -27,11 +27,24 @@ export type NotificationType =
   | 'pos_receipt'
   | 'refund_processed'
   | 'subscription_expiring'
-  | 'feature_unlock';
+  | 'feature_unlock'
+  | 'event_reminder'
+  | 'event_ticket_purchased'
+  | 'event_staff_invitation'
+  | 'event_starting_soon'
+  | 'event_cancelled'
+  | 'deposit_received'
+  | 'deposit_completed'
+  | 'deposit_failed'
+  | 'withdrawal_initiated'
+  | 'withdrawal_completed'
+  | 'withdrawal_failed'
+  | 'transfer_received'
+  | 'transfer_sent';
 
 export type NotificationPriority = 'low' | 'normal' | 'high' | 'urgent';
 
-export type SourceService = 'pos' | 'wallet' | 'kyc' | 'payment' | 'auth' | 'system' | 'payout' | 'subscription';
+export type SourceService = 'pos' | 'wallet' | 'kyc' | 'payment' | 'auth' | 'system' | 'payout' | 'subscription' | 'events';
 
 export interface Notification {
   id: string;
@@ -572,6 +585,388 @@ ${params.businessPhone ? `Contact: ${params.businessPhone}` : ''}`;
       console.error('[NotificationService] SMS error:', error);
       return { success: false, error: 'SMS service unavailable' };
     }
+  }
+
+  // ============================================
+  // Event notification helpers
+  // ============================================
+
+  /**
+   * Send event reminder notification
+   */
+  async sendEventReminder(params: {
+    userId: string;
+    eventId: string;
+    eventTitle: string;
+    eventDate: string;
+    venueName?: string;
+    hoursUntilEvent: number;
+  }): Promise<Notification> {
+    const timeLabel = params.hoursUntilEvent <= 1
+      ? 'in 1 hour'
+      : params.hoursUntilEvent <= 24
+      ? `in ${params.hoursUntilEvent} hours`
+      : `in ${Math.ceil(params.hoursUntilEvent / 24)} days`;
+
+    return this.create({
+      userId: params.userId,
+      type: 'event_reminder',
+      title: 'Event Reminder',
+      message: `${params.eventTitle} starts ${timeLabel}${params.venueName ? ` at ${params.venueName}` : ''}`,
+      icon: 'Calendar',
+      actionUrl: `/events/${params.eventId}`,
+      actionData: {
+        eventId: params.eventId,
+        eventTitle: params.eventTitle,
+        eventDate: params.eventDate,
+        venueName: params.venueName,
+        hoursUntilEvent: params.hoursUntilEvent,
+      },
+      sourceService: 'events',
+      sourceId: params.eventId,
+      priority: params.hoursUntilEvent <= 1 ? 'high' : 'normal',
+    });
+  }
+
+  /**
+   * Send event starting soon notification
+   */
+  async sendEventStartingSoon(params: {
+    userId: string;
+    eventId: string;
+    eventTitle: string;
+    venueName?: string;
+    ticketNumber: string;
+  }): Promise<Notification> {
+    return this.create({
+      userId: params.userId,
+      type: 'event_starting_soon',
+      title: 'Event Starting Soon!',
+      message: `${params.eventTitle} is starting now${params.venueName ? ` at ${params.venueName}` : ''}. Your ticket: ${params.ticketNumber}`,
+      icon: 'Clock',
+      actionUrl: `/my-tickets`,
+      actionData: {
+        eventId: params.eventId,
+        eventTitle: params.eventTitle,
+        venueName: params.venueName,
+        ticketNumber: params.ticketNumber,
+      },
+      sourceService: 'events',
+      sourceId: params.eventId,
+      priority: 'high',
+    });
+  }
+
+  /**
+   * Send ticket purchased notification
+   */
+  async sendTicketPurchased(params: {
+    userId: string;
+    eventId: string;
+    eventTitle: string;
+    eventDate: string;
+    ticketCount: number;
+    ticketType: string;
+    totalAmount: number;
+    currency: string;
+  }): Promise<Notification> {
+    return this.create({
+      userId: params.userId,
+      type: 'event_ticket_purchased',
+      title: 'Tickets Purchased!',
+      message: `You purchased ${params.ticketCount} ${params.ticketType} ticket${params.ticketCount > 1 ? 's' : ''} for ${params.eventTitle}`,
+      icon: 'Ticket',
+      actionUrl: `/my-tickets`,
+      actionData: {
+        eventId: params.eventId,
+        eventTitle: params.eventTitle,
+        eventDate: params.eventDate,
+        ticketCount: params.ticketCount,
+        ticketType: params.ticketType,
+        totalAmount: params.totalAmount,
+        currency: params.currency,
+      },
+      sourceService: 'events',
+      sourceId: params.eventId,
+      priority: 'normal',
+    });
+  }
+
+  /**
+   * Send event staff invitation notification
+   */
+  async sendEventStaffInvitation(params: {
+    userId: string;
+    eventId: string;
+    eventTitle: string;
+    eventDate: string;
+    merchantName: string;
+    staffId: string;
+  }): Promise<Notification> {
+    return this.create({
+      userId: params.userId,
+      type: 'event_staff_invitation',
+      title: 'Event Staff Invitation',
+      message: `You've been invited to scan tickets at ${params.eventTitle} by ${params.merchantName}`,
+      icon: 'UserPlus',
+      actionUrl: `/dashboard/pos`,
+      actionData: {
+        eventId: params.eventId,
+        eventTitle: params.eventTitle,
+        eventDate: params.eventDate,
+        merchantName: params.merchantName,
+        staffId: params.staffId,
+        responded: false,
+      },
+      sourceService: 'events',
+      sourceId: params.staffId,
+      priority: 'high',
+    });
+  }
+
+  /**
+   * Send event cancelled notification
+   */
+  async sendEventCancelled(params: {
+    userId: string;
+    eventId: string;
+    eventTitle: string;
+    refundInfo?: string;
+  }): Promise<Notification> {
+    return this.create({
+      userId: params.userId,
+      type: 'event_cancelled',
+      title: 'Event Cancelled',
+      message: `${params.eventTitle} has been cancelled.${params.refundInfo ? ` ${params.refundInfo}` : ''}`,
+      icon: 'XCircle',
+      actionUrl: `/my-tickets`,
+      actionData: {
+        eventId: params.eventId,
+        eventTitle: params.eventTitle,
+        refundInfo: params.refundInfo,
+      },
+      sourceService: 'events',
+      sourceId: params.eventId,
+      priority: 'high',
+    });
+  }
+
+  /**
+   * Schedule event reminders for a user's tickets
+   * This should be called by a background job
+   */
+  async scheduleEventReminders(params: {
+    userId: string;
+    eventId: string;
+    eventTitle: string;
+    eventDate: string;
+    venueName?: string;
+  }): Promise<void> {
+    const eventTime = new Date(params.eventDate).getTime();
+    const now = Date.now();
+
+    // Define reminder intervals (24 hours, 2 hours, 1 hour before)
+    const reminderIntervals = [
+      { hours: 24, label: '24 hours' },
+      { hours: 2, label: '2 hours' },
+      { hours: 1, label: '1 hour' },
+    ];
+
+    for (const interval of reminderIntervals) {
+      const reminderTime = eventTime - (interval.hours * 60 * 60 * 1000);
+
+      // Only schedule if reminder time is in the future
+      if (reminderTime > now) {
+        // Store scheduled reminder in database
+        await supabase
+          .from('scheduled_notifications')
+          .upsert({
+            user_id: params.userId,
+            event_id: params.eventId,
+            reminder_type: `event_reminder_${interval.hours}h`,
+            scheduled_for: new Date(reminderTime).toISOString(),
+            notification_data: {
+              userId: params.userId,
+              eventId: params.eventId,
+              eventTitle: params.eventTitle,
+              eventDate: params.eventDate,
+              venueName: params.venueName,
+              hoursUntilEvent: interval.hours,
+            },
+            status: 'pending',
+          }, {
+            onConflict: 'user_id,event_id,reminder_type',
+          });
+      }
+    }
+  }
+
+  // ============================================
+  // Deposit/Withdrawal/Transfer notification helpers
+  // ============================================
+
+  /**
+   * Send deposit notification
+   */
+  async sendDepositNotification(params: {
+    userId: string;
+    amount: number;
+    currency: string;
+    status: 'received' | 'completed' | 'failed';
+    transactionId: string;
+    method?: string;
+    reason?: string;
+  }): Promise<Notification> {
+    const statusConfig = {
+      received: {
+        type: 'deposit_received' as NotificationType,
+        title: 'Deposit Received',
+        message: `Your deposit of ${params.currency} ${params.amount.toLocaleString()}${params.method ? ` via ${params.method}` : ''} is being processed.`,
+        icon: 'ArrowDownLeft',
+        priority: 'normal' as NotificationPriority,
+      },
+      completed: {
+        type: 'deposit_completed' as NotificationType,
+        title: 'Deposit Completed',
+        message: `${params.currency} ${params.amount.toLocaleString()} has been added to your wallet.`,
+        icon: 'CheckCircle',
+        priority: 'normal' as NotificationPriority,
+      },
+      failed: {
+        type: 'deposit_failed' as NotificationType,
+        title: 'Deposit Failed',
+        message: `Your deposit of ${params.currency} ${params.amount.toLocaleString()} failed.${params.reason ? ` Reason: ${params.reason}` : ''}`,
+        icon: 'XCircle',
+        priority: 'high' as NotificationPriority,
+      },
+    };
+
+    const config = statusConfig[params.status];
+
+    return this.create({
+      userId: params.userId,
+      type: config.type,
+      title: config.title,
+      message: config.message,
+      icon: config.icon,
+      actionUrl: '/dashboard/transactions',
+      actionData: {
+        amount: params.amount,
+        currency: params.currency,
+        status: params.status,
+        transactionId: params.transactionId,
+        method: params.method,
+      },
+      sourceService: 'wallet',
+      sourceId: params.transactionId,
+      priority: config.priority,
+    });
+  }
+
+  /**
+   * Send withdrawal notification
+   */
+  async sendWithdrawalNotification(params: {
+    userId: string;
+    amount: number;
+    currency: string;
+    status: 'initiated' | 'completed' | 'failed';
+    transactionId: string;
+    destination?: string;
+    reason?: string;
+  }): Promise<Notification> {
+    const statusConfig = {
+      initiated: {
+        type: 'withdrawal_initiated' as NotificationType,
+        title: 'Withdrawal Initiated',
+        message: `Your withdrawal of ${params.currency} ${params.amount.toLocaleString()}${params.destination ? ` to ${params.destination}` : ''} is being processed.`,
+        icon: 'ArrowUpRight',
+        priority: 'normal' as NotificationPriority,
+      },
+      completed: {
+        type: 'withdrawal_completed' as NotificationType,
+        title: 'Withdrawal Completed',
+        message: `${params.currency} ${params.amount.toLocaleString()} has been sent${params.destination ? ` to ${params.destination}` : ''}.`,
+        icon: 'CheckCircle',
+        priority: 'normal' as NotificationPriority,
+      },
+      failed: {
+        type: 'withdrawal_failed' as NotificationType,
+        title: 'Withdrawal Failed',
+        message: `Your withdrawal of ${params.currency} ${params.amount.toLocaleString()} failed.${params.reason ? ` Reason: ${params.reason}` : ''}`,
+        icon: 'XCircle',
+        priority: 'high' as NotificationPriority,
+      },
+    };
+
+    const config = statusConfig[params.status];
+
+    return this.create({
+      userId: params.userId,
+      type: config.type,
+      title: config.title,
+      message: config.message,
+      icon: config.icon,
+      actionUrl: '/dashboard/transactions',
+      actionData: {
+        amount: params.amount,
+        currency: params.currency,
+        status: params.status,
+        transactionId: params.transactionId,
+        destination: params.destination,
+      },
+      sourceService: 'wallet',
+      sourceId: params.transactionId,
+      priority: config.priority,
+    });
+  }
+
+  /**
+   * Send transfer notification
+   */
+  async sendTransferNotification(params: {
+    userId: string;
+    amount: number;
+    currency: string;
+    direction: 'received' | 'sent';
+    counterpartyName?: string;
+    transactionId: string;
+  }): Promise<Notification> {
+    const directionConfig = {
+      received: {
+        type: 'transfer_received' as NotificationType,
+        title: 'Transfer Received',
+        message: `You received ${params.currency} ${params.amount.toLocaleString()}${params.counterpartyName ? ` from ${params.counterpartyName}` : ''}.`,
+        icon: 'ArrowDownLeft',
+      },
+      sent: {
+        type: 'transfer_sent' as NotificationType,
+        title: 'Transfer Sent',
+        message: `You sent ${params.currency} ${params.amount.toLocaleString()}${params.counterpartyName ? ` to ${params.counterpartyName}` : ''}.`,
+        icon: 'ArrowUpRight',
+      },
+    };
+
+    const config = directionConfig[params.direction];
+
+    return this.create({
+      userId: params.userId,
+      type: config.type,
+      title: config.title,
+      message: config.message,
+      icon: config.icon,
+      actionUrl: '/dashboard/transactions',
+      actionData: {
+        amount: params.amount,
+        currency: params.currency,
+        direction: params.direction,
+        counterpartyName: params.counterpartyName,
+        transactionId: params.transactionId,
+      },
+      sourceService: 'wallet',
+      sourceId: params.transactionId,
+      priority: 'normal',
+    });
   }
 }
 

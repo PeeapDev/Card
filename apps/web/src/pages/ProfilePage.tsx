@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   User,
@@ -52,6 +53,9 @@ import { IdCardScanner } from '@/components/kyc/IdCardScanner';
 import { kycService, fileToBase64 } from '@/services/kyc.service';
 import { NFCAgentSettings } from '@/components/settings/NFCAgentSettings';
 import { BecomeMerchantCard } from '@/components/settings/BecomeMerchantCard';
+import { uploadService } from '@/services/upload.service';
+import { supabaseAdmin } from '@/lib/supabase';
+import { indexedDBService } from '@/services/indexeddb.service';
 
 // Animation variants
 const containerVariants = {
@@ -113,6 +117,10 @@ export function ProfilePage() {
   const [phone, setPhone] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
+  // Avatar upload state
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
+
   // Password change states
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -160,8 +168,17 @@ export function ProfilePage() {
       setFirstName(user.firstName || '');
       setLastName(user.lastName || '');
       setPhone(user.phone || '');
+      // Load avatar from user or cached
+      if (user.profilePicture) {
+        setAvatarUrl(user.profilePicture);
+      } else {
+        // Try to get cached avatar
+        indexedDBService.getSetting<string>(`avatar_${user.id}`).then((cached) => {
+          if (cached) setAvatarUrl(cached);
+        });
+      }
     }
-  }, [user?.id]);
+  }, [user?.id, user?.profilePicture]);
 
   const loadWallets = async () => {
     if (!user?.id) return;
@@ -175,6 +192,53 @@ export function ProfilePage() {
 
     if (!error && data) {
       setWallets(data);
+    }
+  };
+
+  // Handle avatar upload
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user?.id) return;
+
+    setIsUploadingAvatar(true);
+    setMessage(null);
+
+    try {
+      // Upload to Supabase Storage
+      const result = await uploadService.uploadImage(file, 'user-avatars');
+
+      if (result.success && result.url) {
+        // Update database using supabaseAdmin (bypasses RLS)
+        const { error: dbError } = await supabaseAdmin
+          .from('users')
+          .update({
+            profile_picture: result.url,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', user.id);
+
+        if (dbError) {
+          throw new Error(dbError.message);
+        }
+
+        // Update local state
+        setAvatarUrl(result.url);
+
+        // Cache to IndexedDB
+        await indexedDBService.saveSetting(`avatar_${user.id}`, result.url);
+
+        setMessage({ type: 'success', text: 'Profile picture updated successfully!' });
+
+        // Refresh user to update context (await to ensure header updates)
+        if (refreshUser) await refreshUser();
+      }
+    } catch (error: any) {
+      console.error('Avatar upload error:', error);
+      setMessage({ type: 'error', text: error.message || 'Failed to upload profile picture' });
+    } finally {
+      setIsUploadingAvatar(false);
+      // Clear the input so the same file can be selected again
+      event.target.value = '';
     }
   };
 
@@ -252,8 +316,8 @@ export function ProfilePage() {
       icon: CheckCircle,
       color: 'text-green-600',
       bg: 'bg-green-50',
-      label: 'Approved',
-      description: 'Your identity has been approved. You have full access to all features.',
+      label: 'Verified',
+      description: 'Your identity has been verified. You have full access to all features.',
     },
     REJECTED: {
       icon: AlertCircle,
@@ -645,13 +709,37 @@ export function ProfilePage() {
         <motion.div variants={itemVariants}>
           <MotionCard className="p-6" glowEffect>
               <div className="flex flex-col sm:flex-row items-start gap-6">
-                {/* Avatar */}
-                <div className="relative">
+                {/* Avatar with Upload */}
+                <div className="relative group">
                   <ProfileAvatar
                     firstName={user?.firstName}
                     lastName={user?.lastName}
+                    profilePicture={avatarUrl}
                     size="xl"
                     className="w-24 h-24"
+                  />
+                  {/* Upload overlay */}
+                  <label
+                    htmlFor="avatar-upload"
+                    className={clsx(
+                      'absolute inset-0 flex items-center justify-center rounded-full cursor-pointer transition-all',
+                      'bg-black/0 group-hover:bg-black/50',
+                      isUploadingAvatar && 'bg-black/50'
+                    )}
+                  >
+                    {isUploadingAvatar ? (
+                      <Loader2 className="w-8 h-8 text-white animate-spin" />
+                    ) : (
+                      <Camera className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                    )}
+                  </label>
+                  <input
+                    type="file"
+                    id="avatar-upload"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    onChange={handleAvatarUpload}
+                    disabled={isUploadingAvatar}
+                    className="hidden"
                   />
                   {isVerified && (
                     <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center border-4 border-white dark:border-gray-800">
@@ -950,6 +1038,29 @@ export function ProfilePage() {
           </MotionCard>
         </motion.div>
         </div>
+
+        {/* Settings Link Card */}
+        <motion.div variants={itemVariants}>
+          <MotionCard className="p-6" delay={0.28} glowEffect>
+            <Link
+              to="/settings"
+              className="flex items-center justify-between group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+                  <ChevronRight className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-white">Settings</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Manage apps, payment preferences, notifications, and security
+                  </p>
+                </div>
+              </div>
+              <ChevronRight className="w-6 h-6 text-gray-400 group-hover:text-primary-600 transition-colors" />
+            </Link>
+          </MotionCard>
+        </motion.div>
 
         {/* Account Limits - Full Width */}
         <motion.div variants={itemVariants}>

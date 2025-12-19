@@ -9,6 +9,7 @@ import {
   notifyPayoutCompleted,
   notifyPaymentFailed,
 } from '@/services/push-notification.service';
+import { notificationService } from '@/services/notification.service';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from './AuthContext';
 
@@ -31,7 +32,7 @@ export interface Notification {
 
 export interface InAppNotification {
   id: string;
-  type: 'transaction' | 'payment' | 'system' | 'promo' | 'security' | 'driver_payment' | 'merchant_sale';
+  type: 'transaction' | 'payment' | 'system' | 'promo' | 'security' | 'driver_payment' | 'merchant_sale' | 'deposit' | 'withdrawal' | 'transfer';
   title: string;
   message: string;
   read: boolean;
@@ -154,7 +155,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   // Initialize push notifications
-  const initializePush = useCallback(async () => {
+  const initializePush = useCallback(async (userId?: string) => {
     const permission = pushNotificationService.getPermissionStatus();
     setPushPermission(permission);
     setIsPushEnabled(permission === 'granted');
@@ -162,15 +163,34 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     // Load preferences
     const prefs = await pushNotificationService.getPreferences();
     setPushPreferences(prefs);
+
+    // Get and save FCM token if permission granted and userId provided
+    if (permission === 'granted' && userId) {
+      try {
+        await pushNotificationService.getFcmToken(userId);
+      } catch (error) {
+        console.error('[NotificationContext] Failed to get FCM token:', error);
+      }
+    }
   }, []);
 
-  // Request push permission
+  // Request push permission and get FCM token
   const requestPushPermission = useCallback(async (): Promise<boolean> => {
     const granted = await pushNotificationService.initialize();
     setPushPermission(pushNotificationService.getPermissionStatus());
     setIsPushEnabled(granted);
+
+    // Get and save FCM token if permission granted
+    if (granted && user?.id) {
+      try {
+        await pushNotificationService.getFcmToken(user.id);
+      } catch (error) {
+        console.error('[NotificationContext] Failed to get FCM token:', error);
+      }
+    }
+
     return granted;
-  }, []);
+  }, [user?.id]);
 
   // Send test push notification
   const sendTestPush = useCallback(async () => {
@@ -213,180 +233,420 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user?.id) return;
 
-    initializePush();
+    // Auto-request notification permission on login
+    const setupNotifications = async () => {
+      const permission = pushNotificationService.getPermissionStatus();
+      console.log('[NotificationContext] Current permission status:', permission);
 
-    // Subscribe to transactions where user is recipient (payments received)
-    const transactionSubscription = supabase
-      .channel('user-transactions')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'transactions',
-          filter: `recipient_id=eq.${user.id}`,
-        },
-        (payload) => {
-          const tx = payload.new as any;
-
-          // Skip if already processed
-          if (processedTransactionsRef.current.has(tx.id)) return;
-          processedTransactionsRef.current.add(tx.id);
-
-          // Determine notification type based on transaction
-          const isDriverPayment = tx.metadata?.collectionType === 'driver';
-          const isMerchantSale = tx.metadata?.type === 'merchant_sale' || tx.type === 'merchant_payment';
-
-          if (isDriverPayment) {
-            notifyDriverPayment(tx.amount, tx.currency || 'SLE');
-            addNotification({
-              type: 'driver_payment',
-              title: 'Fare Collected!',
-              message: `You received ${tx.currency || 'SLE'} ${tx.amount?.toLocaleString()} for your trip`,
-              data: { ...tx, url: '/merchant/driver-wallet' },
-            });
-            // Show toast with deep link
-            showToast({
-              type: 'success',
-              title: 'Fare Collected!',
-              message: `You received ${tx.currency || 'SLE'} ${tx.amount?.toLocaleString()}`,
-              duration: 8000,
-              deepLink: '/merchant/driver-wallet',
-              action: { label: 'View Driver Wallet' },
-            });
-          } else if (isMerchantSale) {
-            notifyMerchantSale(tx.amount, tx.currency || 'SLE', tx.payment_method || 'QR');
-            addNotification({
-              type: 'merchant_sale',
-              title: 'New Sale!',
-              message: `${tx.currency || 'SLE'} ${tx.amount?.toLocaleString()} received via ${tx.payment_method || 'payment'}`,
-              data: { ...tx, url: '/merchant/transactions' },
-            });
-            // Show toast with deep link
-            showToast({
-              type: 'success',
-              title: 'New Sale!',
-              message: `${tx.currency || 'SLE'} ${tx.amount?.toLocaleString()} received`,
-              duration: 8000,
-              deepLink: '/merchant/transactions',
-              action: { label: 'View Transaction' },
-            });
-          } else {
-            notifyPaymentReceived(tx.amount, tx.currency || 'SLE', tx.sender_name || 'Someone');
-            addNotification({
-              type: 'payment',
-              title: 'Payment Received',
-              message: `You received ${tx.currency || 'SLE'} ${tx.amount?.toLocaleString()}`,
-              data: { ...tx, url: '/dashboard/transactions' },
-            });
-            // Show toast with deep link
-            showToast({
-              type: 'success',
-              title: 'Payment Received!',
-              message: `You received ${tx.currency || 'SLE'} ${tx.amount?.toLocaleString()}`,
-              duration: 8000,
-              deepLink: '/dashboard/transactions',
-              action: { label: 'View Transaction' },
-            });
+      // If permission not yet requested, ask user
+      if (permission === 'default') {
+        console.log('[NotificationContext] Will request permission in 2 seconds...');
+        // Small delay to not interrupt initial page load
+        setTimeout(async () => {
+          console.log('[NotificationContext] Requesting notification permission...');
+          const granted = await pushNotificationService.initialize();
+          console.log('[NotificationContext] Permission granted:', granted);
+          if (granted) {
+            const token = await pushNotificationService.getFcmToken(user.id);
+            console.log('[NotificationContext] FCM token:', token ? 'obtained' : 'failed');
           }
-        }
-      )
-      .subscribe();
+        }, 2000);
+      } else if (permission === 'granted') {
+        console.log('[NotificationContext] Permission already granted, getting FCM token...');
+        const token = await pushNotificationService.getFcmToken(user.id);
+        console.log('[NotificationContext] FCM token:', token ? 'obtained' : 'failed');
+      } else {
+        console.log('[NotificationContext] Notifications blocked or unsupported');
+      }
+    };
 
-    subscriptionsRef.current.push(transactionSubscription);
+    setupNotifications();
+    initializePush(user.id);
 
-    // Subscribe to checkout sessions (for merchants)
-    const checkoutSubscription = supabase
-      .channel('checkout-sessions')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'checkout_sessions',
-          filter: `merchant_id=eq.${user.id}`,
-        },
-        (payload) => {
-          const session = payload.new as any;
+    // Setup subscriptions with wallet ID
+    const setupSubscriptions = async () => {
+      // Get user's primary wallet
+      const { data: wallets } = await supabase
+        .from('wallets')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('wallet_type', 'primary');
 
-          // Only notify on completed payments
-          if (session.status === 'completed' && payload.old?.status !== 'completed') {
-            const amount = session.amount;
-            const currency = session.currency || 'SLE';
+      const userWalletIds = wallets?.map(w => w.id) || [];
 
-            notifyMerchantSale(amount, currency, session.payment_method || 'QR');
-            addNotification({
-              type: 'merchant_sale',
-              title: 'Payment Received!',
-              message: `${currency} ${amount?.toLocaleString()} checkout completed`,
-              data: session,
-            });
+      if (userWalletIds.length === 0) {
+        console.warn('[NotificationContext] No wallets found for user, skipping transaction subscription');
+        return;
+      }
 
-            showToast({
-              type: 'success',
-              title: 'Payment Received!',
-              message: `${currency} ${amount?.toLocaleString()}`,
-            });
+      const primaryWalletId = userWalletIds[0];
+
+      // Subscribe to transactions for user's wallet
+      // Transaction types: PAYMENT_RECEIVED, TRANSFER, PAYMENT, MOBILE_MONEY_SEND, REFUND
+      const walletTransactionSubscription = supabase
+        .channel('user-wallet-transactions')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'transactions',
+            filter: `wallet_id=eq.${primaryWalletId}`,
+          },
+          (payload) => {
+            const tx = payload.new as any;
+            const rawAmount = tx.amount;
+            const amount = Math.abs(rawAmount);
+            const currency = tx.currency || 'SLE';
+            const type = tx.type;
+            const description = tx.description || '';
+            const merchantName = tx.merchant_name || tx.metadata?.sender_name || tx.metadata?.recipient_name || '';
+
+            // Skip if already processed
+            if (processedTransactionsRef.current.has(tx.id)) return;
+            processedTransactionsRef.current.add(tx.id);
+
+            // Determine notification type based on transaction metadata
+            const isDriverPayment = tx.metadata?.collectionType === 'driver';
+            const isMerchantSale = tx.metadata?.type === 'merchant_sale' || type === 'merchant_payment';
+
+            // Handle based on transaction type
+            if (isDriverPayment) {
+              notifyDriverPayment(amount, currency);
+              addNotification({
+                type: 'driver_payment',
+                title: 'Fare Collected!',
+                message: `You received ${currency} ${amount?.toLocaleString()} for your trip`,
+                data: { ...tx, url: '/merchant/driver-wallet' },
+              });
+              showToast({
+                type: 'success',
+                title: 'Fare Collected!',
+                message: `You received ${currency} ${amount?.toLocaleString()}`,
+                duration: 8000,
+                deepLink: '/merchant/driver-wallet',
+                action: { label: 'View Driver Wallet' },
+              });
+            } else if (isMerchantSale) {
+              notifyMerchantSale(amount, currency, tx.payment_method || 'QR');
+              addNotification({
+                type: 'merchant_sale',
+                title: 'New Sale!',
+                message: `${currency} ${amount?.toLocaleString()} received via ${tx.payment_method || 'payment'}`,
+                data: { ...tx, url: '/merchant/transactions' },
+              });
+              showToast({
+                type: 'success',
+                title: 'New Sale!',
+                message: `${currency} ${amount?.toLocaleString()} received`,
+                duration: 8000,
+                deepLink: '/merchant/transactions',
+                action: { label: 'View Transaction' },
+              });
+            } else if (type === 'PAYMENT_RECEIVED') {
+              notifyPaymentReceived(amount, currency, merchantName || 'Someone');
+              addNotification({
+                type: 'payment',
+                title: 'Payment Received',
+                message: `${currency} ${amount?.toLocaleString()} received${merchantName ? ` from ${merchantName}` : ''}`,
+                data: { ...tx, url: '/dashboard/transactions' },
+              });
+              showToast({
+                type: 'success',
+                title: 'Payment Received!',
+                message: `${currency} ${amount?.toLocaleString()} received`,
+                duration: 8000,
+                deepLink: '/dashboard/transactions',
+                action: { label: 'View Transaction' },
+              });
+              notificationService.sendPaymentReceived({
+                userId: user.id,
+                amount: amount || 0,
+                currency,
+                senderName: merchantName || 'Someone',
+                transactionId: tx.id,
+              }).catch(console.error);
+            } else if (type === 'TRANSFER') {
+              // Positive = received, negative = sent
+              const isReceived = rawAmount > 0;
+              const counterparty = isReceived ? tx.metadata?.sender_name : tx.metadata?.recipient_name;
+
+              if (isReceived) {
+                notifyPaymentReceived(amount, currency, counterparty || 'Someone');
+              }
+
+              addNotification({
+                type: 'transfer',
+                title: isReceived ? 'Transfer Received' : 'Transfer Sent',
+                message: `${currency} ${amount?.toLocaleString()} ${isReceived ? 'received from' : 'sent to'} ${counterparty || 'user'}`,
+                data: { ...tx, url: '/dashboard/transactions' },
+              });
+              showToast({
+                type: isReceived ? 'success' : 'info',
+                title: isReceived ? 'Transfer Received!' : 'Transfer Sent',
+                message: `${currency} ${amount?.toLocaleString()} ${isReceived ? 'received' : 'sent'}`,
+                duration: 8000,
+                deepLink: '/dashboard/transactions',
+                action: { label: 'View Transaction' },
+              });
+              notificationService.sendTransferNotification({
+                userId: user.id,
+                amount: amount || 0,
+                currency,
+                direction: isReceived ? 'received' : 'sent',
+                counterpartyName: counterparty || description,
+                transactionId: tx.id,
+              }).catch(console.error);
+            } else if (type === 'PAYMENT') {
+              addNotification({
+                type: 'payment',
+                title: 'Payment Sent',
+                message: `${currency} ${amount?.toLocaleString()} sent${merchantName ? ` to ${merchantName}` : ''}`,
+                data: { ...tx, url: '/dashboard/transactions' },
+              });
+              showToast({
+                type: 'info',
+                title: 'Payment Sent',
+                message: `${currency} ${amount?.toLocaleString()} sent`,
+                duration: 5000,
+                deepLink: '/dashboard/transactions',
+                action: { label: 'View Transaction' },
+              });
+              notificationService.sendPaymentSent({
+                userId: user.id,
+                amount: amount || 0,
+                currency,
+                recipientName: merchantName || 'Recipient',
+                transactionId: tx.id,
+              }).catch(console.error);
+            } else if (type === 'MOBILE_MONEY_SEND') {
+              addNotification({
+                type: 'withdrawal',
+                title: 'Mobile Money Sent',
+                message: `${currency} ${amount?.toLocaleString()} sent to mobile money`,
+                data: { ...tx, url: '/dashboard/transactions' },
+              });
+              showToast({
+                type: 'success',
+                title: 'Mobile Money Sent',
+                message: `${currency} ${amount?.toLocaleString()} sent`,
+                duration: 8000,
+                deepLink: '/dashboard/transactions',
+                action: { label: 'View Transaction' },
+              });
+              notificationService.sendWithdrawalNotification({
+                userId: user.id,
+                amount: amount || 0,
+                currency,
+                status: 'completed',
+                transactionId: tx.id,
+                destination: 'Mobile Money',
+              }).catch(console.error);
+            } else if (type === 'REFUND') {
+              addNotification({
+                type: 'payment',
+                title: 'Refund Received',
+                message: `${currency} ${amount?.toLocaleString()} refunded${merchantName ? ` from ${merchantName}` : ''}`,
+                data: { ...tx, url: '/dashboard/transactions' },
+              });
+              showToast({
+                type: 'success',
+                title: 'Refund Received!',
+                message: `${currency} ${amount?.toLocaleString()} refunded`,
+                duration: 8000,
+                deepLink: '/dashboard/transactions',
+                action: { label: 'View Transaction' },
+              });
+            } else if (type === 'DEPOSIT') {
+              // Handle deposit notifications
+              addNotification({
+                type: 'deposit',
+                title: 'Deposit Received',
+                message: `${currency} ${amount?.toLocaleString()} deposited to your wallet`,
+                data: { ...tx, url: '/dashboard/transactions' },
+              });
+              showToast({
+                type: 'success',
+                title: 'Deposit Successful!',
+                message: `${currency} ${amount?.toLocaleString()} added to your wallet`,
+                duration: 8000,
+                deepLink: '/dashboard/transactions',
+                action: { label: 'View Transaction' },
+              });
+              notificationService.sendDepositNotification({
+                userId: user.id,
+                amount: amount || 0,
+                currency,
+                status: 'completed',
+                transactionId: tx.id,
+              }).catch(console.error);
+            } else if (type === 'CASHOUT') {
+              // User withdrawal/cashout
+              addNotification({
+                type: 'withdrawal',
+                title: 'Cashout Initiated',
+                message: `${currency} ${amount?.toLocaleString()} cashout to mobile money`,
+                data: { ...tx, url: '/dashboard/transactions' },
+              });
+              showToast({
+                type: 'info',
+                title: 'Cashout Initiated',
+                message: `${currency} ${amount?.toLocaleString()} being sent to your mobile money`,
+                duration: 8000,
+                deepLink: '/dashboard/transactions',
+                action: { label: 'View Transaction' },
+              });
+            } else if (type === 'MERCHANT_WITHDRAWAL') {
+              // Merchant withdrawal
+              addNotification({
+                type: 'withdrawal',
+                title: 'Withdrawal Initiated',
+                message: `${currency} ${amount?.toLocaleString()} withdrawal requested`,
+                data: { ...tx, url: '/merchant/payouts' },
+              });
+              showToast({
+                type: 'info',
+                title: 'Withdrawal Initiated',
+                message: `${currency} ${amount?.toLocaleString()} withdrawal processing`,
+                duration: 8000,
+                deepLink: '/merchant/payouts',
+                action: { label: 'View Payouts' },
+              });
+            } else if (type === 'CARD_PURCHASE') {
+              // Card purchase
+              addNotification({
+                type: 'payment',
+                title: 'Card Purchased',
+                message: `Virtual card purchased for ${currency} ${amount?.toLocaleString()}`,
+                data: { ...tx, url: '/dashboard/cards' },
+              });
+              showToast({
+                type: 'success',
+                title: 'Card Purchased!',
+                message: `Your new card is ready`,
+                duration: 8000,
+                deepLink: '/dashboard/cards',
+                action: { label: 'View Cards' },
+              });
+            } else if (type === 'PAYMENT_SENT') {
+              // Outgoing payment
+              addNotification({
+                type: 'payment',
+                title: 'Payment Sent',
+                message: `${currency} ${amount?.toLocaleString()} sent${merchantName ? ` to ${merchantName}` : ''}`,
+                data: { ...tx, url: '/dashboard/transactions' },
+              });
+              showToast({
+                type: 'info',
+                title: 'Payment Sent',
+                message: `${currency} ${amount?.toLocaleString()} sent successfully`,
+                duration: 5000,
+                deepLink: '/dashboard/transactions',
+                action: { label: 'View Transaction' },
+              });
+            }
           }
-        }
-      )
-      .subscribe();
+        )
+        .subscribe();
 
-    subscriptionsRef.current.push(checkoutSubscription);
+      subscriptionsRef.current.push(walletTransactionSubscription);
 
-    // Subscribe to payouts (for merchants)
-    const payoutSubscription = supabase
-      .channel('user-payouts')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'payouts',
-          filter: `user_id=eq.${user.id}`,
-        },
-        (payload) => {
-          const payout = payload.new as any;
-          const amount = payout.amount;
-          const currency = payout.currency || 'SLE';
+      // Subscribe to checkout sessions (for merchants)
+      const checkoutSubscription = supabase
+        .channel('checkout-sessions')
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'checkout_sessions',
+            filter: `merchant_id=eq.${user.id}`,
+          },
+          (payload) => {
+            const session = payload.new as any;
 
-          if (payout.status === 'completed' && payload.old?.status !== 'completed') {
-            notifyPayoutCompleted(amount, currency, payout.destination || 'bank');
-            addNotification({
-              type: 'payment',
-              title: 'Payout Completed',
-              message: `${currency} ${amount?.toLocaleString()} sent to ${payout.destination || 'your account'}`,
-              data: payout,
-            });
-            showToast({
-              type: 'success',
-              title: 'Payout Completed',
-              message: `${currency} ${amount?.toLocaleString()} sent`,
-            });
-          } else if (payout.status === 'failed' && payload.old?.status !== 'failed') {
-            notifyPaymentFailed(amount, payout.failure_reason || 'Unknown error');
-            addNotification({
-              type: 'payment',
-              title: 'Payout Failed',
-              message: `${currency} ${amount?.toLocaleString()} payout failed: ${payout.failure_reason || 'Unknown error'}`,
-              data: payout,
-            });
-            showToast({
-              type: 'error',
-              title: 'Payout Failed',
-              message: payout.failure_reason || 'Please try again',
-            });
+            // Only notify on completed payments
+            if (session.status === 'completed' && payload.old?.status !== 'completed') {
+              const amount = session.amount;
+              const currency = session.currency || 'SLE';
+
+              notifyMerchantSale(amount, currency, session.payment_method || 'QR');
+              addNotification({
+                type: 'merchant_sale',
+                title: 'Payment Received!',
+                message: `${currency} ${amount?.toLocaleString()} checkout completed`,
+                data: session,
+              });
+
+              showToast({
+                type: 'success',
+                title: 'Payment Received!',
+                message: `${currency} ${amount?.toLocaleString()}`,
+              });
+            }
           }
-        }
-      )
-      .subscribe();
+        )
+        .subscribe();
 
-    subscriptionsRef.current.push(payoutSubscription);
+      subscriptionsRef.current.push(checkoutSubscription);
+
+      // Subscribe to payouts (for merchants)
+      const payoutSubscription = supabase
+        .channel('user-payouts')
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'payouts',
+            filter: `user_id=eq.${user.id}`,
+          },
+          (payload) => {
+            const payout = payload.new as any;
+            const amount = payout.amount;
+            const currency = payout.currency || 'SLE';
+
+            if (payout.status === 'completed' && payload.old?.status !== 'completed') {
+              notifyPayoutCompleted(amount, currency, payout.destination || 'bank');
+              addNotification({
+                type: 'payment',
+                title: 'Payout Completed',
+                message: `${currency} ${amount?.toLocaleString()} sent to ${payout.destination || 'your account'}`,
+                data: payout,
+              });
+              showToast({
+                type: 'success',
+                title: 'Payout Completed',
+                message: `${currency} ${amount?.toLocaleString()} sent`,
+              });
+            } else if (payout.status === 'failed' && payload.old?.status !== 'failed') {
+              notifyPaymentFailed(amount, payout.failure_reason || 'Unknown error');
+              addNotification({
+                type: 'payment',
+                title: 'Payout Failed',
+                message: `${currency} ${amount?.toLocaleString()} payout failed: ${payout.failure_reason || 'Unknown error'}`,
+                data: payout,
+              });
+              showToast({
+                type: 'error',
+                title: 'Payout Failed',
+                message: payout.failure_reason || 'Please try again',
+              });
+            }
+          }
+        )
+        .subscribe();
+
+      subscriptionsRef.current.push(payoutSubscription);
+    };
+
+    setupSubscriptions();
 
     // Cleanup
     return () => {
       subscriptionsRef.current.forEach((sub) => sub.unsubscribe());
       subscriptionsRef.current = [];
+      pushNotificationService.cleanup();
     };
   }, [user?.id, initializePush, addNotification, showToast]);
 

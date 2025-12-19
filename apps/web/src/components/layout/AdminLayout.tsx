@@ -25,7 +25,7 @@ import {
   DollarSign,
   ShoppingBag,
   ClipboardList,
-  PiggyBank,
+  Package,
   Banknote,
   ChevronDown,
   ChevronRight,
@@ -36,6 +36,7 @@ import {
   Puzzle,
   Mail,
   Wifi,
+  BellRing,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { AdminNotificationBell } from '@/components/ui/AdminNotificationBell';
@@ -79,7 +80,7 @@ const navSections: NavSection[] = [
     items: [
       { path: '/admin/accounts', label: 'Accounts', icon: Wallet },
       { path: '/admin/customers', label: 'Customers', icon: Users },
-      { path: '/admin/pots', label: 'Savings Pots', icon: PiggyBank },
+      { path: '/admin/pots', label: 'Cash Boxes', icon: Package },
       { path: '/admin/cards', label: 'Cards', icon: CreditCard },
       { path: '/admin/card-products', label: 'Card Products', icon: PackagePlus, badge: 'New', badgeColor: 'primary' },
       { path: '/admin/card-programs', label: 'Card Programs', icon: Layers },
@@ -120,6 +121,7 @@ const navSections: NavSection[] = [
       { path: '/admin/roles', label: 'Role Management', icon: UserCog },
       { path: '/admin/payment-settings', label: 'Payment Settings', icon: Settings },
       { path: '/admin/smtp-settings', label: 'SMTP / Email', icon: Mail },
+      { path: '/admin/push-notifications', label: 'Push Notifications', icon: BellRing },
       { path: '/admin/compliance', label: 'Compliance', icon: FileCheck, badge: 'Pending', badgeColor: 'yellow' },
     ],
   },

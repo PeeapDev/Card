@@ -1,14 +1,14 @@
 /**
- * Pot Detail Page
+ * Cash Box Detail Page
  *
- * Detailed view of a single pot with transactions and actions
+ * Detailed view of a single cash box with transactions and actions
  */
 
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft,
-  PiggyBank,
+  Package,
   ArrowUpRight,
   ArrowDownLeft,
   Settings,
@@ -137,9 +137,9 @@ export function PotDetailPage() {
     return (
       <MainLayout>
         <div className="text-center py-16">
-          <p className="text-gray-500">Pot not found</p>
+          <p className="text-gray-500">Cash Box not found</p>
           <Link to="/pots" className="text-primary-600 hover:text-primary-700 mt-4 inline-block">
-            Back to Pots
+            Back to Cash Boxes
           </Link>
         </div>
       </MainLayout>
@@ -166,7 +166,7 @@ export function PotDetailPage() {
                   className="w-10 h-10 rounded-full flex items-center justify-center"
                   style={{ backgroundColor: `${pot?.color || '#4F46E5'}15` }}
                 >
-                  <PiggyBank
+                  <Package
                     className="w-5 h-5"
                     style={{ color: pot?.color || '#4F46E5' }}
                   />
@@ -205,7 +205,7 @@ export function PotDetailPage() {
                     className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                   >
                     <Edit2 className="w-4 h-4" />
-                    Edit Pot
+                    Edit Cash Box
                   </button>
                   {pot?.autoDepositEnabled !== undefined && (
                     <button
@@ -227,7 +227,7 @@ export function PotDetailPage() {
                     className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
                   >
                     <Trash2 className="w-4 h-4" />
-                    Close Pot
+                    Close Cash Box
                   </button>
                 </div>
               </>
@@ -395,7 +395,7 @@ export function PotDetailPage() {
               {/* Details Card */}
               <Card>
                 <div className="p-6 space-y-4">
-                  <h3 className="font-semibold text-gray-900">Pot Details</h3>
+                  <h3 className="font-semibold text-gray-900">Cash Box Details</h3>
 
                   {pot.goalAmount && (
                     <div className="flex items-center justify-between">
@@ -573,7 +573,7 @@ export function PotDetailPage() {
             onClick={() => setShowCloseConfirm(false)}
           />
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Close Pot?</h2>
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">Close Cash Box?</h2>
             <p className="text-gray-600 mb-4">
               Are you sure you want to close "{pot.name}"?
               {pot.currentBalance > 0 && (
@@ -610,7 +610,7 @@ export function PotDetailPage() {
                     Closing...
                   </>
                 ) : (
-                  'Close Pot'
+                  'Close Cash Box'
                 )}
               </button>
             </div>

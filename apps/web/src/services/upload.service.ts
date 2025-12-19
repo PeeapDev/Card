@@ -1,9 +1,12 @@
 /**
  * Upload Service
  * Handles file uploads to Supabase Storage
+ *
+ * Note: We use supabaseAdmin because this app uses custom JWT auth,
+ * not Supabase Auth. auth.uid() returns NULL, so RLS policies fail.
  */
 
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase';
 
 // Configuration
 const UPLOAD_CONFIG = {
@@ -75,7 +78,7 @@ export const uploadService = {
 
     try {
       // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
+      const { data, error } = await supabaseAdmin.storage
         .from(UPLOAD_CONFIG.bucketName)
         .upload(filePath, file, {
           cacheControl: '3600',
@@ -88,7 +91,7 @@ export const uploadService = {
       }
 
       // Get the public URL
-      const { data: urlData } = supabase.storage
+      const { data: urlData } = supabaseAdmin.storage
         .from(UPLOAD_CONFIG.bucketName)
         .getPublicUrl(data.path);
 
@@ -143,7 +146,7 @@ export const uploadService = {
       const bucket = pathParts[0];
       const filePath = pathParts.slice(1).join('/');
 
-      const { error } = await supabase.storage
+      const { error } = await supabaseAdmin.storage
         .from(bucket)
         .remove([filePath]);
 
@@ -163,7 +166,7 @@ export const uploadService = {
    * Get the public URL for a file in Supabase Storage
    */
   getImageUrl(folder: string, filename: string): string {
-    const { data } = supabase.storage
+    const { data } = supabaseAdmin.storage
       .from(UPLOAD_CONFIG.bucketName)
       .getPublicUrl(`${folder}/${filename}`);
 
@@ -174,7 +177,7 @@ export const uploadService = {
    * List files in a folder
    */
   async listFiles(folder: string): Promise<string[]> {
-    const { data, error } = await supabase.storage
+    const { data, error } = await supabaseAdmin.storage
       .from(UPLOAD_CONFIG.bucketName)
       .list(folder);
 

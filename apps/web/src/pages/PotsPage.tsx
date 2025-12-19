@@ -1,13 +1,13 @@
 /**
- * Pots Page
+ * Cash Box Page
  *
- * Main page for viewing and managing savings pots
+ * Main page for viewing and managing cash boxes (savings)
  */
 
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  PiggyBank,
+  Package,
   Plus,
   Loader2,
   Search,
@@ -70,7 +70,7 @@ export function PotsPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Savings Pots</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Cash Box</h1>
             <p className="text-gray-500 mt-1">
               Create and manage locked savings goals
             </p>
@@ -80,7 +80,7 @@ export function PotsPage() {
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700 transition-colors"
           >
             <Plus className="w-5 h-5" />
-            Create Pot
+            Create Cash Box
           </button>
         </div>
 
@@ -89,7 +89,7 @@ export function PotsPage() {
           <Card>
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center">
-                <PiggyBank className="w-6 h-6 text-primary-600" />
+                <Package className="w-6 h-6 text-primary-600" />
               </div>
               <div>
                 <p className="text-sm text-gray-500">Total Savings</p>
@@ -120,7 +120,7 @@ export function PotsPage() {
                 <TrendingUp className="w-6 h-6 text-blue-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Active Pots</p>
+                <p className="text-sm text-gray-500">Active Cash Boxes</p>
                 <p className="text-xl font-bold text-gray-900">
                   {isLoading ? '...' : activePots}
                 </p>
@@ -151,7 +151,7 @@ export function PotsPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search pots..."
+              placeholder="Search cash boxes..."
               className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-300 focus:border-primary-500 focus:ring-primary-500 transition-colors"
             />
           </div>
@@ -183,7 +183,7 @@ export function PotsPage() {
           <div className="p-6 bg-red-50 rounded-xl flex items-start gap-4">
             <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0" />
             <div>
-              <h3 className="font-semibold text-red-800">Error loading pots</h3>
+              <h3 className="font-semibold text-red-800">Error loading cash boxes</h3>
               <p className="text-red-700 mt-1">{(error as Error).message}</p>
             </div>
           </div>
@@ -194,17 +194,17 @@ export function PotsPage() {
           <Card className="py-16">
             <div className="text-center">
               <div className="w-20 h-20 rounded-full bg-primary-100 flex items-center justify-center mx-auto mb-6">
-                <PiggyBank className="w-10 h-10 text-primary-600" />
+                <Package className="w-10 h-10 text-primary-600" />
               </div>
               <h3 className="text-xl font-semibold text-gray-900 mb-2">
                 {searchQuery || filterStatus !== 'all'
-                  ? 'No pots found'
-                  : 'No savings pots yet'}
+                  ? 'No cash boxes found'
+                  : 'No cash boxes yet'}
               </h3>
               <p className="text-gray-500 max-w-md mx-auto mb-6">
                 {searchQuery || filterStatus !== 'all'
                   ? 'Try adjusting your search or filter criteria.'
-                  : 'Start building your savings by creating your first pot. Set a goal, lock your funds, and watch your savings grow!'}
+                  : 'Start building your savings by creating your first cash box. Set a goal, lock your funds, and watch your savings grow!'}
               </p>
               {!searchQuery && filterStatus === 'all' && (
                 <button
@@ -212,14 +212,14 @@ export function PotsPage() {
                   className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700 transition-colors"
                 >
                   <Plus className="w-5 h-5" />
-                  Create Your First Pot
+                  Create Your First Cash Box
                 </button>
               )}
             </div>
           </Card>
         )}
 
-        {/* Pots Grid */}
+        {/* Cash Box Grid */}
         {!isLoading && !error && filteredPots.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredPots.map((pot) => (
@@ -236,7 +236,7 @@ export function PotsPage() {
         {settings && (
           <div className="text-center text-sm text-gray-500">
             <p>
-              Max {settings.maxPotsPerUser} pots per user •
+              Max {settings.maxPotsPerUser} cash boxes per user •
               Min lock period: {settings.minLockPeriodDays} days •
               Early withdrawal penalty: {settings.earlyWithdrawalPenaltyPercent}%
             </p>

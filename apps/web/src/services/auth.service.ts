@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import type { User, AuthTokens, LoginRequest, RegisterRequest, UserRole } from '@/types';
 import { normalizePhoneNumber } from '@/utils/phone';
-import { authenticator } from 'otplib';
+import { verifyTOTP } from '@/lib/totp';
 import { sessionService } from './session.service';
 
 export interface MfaRequiredResponse {
@@ -85,11 +85,8 @@ export const authService = {
         };
       }
 
-      // Verify MFA code
-      const isValidMfa = authenticator.verify({
-        token: data.mfaCode,
-        secret: dbUser.two_factor_secret,
-      });
+      // Verify MFA code using native browser TOTP implementation
+      const isValidMfa = await verifyTOTP(dbUser.two_factor_secret, data.mfaCode);
 
       if (!isValidMfa) {
         throw new Error('Invalid verification code');
@@ -111,6 +108,7 @@ export const authService = {
       firstName: dbUser.first_name,
       lastName: dbUser.last_name,
       phone: dbUser.phone,
+      profilePicture: dbUser.profile_picture || undefined,
       roles: userRoles,
       kycStatus: dbUser.kyc_status,
       kycTier: dbUser.kyc_tier,
@@ -192,6 +190,24 @@ export const authService = {
     if (error || !newUser) {
       console.error('Registration error:', error);
       throw new Error(error?.message || 'Failed to create user');
+    }
+
+    // Create primary wallet for new user
+    const walletExternalId = `wal_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const { error: walletError } = await supabase
+      .from('wallets')
+      .insert({
+        external_id: walletExternalId,
+        user_id: newUser.id,
+        balance: 0,
+        currency: 'SLE',
+        wallet_type: 'primary',
+        status: 'ACTIVE',
+      });
+
+    if (walletError) {
+      console.error('Failed to create wallet for new user:', walletError);
+      // Don't throw - user can still use the app, wallet can be created later
     }
 
     const user: User = {

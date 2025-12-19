@@ -4,6 +4,7 @@ import { AuthProvider } from '@/context/AuthContext';
 import { NFCProvider } from '@/hooks/useNFC';
 import { DeveloperModeProvider } from '@/context/DeveloperModeContext';
 import { AppsProvider } from '@/context/AppsContext';
+import { UserAppsProvider } from '@/context/UserAppsContext';
 import { NotificationProvider } from '@/context/NotificationContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { NotificationWrapper } from '@/components/ui/NotificationWrapper';
@@ -81,6 +82,7 @@ import { BusinessDetailPage } from '@/pages/admin/BusinessDetailPage';
 import { SupportTicketsPage } from '@/pages/admin/SupportTicketsPage';
 import { AdminNotificationsPage } from '@/pages/admin/AdminNotificationsPage';
 import { SmtpSettingsPage } from '@/pages/admin/SmtpSettingsPage';
+import { PushNotificationsPage } from '@/pages/admin/PushNotificationsPage';
 import SsoSettingsPage from '@/pages/admin/SsoSettingsPage';
 import { WebsiteAnalyticsPage } from '@/pages/admin/WebsiteAnalyticsPage';
 import { PaymentCheckoutPage } from '@/pages/PaymentCheckoutPage';
@@ -135,6 +137,14 @@ import { EventsSetupWizard, EventsListPage, EventFormPage, EventDetailsPage, Eve
 import { UserNotificationsPage } from '@/pages/UserNotificationsPage';
 // Staff POS
 import StaffPOSPage from '@/pages/user/StaffPOSPage';
+// User Events Pages
+import { UserEventsPage } from '@/pages/user/UserEventsPage';
+import { UserEventDetailPage } from '@/pages/user/UserEventDetailPage';
+import { MyTicketsPage } from '@/pages/user/MyTicketsPage';
+import { StaffEventScannerPage } from '@/pages/user/StaffEventScannerPage';
+// Settings and Cash Box
+import { SettingsPage } from '@/pages/SettingsPage';
+import { CashBoxSetupWizard } from '@/components/cashbox/CashBoxSetupWizard';
 // Agent Pages
 import { AgentDashboard } from '@/pages/agent/AgentDashboard';
 import { AgentNotificationsPage } from '@/pages/agent/AgentNotificationsPage';
@@ -174,6 +184,7 @@ function App() {
               <NotificationProvider>
                 <DeveloperModeProvider>
                   <AppsProvider>
+                    <UserAppsProvider>
                   <NotificationWrapper />
                   <AnalyticsTracker />
                 <Routes>
@@ -413,12 +424,79 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+              {/* Settings and Cash Box */}
+              <Route
+                path="/settings"
+                element={
+                  <ProtectedRoute>
+                    <SettingsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/cashbox/setup"
+                element={
+                  <ProtectedRoute>
+                    <CashBoxSetupWizard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/support"
+                element={
+                  <ProtectedRoute>
+                    <SupportPage />
+                  </ProtectedRoute>
+                }
+              />
               {/* Staff POS Route - For users who are staff at a merchant's POS */}
               <Route
                 path="/dashboard/pos"
                 element={
                   <ProtectedRoute>
                     <StaffPOSPage />
+                  </ProtectedRoute>
+                }
+              />
+              {/* User Events Routes */}
+              <Route
+                path="/events"
+                element={
+                  <ProtectedRoute>
+                    <UserEventsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/events/:eventId"
+                element={
+                  <ProtectedRoute>
+                    <UserEventDetailPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/my-tickets"
+                element={
+                  <ProtectedRoute>
+                    <MyTicketsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/staff-events/:eventId/scan"
+                element={
+                  <ProtectedRoute>
+                    <StaffEventScannerPage />
+                  </ProtectedRoute>
+                }
+              />
+              {/* Ticket validation - redirects from Scan to Pay when event ticket detected */}
+              <Route
+                path="/events/:eventId/validate/:ticketNumber"
+                element={
+                  <ProtectedRoute>
+                    <StaffEventScannerPage />
                   </ProtectedRoute>
                 }
               />
@@ -997,6 +1075,95 @@ function App() {
                   </RoleBasedRoute>
                 }
               />
+              {/* Events App Routes */}
+              <Route
+                path="/merchant/apps/events"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <EventsAppPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/events/setup"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <EventsSetupWizard />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/events"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <EventsListPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/events/create"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <EventFormPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/events/:eventId"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <EventDetailsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/events/:eventId/edit"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <EventFormPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/events/:eventId/tickets"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <EventTicketTypesPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/events/:eventId/staff"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <EventStaffPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/events/:eventId/scanner"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <EventScannerPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/events/:eventId/analytics"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <EventAnalyticsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/events/:eventId/wallet"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <EventWalletPage />
+                  </RoleBasedRoute>
+                }
+              />
               <Route
                 path="/merchant/*"
                 element={
@@ -1119,6 +1286,10 @@ function App() {
                   <Route path="/cashout" element={<ProtectedRoute><CashOutPage /></ProtectedRoute>} />
                   <Route path="/withdraw" element={<ProtectedRoute><WithdrawPage /></ProtectedRoute>} />
                   <Route path="/analytics" element={<ProtectedRoute><SpendingAnalyticsPage /></ProtectedRoute>} />
+                  {/* Settings and Cash Box */}
+                  <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+                  <Route path="/cashbox/setup" element={<ProtectedRoute><CashBoxSetupWizard /></ProtectedRoute>} />
+                  <Route path="/support" element={<ProtectedRoute><SupportPage /></ProtectedRoute>} />
 
                   {/* Marketplace Routes */}
                   <Route path="/marketplace" element={<MarketplacePage />} />
@@ -1160,6 +1331,7 @@ function App() {
                   <Route path="/admin/support" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><SupportTicketsPage /></RoleBasedRoute>} />
                   <Route path="/admin/notifications" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><AdminNotificationsPage /></RoleBasedRoute>} />
                   <Route path="/admin/smtp-settings" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><SmtpSettingsPage /></RoleBasedRoute>} />
+                  <Route path="/admin/push-notifications" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><PushNotificationsPage /></RoleBasedRoute>} />
                   <Route path="/admin/settings/sso" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><SsoSettingsPage /></RoleBasedRoute>} />
                   <Route path="/admin/analytics" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><WebsiteAnalyticsPage /></RoleBasedRoute>} />
 
@@ -1168,6 +1340,14 @@ function App() {
 
                   {/* Staff POS Route - For users who are staff at a merchant's POS */}
                   <Route path="/dashboard/pos" element={<ProtectedRoute><StaffPOSPage /></ProtectedRoute>} />
+
+                  {/* User Events Routes */}
+                  <Route path="/events" element={<ProtectedRoute><UserEventsPage /></ProtectedRoute>} />
+                  <Route path="/events/:eventId" element={<ProtectedRoute><UserEventDetailPage /></ProtectedRoute>} />
+                  <Route path="/my-tickets" element={<ProtectedRoute><MyTicketsPage /></ProtectedRoute>} />
+                  <Route path="/staff-events/:eventId/scan" element={<ProtectedRoute><StaffEventScannerPage /></ProtectedRoute>} />
+                  {/* Ticket validation - redirects from Scan to Pay when event ticket detected */}
+                  <Route path="/events/:eventId/validate/:ticketNumber" element={<ProtectedRoute><StaffEventScannerPage /></ProtectedRoute>} />
 
                   {/* Merchant Routes */}
                   <Route path="/merchant" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantDashboard /></RoleBasedRoute>} />
@@ -1246,6 +1426,7 @@ function App() {
               {/* Global 404 fallback for all modes */}
               <Route path="*" element={<NotFoundPage />} />
                 </Routes>
+                    </UserAppsProvider>
                 </AppsProvider>
                 </DeveloperModeProvider>
               </NotificationProvider>

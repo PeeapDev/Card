@@ -31,6 +31,8 @@ import {
   Loader2,
   X,
   Check,
+  Calendar,
+  Ticket,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useNavigate, Link } from 'react-router-dom';
@@ -60,6 +62,20 @@ const notificationIcons: Record<NotificationType, typeof Bell> = {
   refund_processed: RefreshCw,
   subscription_expiring: CreditCard,
   feature_unlock: Sparkles,
+  event_reminder: Calendar,
+  event_ticket_purchased: Ticket,
+  event_staff_invitation: UserPlus,
+  event_starting_soon: Clock,
+  event_cancelled: XCircle,
+  // Deposit/Withdrawal/Transfer types
+  deposit_received: ArrowDownLeft,
+  deposit_completed: CheckCircle,
+  deposit_failed: XCircle,
+  withdrawal_initiated: ArrowUpRight,
+  withdrawal_completed: CheckCircle,
+  withdrawal_failed: XCircle,
+  transfer_received: ArrowDownLeft,
+  transfer_sent: ArrowUpRight,
 };
 
 // Color mapping for notification types
@@ -83,6 +99,20 @@ const notificationColors: Record<NotificationType, string> = {
   refund_processed: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
   subscription_expiring: 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400',
   feature_unlock: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400',
+  event_reminder: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400',
+  event_ticket_purchased: 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400',
+  event_staff_invitation: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
+  event_starting_soon: 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400',
+  event_cancelled: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
+  // Deposit/Withdrawal/Transfer types
+  deposit_received: 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400',
+  deposit_completed: 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400',
+  deposit_failed: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
+  withdrawal_initiated: 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400',
+  withdrawal_completed: 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400',
+  withdrawal_failed: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
+  transfer_received: 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400',
+  transfer_sent: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
 };
 
 // Format relative time

@@ -1,12 +1,13 @@
 /**
  * Push Notification Service
  *
- * Handles push notifications using Web Push API
+ * Handles push notifications using Web Push API and Firebase Cloud Messaging
  * Supports both foreground and background notifications
- * Note: Firebase integration disabled - using native browser notifications only
  */
 
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase';
+import { getFirebaseMessaging, vapidKey, isFirebaseConfigured } from '@/lib/firebase';
+import { getToken, onMessage, Messaging } from 'firebase/messaging';
 
 // Notification types
 export type NotificationType =
@@ -161,6 +162,8 @@ class PushNotificationService {
   private fcmToken: string | null = null;
   private isSupported: boolean = false;
   private listeners: Map<string, (payload: NotificationPayload) => void> = new Map();
+  private messaging: Messaging | null = null;
+  private foregroundUnsubscribe: (() => void) | null = null;
 
   constructor() {
     this.checkSupport();
@@ -188,10 +191,224 @@ class PushNotificationService {
       const hasPermission = await this.requestPermission();
       if (!hasPermission) return false;
 
+      // Initialize Firebase messaging if configured
+      if (isFirebaseConfigured()) {
+        await this.initializeFirebaseMessaging();
+      }
+
       return true;
     } catch (error) {
       console.error('[Push] Failed to initialize:', error);
       return false;
+    }
+  }
+
+  /**
+   * Initialize Firebase Cloud Messaging
+   */
+  private async initializeFirebaseMessaging(): Promise<void> {
+    try {
+      // Register Firebase service worker first
+      await this.registerFirebaseServiceWorker();
+
+      // Get messaging instance
+      this.messaging = await getFirebaseMessaging();
+      if (!this.messaging) {
+        console.warn('[Push] Firebase messaging not available');
+        return;
+      }
+
+      // Set up foreground message handler
+      this.setupForegroundMessageHandler();
+
+      console.log('[Push] Firebase messaging initialized');
+    } catch (error) {
+      console.error('[Push] Failed to initialize Firebase messaging:', error);
+    }
+  }
+
+  /**
+   * Register Firebase service worker
+   */
+  private async registerFirebaseServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+    try {
+      // Register with root scope for Firebase messaging
+      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+      console.log('[Push] Firebase service worker registered, scope:', registration.scope);
+      return registration;
+    } catch (error) {
+      console.error('[Push] Failed to register Firebase SW:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Set up foreground message handler
+   */
+  private setupForegroundMessageHandler(): void {
+    if (!this.messaging) return;
+
+    this.foregroundUnsubscribe = onMessage(this.messaging, (payload) => {
+      console.log('[Push] Foreground message received:', payload);
+
+      // Extract notification data
+      const notification = payload.notification;
+      const data = payload.data || {};
+
+      if (notification) {
+        // Show local notification
+        this.showLocalNotification({
+          type: (data.type as NotificationType) || 'payment_received',
+          title: notification.title || 'Notification',
+          body: notification.body || '',
+          icon: notification.icon,
+          image: notification.image,
+          data: data as Record<string, any>,
+        });
+      }
+
+      // Notify listeners
+      this.notifyListeners({
+        type: (data.type as NotificationType) || 'payment_received',
+        title: notification?.title || 'Notification',
+        body: notification?.body || '',
+        data: data as Record<string, any>,
+      });
+    });
+  }
+
+  /**
+   * Get FCM token and save to database
+   */
+  async getFcmToken(userId?: string): Promise<string | null> {
+    // Check VAPID key
+    if (!vapidKey) {
+      console.warn('[Push] VAPID key not available');
+      return null;
+    }
+
+    try {
+      // Initialize Firebase messaging if not already done
+      if (!this.messaging) {
+        console.log('[Push] Initializing Firebase messaging for token...');
+        await this.initializeFirebaseMessaging();
+      }
+
+      if (!this.messaging) {
+        console.warn('[Push] Firebase messaging not available after init');
+        return null;
+      }
+
+      // Get service worker registration - wait for it to be ready
+      let registration = await navigator.serviceWorker.getRegistration();
+
+      if (!registration) {
+        console.log('[Push] Firebase SW not registered, registering now...');
+        registration = await this.registerFirebaseServiceWorker() ?? undefined;
+      }
+
+      if (!registration) {
+        console.warn('[Push] Firebase service worker registration failed');
+        return null;
+      }
+
+      // Wait for service worker to be ready
+      await navigator.serviceWorker.ready;
+
+      // Get FCM token
+      console.log('[Push] Getting FCM token...');
+      const token = await getToken(this.messaging, {
+        vapidKey,
+        serviceWorkerRegistration: registration,
+      });
+
+      if (token) {
+        this.fcmToken = token;
+        console.log('[Push] FCM token obtained successfully');
+
+        // Save token to database if userId provided
+        if (userId) {
+          await this.saveFcmTokenToDatabase(userId, token);
+        }
+      } else {
+        console.warn('[Push] No FCM token received');
+      }
+
+      return token;
+    } catch (error) {
+      console.error('[Push] Failed to get FCM token:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Save FCM token to Supabase database
+   */
+  async saveFcmTokenToDatabase(userId: string, token: string): Promise<void> {
+    try {
+      // Get device info
+      const deviceInfo = {
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        language: navigator.language,
+        screenWidth: window.screen.width,
+        screenHeight: window.screen.height,
+      };
+
+      // Upsert token (update if exists, insert if new)
+      const { error } = await supabaseAdmin
+        .from('fcm_tokens')
+        .upsert(
+          {
+            user_id: userId,
+            token,
+            device_info: deviceInfo,
+            platform: 'web',
+            is_active: true,
+            last_used_at: new Date().toISOString(),
+          },
+          {
+            onConflict: 'user_id,token',
+          }
+        );
+
+      if (error) {
+        console.error('[Push] Failed to save FCM token:', error);
+      } else {
+        console.log('[Push] FCM token saved to database');
+      }
+    } catch (error) {
+      console.error('[Push] Error saving FCM token:', error);
+    }
+  }
+
+  /**
+   * Delete FCM token from database (on logout)
+   */
+  async deleteFcmToken(userId: string): Promise<void> {
+    if (!this.fcmToken) return;
+
+    try {
+      await supabaseAdmin
+        .from('fcm_tokens')
+        .delete()
+        .eq('user_id', userId)
+        .eq('token', this.fcmToken);
+
+      console.log('[Push] FCM token deleted from database');
+      this.fcmToken = null;
+    } catch (error) {
+      console.error('[Push] Failed to delete FCM token:', error);
+    }
+  }
+
+  /**
+   * Cleanup on unmount
+   */
+  cleanup(): void {
+    if (this.foregroundUnsubscribe) {
+      this.foregroundUnsubscribe();
+      this.foregroundUnsubscribe = null;
     }
   }
 

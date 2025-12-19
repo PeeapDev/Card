@@ -24,6 +24,7 @@ interface AppsContextType {
   enableApp: (appId: string) => void;
   disableApp: (appId: string) => void;
   isLoading: boolean;
+  hasLoadedFromDB: boolean;
   refreshApps: () => Promise<void>;
 }
 
@@ -44,22 +45,12 @@ interface AppsProviderProps {
 }
 
 export function AppsProvider({ children }: AppsProviderProps) {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
-  const [enabledApps, setEnabledApps] = useState<Record<string, boolean>>(() => {
-    // Load from localStorage as initial value (cache)
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        return { ...DEFAULT_APPS, ...JSON.parse(stored) };
-      }
-    } catch (error) {
-      console.error('Error loading app settings from cache:', error);
-    }
-    return DEFAULT_APPS;
-  });
+  const [hasLoadedFromDB, setHasLoadedFromDB] = useState(false);
+  const [enabledApps, setEnabledApps] = useState<Record<string, boolean>>(DEFAULT_APPS);
 
-  // Load app states from database
+  // Load app states from database (primary source of truth)
   const loadAppsFromDatabase = useCallback(async () => {
     if (!user?.id) {
       setIsLoading(false);
@@ -77,33 +68,47 @@ export function AppsProvider({ children }: AppsProviderProps) {
       const eventsEnabled = await eventService.isEventsSetupCompleted(merchantId);
 
       // Update state with database values
-      setEnabledApps(prev => {
-        const newState = {
-          ...prev,
-          pos: posEnabled,
-          events: eventsEnabled,
-        };
+      const newState = {
+        ...DEFAULT_APPS,
+        pos: posEnabled,
+        events: eventsEnabled,
+      };
 
-        // Update localStorage cache
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
-        } catch (e) {
-          console.error('Error caching app settings:', e);
-        }
+      setEnabledApps(newState);
+      setHasLoadedFromDB(true);
 
-        return newState;
-      });
+      // Update localStorage cache for faster subsequent loads
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
+      } catch (e) {
+        console.error('Error caching app settings:', e);
+      }
     } catch (error) {
       console.error('Error loading app settings from database:', error);
+      // On error, try to load from localStorage cache as fallback
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          setEnabledApps({ ...DEFAULT_APPS, ...JSON.parse(stored) });
+        }
+      } catch (e) {
+        // If localStorage also fails, keep defaults
+        console.error('Error loading from cache fallback:', e);
+      }
+      setHasLoadedFromDB(true);
     } finally {
       setIsLoading(false);
     }
   }, [user?.id]);
 
-  // Load from database when user changes
+  // Load from database when user changes and auth is done loading
   useEffect(() => {
+    if (authLoading) {
+      // Wait for auth to finish before loading app settings
+      return;
+    }
     loadAppsFromDatabase();
-  }, [loadAppsFromDatabase]);
+  }, [loadAppsFromDatabase, authLoading]);
 
   const isAppEnabled = (appId: string): boolean => {
     return enabledApps[appId] ?? false;
@@ -230,6 +235,7 @@ export function AppsProvider({ children }: AppsProviderProps) {
         enableApp,
         disableApp,
         isLoading,
+        hasLoadedFromDB,
         refreshApps: loadAppsFromDatabase,
       }}
     >

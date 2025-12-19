@@ -1,25 +1,34 @@
 /**
  * Firebase Cloud Messaging Service Worker
  * Handles background push notifications
+ *
+ * SETUP INSTRUCTIONS:
+ * 1. Go to Firebase Console: https://console.firebase.google.com/
+ * 2. Create a project or select existing one
+ * 3. Go to Project Settings > General > Your apps > Add app > Web
+ * 4. Copy the firebaseConfig values below
+ * 5. Also add the same config to .env.local as VITE_FIREBASE_* variables
  */
 
 // Import Firebase scripts
 importScripts('https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js');
 
-// Initialize Firebase (config will be passed from main app)
-// These are placeholder values - actual config should come from environment
+// Firebase configuration - Peeap2025 project
 const firebaseConfig = {
-  apiKey: '',
-  authDomain: '',
-  projectId: '',
-  storageBucket: '',
-  messagingSenderId: '',
-  appId: '',
+  apiKey: 'AIzaSyC42eJgE3aJQZnCTPG08nXrX7Tv40Gje1k',
+  authDomain: 'peeap2025.firebaseapp.com',
+  projectId: 'peeap2025',
+  storageBucket: 'peeap2025.firebasestorage.app',
+  messagingSenderId: '1095173463432',
+  appId: '1:1095173463432:web:1364a76e1f4a79a0826e3d',
 };
 
+// Firebase is configured
+const isConfigured = true;
+
 // Only initialize if config is available
-if (firebaseConfig.apiKey) {
+if (isConfigured) {
   firebase.initializeApp(firebaseConfig);
   const messaging = firebase.messaging();
 
@@ -40,6 +49,8 @@ if (firebaseConfig.apiKey) {
 
     return self.registration.showNotification(notificationTitle, notificationOptions);
   });
+} else {
+  console.warn('[Firebase SW] Firebase not configured. Please update firebaseConfig in firebase-messaging-sw.js');
 }
 
 // Get notification actions based on type

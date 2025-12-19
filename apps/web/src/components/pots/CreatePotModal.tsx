@@ -1,13 +1,13 @@
 /**
- * Create Pot Modal Component
+ * Create Cash Box Modal Component
  *
- * A modal form for creating a new pot with all configuration options
+ * A modal form for creating a new cash box with all configuration options
  */
 
 import { useState, useEffect } from 'react';
 import {
   X,
-  PiggyBank,
+  Package,
   Target,
   Calendar,
   Repeat,
@@ -171,7 +171,7 @@ export function CreatePotModal({ isOpen, onClose, onSuccess }: CreatePotModalPro
     const newErrors: Record<string, string> = {};
 
     if (!formData.name.trim()) {
-      newErrors.name = 'Pot name is required';
+      newErrors.name = 'Cash box name is required';
     } else if (formData.name.length > 50) {
       newErrors.name = 'Name must be 50 characters or less';
     }
@@ -214,7 +214,7 @@ export function CreatePotModal({ isOpen, onClose, onSuccess }: CreatePotModalPro
       onSuccess?.();
       onClose();
     } catch (error: any) {
-      setErrors({ submit: error.message || 'Failed to create pot' });
+      setErrors({ submit: error.message || 'Failed to create cash box' });
     }
   };
 
@@ -234,10 +234,10 @@ export function CreatePotModal({ isOpen, onClose, onSuccess }: CreatePotModalPro
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
-              <PiggyBank className="w-5 h-5 text-primary-600" />
+              <Package className="w-5 h-5 text-primary-600" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Create New Pot</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Create Cash Box</h2>
               <p className="text-sm text-gray-500">Start saving towards your goal</p>
             </div>
           </div>
@@ -252,10 +252,10 @@ export function CreatePotModal({ isOpen, onClose, onSuccess }: CreatePotModalPro
         {/* Content */}
         <form onSubmit={handleSubmit} className="overflow-y-auto max-h-[calc(90vh-180px)]">
           <div className="p-6 space-y-6">
-            {/* Pot Name */}
+            {/* Cash Box Name */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Pot Name *
+                Cash Box Name *
               </label>
               <input
                 type="text"
@@ -636,7 +636,7 @@ export function CreatePotModal({ isOpen, onClose, onSuccess }: CreatePotModalPro
                     Creating...
                   </>
                 ) : (
-                  'Create Pot'
+                  'Create Cash Box'
                 )}
               </button>
             </div>

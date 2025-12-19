@@ -15,8 +15,9 @@
  * 5. After payment: Update checkout session and notify original page
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import confetti from 'canvas-confetti';
 import {
   CheckCircle,
   XCircle,
@@ -63,10 +64,67 @@ const CURRENCIES: Record<string, { symbol: string; name: string }> = {
   GBP: { symbol: '£', name: 'British Pound' },
 };
 
+// Play success sound using Web Audio API
+const playSuccessSound = () => {
+  try {
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    // Pleasant three-tone success sound (C5 → E5 → G5)
+    oscillator.frequency.setValueAtTime(523.25, audioContext.currentTime); // C5
+    oscillator.frequency.setValueAtTime(659.25, audioContext.currentTime + 0.1); // E5
+    oscillator.frequency.setValueAtTime(783.99, audioContext.currentTime + 0.2); // G5
+
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.5);
+  } catch (e) {
+    console.log('Could not play success sound');
+  }
+};
+
+// Fire confetti burst
+const fireSuccessConfetti = () => {
+  // Center burst
+  confetti({
+    particleCount: 100,
+    spread: 70,
+    origin: { y: 0.6 },
+    colors: ['#10B981', '#34D399', '#6EE7B7', '#FFD700', '#FFA500', '#FF6B6B'],
+  });
+  // Left burst
+  setTimeout(() => {
+    confetti({
+      particleCount: 50,
+      angle: 60,
+      spread: 55,
+      origin: { x: 0 },
+      colors: ['#10B981', '#34D399', '#6EE7B7'],
+    });
+  }, 150);
+  // Right burst
+  setTimeout(() => {
+    confetti({
+      particleCount: 50,
+      angle: 120,
+      spread: 55,
+      origin: { x: 1 },
+      colors: ['#10B981', '#34D399', '#6EE7B7'],
+    });
+  }, 300);
+};
+
 export function ScanPayPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const successEffectsTriggered = useRef(false);
 
   const [step, setStep] = useState<PaymentStep>('loading');
   const [session, setSession] = useState<CheckoutSession | null>(null);
@@ -571,42 +629,71 @@ export function ScanPayPage() {
 
   // Success state - auto redirect to merchant's successUrl or my.peeap.com dashboard
   if (step === 'success') {
-    // Auto redirect after 3 seconds
-    setTimeout(() => {
-      if (session?.successUrl) {
-        // Redirect to merchant's success URL with payment info
-        const url = new URL(session.successUrl);
-        url.searchParams.set('status', 'success');
-        url.searchParams.set('peeap_status', 'success');
-        url.searchParams.set('session_id', session.externalId || sessionId || '');
-        url.searchParams.set('amount', String(session.amount));
-        url.searchParams.set('currency', session.currencyCode);
-        url.searchParams.set('payment_method', 'scan_to_pay');
-        window.location.href = url.toString();
-      } else {
-        // No success URL - redirect to app dashboard
-        window.location.href = `${APP_URL}/dashboard`;
-      }
-    }, 3000);
+    // Trigger sound and confetti effects once
+    if (!successEffectsTriggered.current) {
+      successEffectsTriggered.current = true;
+      playSuccessSound();
+      fireSuccessConfetti();
+
+      // Auto redirect after 2 seconds (fast celebration)
+      setTimeout(() => {
+        if (session?.successUrl) {
+          // Redirect to merchant's success URL with payment info
+          const url = new URL(session.successUrl);
+          url.searchParams.set('status', 'success');
+          url.searchParams.set('peeap_status', 'success');
+          url.searchParams.set('session_id', session.externalId || sessionId || '');
+          url.searchParams.set('amount', String(session.amount));
+          url.searchParams.set('currency', session.currencyCode);
+          url.searchParams.set('payment_method', 'scan_to_pay');
+          window.location.href = url.toString();
+        } else {
+          // No success URL - redirect to app dashboard
+          window.location.href = `${APP_URL}/dashboard`;
+        }
+      }, 2000);
+    }
 
     return (
-      <div className="min-h-screen bg-gradient-to-b from-green-500 to-emerald-600 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 text-center">
-          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce">
-            <CheckCircle className="w-10 h-10 text-green-600" />
+      <div className="min-h-screen bg-gradient-to-br from-green-400 via-emerald-500 to-teal-600 flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 text-center animate-in zoom-in-95 duration-300">
+          {/* Animated checkmark */}
+          <div className="relative w-24 h-24 mx-auto mb-6">
+            <div className="absolute inset-0 bg-green-100 rounded-full animate-ping opacity-50"></div>
+            <div className="absolute inset-0 bg-green-100 rounded-full"></div>
+            <div className="absolute inset-2 bg-green-500 rounded-full flex items-center justify-center">
+              <CheckCircle className="w-12 h-12 text-white" />
+            </div>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Payment Successful!</h1>
+
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Thank You!</h1>
+          <p className="text-gray-600 mb-4">Payment Successful</p>
+
           {session && (
-            <p className="text-3xl font-bold text-green-600 mb-2">
-              {formatAmount(session.amount, session.currencyCode)}
-            </p>
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl p-4 mb-4">
+              <p className="text-4xl font-bold text-green-600 mb-1">
+                {formatAmount(session.amount, session.currencyCode)}
+              </p>
+              {session?.merchantName && (
+                <p className="text-gray-500 text-sm">Paid to {session.merchantName}</p>
+              )}
+            </div>
           )}
-          {session?.merchantName && (
-            <p className="text-gray-500 mb-4">Paid to {session.merchantName}</p>
-          )}
+
           <div className="flex items-center justify-center gap-2 text-gray-400 text-sm">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            <span>{session?.successUrl ? 'Redirecting to merchant...' : 'Redirecting to dashboard...'}</span>
+            <div className="flex space-x-1">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+            <span>{session?.successUrl ? `Returning to ${session.merchantName || 'merchant'}...` : 'Redirecting to dashboard...'}</span>
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-gray-100">
+            <div className="flex items-center justify-center gap-2 text-gray-400 text-xs">
+              <Shield className="w-3 h-3" />
+              <span>Secured by Peeap</span>
+            </div>
           </div>
         </div>
       </div>
