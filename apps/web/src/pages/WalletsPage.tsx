@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Wallet, Plus, ArrowDownRight, ArrowUpRight, MoreVertical, Snowflake, Send, QrCode, Copy, CheckCircle, Search, User, X, AlertCircle, PiggyBank, ChevronDown, Loader2, XCircle } from 'lucide-react';
+import { Wallet, Plus, ArrowDownRight, ArrowUpRight, MoreVertical, Snowflake, Send, QrCode, Copy, CheckCircle, Search, User, X, AlertCircle, PiggyBank, ChevronDown, Loader2, XCircle, ArrowLeftRight, Smartphone } from 'lucide-react';
 import { Card, CardHeader, CardTitle, Button } from '@/components/ui';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { CreatePotModal } from '@/components/pots';
@@ -8,10 +8,11 @@ import { useWallets, useCreateWallet, useDeposit, useTransfer, useFreezeWallet, 
 import { clsx } from 'clsx';
 import type { Wallet as WalletType } from '@/types';
 import { supabase } from '@/lib/supabase';
-import { monimeService, toMinorUnits } from '@/services/monime.service';
+import { monimeService } from '@/services/monime.service';
 import { PaymentQRCode } from '@/components/payment/PaymentQRCode';
 import { useAuth } from '@/context/AuthContext';
 import { currencyService, Currency } from '@/services/currency.service';
+import { walletService } from '@/services/wallet.service';
 
 interface Recipient {
   id: string;
@@ -94,12 +95,24 @@ export function WalletsPage() {
   const [showDepositModal, setShowDepositModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showReceiveModal, setShowReceiveModal] = useState(false);
+  const [showInternalTransferModal, setShowInternalTransferModal] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState<WalletType | null>(null);
   const [depositAmount, setDepositAmount] = useState('');
   const [depositLoading, setDepositLoading] = useState(false);
   const [depositError, setDepositError] = useState('');
   const [newWalletCurrency, setNewWalletCurrency] = useState<'USD' | 'SLE'>('SLE');
+  const [newWalletName, setNewWalletName] = useState('');
   const [createWalletError, setCreateWalletError] = useState('');
+
+  // Internal transfer state (between own wallets)
+  const [internalTransferAmount, setInternalTransferAmount] = useState('');
+  const [internalTransferTargetWallet, setInternalTransferTargetWallet] = useState<string>('');
+  const [internalTransferLoading, setInternalTransferLoading] = useState(false);
+  const [internalTransferError, setInternalTransferError] = useState('');
+  const [internalTransferSuccess, setInternalTransferSuccess] = useState(false);
+
+  // Wallet menu state
+  const [openMenuWalletId, setOpenMenuWalletId] = useState<string | null>(null);
 
   // Transfer state
   const [transferAmount, setTransferAmount] = useState('');
@@ -202,13 +215,91 @@ export function WalletsPage() {
   const handleCreateWallet = async () => {
     setCreateWalletError('');
     try {
-      await createWallet.mutateAsync({ currency: newWalletCurrency });
+      await createWallet.mutateAsync({
+        currency: newWalletCurrency,
+        name: newWalletName.trim() || undefined,
+      });
       setShowCreateModal(false);
       setNewWalletCurrency('SLE'); // Reset to default
+      setNewWalletName(''); // Reset name
     } catch (error: any) {
       console.error('Failed to create wallet:', error);
       setCreateWalletError(error.message || 'Failed to create wallet. Please try again.');
     }
+  };
+
+  // Handle internal transfer between own wallets
+  const handleInternalTransfer = async () => {
+    if (!selectedWallet || !internalTransferAmount || !internalTransferTargetWallet) return;
+
+    setInternalTransferError('');
+    setInternalTransferLoading(true);
+
+    const amount = parseFloat(internalTransferAmount);
+    if (amount <= 0) {
+      setInternalTransferError('Amount must be greater than 0');
+      setInternalTransferLoading(false);
+      return;
+    }
+    if (amount > selectedWallet.balance) {
+      setInternalTransferError('Insufficient balance');
+      setInternalTransferLoading(false);
+      return;
+    }
+
+    try {
+      await walletService.transferBetweenOwnWallets(
+        selectedWallet.id,
+        internalTransferTargetWallet,
+        amount,
+        `Transfer between wallets`
+      );
+
+      setInternalTransferSuccess(true);
+      refetch(); // Refresh wallet balances
+
+      setTimeout(() => {
+        setShowInternalTransferModal(false);
+        resetInternalTransferState();
+      }, 2000);
+    } catch (error: any) {
+      setInternalTransferError(error.message || 'Transfer failed. Please try again.');
+    } finally {
+      setInternalTransferLoading(false);
+    }
+  };
+
+  const resetInternalTransferState = () => {
+    setInternalTransferAmount('');
+    setInternalTransferTargetWallet('');
+    setInternalTransferError('');
+    setInternalTransferSuccess(false);
+    setSelectedWallet(null);
+  };
+
+  // Get wallet display name
+  const getWalletDisplayName = (wallet: any): string => {
+    if (wallet.name) return wallet.name;
+    if (wallet.walletType === 'primary' || !wallet.walletType) return 'Main Wallet';
+    if (wallet.walletType === 'driver') return 'Driver Wallet';
+    if (wallet.walletType === 'pos') return 'POS Wallet';
+    if (wallet.walletType === 'merchant') return 'Merchant Wallet';
+    return `${wallet.currency} Wallet`;
+  };
+
+  // Check if wallet is the primary/main wallet
+  const isPrimaryWallet = (wallet: any): boolean => {
+    return wallet.walletType === 'primary' || !wallet.walletType;
+  };
+
+  // Get other wallets for transfer (excluding current one)
+  const getOtherWallets = (currentWalletId: string) => {
+    return wallets?.filter(w => w.id !== currentWalletId && w.status === 'ACTIVE') || [];
+  };
+
+  // Check if wallet can send to general users (only main wallet can)
+  const canSendToUsers = (wallet: any): boolean => {
+    return isPrimaryWallet(wallet);
   };
 
   const handleDeposit = async () => {
@@ -224,9 +315,7 @@ export function WalletsPage() {
     setDepositError('');
 
     try {
-      // Convert to minor units (cents) for Monime
-      const amountInMinorUnits = toMinorUnits(amount);
-
+      // Send display amount - backend handles conversion to Monime format
       // Call our API endpoint to create Monime checkout session
       const response = await fetch('/api/monime/deposit', {
         method: 'POST',
@@ -235,7 +324,7 @@ export function WalletsPage() {
         },
         body: JSON.stringify({
           walletId: selectedWallet.id,
-          amount: amountInMinorUnits,
+          amount: amount, // Send display amount, backend converts
           currency: 'SLE',
           userId: user?.id,
           description: `Deposit to ${selectedWallet.currency} wallet`,
@@ -384,20 +473,108 @@ export function WalletsPage() {
                       />
                     </div>
                     <div className="ml-3">
-                      <p className="text-sm font-medium text-gray-900">{wallet.currency} Wallet</p>
-                      <p
-                        className={clsx(
-                          'text-xs',
-                          wallet.status === 'ACTIVE' ? 'text-green-600' : 'text-gray-500'
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-gray-900">{getWalletDisplayName(wallet)}</p>
+                        {isPrimaryWallet(wallet) && (
+                          <span className="px-1.5 py-0.5 text-xs font-medium bg-primary-100 text-primary-700 rounded">
+                            Main
+                          </span>
                         )}
-                      >
-                        {wallet.status}
-                      </p>
+                      </div>
+                      <p className="text-xs text-gray-500">{wallet.currency}</p>
                     </div>
                   </div>
-                  <button className="p-1 rounded hover:bg-gray-100">
-                    <MoreVertical className="w-5 h-5 text-gray-400" />
-                  </button>
+                  {/* Wallet menu */}
+                  <div className="relative">
+                    <button
+                      className="p-1 rounded hover:bg-gray-100"
+                      onClick={() => setOpenMenuWalletId(openMenuWalletId === wallet.id ? null : wallet.id)}
+                    >
+                      <MoreVertical className="w-5 h-5 text-gray-400" />
+                    </button>
+
+                    {openMenuWalletId === wallet.id && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-10"
+                          onClick={() => setOpenMenuWalletId(null)}
+                        />
+                        <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                          {/* Add Money option */}
+                          <button
+                            onClick={() => {
+                              setOpenMenuWalletId(null);
+                              setSelectedWallet(wallet);
+                              setShowDepositModal(true);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                            disabled={wallet.status !== 'ACTIVE'}
+                          >
+                            <ArrowDownRight className="w-4 h-4" />
+                            Add Money
+                          </button>
+
+                          {/* Transfer to another wallet */}
+                          {getOtherWallets(wallet.id).length > 0 && (
+                            <button
+                              onClick={() => {
+                                setOpenMenuWalletId(null);
+                                setSelectedWallet(wallet);
+                                setShowInternalTransferModal(true);
+                              }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                              disabled={wallet.status !== 'ACTIVE'}
+                            >
+                              <ArrowLeftRight className="w-4 h-4" />
+                              {isPrimaryWallet(wallet) ? 'Transfer to Other Wallet' : 'Transfer to Main Wallet'}
+                            </button>
+                          )}
+
+                          {/* Send to user - only for main wallet */}
+                          {canSendToUsers(wallet) && (
+                            <button
+                              onClick={() => {
+                                setOpenMenuWalletId(null);
+                                setSelectedWallet(wallet);
+                                setShowTransferModal(true);
+                              }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                              disabled={wallet.status !== 'ACTIVE'}
+                            >
+                              <Send className="w-4 h-4" />
+                              Send to User
+                            </button>
+                          )}
+
+                          {/* Receive */}
+                          <button
+                            onClick={() => {
+                              setOpenMenuWalletId(null);
+                              setSelectedWallet(wallet);
+                              setShowReceiveModal(true);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                            disabled={wallet.status !== 'ACTIVE'}
+                          >
+                            <QrCode className="w-4 h-4" />
+                            Receive
+                          </button>
+
+                          {/* Freeze/Unfreeze */}
+                          <button
+                            onClick={() => {
+                              setOpenMenuWalletId(null);
+                              handleFreeze(wallet);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          >
+                            <Snowflake className={clsx('w-4 h-4', wallet.status === 'FROZEN' ? 'text-blue-500' : '')} />
+                            {wallet.status === 'FROZEN' ? 'Unfreeze' : 'Freeze'}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 <div className="mb-4">
@@ -436,19 +613,36 @@ export function WalletsPage() {
                     <ArrowDownRight className="w-4 h-4 mr-1" />
                     Deposit
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1"
-                    onClick={() => {
-                      setSelectedWallet(wallet);
-                      setShowTransferModal(true);
-                    }}
-                    disabled={wallet.status !== 'ACTIVE'}
-                  >
-                    <ArrowUpRight className="w-4 h-4 mr-1" />
-                    Send
-                  </Button>
+                  {getOtherWallets(wallet.id).length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => {
+                        setSelectedWallet(wallet);
+                        setShowInternalTransferModal(true);
+                      }}
+                      disabled={wallet.status !== 'ACTIVE'}
+                    >
+                      <ArrowLeftRight className="w-4 h-4 mr-1" />
+                      Transfer
+                    </Button>
+                  )}
+                  {canSendToUsers(wallet) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => {
+                        setSelectedWallet(wallet);
+                        setShowTransferModal(true);
+                      }}
+                      disabled={wallet.status !== 'ACTIVE'}
+                    >
+                      <Send className="w-4 h-4 mr-1" />
+                      Send
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
@@ -460,19 +654,6 @@ export function WalletsPage() {
                     title="Receive Money"
                   >
                     <QrCode className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleFreeze(wallet)}
-                    title={wallet.status === 'FROZEN' ? 'Unfreeze' : 'Freeze'}
-                  >
-                    <Snowflake
-                      className={clsx(
-                        'w-4 h-4',
-                        wallet.status === 'FROZEN' ? 'text-blue-500' : 'text-gray-400'
-                      )}
-                    />
                   </Button>
                 </div>
               </Card>
@@ -504,7 +685,23 @@ export function WalletsPage() {
             <CardHeader>
               <CardTitle>Create New Wallet</CardTitle>
             </CardHeader>
-            <p className="text-gray-500 mb-4">Choose the currency for your new wallet.</p>
+            <p className="text-gray-500 mb-4">Name your wallet and choose the currency.</p>
+
+            {/* Wallet Name Input */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Wallet Name
+              </label>
+              <input
+                type="text"
+                value={newWalletName}
+                onChange={(e) => setNewWalletName(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                placeholder="e.g., My Savings, Business Wallet"
+                maxLength={50}
+              />
+              <p className="text-xs text-gray-400 mt-1">Optional - leave blank for default name</p>
+            </div>
 
             {/* Currency Selection */}
             <div className="mb-6 space-y-3">
@@ -569,12 +766,13 @@ export function WalletsPage() {
                   setShowCreateModal(false);
                   setCreateWalletError('');
                   setNewWalletCurrency('SLE');
+                  setNewWalletName('');
                 }}
               >
                 Cancel
               </Button>
               <Button className="flex-1" onClick={handleCreateWallet} isLoading={createWallet.isPending}>
-                Create {newWalletCurrency} Wallet
+                Create Wallet
               </Button>
             </div>
           </Card>
@@ -652,11 +850,11 @@ export function WalletsPage() {
               </div>
 
               {/* Payment Notice */}
-              <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+              <div className="p-3 bg-primary-50 border border-primary-200 rounded-lg">
                 <div className="flex items-start gap-2">
-                  <ArrowDownRight className="w-4 h-4 text-orange-600 mt-0.5" />
-                  <p className="text-sm text-orange-800">
-                    Add money with Orange Money
+                  <Smartphone className="w-4 h-4 text-primary-600 mt-0.5" />
+                  <p className="text-sm text-primary-800">
+                    Add money via Mobile Money (Orange, Africell)
                   </p>
                 </div>
               </div>
@@ -996,6 +1194,157 @@ export function WalletsPage() {
                 Done
               </Button>
             </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Internal Transfer Modal (between own wallets) */}
+      {showInternalTransferModal && selectedWallet && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <Card className="w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary-100 rounded-lg">
+                  <ArrowLeftRight className="w-5 h-5 text-primary-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Transfer Between Wallets</h2>
+                  <p className="text-sm text-gray-500">Move funds between your wallets</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowInternalTransferModal(false);
+                  resetInternalTransferState();
+                }}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            {internalTransferSuccess ? (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle className="w-8 h-8 text-green-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Transfer Successful!</h3>
+                <p className="text-gray-500">
+                  {getCurrencySymbol(selectedWallet.currency)}{internalTransferAmount} has been transferred
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* From Wallet */}
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <p className="text-sm text-gray-500">Transfer From</p>
+                  <div className="flex items-center justify-between mt-1">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-gray-900">{getWalletDisplayName(selectedWallet)}</p>
+                      {isPrimaryWallet(selectedWallet) && (
+                        <span className="px-1.5 py-0.5 text-xs font-medium bg-primary-100 text-primary-700 rounded">
+                          Main
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-lg font-bold text-gray-900">
+                      {formatCurrency(selectedWallet.balance, selectedWallet.currency)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* To Wallet Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Transfer To
+                  </label>
+                  <select
+                    value={internalTransferTargetWallet}
+                    onChange={(e) => setInternalTransferTargetWallet(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                  >
+                    <option value="">Select wallet...</option>
+                    {getOtherWallets(selectedWallet.id).map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {getWalletDisplayName(w)} - {formatCurrency(w.balance, w.currency)}
+                        {isPrimaryWallet(w) ? ' (Main)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Amount */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">
+                      {getCurrencySymbol(selectedWallet.currency)}
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={internalTransferAmount}
+                      onChange={(e) => setInternalTransferAmount(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  {/* Quick amount buttons */}
+                  <div className="flex gap-2 mt-2">
+                    {[10, 50, 100, 500].map((amount) => (
+                      <button
+                        key={amount}
+                        onClick={() => setInternalTransferAmount(amount.toString())}
+                        className="flex-1 px-2 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded text-gray-700"
+                      >
+                        {getCurrencySymbol(selectedWallet.currency)}{amount}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Info Notice */}
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    {isPrimaryWallet(selectedWallet)
+                      ? 'Transfer funds from your main wallet to other wallets like Driver, POS, etc.'
+                      : 'Transfer funds back to your main wallet for general use.'}
+                  </p>
+                </div>
+
+                {/* Error Message */}
+                {internalTransferError && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+                    <AlertCircle className="w-4 h-4" />
+                    <span className="text-sm">{internalTransferError}</span>
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex gap-3 pt-4">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      setShowInternalTransferModal(false);
+                      resetInternalTransferState();
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    onClick={handleInternalTransfer}
+                    isLoading={internalTransferLoading}
+                    disabled={!internalTransferTargetWallet || !internalTransferAmount || parseFloat(internalTransferAmount) <= 0}
+                  >
+                    <ArrowLeftRight className="w-4 h-4 mr-2" />
+                    Transfer {getCurrencySymbol(selectedWallet.currency)}{internalTransferAmount || '0.00'}
+                  </Button>
+                </div>
+              </div>
+            )}
           </Card>
         </div>
       )}

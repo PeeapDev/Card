@@ -825,16 +825,29 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
 
       if (sessionStatus.status === 'completed') {
         // Get the pending transaction
-        const { data: pendingTx } = await supabase
+        const { data: pendingTx, error: txError } = await supabase
           .from('transactions')
           .select('*')
           .eq('reference', sessionId)
           .eq('status', 'PENDING')
           .single();
 
+        console.log('[Deposit Success] Pending transaction lookup:', {
+          reference: sessionId,
+          found: !!pendingTx,
+          error: txError?.message
+        });
+
         if (pendingTx) {
-          amount = pendingTx.amount;
-          currency = pendingTx.currency;
+          amount = parseFloat(pendingTx.amount?.toString() || '0');
+          currency = pendingTx.currency || 'SLE';
+
+          console.log('[Deposit Success] Processing deposit:', {
+            transactionId: pendingTx.id,
+            amount,
+            currency,
+            walletId
+          });
 
           // Credit the wallet
           const { data: wallet, error: walletError } = await supabase
@@ -843,12 +856,22 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
             .eq('id', walletId)
             .single();
 
+          if (walletError) {
+            console.error('[Deposit Success] Failed to get wallet:', walletError);
+          }
+
           if (wallet) {
             const currentBalance = parseFloat(wallet.balance?.toString() || '0');
             newBalance = currentBalance + amount;
 
+            console.log('[Deposit Success] Updating wallet balance:', {
+              currentBalance,
+              depositAmount: amount,
+              newBalance
+            });
+
             // Update wallet balance
-            await supabase
+            const { error: updateError } = await supabase
               .from('wallets')
               .update({
                 balance: newBalance,
@@ -856,8 +879,14 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
               })
               .eq('id', walletId);
 
+            if (updateError) {
+              console.error('[Deposit Success] Failed to update wallet:', updateError);
+            } else {
+              console.log('[Deposit Success] Wallet balance updated successfully');
+            }
+
             // Update transaction status
-            await supabase
+            const { error: txUpdateError } = await supabase
               .from('transactions')
               .update({
                 status: 'COMPLETED',
@@ -869,23 +898,35 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
               })
               .eq('id', pendingTx.id);
 
+            if (txUpdateError) {
+              console.error('[Deposit Success] Failed to update transaction:', txUpdateError);
+            }
+
             console.log('[Deposit Success] Wallet credited:', { walletId, amount, newBalance });
 
             // Credit the system float - money came into the platform via mobile money
             try {
-              await supabase.rpc('credit_system_float', {
+              const { error: floatError } = await supabase.rpc('credit_system_float', {
                 p_currency: currency,
                 p_amount: amount,
                 p_transaction_id: pendingTx.id,
                 p_description: `Mobile Money Deposit - ${pendingTx.description || 'User deposit'}`,
               });
-              console.log('[Deposit Success] System float credited:', { amount, currency });
+              if (floatError) {
+                console.error('[Deposit Success] Float RPC error:', floatError);
+              } else {
+                console.log('[Deposit Success] System float credited:', { amount, currency });
+              }
             } catch (floatErr) {
               console.error('[Deposit Success] Failed to credit system float:', floatErr);
               // Don't fail the deposit if float update fails
             }
           }
+        } else {
+          console.log('[Deposit Success] No pending transaction found for sessionId:', sessionId);
         }
+      } else {
+        console.log('[Deposit Success] Session not completed. Status:', sessionStatus.status);
       }
     }
 
