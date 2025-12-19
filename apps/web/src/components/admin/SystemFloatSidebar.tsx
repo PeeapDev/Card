@@ -165,9 +165,9 @@ export function SystemFloatSidebar({
     }
   };
 
-  // Convert old Leone to New Leone (divide by 1000) for SLE currency
-  const convertToNLe = (amount: number, currency: string): number => {
-    return currency === 'SLE' ? amount / 1000 : amount;
+  // No conversion needed - Sierra Leone already uses 1 Leone = 1.00
+  const convertToNLe = (amount: number, _currency: string): number => {
+    return amount; // No division - amounts stored as-is
   };
 
   const formatAmount = (amount: number, currency: string): string => {

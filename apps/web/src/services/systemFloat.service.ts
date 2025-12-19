@@ -8,6 +8,14 @@
 
 import { supabase } from '@/lib/supabase';
 
+// API base URL - uses the same domain as the current page in production
+const getApiUrl = () => {
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+    return `${window.location.origin}/api`;
+  }
+  return import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+};
+
 export interface SystemFloat {
   id: string;
   currency: string;
@@ -188,21 +196,20 @@ export const systemFloatService = {
   },
 
   /**
-   * Get float summary for dashboard
+   * Get float summary for dashboard via API (bypasses RLS)
    */
   async getFloatSummary(): Promise<FloatSummary[]> {
-    const { data, error } = await supabase.rpc('get_float_summary');
+    try {
+      // Use API endpoint which uses service role (bypasses RLS)
+      const response = await fetch(`${getApiUrl()}/float/summary`);
 
-    if (error) {
-      console.error('Error fetching float summary:', error);
-      // Fallback to manual query
-      const { data: floats } = await supabase
-        .from('system_float')
-        .select('*')
-        .order('status', { ascending: true })
-        .order('created_at', { ascending: false });
+      if (!response.ok) {
+        console.error('API error fetching float summary:', response.status);
+        return [];
+      }
 
-      if (!floats) return [];
+      const result = await response.json();
+      const floats = result.floats || [];
 
       return floats.map((f: any) => ({
         id: f.id,
@@ -221,9 +228,10 @@ export const systemFloatService = {
         cycleStartDate: f.cycle_start_date,
         cycleEndDate: f.cycle_end_date,
       }));
+    } catch (error) {
+      console.error('Error fetching float summary:', error);
+      return [];
     }
-
-    return (data || []).map(mapSummary);
   },
 
   /**
@@ -378,37 +386,27 @@ export const systemFloatService = {
   },
 
   /**
-   * Get today's float movements
+   * Get today's float movements via API (bypasses RLS)
    */
-  async getTodayMovements(currency: string): Promise<{ inflows: number; outflows: number }> {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+  async getTodayMovements(_currency: string): Promise<{ inflows: number; outflows: number }> {
+    try {
+      // Use API endpoint which uses service role (bypasses RLS)
+      const response = await fetch(`${getApiUrl()}/float/today`);
 
-    const { data, error } = await supabase
-      .from('system_float_history')
-      .select('type, amount')
-      .eq('currency', currency)
-      .gte('created_at', today.toISOString())
-      .in('type', ['credit', 'debit', 'replenishment']);
+      if (!response.ok) {
+        console.error('API error fetching today movements:', response.status);
+        return { inflows: 0, outflows: 0 };
+      }
 
-    if (error) {
+      const result = await response.json();
+      return {
+        inflows: result.deposits || 0,
+        outflows: result.payouts || 0,
+      };
+    } catch (error) {
       console.error('Error fetching today movements:', error);
       return { inflows: 0, outflows: 0 };
     }
-
-    let inflows = 0;
-    let outflows = 0;
-
-    (data || []).forEach((item: any) => {
-      const amount = parseFloat(item.amount) || 0;
-      if (item.type === 'credit' || item.type === 'replenishment') {
-        inflows += amount;
-      } else if (item.type === 'debit') {
-        outflows += amount;
-      }
-    });
-
-    return { inflows, outflows };
   },
 
   /**
