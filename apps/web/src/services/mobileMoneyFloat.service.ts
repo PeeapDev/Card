@@ -7,6 +7,14 @@
 
 import { supabase } from '@/lib/supabase';
 
+// API base URL - uses the same domain as the current page in production
+const getApiUrl = () => {
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+    return `${window.location.origin}/api`;
+  }
+  return import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+};
+
 export interface MobileMoneyFloatSummary {
   providerId: string;
   providerName: string;
@@ -75,24 +83,21 @@ const mapHistory = (row: any): MobileMoneyFloatHistory => {
 
 export const mobileMoneyFloatService = {
   /**
-   * Get float summary from system_float table
-   * Shows current balances by currency
+   * Get float summary from system_float table via API
+   * Uses service role to bypass RLS
    */
   async getFloatSummary(): Promise<MobileMoneyFloatSummary[]> {
-    // Get from system_float via RPC
-    const { data, error } = await supabase.rpc('get_float_summary');
+    try {
+      // Use API endpoint which uses service role (bypasses RLS)
+      const response = await fetch(`${getApiUrl()}/float/summary`);
 
-    if (error) {
-      console.error('Error fetching float summary:', error);
-      // Fallback: try direct query
-      const { data: floats, error: directError } = await supabase
-        .from('system_float')
-        .select('*')
-        .order('currency');
-
-      if (directError || !floats) {
+      if (!response.ok) {
+        console.error('API error fetching float summary:', response.status);
         return [];
       }
+
+      const result = await response.json();
+      const floats = result.floats || [];
 
       return floats.map((f: any) => ({
         providerId: 'mobile_money',
@@ -107,21 +112,10 @@ export const mobileMoneyFloatService = {
         lastPayoutAt: null,
         status: f.status || 'active',
       }));
+    } catch (error) {
+      console.error('Error fetching float summary:', error);
+      return [];
     }
-
-    return (data || []).map((row: any) => ({
-      providerId: 'mobile_money',
-      providerName: 'System Float',
-      currency: row.currency,
-      currentBalance: parseFloat(row.current_balance) || 0,
-      totalDeposits: parseFloat(row.total_inflows) || parseFloat(row.total_credits) || 0,
-      totalPayouts: parseFloat(row.total_outflows) || parseFloat(row.total_debits) || 0,
-      totalFeesCollected: 0,
-      netFlow: (parseFloat(row.total_inflows) || 0) - (parseFloat(row.total_outflows) || 0),
-      lastDepositAt: row.updated_at,
-      lastPayoutAt: null,
-      status: row.status || 'active',
-    }));
   },
 
   /**
@@ -144,37 +138,28 @@ export const mobileMoneyFloatService = {
   },
 
   /**
-   * Get today's movements from system_float_history
+   * Get today's movements via API (bypasses RLS)
    */
   async getTodayMovements(): Promise<{ deposits: number; payouts: number; fees: number }> {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    try {
+      // Use API endpoint which uses service role (bypasses RLS)
+      const response = await fetch(`${getApiUrl()}/float/today`);
 
-    const { data, error } = await supabase
-      .from('system_float_history')
-      .select('type, amount')
-      .gte('created_at', today.toISOString());
+      if (!response.ok) {
+        console.error('API error fetching today movements:', response.status);
+        return { deposits: 0, payouts: 0, fees: 0 };
+      }
 
-    if (error) {
+      const result = await response.json();
+      return {
+        deposits: result.deposits || 0,
+        payouts: result.payouts || 0,
+        fees: result.fees || 0,
+      };
+    } catch (error) {
       console.error('Error fetching today movements:', error);
       return { deposits: 0, payouts: 0, fees: 0 };
     }
-
-    let deposits = 0;
-    let payouts = 0;
-
-    (data || []).forEach((item: any) => {
-      const amount = parseFloat(item.amount) || 0;
-      const txType = item.type || item.transaction_type;
-
-      if (txType === 'credit' || txType === 'replenish' || txType === 'opening') {
-        deposits += amount;
-      } else if (txType === 'debit' || txType === 'close') {
-        payouts += amount;
-      }
-    });
-
-    return { deposits, payouts, fees: 0 };
   },
 
   /**

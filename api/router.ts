@@ -157,6 +157,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleMonimeSetupWebhook(req, res);
     } else if (path === 'monime/balance' || path === 'monime/balance/') {
       return await handleMonimeBalance(req, res);
+    } else if (path === 'float/summary' || path === 'float/summary/') {
+      return await handleFloatSummary(req, res);
+    } else if (path === 'float/today' || path === 'float/today/') {
+      return await handleFloatToday(req, res);
     } else if (path === 'deposit/verify' || path === 'deposit/verify/') {
       return await handleDepositVerify(req, res);
     } else if (path === 'payouts' || path === 'payouts/') {
@@ -1360,6 +1364,86 @@ async function handleMonimeBalance(req: VercelRequest, res: VercelResponse) {
     }
 
     return res.status(500).json({ error: error.message || 'Failed to fetch balance' });
+  }
+}
+
+/**
+ * Get float summary - uses service role to bypass RLS
+ */
+async function handleFloatSummary(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    // Get float data with service role (bypasses RLS)
+    const { data: floats, error: floatError } = await supabase
+      .from('system_float')
+      .select('*')
+      .order('currency');
+
+    if (floatError) {
+      console.error('[Float Summary] Error:', floatError);
+      return res.status(500).json({ error: floatError.message });
+    }
+
+    return res.status(200).json({
+      success: true,
+      floats: floats || [],
+    });
+  } catch (error: any) {
+    console.error('[Float Summary] Error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to fetch float summary' });
+  }
+}
+
+/**
+ * Get today's float movements - uses service role to bypass RLS
+ */
+async function handleFloatToday(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Get today's movements with service role (bypasses RLS)
+    const { data: movements, error: movementsError } = await supabase
+      .from('system_float_history')
+      .select('type, amount')
+      .gte('created_at', today.toISOString());
+
+    if (movementsError) {
+      console.error('[Float Today] Error:', movementsError);
+      return res.status(500).json({ error: movementsError.message });
+    }
+
+    let deposits = 0;
+    let payouts = 0;
+
+    (movements || []).forEach((item: any) => {
+      const amount = parseFloat(item.amount) || 0;
+      const txType = item.type || item.transaction_type;
+
+      if (txType === 'credit' || txType === 'replenish' || txType === 'opening') {
+        deposits += amount;
+      } else if (txType === 'debit' || txType === 'close') {
+        payouts += amount;
+      }
+    });
+
+    return res.status(200).json({
+      success: true,
+      deposits,
+      payouts,
+      fees: 0,
+      movementCount: (movements || []).length,
+    });
+  } catch (error: any) {
+    console.error('[Float Today] Error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to fetch today movements' });
   }
 }
 
