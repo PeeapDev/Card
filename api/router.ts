@@ -1264,10 +1264,10 @@ async function handleMonimeBalance(req: VercelRequest, res: VercelResponse) {
       user = result.data?.user;
       authError = result.error;
     } else if (authHeader.startsWith('Session ')) {
-      // Custom session token - validate against sessions table
+      // Custom session token - validate against sso_tokens table
       token = authHeader.replace('Session ', '');
       const { data: session } = await supabase
-        .from('sessions')
+        .from('sso_tokens')
         .select('user_id, expires_at')
         .eq('token', token)
         .single();
