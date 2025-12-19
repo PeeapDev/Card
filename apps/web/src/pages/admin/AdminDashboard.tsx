@@ -646,7 +646,7 @@ export function AdminDashboard() {
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Admin Dashboard</h1>
               <p className="text-gray-500 dark:text-gray-400">Welcome back! Here's what's happening today.</p>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               <button
                 onClick={handleRefresh}
                 disabled={refreshing}
@@ -661,6 +661,63 @@ export function AdminDashboard() {
                   <span className="font-semibold text-indigo-700 dark:text-indigo-300">{stats.pageViewsToday.toLocaleString()}</span>
                   <span className="text-indigo-600 dark:text-indigo-400 ml-1">visits today</span>
                 </div>
+              </div>
+
+              {/* System Float Button in Header */}
+              <div className="relative">
+                <button
+                  onClick={() => setFloatPanelOpen(!floatPanelOpen)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg shadow-sm transition-all duration-200 ${
+                    floatPanelOpen
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white'
+                  }`}
+                  title="System Float Management"
+                >
+                  <Banknote className="w-4 h-4" />
+                  <span className="text-sm font-medium hidden sm:inline">System Float</span>
+                  <motion.div
+                    animate={{ rotate: floatPanelOpen ? 180 : 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <ArrowDown className="w-3 h-3" />
+                  </motion.div>
+                </button>
+
+                {/* System Float Panel - Slides Down from Header */}
+                <AnimatePresence>
+                  {floatPanelOpen && (
+                    <>
+                      {/* Backdrop */}
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-40"
+                        onClick={() => setFloatPanelOpen(false)}
+                      />
+                      <motion.div
+                        initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                        transition={{ duration: 0.2, ease: 'easeOut' }}
+                        className="absolute top-12 right-0 z-50 w-80 max-h-[calc(100vh-120px)] overflow-y-auto rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+                      >
+                        <SystemFloatSidebar
+                          key={floatSidebarKey}
+                          onOpenFloat={handleOpenFloat}
+                          onReplenishFloat={handleReplenishFloat}
+                          onCloseFloat={handleCloseFloat}
+                          onViewHistory={handleViewHistory}
+                        />
+                        {/* Mobile Money Float Card */}
+                        <div className="px-4 pb-4">
+                          <MobileMoneyFloatCard />
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
           </div>
@@ -1196,56 +1253,6 @@ export function AdminDashboard() {
               </MotionCard>
             </div>
           </section>
-        </div>
-
-        {/* System Float Button - Top Right */}
-        <div className="fixed top-20 right-6 z-50">
-          <button
-            onClick={() => setFloatPanelOpen(!floatPanelOpen)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-lg transition-all duration-300 ${
-              floatPanelOpen
-                ? 'bg-gray-700 hover:bg-gray-800'
-                : 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700'
-            } text-white`}
-            title="System Float Management"
-          >
-            <Banknote className="w-5 h-5" />
-            <span className="text-sm font-medium">System Float</span>
-            <motion.div
-              animate={{ rotate: floatPanelOpen ? 180 : 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <ArrowDown className="w-4 h-4" />
-            </motion.div>
-          </button>
-
-          {/* Floating System Float Panel - Slides Down */}
-          <AnimatePresence>
-            {floatPanelOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: -20, scaleY: 0.95 }}
-                animate={{ opacity: 1, y: 0, scaleY: 1 }}
-                exit={{ opacity: 0, y: -20, scaleY: 0.95 }}
-                transition={{ duration: 0.25, ease: 'easeOut' }}
-                style={{ transformOrigin: 'top' }}
-                className="absolute top-14 right-0 w-80 max-h-[calc(100vh-180px)] overflow-y-auto"
-              >
-                <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700">
-                  <SystemFloatSidebar
-                    key={floatSidebarKey}
-                    onOpenFloat={handleOpenFloat}
-                    onReplenishFloat={handleReplenishFloat}
-                    onCloseFloat={handleCloseFloat}
-                    onViewHistory={handleViewHistory}
-                  />
-                  {/* Mobile Money Float Card */}
-                  <div className="px-4 pb-4">
-                    <MobileMoneyFloatCard />
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
       </div>
 
