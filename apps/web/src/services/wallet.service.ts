@@ -89,6 +89,7 @@ export const walletService = {
       .from('wallets')
       .select('*')
       .eq('user_id', userId)
+      .neq('status', 'CLOSED') // Exclude deleted/closed wallets
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -538,5 +539,57 @@ export const walletService = {
     }
 
     return mapWallet(data);
+  },
+
+  /**
+   * Delete a wallet (soft delete - marks as CLOSED)
+   * Note: Balance should be transferred to main wallet before calling this
+   * @param id - Wallet ID to delete
+   * @param isMainWallet - Whether this is currently the user's main wallet (frontend determines this)
+   */
+  async deleteWallet(id: string, isMainWallet: boolean = false): Promise<void> {
+    // Don't allow deletion of main wallet
+    if (isMainWallet) {
+      throw new Error('Cannot delete main wallet. Set another wallet as main first.');
+    }
+
+    // First verify the wallet exists
+    const { data: wallet, error: fetchError } = await supabase
+      .from('wallets')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError) {
+      console.error('Error fetching wallet for deletion:', fetchError);
+      throw new Error('Wallet not found');
+    }
+
+    // Verify balance is zero (should have been transferred)
+    if (parseFloat(wallet.balance) > 0) {
+      throw new Error('Wallet still has balance. Please transfer funds first.');
+    }
+
+    // If this wallet was marked as primary, clear that
+    if (wallet.wallet_type === 'primary') {
+      await supabase
+        .from('wallets')
+        .update({ wallet_type: null })
+        .eq('id', id);
+    }
+
+    // Soft delete - mark as CLOSED
+    const { error } = await supabase
+      .from('wallets')
+      .update({
+        status: 'CLOSED',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting wallet:', error);
+      throw new Error(error.message);
+    }
   },
 };
