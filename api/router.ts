@@ -935,18 +935,15 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
             }
 
             // Create notification for the user
-            // Convert Old Leone (stored in DB) to New Leone for display
-            const displayAmount = currency === 'SLE' ? amount / 1000 : amount;
-            const displayCurrency = currency === 'SLE' ? 'NLe' : currency;
             try {
               await supabase.from('notifications').insert({
                 user_id: pendingTx.user_id,
                 type: 'deposit',
                 title: 'Deposit Successful',
-                message: `Your deposit of ${displayCurrency} ${displayAmount.toFixed(2)} has been credited to your wallet.`,
+                message: `Your deposit of Le ${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} has been credited to your wallet.`,
                 icon: 'wallet',
                 action_url: '/wallets',
-                action_data: { amount: displayAmount, currency: displayCurrency, transactionId: pendingTx.id },
+                action_data: { amount, currency, transactionId: pendingTx.id },
                 source_service: 'deposit',
                 source_id: pendingTx.id,
                 is_read: false,
@@ -959,27 +956,26 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
 
             // Create admin notification for the deposit
             try {
-              // Get user name for admin notification
               const { data: userData } = await supabase
                 .from('users')
-                .select('full_name, phone')
+                .select('first_name, last_name, phone')
                 .eq('id', pendingTx.user_id)
                 .single();
-              const userName = userData?.full_name || userData?.phone || 'Unknown User';
+              const userName = userData?.first_name ? `${userData.first_name} ${userData.last_name || ''}`.trim() : userData?.phone || 'Unknown User';
 
               await supabase.from('admin_notifications').insert({
                 type: 'deposit',
                 title: 'New Deposit Received',
-                message: `${userName} deposited ${displayCurrency} ${displayAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} via Mobile Money`,
-                priority: displayAmount >= 10 ? 'high' : 'medium', // 10 NLe = 10000 Old Le
+                message: `${userName} deposited Le ${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} via Mobile Money`,
+                priority: amount >= 1000 ? 'high' : 'medium',
                 related_entity_type: 'transaction',
                 related_entity_id: pendingTx.id,
                 action_url: `/admin/transactions?id=${pendingTx.id}`,
                 metadata: {
                   userId: pendingTx.user_id,
                   userName,
-                  amount: displayAmount,
-                  currency: displayCurrency,
+                  amount,
+                  currency,
                   method: 'Mobile Money',
                 },
               });
@@ -1147,10 +1143,10 @@ async function handleMonimeWebhook(req: VercelRequest, res: VercelResponse) {
         // Get user name for admin notification
         const { data: userData } = await supabase
           .from('users')
-          .select('full_name, phone')
+          .select('first_name, last_name, phone')
           .eq('id', pendingTx.user_id)
           .single();
-        const userName = userData?.full_name || userData?.phone || 'Unknown User';
+        const userName = userData?.first_name ? `${userData.first_name} ${userData.last_name || ''}`.trim() : userData?.phone || 'Unknown User';
 
         await supabase.from('admin_notifications').insert({
           type: 'deposit',
@@ -2236,11 +2232,6 @@ async function handleMonimeDeposit(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Valid amount is required' });
     }
 
-    // IMPORTANT: Monime operates in New Leone (NLe)
-    // Database stores in Old Leone format (1 NLe = 1000 Old Le)
-    // Convert NLe to Old Le for storage so display works correctly
-    const dbAmount = currency === 'SLE' ? amount * 1000 : amount;
-
     // Verify wallet exists
     const { data: wallet, error: walletError } = await supabase
       .from('wallets')
@@ -2293,14 +2284,13 @@ async function handleMonimeDeposit(req: VercelRequest, res: VercelResponse) {
     console.log('[MonimeDeposit] Checkout created:', result.monimeSessionId);
 
     // Store deposit record for tracking
-    // Use dbAmount (Old Leone format) for database storage
     const externalId = `dep_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     const { error: txError } = await supabase.from('transactions').insert({
       user_id: wallet.user_id,
       wallet_id: walletId,
       external_id: externalId,
       type: 'DEPOSIT',
-      amount: dbAmount, // Store in Old Leone format (NLe * 1000)
+      amount: amount,
       currency: currency,
       status: 'PENDING',
       description: description || `Deposit to ${currency} wallet`,
@@ -2308,7 +2298,6 @@ async function handleMonimeDeposit(req: VercelRequest, res: VercelResponse) {
       metadata: {
         monimeSessionId: result.monimeSessionId,
         paymentMethod: 'mobile_money',
-        originalAmountNLe: amount, // Store original NLe amount for reference
         initiatedAt: new Date().toISOString(),
       },
     });
@@ -5420,10 +5409,10 @@ async function handleUserCashout(req: VercelRequest, res: VercelResponse) {
       try {
         const { data: userData } = await supabase
           .from('users')
-          .select('full_name, phone')
+          .select('first_name, last_name, phone')
           .eq('id', userId)
           .single();
-        const userName = userData?.full_name || userData?.phone || 'Unknown User';
+        const userName = userData?.first_name ? `${userData.first_name} ${userData.last_name || ''}`.trim() : userData?.phone || 'Unknown User';
 
         await supabase.from('admin_notifications').insert({
           type: 'payout',
@@ -6684,17 +6673,17 @@ async function handleSharedTransfer(req: VercelRequest, res: VercelResponse) {
     try {
       const { data: senderData } = await supabase
         .from('users')
-        .select('full_name, phone')
+        .select('first_name, last_name, phone')
         .eq('id', auth.userId)
         .single();
       const { data: recipientData } = await supabase
         .from('users')
-        .select('full_name, phone')
+        .select('first_name, last_name, phone')
         .eq('id', recipientUserId)
         .single();
 
-      const senderName = senderData?.full_name || senderData?.phone || 'Unknown';
-      const recipientName = recipientData?.full_name || recipientData?.phone || 'Unknown';
+      const senderName = senderData?.first_name ? `${senderData.first_name} ${senderData.last_name || ''}`.trim() : senderData?.phone || 'Unknown';
+      const recipientName = recipientData?.first_name ? `${recipientData.first_name} ${recipientData.last_name || ''}`.trim() : recipientData?.phone || 'Unknown';
 
       await supabase.from('admin_notifications').insert({
         type: 'transfer',

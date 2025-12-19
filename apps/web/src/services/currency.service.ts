@@ -25,15 +25,12 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 /**
  * Get all currencies
- * Note: Using hardcoded defaults since currencies table may not exist
  */
 export async function getCurrencies(): Promise<Currency[]> {
-  // Check cache
   if (currencyCache && Date.now() - cacheTimestamp < CACHE_TTL) {
     return currencyCache;
   }
 
-  // Use default currencies (currencies table doesn't exist yet)
   currencyCache = getDefaultCurrencies();
   cacheTimestamp = Date.now();
   defaultCurrencyCache = currencyCache.find(c => c.isDefault) || currencyCache[0];
@@ -70,49 +67,52 @@ export async function getCurrencySymbol(code: string): Promise<string> {
 
 /**
  * Format amount with currency symbol
- * Returns format: "Le 5.00" (with space after symbol)
+ * Returns format: "Le 5.00" or "$ 5.00"
+ * No conversion - shows amount as stored
  */
 export async function formatCurrency(amount: number, currencyCode?: string): Promise<string> {
   const code = currencyCode || (await getDefaultCurrency()).code;
   const symbol = await getCurrencySymbol(code);
+
   const formattedAmount = amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return `${symbol} ${formattedAmount}`;
 }
 
 /**
- * Format amount with currency symbol (sync version - uses cached data)
- * Returns format: "Le 5.00" (with space after symbol)
+ * Format amount with currency symbol (sync version)
+ * No conversion - shows amount as stored
  */
 export function formatCurrencySync(amount: number, currencyCode: string, currencies: Currency[]): string {
   const currency = currencies.find(c => c.code === currencyCode);
   const symbol = currency?.symbol || currencyCode;
+
   const formattedAmount = amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return `${symbol} ${formattedAmount}`;
 }
 
 /**
- * Format amount with currency symbol (sync version - uses hardcoded symbols)
- * Returns format: "NLe 5.00" (with space after symbol)
- * This is a simple synchronous method for quick formatting
+ * Format amount with currency symbol
+ * Simple synchronous method - no conversion, just format
+ * Returns format: "Le 5.00" or "$ 5.00"
  */
 export function formatAmount(amount: number, currencyCode: string = 'SLE'): string {
   const symbols: Record<string, string> = {
-    SLE: 'NLe',
+    SLE: 'Le',
     USD: '$',
     EUR: '€',
     GBP: '£',
   };
   const symbol = symbols[currencyCode] || currencyCode;
+
   const formattedAmount = amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return `${symbol} ${formattedAmount}`;
 }
 
 /**
- * Set default currency (updates in-memory cache only - no database table)
+ * Set default currency
  */
 export async function setDefaultCurrency(code: string): Promise<boolean> {
   try {
-    // Update in-memory cache only (currencies table doesn't exist)
     const currencies = await getCurrencies();
     const currency = currencies.find(c => c.code === code);
 
@@ -121,7 +121,6 @@ export async function setDefaultCurrency(code: string): Promise<boolean> {
       return false;
     }
 
-    // Update cache to set new default
     currencyCache = currencies.map(c => ({
       ...c,
       isDefault: c.code === code,
@@ -137,7 +136,7 @@ export async function setDefaultCurrency(code: string): Promise<boolean> {
 }
 
 /**
- * Clear currency cache (call when currencies are updated)
+ * Clear currency cache
  */
 export function clearCurrencyCache(): void {
   currencyCache = null;
@@ -146,11 +145,11 @@ export function clearCurrencyCache(): void {
 }
 
 /**
- * Default currencies (fallback when database is empty)
+ * Default currencies
  */
 function getDefaultCurrencies(): Currency[] {
   return [
-    { code: 'SLE', name: 'Sierra Leone New Leone', symbol: 'NLe', isDefault: true, isActive: true },
+    { code: 'SLE', name: 'Sierra Leone Leone', symbol: 'Le', isDefault: true, isActive: true },
     { code: 'USD', name: 'US Dollar', symbol: '$', isDefault: false, isActive: true },
   ];
 }
