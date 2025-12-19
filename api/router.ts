@@ -152,6 +152,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleMonimeTransactions(req, res);
     } else if (path === 'monime/webhook' || path === 'monime/webhook/') {
       return await handleMonimeWebhook(req, res);
+    } else if (path === 'monime/setup-webhook' || path === 'monime/setup-webhook/') {
+      return await handleMonimeSetupWebhook(req, res);
     } else if (path === 'deposit/verify' || path === 'deposit/verify/') {
       return await handleDepositVerify(req, res);
     } else if (path === 'payouts' || path === 'payouts/') {
@@ -1037,6 +1039,61 @@ async function handleMonimeWebhook(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ received: true });
   } catch (error: any) {
     console.error('[Monime Webhook] Error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+/**
+ * Setup Monime webhook to receive payment notifications
+ * POST /api/monime/setup-webhook
+ */
+async function handleMonimeSetupWebhook(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    // Create Monime service
+    const monimeService = await createMonimeService(supabase, SETTINGS_ID);
+
+    // Get backend URL from settings
+    const { data: settings } = await supabase
+      .from('payment_settings')
+      .select('backend_url')
+      .eq('id', SETTINGS_ID)
+      .single();
+
+    const backendUrl = settings?.backend_url || 'https://api.peeap.com';
+    const webhookUrl = `${backendUrl}/api/monime/webhook`;
+
+    console.log('[Monime Setup Webhook] Setting up webhook:', webhookUrl);
+
+    // Setup the webhook
+    const result = await monimeService.setupPeeapWebhook(webhookUrl);
+
+    if (result.success) {
+      // Store webhook secret if provided
+      if (result.secret) {
+        await supabase
+          .from('payment_settings')
+          .update({ monime_webhook_secret: result.secret })
+          .eq('id', SETTINGS_ID);
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: 'Webhook configured successfully',
+        webhookId: result.webhookId,
+        webhookUrl: webhookUrl,
+      });
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: result.error || 'Failed to setup webhook',
+      });
+    }
+  } catch (error: any) {
+    console.error('[Monime Setup Webhook] Error:', error);
     return res.status(500).json({ error: error.message });
   }
 }

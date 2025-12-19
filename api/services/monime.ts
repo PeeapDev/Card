@@ -585,6 +585,108 @@ export class MonimeService {
       totalFee,
     };
   }
+
+  /**
+   * List existing webhooks
+   */
+  async listWebhooks(): Promise<Array<{ id: string; url: string; events: string[]; active: boolean }>> {
+    try {
+      const response = await this.request<{ result: { data: Array<{ id: string; url: string; events: string[]; active: boolean }> } }>(
+        '/webhooks',
+        'GET'
+      );
+      return response.result?.data || [];
+    } catch (error) {
+      console.error('[Monime] Error listing webhooks:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Create a webhook
+   */
+  async createWebhook(params: {
+    url: string;
+    events: string[];
+    description?: string;
+  }): Promise<{ id: string; url: string; secret?: string }> {
+    const response = await this.request<{ result: { id: string; url: string; secret?: string } }>(
+      '/webhooks',
+      'POST',
+      {
+        url: params.url,
+        events: params.events,
+        description: params.description || 'Peeap webhook',
+        active: true,
+      }
+    );
+
+    if (!response.result) {
+      throw new MonimeError('Failed to create webhook', 'WEBHOOK_ERROR', 500);
+    }
+
+    return response.result;
+  }
+
+  /**
+   * Delete a webhook
+   */
+  async deleteWebhook(webhookId: string): Promise<boolean> {
+    try {
+      await this.request(`/webhooks/${webhookId}`, 'DELETE');
+      return true;
+    } catch (error) {
+      console.error('[Monime] Error deleting webhook:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Setup webhook for deposit/checkout notifications
+   * This creates or updates the webhook to point to our endpoint
+   */
+  async setupPeeapWebhook(webhookUrl: string): Promise<{ success: boolean; webhookId?: string; secret?: string; error?: string }> {
+    try {
+      // First, list existing webhooks to see if we already have one
+      const existingWebhooks = await this.listWebhooks();
+
+      // Find any existing Peeap webhook
+      const existingPeeapWebhook = existingWebhooks.find(w => w.url.includes('peeap.com') || w.url.includes('api.peeap.com'));
+
+      // Delete existing webhook if found (to recreate with correct URL)
+      if (existingPeeapWebhook) {
+        console.log('[Monime] Deleting existing webhook:', existingPeeapWebhook.id);
+        await this.deleteWebhook(existingPeeapWebhook.id);
+      }
+
+      // Create new webhook with all relevant events
+      const result = await this.createWebhook({
+        url: webhookUrl,
+        events: [
+          'checkout.session.completed',
+          'checkout.session.expired',
+          'payout.completed',
+          'payout.failed',
+          'payment.received',
+        ],
+        description: 'Peeap payment notifications',
+      });
+
+      console.log('[Monime] Webhook created:', result.id);
+
+      return {
+        success: true,
+        webhookId: result.id,
+        secret: result.secret,
+      };
+    } catch (error: any) {
+      console.error('[Monime] Error setting up webhook:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to setup webhook',
+      };
+    }
+  }
 }
 
 /**
