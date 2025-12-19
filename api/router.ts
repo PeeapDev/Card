@@ -865,23 +865,17 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
 
             console.log('[Deposit Success] Wallet credited:', { walletId, amount, newBalance });
 
-            // Credit the mobile money float - money came into the platform
-            // Detect provider from session or default to Orange Money
-            const providerId = sessionStatus.providerId || pendingTx.metadata?.providerId || 'm17';
+            // Credit the system float - money came into the platform via mobile money
             try {
-              await supabase.rpc('credit_mobile_money_float', {
-                p_provider_id: providerId,
-                p_amount: amount,
-                p_fee: 0,
-                p_reference: String(sessionId),
-                p_description: `Deposit from user - ${pendingTx.description || 'Mobile Money Deposit'}`,
-                p_transaction_id: pendingTx.id,
-                p_user_id: wallet.user_id || null,
+              await supabase.rpc('credit_system_float', {
                 p_currency: currency,
+                p_amount: amount,
+                p_transaction_id: pendingTx.id,
+                p_description: `Mobile Money Deposit - ${pendingTx.description || 'User deposit'}`,
               });
-              console.log('[Deposit Success] Mobile money float credited:', { providerId, amount });
+              console.log('[Deposit Success] System float credited:', { amount, currency });
             } catch (floatErr) {
-              console.error('[Deposit Success] Failed to credit mobile money float:', floatErr);
+              console.error('[Deposit Success] Failed to credit system float:', floatErr);
               // Don't fail the deposit if float update fails
             }
           }
@@ -1096,21 +1090,17 @@ async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse
           }
           console.log('[CheckoutPay] Merchant wallet credited:', { merchantOwnerId, amount: paymentAmount, ref: transactionRef });
 
-          // Credit mobile money float - money came into the platform via mobile money
+          // Credit system float - money came into the platform via mobile money checkout
           try {
-            await supabase.rpc('credit_mobile_money_float', {
-              p_provider_id: 'm17', // Default to Orange Money for now
-              p_amount: paymentAmount,
-              p_fee: 0,
-              p_reference: transactionRef,
-              p_description: `Checkout payment from ${session.metadata?.payerName || 'Customer'} to ${session.merchant_name}`,
-              p_transaction_id: null,
-              p_user_id: merchantOwnerId,
+            await supabase.rpc('credit_system_float', {
               p_currency: session.currency_code || 'SLE',
+              p_amount: paymentAmount,
+              p_transaction_id: null,
+              p_description: `Mobile Money Checkout - ${session.merchant_name} - ${session.description || 'Payment'}`,
             });
-            console.log('[CheckoutPay] Mobile money float credited:', { amount: paymentAmount });
+            console.log('[CheckoutPay] System float credited:', { amount: paymentAmount });
           } catch (floatErr) {
-            console.error('[CheckoutPay] Failed to credit mobile money float:', floatErr);
+            console.error('[CheckoutPay] Failed to credit system float:', floatErr);
             // Don't fail the payment if float update fails
           }
 
@@ -4620,22 +4610,18 @@ async function handleUserCashout(req: VercelRequest, res: VercelResponse) {
         })
         .eq('reference', externalId);
 
-      // Debit mobile money float when payout is completed (money going out to provider)
-      if (updateData.status === 'COMPLETED' && destinationType === 'momo') {
+      // Debit system float when payout is completed (money going out via mobile money)
+      if (updateData.status === 'COMPLETED') {
         try {
-          await supabase.rpc('debit_mobile_money_float', {
-            p_provider_id: providerId,
-            p_amount: amount,
-            p_fee: fee,
-            p_reference: externalId,
-            p_description: `Payout to ${providerName} - ${normalizedAccountNumber}`,
-            p_transaction_id: payout.id,
-            p_user_id: userId,
+          await supabase.rpc('debit_system_float', {
             p_currency: currency,
+            p_amount: amount,
+            p_transaction_id: payout.id,
+            p_description: `Mobile Money Payout - ${providerName} - ${normalizedAccountNumber}`,
           });
-          console.log('[UserCashout] Mobile money float debited:', { providerId, amount });
+          console.log('[UserCashout] System float debited:', { amount, currency });
         } catch (floatErr) {
-          console.error('[UserCashout] Failed to debit mobile money float:', floatErr);
+          console.error('[UserCashout] Failed to debit system float:', floatErr);
           // Don't fail the payout if float update fails
         }
       }
