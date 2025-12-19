@@ -935,15 +935,18 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
             }
 
             // Create notification for the user
+            // Convert Old Leone (stored in DB) to New Leone for display
+            const displayAmount = currency === 'SLE' ? amount / 1000 : amount;
+            const displayCurrency = currency === 'SLE' ? 'NLe' : currency;
             try {
               await supabase.from('notifications').insert({
                 user_id: pendingTx.user_id,
                 type: 'deposit',
                 title: 'Deposit Successful',
-                message: `Your deposit of ${amount} ${currency} has been credited to your wallet.`,
+                message: `Your deposit of ${displayCurrency} ${displayAmount.toFixed(2)} has been credited to your wallet.`,
                 icon: 'wallet',
                 action_url: '/wallets',
-                action_data: { amount, currency, transactionId: pendingTx.id },
+                action_data: { amount: displayAmount, currency: displayCurrency, transactionId: pendingTx.id },
                 source_service: 'deposit',
                 source_id: pendingTx.id,
                 is_read: false,
@@ -952,6 +955,37 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
               console.log('[Deposit Success] Notification created for user:', pendingTx.user_id);
             } catch (notifErr) {
               console.error('[Deposit Success] Failed to create notification:', notifErr);
+            }
+
+            // Create admin notification for the deposit
+            try {
+              // Get user name for admin notification
+              const { data: userData } = await supabase
+                .from('users')
+                .select('full_name, phone')
+                .eq('id', pendingTx.user_id)
+                .single();
+              const userName = userData?.full_name || userData?.phone || 'Unknown User';
+
+              await supabase.from('admin_notifications').insert({
+                type: 'deposit',
+                title: 'New Deposit Received',
+                message: `${userName} deposited ${displayCurrency} ${displayAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} via Mobile Money`,
+                priority: displayAmount >= 10 ? 'high' : 'medium', // 10 NLe = 10000 Old Le
+                related_entity_type: 'transaction',
+                related_entity_id: pendingTx.id,
+                action_url: `/admin/transactions?id=${pendingTx.id}`,
+                metadata: {
+                  userId: pendingTx.user_id,
+                  userName,
+                  amount: displayAmount,
+                  currency: displayCurrency,
+                  method: 'Mobile Money',
+                },
+              });
+              console.log('[Deposit Success] Admin notification created');
+            } catch (adminNotifErr) {
+              console.error('[Deposit Success] Failed to create admin notification:', adminNotifErr);
             }
           }
         } else {
@@ -1107,6 +1141,37 @@ async function handleMonimeWebhook(req: VercelRequest, res: VercelResponse) {
       }
 
       console.log('[Monime Webhook] Deposit completed:', { walletId, amount, newBalance });
+
+      // Create admin notification for the deposit
+      try {
+        // Get user name for admin notification
+        const { data: userData } = await supabase
+          .from('users')
+          .select('full_name, phone')
+          .eq('id', pendingTx.user_id)
+          .single();
+        const userName = userData?.full_name || userData?.phone || 'Unknown User';
+
+        await supabase.from('admin_notifications').insert({
+          type: 'deposit',
+          title: 'New Deposit Received',
+          message: `${userName} deposited ${currency} ${amount.toLocaleString()} via Mobile Money`,
+          priority: amount >= 10000 ? 'high' : 'medium',
+          related_entity_type: 'transaction',
+          related_entity_id: pendingTx.id,
+          action_url: `/admin/transactions?id=${pendingTx.id}`,
+          metadata: {
+            userId: pendingTx.user_id,
+            userName,
+            amount,
+            currency,
+            method: 'Mobile Money (Webhook)',
+          },
+        });
+        console.log('[Monime Webhook] Admin notification created');
+      } catch (adminNotifErr) {
+        console.error('[Monime Webhook] Failed to create admin notification:', adminNotifErr);
+      }
     }
 
     return res.status(200).json({ received: true });
@@ -1182,16 +1247,44 @@ async function handleMonimeBalance(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Verify admin authentication
+    // Verify admin authentication - support both Bearer and Session tokens
     const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
+    if (!authHeader) {
       return res.status(401).json({ error: 'Missing authorization token' });
     }
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    let token = '';
+    let user: any = null;
+    let authError: any = null;
 
-    if (authError || !user) {
+    if (authHeader.startsWith('Bearer ')) {
+      // Supabase JWT token
+      token = authHeader.replace('Bearer ', '');
+      const result = await supabase.auth.getUser(token);
+      user = result.data?.user;
+      authError = result.error;
+    } else if (authHeader.startsWith('Session ')) {
+      // Custom session token - validate against sessions table
+      token = authHeader.replace('Session ', '');
+      const { data: session } = await supabase
+        .from('sessions')
+        .select('user_id, expires_at')
+        .eq('token', token)
+        .single();
+
+      if (session && new Date(session.expires_at) > new Date()) {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('id, email')
+          .eq('id', session.user_id)
+          .single();
+        if (userData) {
+          user = { id: userData.id, email: userData.email };
+        }
+      }
+    }
+
+    if (!user) {
       return res.status(401).json({ error: 'Invalid or expired token' });
     }
 
@@ -2143,6 +2236,11 @@ async function handleMonimeDeposit(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Valid amount is required' });
     }
 
+    // IMPORTANT: Monime operates in New Leone (NLe)
+    // Database stores in Old Leone format (1 NLe = 1000 Old Le)
+    // Convert NLe to Old Le for storage so display works correctly
+    const dbAmount = currency === 'SLE' ? amount * 1000 : amount;
+
     // Verify wallet exists
     const { data: wallet, error: walletError } = await supabase
       .from('wallets')
@@ -2195,20 +2293,22 @@ async function handleMonimeDeposit(req: VercelRequest, res: VercelResponse) {
     console.log('[MonimeDeposit] Checkout created:', result.monimeSessionId);
 
     // Store deposit record for tracking
+    // Use dbAmount (Old Leone format) for database storage
     const externalId = `dep_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     const { error: txError } = await supabase.from('transactions').insert({
       user_id: wallet.user_id,
       wallet_id: walletId,
       external_id: externalId,
       type: 'DEPOSIT',
-      amount: amount,
+      amount: dbAmount, // Store in Old Leone format (NLe * 1000)
       currency: currency,
       status: 'PENDING',
-      description: description || 'Mobile Money Deposit',
+      description: description || `Deposit to ${currency} wallet`,
       reference: result.monimeSessionId,
       metadata: {
         monimeSessionId: result.monimeSessionId,
         paymentMethod: 'mobile_money',
+        originalAmountNLe: amount, // Store original NLe amount for reference
         initiatedAt: new Date().toISOString(),
       },
     });
@@ -5316,6 +5416,38 @@ async function handleUserCashout(req: VercelRequest, res: VercelResponse) {
         },
       });
 
+      // Create admin notification for the cashout
+      try {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('full_name, phone')
+          .eq('id', userId)
+          .single();
+        const userName = userData?.full_name || userData?.phone || 'Unknown User';
+
+        await supabase.from('admin_notifications').insert({
+          type: 'payout',
+          title: 'User Cashout Request',
+          message: `${userName} requested cashout of ${currency} ${amount.toLocaleString()} to ${providerName}`,
+          priority: amount >= 10000 ? 'high' : 'medium',
+          related_entity_type: 'payout',
+          related_entity_id: payout.id,
+          action_url: `/admin/payouts?id=${payout.id}`,
+          metadata: {
+            userId,
+            userName,
+            amount,
+            fee,
+            currency,
+            destination: normalizedAccountNumber,
+            provider: providerName,
+          },
+        });
+        console.log('[UserCashout] Admin notification created');
+      } catch (adminNotifErr) {
+        console.error('[UserCashout] Failed to create admin notification:', adminNotifErr);
+      }
+
       return res.status(200).json({
         success: true,
         payoutId: externalId,
@@ -6547,6 +6679,44 @@ async function handleSharedTransfer(req: VercelRequest, res: VercelResponse) {
         sender_id: auth.userId,
       },
     ]);
+
+    // Create admin notification for the transfer
+    try {
+      const { data: senderData } = await supabase
+        .from('users')
+        .select('full_name, phone')
+        .eq('id', auth.userId)
+        .single();
+      const { data: recipientData } = await supabase
+        .from('users')
+        .select('full_name, phone')
+        .eq('id', recipientUserId)
+        .single();
+
+      const senderName = senderData?.full_name || senderData?.phone || 'Unknown';
+      const recipientName = recipientData?.full_name || recipientData?.phone || 'Unknown';
+
+      await supabase.from('admin_notifications').insert({
+        type: 'transfer',
+        title: 'New Transfer',
+        message: `${senderName} sent SLE ${amount.toLocaleString()} to ${recipientName}`,
+        priority: amount >= 10000 ? 'high' : 'low',
+        related_entity_type: 'transaction',
+        related_entity_id: reference,
+        action_url: `/admin/transactions?reference=${reference}`,
+        metadata: {
+          senderId: auth.userId,
+          senderName,
+          recipientId: recipientUserId,
+          recipientName,
+          amount,
+          currency: 'SLE',
+        },
+      });
+      console.log('[SharedTransfer] Admin notification created');
+    } catch (adminNotifErr) {
+      console.error('[SharedTransfer] Failed to create admin notification:', adminNotifErr);
+    }
 
     return res.status(200).json({
       success: true,

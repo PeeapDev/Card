@@ -117,8 +117,15 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
   };
 
   // Use currency service formatAmount which handles NLe conversion (divides by 1000)
+  // This is for amounts stored in Old Leone format (database values)
   const formatCurrency = (amount: number): string => {
     return currencyService.formatAmount(amount, 'SLE');
+  };
+
+  // Format Monime balance directly - Monime already returns amounts in New Leone (NLe)
+  // No division needed since Monime operates in NLe
+  const formatMonimeBalance = (amount: number): string => {
+    return `NLe ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const formatTime = (dateString: string | null): string => {
@@ -192,9 +199,8 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
               <div className="space-y-2">
                 <div className="flex items-baseline gap-2">
                   <p className="text-3xl font-bold text-indigo-700 dark:text-indigo-300">
-                    {formatCurrency(monimeBalance.balance)}
+                    {formatMonimeBalance(monimeBalance.balance)}
                   </p>
-                  <span className="text-sm text-indigo-500 dark:text-indigo-400">SLE</span>
                 </div>
                 {monimeBalance.accountCount > 0 && (
                   <p className="text-xs text-indigo-500 dark:text-indigo-400">
