@@ -25,6 +25,7 @@ import {
   History,
   Shield,
   Loader2,
+  Wifi,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, Button, Input } from '@/components/ui';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -948,52 +949,117 @@ function CardItem({
 
   return (
     <div className="space-y-3">
-      {/* Card Visual */}
+      {/* Card Visual - Realistic Credit Card Design */}
       <div
-        className="relative h-48 rounded-xl p-6 text-white shadow-lg cursor-pointer overflow-hidden"
-        style={{ backgroundColor: card.cardColor }}
+        className="relative h-52 rounded-2xl p-5 text-white shadow-2xl cursor-pointer overflow-hidden transform transition-transform hover:scale-[1.02]"
+        style={{
+          background: `linear-gradient(135deg, ${card.cardColor} 0%, ${card.cardColor}dd 50%, ${card.cardColor}99 100%)`,
+        }}
         onClick={onToggleNumber}
       >
+        {/* Background Pattern - Circuit/Wave Design */}
+        <div className="absolute inset-0 opacity-10">
+          <svg className="w-full h-full" viewBox="0 0 400 250" preserveAspectRatio="xMidYMid slice">
+            <defs>
+              <pattern id="cardPattern" x="0" y="0" width="50" height="50" patternUnits="userSpaceOnUse">
+                <circle cx="25" cy="25" r="1" fill="white"/>
+                <path d="M0 25 Q12.5 0 25 25 T50 25" fill="none" stroke="white" strokeWidth="0.5"/>
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#cardPattern)"/>
+            <circle cx="350" cy="50" r="80" fill="white" fillOpacity="0.1"/>
+            <circle cx="380" cy="200" r="120" fill="white" fillOpacity="0.05"/>
+          </svg>
+        </div>
+
+        {/* Holographic Strip Effect */}
+        <div className="absolute top-0 right-0 w-32 h-full opacity-20 bg-gradient-to-bl from-white/30 via-transparent to-transparent" />
+
         {/* Overlay for frozen/blocked */}
         {(card.cardStatus === 'frozen' || card.cardStatus === 'blocked') && (
-          <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-10">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-10 rounded-2xl">
             {card.cardStatus === 'frozen' ? (
-              <Snowflake className="w-12 h-12" />
+              <div className="text-center">
+                <Snowflake className="w-12 h-12 mx-auto mb-2" />
+                <p className="text-sm font-medium">Card Frozen</p>
+              </div>
             ) : (
-              <Lock className="w-12 h-12" />
+              <div className="text-center">
+                <Lock className="w-12 h-12 mx-auto mb-2" />
+                <p className="text-sm font-medium">Card Blocked</p>
+              </div>
             )}
           </div>
         )}
 
         {/* Card Content */}
-        <div className="relative h-full flex flex-col justify-between">
+        <div className="relative h-full flex flex-col justify-between z-[1]">
+          {/* Top Row - Logo and Status */}
           <div className="flex justify-between items-start">
-            <div>
-              <p className="text-xs uppercase tracking-wider opacity-70">Virtual Card</p>
-              <p className="text-sm font-medium mt-1">{card.cardLabel || card.cardName}</p>
+            <div className="flex items-center gap-2">
+              {/* Peeap Logo/Brand */}
+              <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                <span className="text-lg font-bold">P</span>
+              </div>
+              <div>
+                <p className="text-xs font-semibold tracking-wider">PEEAP</p>
+                <p className="text-[10px] opacity-70">Virtual Card</p>
+              </div>
             </div>
             <div className="flex items-center gap-2">
-              <span className={clsx('px-2 py-0.5 text-xs rounded-full', getStatusColor(card.cardStatus))}>
-                {card.cardStatus}
+              <span className={clsx('px-2 py-0.5 text-[10px] font-medium rounded-full backdrop-blur-sm', getStatusColor(card.cardStatus))}>
+                {card.cardStatus.toUpperCase()}
               </span>
-              <CreditCard className="w-8 h-8 opacity-70" />
             </div>
           </div>
 
+          {/* EMV Chip */}
+          <div className="flex items-center gap-4">
+            {/* Chip Design */}
+            <div className="w-12 h-9 rounded-md bg-gradient-to-br from-yellow-300 via-yellow-400 to-yellow-600 shadow-md flex items-center justify-center overflow-hidden">
+              <div className="w-full h-full grid grid-cols-3 grid-rows-3 gap-[1px] p-[3px]">
+                <div className="bg-yellow-600/50 rounded-sm"></div>
+                <div className="bg-yellow-600/30 rounded-sm"></div>
+                <div className="bg-yellow-600/50 rounded-sm"></div>
+                <div className="bg-yellow-600/30 rounded-sm"></div>
+                <div className="bg-yellow-600/60 rounded-sm"></div>
+                <div className="bg-yellow-600/30 rounded-sm"></div>
+                <div className="bg-yellow-600/50 rounded-sm"></div>
+                <div className="bg-yellow-600/30 rounded-sm"></div>
+                <div className="bg-yellow-600/50 rounded-sm"></div>
+              </div>
+            </div>
+            {/* Contactless Icon */}
+            <div className="opacity-70">
+              <Wifi className="w-6 h-6 rotate-90" />
+            </div>
+          </div>
+
+          {/* Card Number */}
           <div>
-            <p className="font-mono text-lg tracking-widest mb-4">
+            <p className="font-mono text-xl tracking-[0.2em] mb-3 drop-shadow-md">
               {formatCardNumber(card.cardLastFour, card.cardNumber)}
             </p>
+
+            {/* Bottom Row - Details */}
             <div className="flex justify-between items-end">
-              <div>
-                <p className="text-[10px] uppercase opacity-60">Valid Thru</p>
-                <p className="text-sm">
-                  {String(card.expiryMonth).padStart(2, '0')}/{String(card.expiryYear).slice(-2)}
-                </p>
+              <div className="flex gap-6">
+                <div>
+                  <p className="text-[9px] uppercase opacity-60 tracking-wider">Valid Thru</p>
+                  <p className="text-sm font-medium tracking-wider">
+                    {String(card.expiryMonth).padStart(2, '0')}/{String(card.expiryYear).slice(-2)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[9px] uppercase opacity-60 tracking-wider">Card Holder</p>
+                  <p className="text-sm font-medium tracking-wide truncate max-w-[120px]">
+                    {card.cardLabel || card.cardName}
+                  </p>
+                </div>
               </div>
               <div className="text-right">
-                <p className="text-[10px] uppercase opacity-60">Balance</p>
-                <p className="text-sm font-semibold">
+                <p className="text-[9px] uppercase opacity-60 tracking-wider">Balance</p>
+                <p className="text-base font-bold">
                   {card.wallet ? formatCurrency(card.wallet.balance * 100) : '-'}
                 </p>
               </div>
@@ -1001,10 +1067,13 @@ function CardItem({
           </div>
         </div>
 
-        {/* Eye icon hint */}
-        <div className="absolute top-2 right-2 opacity-50">
+        {/* Eye icon hint for revealing number */}
+        <div className="absolute top-3 right-3 opacity-40 hover:opacity-80 transition-opacity z-[2]">
           {showFullNumber ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
         </div>
+
+        {/* Subtle shine effect */}
+        <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-transparent pointer-events-none" />
       </div>
 
       {/* Card Actions */}
