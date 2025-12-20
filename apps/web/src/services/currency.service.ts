@@ -93,11 +93,11 @@ export function formatCurrencySync(amount: number, currencyCode: string, currenc
 /**
  * Format amount with currency symbol
  * Simple synchronous method - no conversion, just format
- * Returns format: "Le 5.00" or "$ 5.00"
+ * Returns format: "NLe 5.00" or "$ 5.00"
  */
 export function formatAmount(amount: number, currencyCode: string = 'SLE'): string {
   const symbols: Record<string, string> = {
-    SLE: 'Le',
+    SLE: 'NLe',
     USD: '$',
     EUR: '€',
     GBP: '£',
@@ -146,10 +146,11 @@ export function clearCurrencyCache(): void {
 
 /**
  * Default currencies
+ * Note: SLE uses New Leones (NLe) - 1 NLe = 1000 old Leones
  */
 function getDefaultCurrencies(): Currency[] {
   return [
-    { code: 'SLE', name: 'Sierra Leone Leone', symbol: 'Le', isDefault: true, isActive: true },
+    { code: 'SLE', name: 'Sierra Leone New Leone', symbol: 'NLe', isDefault: true, isActive: true },
     { code: 'USD', name: 'US Dollar', symbol: '$', isDefault: false, isActive: true },
   ];
 }
