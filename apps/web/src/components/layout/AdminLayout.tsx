@@ -86,6 +86,7 @@ const navSections: NavSection[] = [
       { path: '/admin/card-programs', label: 'Card Programs', icon: Layers },
       { path: '/admin/card-types', label: 'Card Types', icon: ShoppingBag },
       { path: '/admin/card-orders', label: 'Card Orders', icon: ClipboardList, badge: 'New', badgeColor: 'primary' },
+      { path: '/admin/virtual-cards', label: 'Virtual Cards', icon: CreditCard, badge: 'New', badgeColor: 'success' },
     ],
   },
   {
