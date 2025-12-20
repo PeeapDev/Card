@@ -163,6 +163,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleFloatToday(req, res);
     } else if (path === 'float/payouts' || path === 'float/payouts/') {
       return await handleFloatPayouts(req, res);
+    } else if (path === 'float/earnings' || path === 'float/earnings/') {
+      return await handleFloatEarnings(req, res);
     } else if (path === 'deposit/verify' || path === 'deposit/verify/') {
       return await handleDepositVerify(req, res);
     } else if (path === 'payouts' || path === 'payouts/') {
@@ -860,14 +862,30 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
           amount = parseFloat(pendingTx.amount?.toString() || '0');
           currency = pendingTx.currency || 'SLE';
 
+          // Get deposit fee settings
+          const { data: feeSettings } = await supabase
+            .from('payment_settings')
+            .select('deposit_fee_percent, deposit_fee_flat')
+            .eq('id', SETTINGS_ID)
+            .single();
+
+          // Calculate deposit fee
+          const feePercent = parseFloat(feeSettings?.deposit_fee_percent?.toString() || '0');
+          const feeFlat = parseFloat(feeSettings?.deposit_fee_flat?.toString() || '0');
+          const percentFee = amount * (feePercent / 100);
+          const depositFee = Math.round((percentFee + feeFlat) * 100) / 100; // Round to 2 decimals
+          const netAmount = amount - depositFee; // Amount credited to user's wallet
+
           console.log('[Deposit Success] Processing deposit:', {
             transactionId: pendingTx.id,
-            amount,
+            grossAmount: amount,
+            depositFee,
+            netAmount,
             currency,
             walletId
           });
 
-          // Credit the wallet
+          // Credit the wallet with NET amount (after fee)
           const { data: wallet, error: walletError } = await supabase
             .from('wallets')
             .select('balance')
@@ -880,11 +898,12 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
 
           if (wallet) {
             const currentBalance = parseFloat(wallet.balance?.toString() || '0');
-            newBalance = currentBalance + amount;
+            newBalance = currentBalance + netAmount; // Credit net amount
 
             console.log('[Deposit Success] Updating wallet balance:', {
               currentBalance,
-              depositAmount: amount,
+              depositAmount: netAmount,
+              fee: depositFee,
               newBalance
             });
 
@@ -903,15 +922,20 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
               console.log('[Deposit Success] Wallet balance updated successfully');
             }
 
-            // Update transaction status
+            // Update transaction status with fee info
             const { error: txUpdateError } = await supabase
               .from('transactions')
               .update({
                 status: 'COMPLETED',
+                fee: depositFee,
                 metadata: {
                   ...pendingTx.metadata,
                   completedAt: new Date().toISOString(),
                   monimeStatus: sessionStatus.status,
+                  grossAmount: amount,
+                  netAmount: netAmount,
+                  feePercent: feePercent,
+                  feeFlat: feeFlat,
                 }
               })
               .eq('id', pendingTx.id);
@@ -920,7 +944,31 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
               console.error('[Deposit Success] Failed to update transaction:', txUpdateError);
             }
 
-            console.log('[Deposit Success] Wallet credited:', { walletId, amount, newBalance });
+            // Record platform earning from deposit fee
+            if (depositFee > 0) {
+              try {
+                await supabase.from('platform_earnings').insert({
+                  earning_type: 'deposit_fee',
+                  source_type: 'user',
+                  source_id: pendingTx.user_id,
+                  transaction_id: pendingTx.id,
+                  amount: depositFee,
+                  currency: currency,
+                  description: `Deposit fee (${feePercent}% + Le ${feeFlat})`,
+                  metadata: {
+                    grossAmount: amount,
+                    netAmount: netAmount,
+                    feePercent: feePercent,
+                    feeFlat: feeFlat,
+                  }
+                });
+                console.log('[Deposit Success] Platform earning recorded:', { depositFee, currency });
+              } catch (earningErr) {
+                console.error('[Deposit Success] Failed to record platform earning:', earningErr);
+              }
+            }
+
+            console.log('[Deposit Success] Wallet credited:', { walletId, netAmount, fee: depositFee, newBalance });
 
             // Credit the system float - money came into the platform via mobile money
             try {
@@ -1560,6 +1608,124 @@ async function handleFloatPayouts(req: VercelRequest, res: VercelResponse) {
   } catch (error: any) {
     console.error('[Float Payouts] Error:', error);
     return res.status(500).json({ error: error.message || 'Failed to fetch payouts' });
+  }
+}
+
+/**
+ * Get platform earnings summary
+ * GET /api/float/earnings
+ * Returns earnings from deposit fees, withdrawal fees, transaction fees, etc.
+ */
+async function handleFloatEarnings(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const url = new URL(req.url || '', `http://${req.headers.host}`);
+    const period = url.searchParams.get('period') || 'today'; // today, week, month, all
+    const type = url.searchParams.get('type'); // deposit_fee, withdrawal_fee, etc.
+
+    // Calculate date range
+    const now = new Date();
+    let startDate: Date;
+
+    if (period === 'today') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    } else if (period === 'week') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+    } else if (period === 'month') {
+      startDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+    } else {
+      startDate = new Date(0); // All time
+    }
+
+    // Build query
+    let query = supabase
+      .from('platform_earnings')
+      .select('*')
+      .gte('created_at', startDate.toISOString())
+      .order('created_at', { ascending: false });
+
+    if (type) {
+      query = query.eq('earning_type', type);
+    }
+
+    const { data: earnings, error } = await query;
+
+    if (error) {
+      console.error('[Float Earnings] Error:', error);
+      // If table doesn't exist yet, return empty data
+      if (error.code === '42P01') {
+        return res.status(200).json({
+          success: true,
+          earnings: [],
+          summary: {
+            totalEarnings: 0,
+            depositFees: 0,
+            withdrawalFees: 0,
+            transactionFees: 0,
+            checkoutFees: 0,
+            count: 0,
+          },
+          period,
+        });
+      }
+      return res.status(500).json({ error: error.message });
+    }
+
+    // Calculate summary by type
+    const summary = {
+      totalEarnings: 0,
+      depositFees: 0,
+      withdrawalFees: 0,
+      transactionFees: 0,
+      checkoutFees: 0,
+      count: (earnings || []).length,
+    };
+
+    (earnings || []).forEach((e: any) => {
+      const amount = parseFloat(e.amount) || 0;
+      summary.totalEarnings += amount;
+
+      switch (e.earning_type) {
+        case 'deposit_fee':
+          summary.depositFees += amount;
+          break;
+        case 'withdrawal_fee':
+          summary.withdrawalFees += amount;
+          break;
+        case 'transaction_fee':
+          summary.transactionFees += amount;
+          break;
+        case 'checkout_fee':
+          summary.checkoutFees += amount;
+          break;
+      }
+    });
+
+    // Get daily breakdown for chart
+    const dailyEarnings: Record<string, number> = {};
+    (earnings || []).forEach((e: any) => {
+      const date = new Date(e.created_at).toISOString().split('T')[0];
+      dailyEarnings[date] = (dailyEarnings[date] || 0) + (parseFloat(e.amount) || 0);
+    });
+
+    const chartData = Object.entries(dailyEarnings)
+      .map(([date, amount]) => ({ date, amount }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(-7); // Last 7 days
+
+    return res.status(200).json({
+      success: true,
+      earnings: (earnings || []).slice(0, 50), // Limit to 50 recent
+      summary,
+      chartData,
+      period,
+    });
+  } catch (error: any) {
+    console.error('[Float Earnings] Error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to fetch earnings' });
   }
 }
 

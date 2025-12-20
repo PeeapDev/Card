@@ -102,6 +102,36 @@ export interface FloatPayoutsResponse {
   };
 }
 
+export interface PlatformEarning {
+  id: string;
+  earning_type: 'deposit_fee' | 'withdrawal_fee' | 'transaction_fee' | 'checkout_fee';
+  source_type: 'user' | 'merchant';
+  source_id: string | null;
+  transaction_id: string | null;
+  amount: number;
+  currency: string;
+  description: string | null;
+  metadata: Record<string, any>;
+  created_at: string;
+}
+
+export interface EarningsSummary {
+  totalEarnings: number;
+  depositFees: number;
+  withdrawalFees: number;
+  transactionFees: number;
+  checkoutFees: number;
+  count: number;
+}
+
+export interface FloatEarningsResponse {
+  success: boolean;
+  earnings: PlatformEarning[];
+  summary: EarningsSummary;
+  chartData: Array<{ date: string; amount: number }>;
+  period: string;
+}
+
 // Provider display info
 export const PROVIDER_INFO: Record<string, { name: string; color: string; bgColor: string; icon: string }> = {
   'm17': { name: 'Orange Money', color: 'text-orange-600', bgColor: 'bg-orange-100', icon: 'OM' },
@@ -315,6 +345,52 @@ export const mobileMoneyFloatService = {
     } catch (error) {
       console.error('Error fetching today payouts summary:', error);
       return { totalAmount: 0, count: 0, userCashouts: 0, merchantWithdrawals: 0 };
+    }
+  },
+
+  /**
+   * Get platform earnings (profit from fees)
+   */
+  async getEarnings(period: 'today' | 'week' | 'month' | 'all' = 'today'): Promise<FloatEarningsResponse> {
+    try {
+      const url = `${getApiUrl()}/float/earnings?period=${period}`;
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        console.error('API error fetching earnings:', response.status);
+        return {
+          success: false,
+          earnings: [],
+          summary: {
+            totalEarnings: 0,
+            depositFees: 0,
+            withdrawalFees: 0,
+            transactionFees: 0,
+            checkoutFees: 0,
+            count: 0,
+          },
+          chartData: [],
+          period,
+        };
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching earnings:', error);
+      return {
+        success: false,
+        earnings: [],
+        summary: {
+          totalEarnings: 0,
+          depositFees: 0,
+          withdrawalFees: 0,
+          transactionFees: 0,
+          checkoutFees: 0,
+          count: 0,
+        },
+        chartData: [],
+        period,
+      };
     }
   },
 };

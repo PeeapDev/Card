@@ -26,6 +26,8 @@ import {
   CheckCircle2,
   XCircle,
   Send,
+  DollarSign,
+  Coins,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -34,6 +36,7 @@ import {
   MobileMoneyFloatSummary,
   MobileMoneyFloatHistory,
   FloatPayout,
+  EarningsSummary,
   PROVIDER_INFO,
 } from '@/services/mobileMoneyFloat.service';
 import { currencyService } from '@/services/currency.service';
@@ -67,11 +70,21 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
   const [monimeBalance, setMonimeBalance] = useState<MonimeBalanceResponse | null>(null);
   const [monimeLoading, setMonimeLoading] = useState(true);
   const [payoutsLoading, setPayoutsLoading] = useState(false);
+  const [earnings, setEarnings] = useState<EarningsSummary>({
+    totalEarnings: 0,
+    depositFees: 0,
+    withdrawalFees: 0,
+    transactionFees: 0,
+    checkoutFees: 0,
+    count: 0,
+  });
+  const [earningsLoading, setEarningsLoading] = useState(false);
 
   useEffect(() => {
     loadData();
     loadMonimeBalance();
     loadPayouts();
+    loadEarnings();
 
     // Set up real-time subscriptions using system_float tables
     const floatSubscription = supabase
@@ -132,6 +145,18 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
       console.error('Error loading payouts:', error);
     } finally {
       setPayoutsLoading(false);
+    }
+  };
+
+  const loadEarnings = async () => {
+    setEarningsLoading(true);
+    try {
+      const result = await mobileMoneyFloatService.getEarnings('month');
+      setEarnings(result.summary);
+    } catch (error) {
+      console.error('Error loading earnings:', error);
+    } finally {
+      setEarningsLoading(false);
     }
   };
 
@@ -296,6 +321,82 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
                 {formatCurrency(todayMovements.deposits - todayMovements.payouts)}
               </p>
             </div>
+          </div>
+
+          {/* Platform Earnings Section */}
+          <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 rounded-xl border border-emerald-200 dark:border-emerald-800">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-emerald-100 dark:bg-emerald-900/50 rounded-lg">
+                  <Coins className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-emerald-900 dark:text-emerald-100">Platform Earnings</h4>
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400">Profit from transaction fees (This Month)</p>
+                </div>
+              </div>
+              <button
+                onClick={loadEarnings}
+                disabled={earningsLoading}
+                className="p-1.5 text-emerald-600 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 rounded-lg"
+              >
+                <RefreshCw className={`w-4 h-4 ${earningsLoading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+
+            {/* Total Earnings */}
+            <div className="mb-3 p-3 bg-white/60 dark:bg-gray-800/60 rounded-lg">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Total Profit</span>
+                <span className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                  {formatCurrency(earnings.totalEarnings)}
+                </span>
+              </div>
+            </div>
+
+            {/* Earnings Breakdown */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="p-2 bg-white/40 dark:bg-gray-800/40 rounded-lg">
+                <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400 mb-1">
+                  <ArrowDownRight className="w-3 h-3" />
+                  <span className="text-xs">Deposit Fees</span>
+                </div>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                  {formatCurrency(earnings.depositFees)}
+                </p>
+              </div>
+              <div className="p-2 bg-white/40 dark:bg-gray-800/40 rounded-lg">
+                <div className="flex items-center gap-1 text-red-600 dark:text-red-400 mb-1">
+                  <ArrowUpRight className="w-3 h-3" />
+                  <span className="text-xs">Withdrawal Fees</span>
+                </div>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                  {formatCurrency(earnings.withdrawalFees)}
+                </p>
+              </div>
+              <div className="p-2 bg-white/40 dark:bg-gray-800/40 rounded-lg">
+                <div className="flex items-center gap-1 text-purple-600 dark:text-purple-400 mb-1">
+                  <DollarSign className="w-3 h-3" />
+                  <span className="text-xs">Transaction Fees</span>
+                </div>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                  {formatCurrency(earnings.transactionFees)}
+                </p>
+              </div>
+              <div className="p-2 bg-white/40 dark:bg-gray-800/40 rounded-lg">
+                <div className="flex items-center gap-1 text-orange-600 dark:text-orange-400 mb-1">
+                  <Wallet className="w-3 h-3" />
+                  <span className="text-xs">Checkout Fees</span>
+                </div>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                  {formatCurrency(earnings.checkoutFees)}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-2 text-center">
+              {earnings.count} fee transactions this month
+            </p>
           </div>
 
           {/* Provider Cards */}
