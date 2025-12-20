@@ -1563,8 +1563,8 @@ export const cardService = {
    * Activate a virtual card
    */
   async activateVirtualCard(cardId: string, userId: string, activationCode: string): Promise<{ success: boolean; error?: string }> {
-    // First verify the activation code
-    const { data: card, error: fetchError } = await supabase
+    // First verify the activation code - use admin client to bypass RLS
+    const { data: card, error: fetchError } = await supabaseAdmin
       .from('issued_cards')
       .select('activation_code, card_status')
       .eq('id', cardId)
@@ -1572,6 +1572,7 @@ export const cardService = {
       .single();
 
     if (fetchError || !card) {
+      console.error('Error fetching card for activation:', fetchError);
       return { success: false, error: 'Card not found' };
     }
 
@@ -1583,10 +1584,12 @@ export const cardService = {
       return { success: false, error: 'Invalid activation code' };
     }
 
-    const { error } = await supabase
+    // Update card status - use admin client
+    const { error } = await supabaseAdmin
       .from('issued_cards')
       .update({
         card_status: 'active',
+        activated_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
       .eq('id', cardId)
@@ -1606,7 +1609,7 @@ export const cardService = {
   async toggleCardFreeze(cardId: string, userId: string, freeze: boolean): Promise<{ success: boolean; error?: string }> {
     const newStatus = freeze ? 'frozen' : 'active';
 
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('issued_cards')
       .update({
         is_frozen: freeze,
@@ -1639,7 +1642,7 @@ export const cardService = {
     if (limits.monthlyLimit !== undefined) updates.monthly_limit = limits.monthlyLimit;
     if (limits.perTransactionLimit !== undefined) updates.per_transaction_limit = limits.perTransactionLimit;
 
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('issued_cards')
       .update(updates)
       .eq('id', cardId)
@@ -1668,7 +1671,7 @@ export const cardService = {
     if (controls.onlinePaymentsEnabled !== undefined) updates.online_payments_enabled = controls.onlinePaymentsEnabled;
     if (controls.atmWithdrawalsEnabled !== undefined) updates.atm_withdrawals_enabled = controls.atmWithdrawalsEnabled;
 
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('issued_cards')
       .update(updates)
       .eq('id', cardId)
