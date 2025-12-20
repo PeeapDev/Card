@@ -78,6 +78,7 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
     checkoutFees: 0,
     count: 0,
   });
+  const [earningsByCurrency, setEarningsByCurrency] = useState<Record<string, EarningsSummary>>({});
   const [earningsLoading, setEarningsLoading] = useState(false);
 
   useEffect(() => {
@@ -153,6 +154,9 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
     try {
       const result = await mobileMoneyFloatService.getEarnings('month');
       setEarnings(result.summary);
+      if (result.earningsByCurrency) {
+        setEarningsByCurrency(result.earningsByCurrency);
+      }
     } catch (error) {
       console.error('Error loading earnings:', error);
     } finally {
@@ -233,7 +237,7 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
 
       {expanded && (
         <div className="p-4 space-y-4">
-          {/* Monime Gateway Balance */}
+          {/* Monime Gateway Balance - Multi-Currency */}
           <div className="p-4 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-xl border border-indigo-200 dark:border-indigo-800">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -258,18 +262,51 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
                 <RefreshCw className="w-5 h-5 animate-spin text-indigo-400" />
               </div>
             ) : monimeBalance && monimeBalance.success ? (
-              <div className="space-y-2">
-                <div className="flex items-baseline gap-2">
-                  <p className="text-3xl font-bold text-indigo-700 dark:text-indigo-300">
-                    {formatMonimeBalance(monimeBalance.balance)}
-                  </p>
+              <div className="space-y-3">
+                {/* Currency Balances Grid */}
+                <div className="grid grid-cols-2 gap-3">
+                  {/* SLE Balance */}
+                  <div className="p-3 bg-white/60 dark:bg-gray-800/60 rounded-lg border border-indigo-100 dark:border-indigo-800">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-lg">🇸🇱</span>
+                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Leones (SLE)</span>
+                    </div>
+                    <p className="text-xl font-bold text-indigo-700 dark:text-indigo-300">
+                      NLe {(monimeBalance.balancesByCurrency?.SLE?.totalBalance || monimeBalance.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                    {monimeBalance.balancesByCurrency?.SLE?.accounts?.length > 0 && (
+                      <p className="text-xs text-indigo-400 mt-1">
+                        {monimeBalance.balancesByCurrency.SLE.accounts.length} account{monimeBalance.balancesByCurrency.SLE.accounts.length > 1 ? 's' : ''}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* USD Balance */}
+                  <div className="p-3 bg-white/60 dark:bg-gray-800/60 rounded-lg border border-green-100 dark:border-green-800">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-lg">🇺🇸</span>
+                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Dollars (USD)</span>
+                    </div>
+                    <p className="text-xl font-bold text-green-700 dark:text-green-300">
+                      $ {(monimeBalance.balancesByCurrency?.USD?.totalBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                    {monimeBalance.balancesByCurrency?.USD?.accounts?.length > 0 && (
+                      <p className="text-xs text-green-400 mt-1">
+                        {monimeBalance.balancesByCurrency.USD.accounts.length} account{monimeBalance.balancesByCurrency.USD.accounts.length > 1 ? 's' : ''}
+                      </p>
+                    )}
+                  </div>
                 </div>
-                {monimeBalance.accountCount > 0 && (
+
+                {/* Combined Total & Last Updated */}
+                <div className="flex items-center justify-between pt-2 border-t border-indigo-100 dark:border-indigo-800">
                   <p className="text-xs text-indigo-500 dark:text-indigo-400">
-                    {monimeBalance.accountCount} account{monimeBalance.accountCount > 1 ? 's' : ''} •
+                    {monimeBalance.accountCount} total account{monimeBalance.accountCount > 1 ? 's' : ''}
+                  </p>
+                  <p className="text-xs text-indigo-500 dark:text-indigo-400">
                     Updated {new Date(monimeBalance.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </p>
-                )}
+                </div>
               </div>
             ) : (
               <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
@@ -323,7 +360,7 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
             </div>
           </div>
 
-          {/* Platform Earnings Section */}
+          {/* Platform Earnings Section - Multi-Currency */}
           <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 rounded-xl border border-emerald-200 dark:border-emerald-800">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -332,7 +369,7 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
                 </div>
                 <div>
                   <h4 className="font-semibold text-emerald-900 dark:text-emerald-100">Platform Earnings</h4>
-                  <p className="text-xs text-emerald-600 dark:text-emerald-400">Profit from transaction fees (This Month)</p>
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400">Profit by currency (This Month)</p>
                 </div>
               </div>
               <button
@@ -344,22 +381,43 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
               </button>
             </div>
 
-            {/* Total Earnings */}
-            <div className="mb-3 p-3 bg-white/60 dark:bg-gray-800/60 rounded-lg">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Total Profit</span>
-                <span className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-                  {formatCurrency(earnings.totalEarnings)}
-                </span>
+            {/* Multi-Currency Earnings */}
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              {/* SLE Earnings */}
+              <div className="p-3 bg-white/60 dark:bg-gray-800/60 rounded-lg border border-emerald-100 dark:border-emerald-800">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-lg">🇸🇱</span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">Leones (SLE)</span>
+                </div>
+                <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                  NLe {(earningsByCurrency?.SLE?.totalEarnings || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {earningsByCurrency?.SLE?.count || 0} transactions
+                </p>
+              </div>
+
+              {/* USD Earnings */}
+              <div className="p-3 bg-white/60 dark:bg-gray-800/60 rounded-lg border border-green-100 dark:border-green-800">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-lg">🇺🇸</span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">Dollars (USD)</span>
+                </div>
+                <p className="text-xl font-bold text-green-600 dark:text-green-400">
+                  $ {(earningsByCurrency?.USD?.totalEarnings || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {earningsByCurrency?.USD?.count || 0} transactions
+                </p>
               </div>
             </div>
 
-            {/* Earnings Breakdown */}
+            {/* Combined Fee Breakdown */}
             <div className="grid grid-cols-2 gap-2">
               <div className="p-2 bg-white/40 dark:bg-gray-800/40 rounded-lg">
                 <div className="flex items-center gap-1 text-red-600 dark:text-red-400 mb-1">
                   <ArrowUpRight className="w-3 h-3" />
-                  <span className="text-xs">Withdrawal Fees (2%)</span>
+                  <span className="text-xs">Withdrawal Fees</span>
                 </div>
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">
                   {formatCurrency(earnings.withdrawalFees)}

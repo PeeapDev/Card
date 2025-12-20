@@ -51,6 +51,7 @@ const notificationIcons: Record<AdminNotificationType, typeof Bell> = {
   payout: ArrowUpRight,
   withdrawal: Banknote,
   transfer: ArrowLeftRight,
+  cashout: ArrowUpRight,
 };
 
 // Color mapping for notification types
@@ -67,6 +68,7 @@ const notificationColors: Record<AdminNotificationType, string> = {
   payout: 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400',
   withdrawal: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
   transfer: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400',
+  cashout: 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400',
 };
 
 const priorityColors: Record<string, string> = {
@@ -194,7 +196,7 @@ function AdminNotificationItem({
                 Deposit
               </span>
             )}
-            {(notification.type === 'payout' || notification.type === 'withdrawal') && (
+            {(notification.type === 'payout' || notification.type === 'withdrawal' || notification.type === 'cashout') && (
               <span className="px-1.5 py-0.5 text-[10px] font-medium bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 rounded">
                 Payout
               </span>
@@ -322,7 +324,7 @@ export function AdminNotificationBell() {
       // Update counts
       if (notification.type === 'deposit') {
         setRecentDepositsCount(prev => prev + 1);
-      } else if (notification.type === 'payout' || notification.type === 'withdrawal') {
+      } else if (notification.type === 'payout' || notification.type === 'withdrawal' || notification.type === 'cashout') {
         setRecentPayoutsCount(prev => prev + 1);
       }
 

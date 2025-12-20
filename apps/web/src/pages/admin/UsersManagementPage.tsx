@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, SyntheticEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Users,
@@ -35,6 +35,7 @@ interface User {
   created_at: string;
   last_login_at?: string;
   external_id?: string;
+  profile_picture?: string;
 }
 
 interface CreateUserForm {
@@ -84,6 +85,13 @@ export function UsersManagementPage() {
   const [checkingUsername, setCheckingUsername] = useState(false);
   const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
   const [usernameError, setUsernameError] = useState<string | null>(null);
+
+  // Track failed avatar images
+  const [failedAvatars, setFailedAvatars] = useState<Set<string>>(new Set());
+
+  const handleAvatarError = useCallback((userId: string) => {
+    setFailedAvatars(prev => new Set(prev).add(userId));
+  }, []);
 
   useEffect(() => {
     fetchUsers();
@@ -515,11 +523,20 @@ export function UsersManagementPage() {
                   >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center">
-                          <span className="text-primary-700 dark:text-primary-400 font-medium">
-                            {user.first_name?.charAt(0)}{user.last_name?.charAt(0)}
-                          </span>
-                        </div>
+                        {user.profile_picture && !failedAvatars.has(user.id) ? (
+                          <img
+                            src={user.profile_picture}
+                            alt={`${user.first_name} ${user.last_name}`}
+                            className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                            onError={() => handleAvatarError(user.id)}
+                          />
+                        ) : (
+                          <div className="w-10 h-10 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center flex-shrink-0">
+                            <span className="text-primary-700 dark:text-primary-400 font-medium">
+                              {user.first_name?.charAt(0)}{user.last_name?.charAt(0)}
+                            </span>
+                          </div>
+                        )}
                         <div>
                           <p className="font-medium text-gray-900 dark:text-white">{user.first_name} {user.last_name}</p>
                           <p className="text-sm text-gray-500 dark:text-gray-400">ID: {user.id.slice(0, 8)}...</p>

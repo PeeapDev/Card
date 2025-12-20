@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Store,
@@ -40,6 +40,11 @@ export function BusinessesPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [actionNotes, setActionNotes] = useState('');
   const [showRejectModal, setShowRejectModal] = useState(false);
+  const [failedAvatars, setFailedAvatars] = useState<Set<string>>(new Set());
+
+  const handleAvatarError = useCallback((merchantId: string) => {
+    setFailedAvatars(prev => new Set(prev).add(merchantId));
+  }, []);
 
   useEffect(() => {
     fetchBusinesses();
@@ -308,11 +313,25 @@ export function BusinessesPage() {
                     </td>
                     <td className="px-6 py-4">
                       {business.merchant && (
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">
-                            {business.merchant.first_name} {business.merchant.last_name}
-                          </p>
-                          <p className="text-sm text-gray-500">{business.merchant.email}</p>
+                        <div className="flex items-center gap-3">
+                          {business.merchant.profile_picture && !failedAvatars.has(business.merchant.id) ? (
+                            <img
+                              src={business.merchant.profile_picture}
+                              alt={`${business.merchant.first_name} ${business.merchant.last_name}`}
+                              className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                              onError={() => handleAvatarError(business.merchant!.id)}
+                            />
+                          ) : (
+                            <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
+                              <User className="w-4 h-4 text-gray-400" />
+                            </div>
+                          )}
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">
+                              {business.merchant.first_name} {business.merchant.last_name}
+                            </p>
+                            <p className="text-sm text-gray-500">{business.merchant.email}</p>
+                          </div>
                         </div>
                       )}
                     </td>
@@ -460,16 +479,30 @@ export function BusinessesPage() {
                     <User className="w-4 h-4" />
                     Merchant Owner
                   </h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-500">Name</p>
-                      <p className="font-medium">
-                        {selectedBusiness.merchant.first_name} {selectedBusiness.merchant.last_name}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Email</p>
-                      <p className="font-medium">{selectedBusiness.merchant.email}</p>
+                  <div className="flex items-center gap-4">
+                    {selectedBusiness.merchant.profile_picture && !failedAvatars.has(selectedBusiness.merchant.id) ? (
+                      <img
+                        src={selectedBusiness.merchant.profile_picture}
+                        alt={`${selectedBusiness.merchant.first_name} ${selectedBusiness.merchant.last_name}`}
+                        className="w-12 h-12 rounded-full object-cover flex-shrink-0"
+                        onError={() => handleAvatarError(selectedBusiness.merchant!.id)}
+                      />
+                    ) : (
+                      <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <User className="w-6 h-6 text-gray-400" />
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-4 flex-1">
+                      <div>
+                        <p className="text-sm text-gray-500">Name</p>
+                        <p className="font-medium">
+                          {selectedBusiness.merchant.first_name} {selectedBusiness.merchant.last_name}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Email</p>
+                        <p className="font-medium">{selectedBusiness.merchant.email}</p>
+                      </div>
                     </div>
                   </div>
                 </Card>

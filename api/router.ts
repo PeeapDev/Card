@@ -1677,7 +1677,7 @@ async function handleFloatEarnings(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: error.message });
     }
 
-    // Calculate summary by type
+    // Calculate summary by type (overall)
     const summary = {
       totalEarnings: 0,
       depositFees: 0,
@@ -1687,8 +1687,21 @@ async function handleFloatEarnings(req: VercelRequest, res: VercelResponse) {
       count: (earnings || []).length,
     };
 
+    // Calculate summary by currency
+    const earningsByCurrency: Record<string, {
+      totalEarnings: number;
+      depositFees: number;
+      withdrawalFees: number;
+      transactionFees: number;
+      checkoutFees: number;
+      count: number;
+    }> = {};
+
     (earnings || []).forEach((e: any) => {
       const amount = parseFloat(e.amount) || 0;
+      const currency = e.currency || 'SLE';
+
+      // Overall summary
       summary.totalEarnings += amount;
 
       switch (e.earning_type) {
@@ -1703,6 +1716,35 @@ async function handleFloatEarnings(req: VercelRequest, res: VercelResponse) {
           break;
         case 'checkout_fee':
           summary.checkoutFees += amount;
+          break;
+      }
+
+      // By currency summary
+      if (!earningsByCurrency[currency]) {
+        earningsByCurrency[currency] = {
+          totalEarnings: 0,
+          depositFees: 0,
+          withdrawalFees: 0,
+          transactionFees: 0,
+          checkoutFees: 0,
+          count: 0,
+        };
+      }
+      earningsByCurrency[currency].totalEarnings += amount;
+      earningsByCurrency[currency].count += 1;
+
+      switch (e.earning_type) {
+        case 'deposit_fee':
+          earningsByCurrency[currency].depositFees += amount;
+          break;
+        case 'withdrawal_fee':
+          earningsByCurrency[currency].withdrawalFees += amount;
+          break;
+        case 'transaction_fee':
+          earningsByCurrency[currency].transactionFees += amount;
+          break;
+        case 'checkout_fee':
+          earningsByCurrency[currency].checkoutFees += amount;
           break;
       }
     });
@@ -1723,6 +1765,7 @@ async function handleFloatEarnings(req: VercelRequest, res: VercelResponse) {
       success: true,
       earnings: (earnings || []).slice(0, 50), // Limit to 50 recent
       summary,
+      earningsByCurrency,
       chartData,
       period,
     });

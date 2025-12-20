@@ -481,7 +481,18 @@ export function PayoutPage() {
                 </div>
               ) : wallets && wallets.length > 0 ? (
                 <div className="space-y-2 max-h-40 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
-                  {wallets.filter(w => w.status === 'ACTIVE').map((wallet) => (
+                  {/* Filter to only show SLE wallets - USD wallets can only payout to bank accounts */}
+                  {wallets.filter(w => w.status === 'ACTIVE' && w.currency === 'SLE').length === 0 ? (
+                    <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl">
+                      <div className="flex items-start gap-3">
+                        <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                        <div className="text-sm text-yellow-800 dark:text-yellow-200">
+                          <p className="font-medium">No SLE Wallet Available</p>
+                          <p className="mt-1">Mobile money payouts only support SLE currency. USD wallets can only payout to bank accounts.</p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : wallets.filter(w => w.status === 'ACTIVE' && w.currency === 'SLE').map((wallet) => (
                     <button
                       key={wallet.id}
                       type="button"
@@ -506,6 +517,16 @@ export function PayoutPage() {
                       )}
                     </button>
                   ))}
+                </div>
+              ) : wallets && wallets.some(w => w.currency === 'USD') ? (
+                <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-yellow-800 dark:text-yellow-200">
+                      <p className="font-medium">USD Wallets Not Supported</p>
+                      <p className="mt-1">Mobile money payouts only support SLE currency. To withdraw USD, please use bank transfer.</p>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <p className="text-sm text-gray-500 text-center py-4">No wallets available</p>

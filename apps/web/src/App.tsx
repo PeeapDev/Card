@@ -85,6 +85,7 @@ import { SmtpSettingsPage } from '@/pages/admin/SmtpSettingsPage';
 import { PushNotificationsPage } from '@/pages/admin/PushNotificationsPage';
 import SsoSettingsPage from '@/pages/admin/SsoSettingsPage';
 import { WebsiteAnalyticsPage } from '@/pages/admin/WebsiteAnalyticsPage';
+import { ExchangeRatesPage } from '@/pages/admin/ExchangeRatesPage';
 import { PaymentCheckoutPage } from '@/pages/PaymentCheckoutPage';
 import { PayPage } from '@/pages/PayPage';
 import { PaymentSuccessPage } from '@/pages/PaymentSuccessPage';
@@ -776,6 +777,14 @@ function App() {
                   </RoleBasedRoute>
                 }
               />
+              <Route
+                path="/admin/exchange-rates"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <ExchangeRatesPage />
+                  </RoleBasedRoute>
+                }
+              />
 
               {/* Merchant Routes */}
               <Route
@@ -1334,6 +1343,7 @@ function App() {
                   <Route path="/admin/push-notifications" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><PushNotificationsPage /></RoleBasedRoute>} />
                   <Route path="/admin/settings/sso" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><SsoSettingsPage /></RoleBasedRoute>} />
                   <Route path="/admin/analytics" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><WebsiteAnalyticsPage /></RoleBasedRoute>} />
+                  <Route path="/admin/exchange-rates" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><ExchangeRatesPage /></RoleBasedRoute>} />
 
                   {/* User Notifications Route */}
                   <Route path="/notifications" element={<ProtectedRoute><UserNotificationsPage /></ProtectedRoute>} />

@@ -120,7 +120,7 @@ export const contactService = {
     try {
       const { data: user, error } = await supabase
         .from('users')
-        .select('id, email, phone, first_name, last_name, email_verified')
+        .select('id, email, phone, first_name, last_name, email_verified, profile_picture')
         .eq('id', userId)
         .single();
 
@@ -135,6 +135,8 @@ export const contactService = {
         firstName: user.first_name,
         lastName: user.last_name,
         fullName: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email,
+        avatar: user.profile_picture,
+        avatarUrl: user.profile_picture,
         isVerified: user.email_verified,
       };
     } catch {
@@ -163,7 +165,8 @@ export const contactService = {
             phone,
             first_name,
             last_name,
-            email_verified
+            email_verified,
+            profile_picture
           )
         `)
         .eq('business_id', businessId);
@@ -183,6 +186,8 @@ export const contactService = {
         firstName: member.users?.first_name,
         lastName: member.users?.last_name,
         fullName: `${member.users?.first_name || ''} ${member.users?.last_name || ''}`.trim() || member.users?.email || 'Unknown',
+        avatar: member.users?.profile_picture,
+        avatarUrl: member.users?.profile_picture,
         isVerified: member.users?.email_verified,
         role: member.role,
         department: member.department,

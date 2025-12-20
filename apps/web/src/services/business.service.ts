@@ -75,6 +75,7 @@ export interface MerchantBusiness {
     first_name: string;
     last_name: string;
     email: string;
+    profile_picture?: string;
   };
 }
 
@@ -436,7 +437,7 @@ export const businessService = {
       .select(`
         *,
         business_category:business_categories(id, name, icon),
-        merchant:users!merchant_id(id, first_name, last_name, email)
+        merchant:users!merchant_id(id, first_name, last_name, email, profile_picture)
       `)
       .order('created_at', { ascending: false });
 

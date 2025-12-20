@@ -14,6 +14,7 @@
 
 import { authService } from './auth.service';
 import { APP_URL, isDevelopment } from '@/config/urls';
+import { saveUserAvatars } from './indexeddb.service';
 
 // API base URL - points to my.peeap.com API
 const getApiBaseUrl = () => {
@@ -297,6 +298,7 @@ class SharedApiService {
   /**
    * Search users by email, phone, or name
    * Used for inviting team members to Plus businesses
+   * Caches user avatars to IndexedDB for offline access
    */
   async searchUsers(query: string): Promise<ApiResponse<{
     users: Array<{
@@ -313,7 +315,39 @@ class SharedApiService {
     if (!query || query.length < 2) {
       return { data: { users: [] } };
     }
-    return this.request(`/shared/users/search?q=${encodeURIComponent(query)}`);
+
+    const response = await this.request<{
+      users: Array<{
+        id: string;
+        email: string;
+        firstName?: string;
+        lastName?: string;
+        fullName: string;
+        phone?: string;
+        avatarUrl?: string;
+        createdAt: string;
+      }>;
+    }>(`/shared/users/search?q=${encodeURIComponent(query)}`);
+
+    // Cache user avatars to IndexedDB for offline access
+    if (response.data?.users && response.data.users.length > 0) {
+      const avatarsToCache = response.data.users.map(user => ({
+        user_id: user.id,
+        avatar_url: user.avatarUrl || null,
+        first_name: user.firstName || '',
+        last_name: user.lastName || '',
+        phone: user.phone || null,
+        email: user.email || null,
+        username: null,
+      }));
+
+      // Save to IndexedDB in background (don't await)
+      saveUserAvatars(avatarsToCache).catch(err => {
+        console.warn('Failed to cache user avatars from search:', err);
+      });
+    }
+
+    return response;
   }
 }
 

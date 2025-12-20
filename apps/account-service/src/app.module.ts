@@ -6,8 +6,12 @@ import { MonimeModule } from './modules/monime/monime.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { UsersModule } from './modules/users/users.module';
 import { UploadModule } from './modules/upload/upload.module';
+import { ExchangeModule } from './modules/exchange/exchange.module';
 import { PaymentSettings } from '@payment-system/database';
 import { MonimeTransaction } from './modules/monime/entities/monime-transaction.entity';
+import { ExchangeRate } from './modules/exchange/entities/exchange-rate.entity';
+import { ExchangeTransaction } from './modules/exchange/entities/exchange-transaction.entity';
+import { ExchangePermission } from './modules/exchange/entities/exchange-permission.entity';
 
 @Module({
   imports: [
@@ -39,8 +43,8 @@ import { MonimeTransaction } from './modules/monime/entities/monime-transaction.
           username: configService.get('DB_USER', 'postgres'),
           password: supabaseDbPassword || configService.get('DB_PASSWORD', 'postgres'),
           database: configService.get('DB_NAME', 'postgres'),
-          // Only include entities we need for Monime checkout flow
-          entities: [MonimeTransaction, PaymentSettings],
+          // Only include entities we need for Monime checkout flow and exchange
+          entities: [MonimeTransaction, PaymentSettings, ExchangeRate, ExchangeTransaction, ExchangePermission],
           // Don't sync in production - use migrations
           synchronize: configService.get('NODE_ENV') === 'development',
           logging: configService.get('DB_LOGGING', 'false') === 'true',
@@ -59,6 +63,7 @@ import { MonimeTransaction } from './modules/monime/entities/monime-transaction.
     SettingsModule,
     UsersModule,
     UploadModule,
+    ExchangeModule,
   ],
 })
 export class AppModule {}

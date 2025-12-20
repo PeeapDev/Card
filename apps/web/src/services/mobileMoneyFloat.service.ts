@@ -128,6 +128,7 @@ export interface FloatEarningsResponse {
   success: boolean;
   earnings: PlatformEarning[];
   summary: EarningsSummary;
+  earningsByCurrency?: Record<string, EarningsSummary>;
   chartData: Array<{ date: string; amount: number }>;
   period: string;
 }

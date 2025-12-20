@@ -137,10 +137,9 @@ export function DashboardPage() {
                   <Wallet className="w-6 h-6 text-primary-600 dark:text-primary-400" />
                 </div>
               </div>
-              <div className="mt-4 flex items-center text-sm text-green-600 dark:text-green-400">
-                <TrendingUp className="w-4 h-4 mr-1" />
-                <span>+12.5% from last month</span>
-              </div>
+              <Link to="/wallets" className="mt-4 text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 block">
+                Manage balance →
+              </Link>
             </MotionCard>
           </motion.div>
 

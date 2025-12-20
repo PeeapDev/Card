@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Store,
   Search,
@@ -36,6 +36,7 @@ interface Merchant {
   subscription_status?: string;
   subscription_plan?: string;
   monthly_volume?: number;
+  profile_picture?: string;
 }
 
 export function MerchantsManagementPage() {
@@ -44,6 +45,11 @@ export function MerchantsManagementPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [failedAvatars, setFailedAvatars] = useState<Set<string>>(new Set());
+
+  const handleAvatarError = useCallback((merchantId: string) => {
+    setFailedAvatars(prev => new Set(prev).add(merchantId));
+  }, []);
 
   useEffect(() => {
     fetchMerchants();
@@ -245,9 +251,18 @@ export function MerchantsManagementPage() {
                   <tr key={merchant.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
-                          <Store className="w-5 h-5 text-green-600 dark:text-green-400" />
-                        </div>
+                        {merchant.profile_picture && !failedAvatars.has(merchant.id) ? (
+                          <img
+                            src={merchant.profile_picture}
+                            alt={`${merchant.first_name} ${merchant.last_name}`}
+                            className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                            onError={() => handleAvatarError(merchant.id)}
+                          />
+                        ) : (
+                          <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center flex-shrink-0">
+                            <Store className="w-5 h-5 text-green-600 dark:text-green-400" />
+                          </div>
+                        )}
                         <div>
                           <p className="font-medium text-gray-900 dark:text-white">{merchant.first_name} {merchant.last_name}</p>
                           {merchant.business_name && (

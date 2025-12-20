@@ -9,15 +9,21 @@
  * - Email
  *
  * Shows profile picture from KYC (read-only, cannot be changed by user)
+ * Avatars are cached in IndexedDB for offline access and fast loading
  * Reusable for: Send Money, Add Contact, Search Users
  */
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, SyntheticEvent } from 'react';
 import { Search, Phone, AtSign, X, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { clsx } from 'clsx';
 import { useAuth } from '@/context/AuthContext';
 import { rbacService } from '@/services/rbac.service';
+import {
+  saveUserAvatars,
+  getAllCachedUserAvatars,
+  type CachedUserAvatar,
+} from '@/services/indexeddb.service';
 import Fuse from 'fuse.js';
 
 export interface SearchResult {
@@ -71,9 +77,15 @@ export function UserSearch({
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Handle image load error - fallback to initials
+  const handleImageError = useCallback((userId: string) => {
+    setFailedImages(prev => new Set(prev).add(userId));
+  }, []);
 
   // Initialize RBAC when user changes
   useEffect(() => {
@@ -83,29 +95,63 @@ export function UserSearch({
   }, [user?.id, user?.roles]);
 
   // Load all users on mount for Fuse.js client-side search
+  // First loads from IndexedDB cache for instant display, then fetches fresh data
   useEffect(() => {
     const loadUsers = async () => {
       setIsInitialLoading(true);
+
       try {
+        // Step 1: Load cached users from IndexedDB first for instant display
+        const cachedAvatars = await getAllCachedUserAvatars();
+        if (cachedAvatars.length > 0) {
+          const cachedUsers: SearchResult[] = cachedAvatars.map((c: CachedUserAvatar) => ({
+            id: c.user_id,
+            first_name: c.first_name || '',
+            last_name: c.last_name || '',
+            username: c.username || null,
+            phone: c.phone || null,
+            email: c.email || null,
+            profile_picture: c.avatar_url || null,
+          }));
+
+          // Exclude current user if specified
+          const filteredCached = excludeUserId
+            ? cachedUsers.filter(u => u.id !== excludeUserId)
+            : cachedUsers;
+
+          setAllUsers(filteredCached);
+          setIsInitialLoading(false);
+        }
+
+        // Step 2: Fetch fresh data from server (includes profile_picture)
         const { data, error } = await supabase
           .from('users')
-          .select('id, first_name, last_name, phone, email, roles, status')
+          .select('id, first_name, last_name, phone, email, username, profile_picture, roles, status')
           .eq('status', 'ACTIVE')
           .limit(500);
 
         if (error) {
           console.error('Error loading users:', error);
-          setAllUsers([]);
+          // If we have cached data, keep using it
+          if (cachedAvatars.length === 0) {
+            setAllUsers([]);
+          }
         } else {
+          // Debug: Log users with profile pictures
+          const usersWithPics = (data || []).filter((u: any) => u.profile_picture);
+          console.log(`[UserSearch] Loaded ${data?.length || 0} users, ${usersWithPics.length} have profile pictures`);
+          if (usersWithPics.length > 0) {
+            console.log('[UserSearch] Sample profile_picture:', usersWithPics[0]?.profile_picture);
+          }
           // Map to SearchResult format
           const mappedUsers: SearchResult[] = (data || []).map((u: any) => ({
             id: u.id,
             first_name: u.first_name || '',
             last_name: u.last_name || '',
-            username: null,
+            username: u.username || null,
             phone: u.phone || null,
             email: u.email || null,
-            profile_picture: null,
+            profile_picture: u.profile_picture || null,
           }));
 
           // Exclude current user if specified
@@ -114,6 +160,22 @@ export function UserSearch({
             : mappedUsers;
 
           setAllUsers(filteredUsers);
+
+          // Step 3: Cache all user avatars to IndexedDB for offline access
+          const avatarsToCache = (data || []).map((u: any) => ({
+            user_id: u.id,
+            avatar_url: u.profile_picture || null,
+            first_name: u.first_name || '',
+            last_name: u.last_name || '',
+            phone: u.phone || null,
+            email: u.email || null,
+            username: u.username || null,
+          }));
+
+          // Save to IndexedDB in background (don't await)
+          saveUserAvatars(avatarsToCache).catch(err => {
+            console.warn('Failed to cache user avatars:', err);
+          });
         }
       } catch (err) {
         console.error('Error in loadUsers:', err);
@@ -305,12 +367,13 @@ export function UserSearch({
                         : 'hover:bg-gray-50'
                     )}
                   >
-                    {/* Profile Picture (from KYC) - small round circle */}
-                    {resultUser.profile_picture ? (
+                    {/* Profile Picture - small round circle with fallback */}
+                    {resultUser.profile_picture && !failedImages.has(resultUser.id) ? (
                       <img
                         src={resultUser.profile_picture}
                         alt={`${resultUser.first_name} ${resultUser.last_name}`}
                         className="w-10 h-10 rounded-full object-cover flex-shrink-0 border-2 border-gray-100"
+                        onError={() => handleImageError(resultUser.id)}
                       />
                     ) : (
                       <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center flex-shrink-0">

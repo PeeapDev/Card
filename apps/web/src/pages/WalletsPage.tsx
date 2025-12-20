@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { Wallet, Plus, ArrowDownRight, ArrowUpRight, MoreVertical, Snowflake, Send, QrCode, Copy, CheckCircle, Search, User, X, AlertCircle, Package, ChevronDown, Loader2, XCircle, ArrowLeftRight, Smartphone, Trash2 } from 'lucide-react';
+import { Wallet, Plus, ArrowDownRight, ArrowUpRight, MoreVertical, Snowflake, Send, QrCode, Copy, CheckCircle, Search, User, X, AlertCircle, Package, ChevronDown, Loader2, XCircle, ArrowLeftRight, Smartphone, Trash2, ArrowRightLeft } from 'lucide-react';
 import { Card, CardHeader, CardTitle, Button } from '@/components/ui';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { CreatePotModal } from '@/components/pots';
+import { ExchangeModal } from '@/components/wallet/ExchangeModal';
 import { useWallets, useCreateWallet, useDeposit, useTransfer, useFreezeWallet, useUnfreezeWallet } from '@/hooks/useWallets';
 import { clsx } from 'clsx';
 import type { Wallet as WalletType } from '@/types';
@@ -99,6 +100,7 @@ export function WalletsPage() {
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showReceiveModal, setShowReceiveModal] = useState(false);
   const [showInternalTransferModal, setShowInternalTransferModal] = useState(false);
+  const [showExchangeModal, setShowExchangeModal] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState<WalletType | null>(null);
   const [depositAmount, setDepositAmount] = useState('');
   const [depositLoading, setDepositLoading] = useState(false);
@@ -331,6 +333,20 @@ export function WalletsPage() {
   // Get other wallets for transfer (excluding current one)
   const getOtherWallets = (currentWalletId: string) => {
     return wallets?.filter(w => w.id !== currentWalletId && w.status === 'ACTIVE') || [];
+  };
+
+  // Get wallets with different currency for exchange
+  const getExchangeTargetWallets = (currentWallet: WalletType) => {
+    return wallets?.filter(w =>
+      w.id !== currentWallet.id &&
+      w.currency !== currentWallet.currency &&
+      w.status === 'ACTIVE'
+    ) || [];
+  };
+
+  // Check if wallet can exchange (has target wallet with different currency)
+  const canExchange = (wallet: WalletType): boolean => {
+    return getExchangeTargetWallets(wallet).length > 0;
   };
 
   // Check if wallet can send to general users (only main wallet can)
@@ -656,6 +672,22 @@ export function WalletsPage() {
                             </button>
                           )}
 
+                          {/* Exchange currency */}
+                          {canExchange(wallet) && (
+                            <button
+                              onClick={() => {
+                                setOpenMenuWalletId(null);
+                                setSelectedWallet(wallet);
+                                setShowExchangeModal(true);
+                              }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-purple-700 hover:bg-purple-50"
+                              disabled={wallet.status !== 'ACTIVE'}
+                            >
+                              <ArrowRightLeft className="w-4 h-4" />
+                              Exchange {wallet.currency === 'USD' ? 'to SLE' : 'to USD'}
+                            </button>
+                          )}
+
                           {/* Send to user - only for main wallet */}
                           {canSendToUsers(wallet) && (
                             <button
@@ -773,7 +805,22 @@ export function WalletsPage() {
                     <ArrowDownRight className="w-4 h-4 mr-1" />
                     Deposit
                   </Button>
-                  {getOtherWallets(wallet.id).length > 0 && (
+                  {canExchange(wallet) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 border-purple-200 text-purple-700 hover:bg-purple-50"
+                      onClick={() => {
+                        setSelectedWallet(wallet);
+                        setShowExchangeModal(true);
+                      }}
+                      disabled={wallet.status !== 'ACTIVE'}
+                    >
+                      <ArrowRightLeft className="w-4 h-4 mr-1" />
+                      Exchange
+                    </Button>
+                  )}
+                  {!canExchange(wallet) && getOtherWallets(wallet.id).length > 0 && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -1639,6 +1686,21 @@ export function WalletsPage() {
           </Card>
         </div>
       )}
+
+      {/* Exchange Modal */}
+      <ExchangeModal
+        isOpen={showExchangeModal}
+        onClose={() => {
+          setShowExchangeModal(false);
+          setSelectedWallet(null);
+        }}
+        sourceWallet={selectedWallet}
+        wallets={wallets || []}
+        onSuccess={() => {
+          refetch();
+          setToast({ type: 'success', message: 'Currency exchange completed successfully!' });
+        }}
+      />
 
       {/* Create Pot Modal */}
       <CreatePotModal

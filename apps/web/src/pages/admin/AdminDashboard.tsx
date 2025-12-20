@@ -134,46 +134,101 @@ const CHART_COLORS = {
 
 const PIE_COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#a855f7', '#06b6d4'];
 
+// Cache key for localStorage
+const DASHBOARD_STATS_CACHE_KEY = 'admin_dashboard_stats';
+const DASHBOARD_EARNINGS_CACHE_KEY = 'admin_dashboard_earnings';
+
+// Load cached stats from localStorage
+const loadCachedStats = (): DashboardStats | null => {
+  try {
+    const cached = localStorage.getItem(DASHBOARD_STATS_CACHE_KEY);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+  } catch (e) {
+    console.error('Error loading cached stats:', e);
+  }
+  return null;
+};
+
+// Load cached earnings from localStorage
+const loadCachedEarnings = (): EarningsSummary | null => {
+  try {
+    const cached = localStorage.getItem(DASHBOARD_EARNINGS_CACHE_KEY);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+  } catch (e) {
+    console.error('Error loading cached earnings:', e);
+  }
+  return null;
+};
+
+// Save stats to localStorage
+const saveCachedStats = (stats: DashboardStats) => {
+  try {
+    localStorage.setItem(DASHBOARD_STATS_CACHE_KEY, JSON.stringify(stats));
+  } catch (e) {
+    console.error('Error saving cached stats:', e);
+  }
+};
+
+// Save earnings to localStorage
+const saveCachedEarnings = (earnings: EarningsSummary) => {
+  try {
+    localStorage.setItem(DASHBOARD_EARNINGS_CACHE_KEY, JSON.stringify(earnings));
+  } catch (e) {
+    console.error('Error saving cached earnings:', e);
+  }
+};
+
+const defaultStats: DashboardStats = {
+  totalAccounts: 0,
+  activeAccounts: 0,
+  totalCustomers: 0,
+  verifiedCustomers: 0,
+  totalMerchants: 0,
+  activeMerchants: 0,
+  totalCards: 0,
+  activeCards: 0,
+  virtualCards: 0,
+  physicalCards: 0,
+  cardPrograms: 0,
+  totalVolume: 0,
+  pendingAuthorizations: 0,
+  disputesOpen: 0,
+  apiRequests: 0,
+  webhookDeliveries: 0,
+  avgResponseTime: 0,
+  activeDevelopers: 0,
+  pageViewsToday: 0,
+  pageViewsTotal: 0,
+  uniqueVisitorsToday: 0,
+  totalEvents: 0,
+  publishedEvents: 0,
+  totalTicketsSold: 0,
+  eventRevenue: 0,
+  totalTransactions: 0,
+  successfulTransactions: 0,
+  failedTransactions: 0,
+  pendingTransactions: 0,
+};
+
 export function AdminDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [stats, setStats] = useState<DashboardStats>({
-    totalAccounts: 0,
-    activeAccounts: 0,
-    totalCustomers: 0,
-    verifiedCustomers: 0,
-    totalMerchants: 0,
-    activeMerchants: 0,
-    totalCards: 0,
-    activeCards: 0,
-    virtualCards: 0,
-    physicalCards: 0,
-    cardPrograms: 0,
-    totalVolume: 0,
-    pendingAuthorizations: 0,
-    disputesOpen: 0,
-    apiRequests: 0,
-    webhookDeliveries: 0,
-    avgResponseTime: 0,
-    activeDevelopers: 0,
-    pageViewsToday: 0,
-    pageViewsTotal: 0,
-    uniqueVisitorsToday: 0,
-    totalEvents: 0,
-    publishedEvents: 0,
-    totalTicketsSold: 0,
-    eventRevenue: 0,
-    totalTransactions: 0,
-    successfulTransactions: 0,
-    failedTransactions: 0,
-    pendingTransactions: 0,
-  });
+
+  // Load from cache immediately for instant render
+  const [stats, setStats] = useState<DashboardStats>(() => loadCachedStats() || defaultStats);
 
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
   const [adminNotifications, setAdminNotifications] = useState<AdminNotification[]>([]);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
-  const [loading, setLoading] = useState(true);
+
+  // Only show loading skeleton if there's no cached data
+  const hasCachedData = loadCachedStats() !== null;
+  const [loading, setLoading] = useState(!hasCachedData);
   const [refreshing, setRefreshing] = useState(false);
 
   // Chart data
@@ -192,7 +247,9 @@ export function AdminDashboard() {
   const [floatModalMode, setFloatModalMode] = useState<'open' | 'replenish' | 'close' | 'history'>('open');
   const [floatModalCurrency, setFloatModalCurrency] = useState<string | undefined>();
   const [floatSidebarKey, setFloatSidebarKey] = useState(0);
-  const [platformEarnings, setPlatformEarnings] = useState<EarningsSummary>({
+
+  // Load earnings from cache for instant render
+  const [platformEarnings, setPlatformEarnings] = useState<EarningsSummary>(() => loadCachedEarnings() || {
     totalEarnings: 0,
     depositFees: 0,
     withdrawalFees: 0,
@@ -200,6 +257,9 @@ export function AdminDashboard() {
     checkoutFees: 0,
     count: 0,
   });
+
+  // Multi-currency earnings
+  const [earningsByCurrency, setEarningsByCurrency] = useState<Record<string, EarningsSummary>>({});
 
   useEffect(() => {
     currencyService.getDefaultCurrency().then(setDefaultCurrency);
@@ -395,6 +455,11 @@ export function AdminDashboard() {
         const earningsResponse = await mobileMoneyFloatService.getEarnings('month');
         if (earningsResponse.success) {
           setPlatformEarnings(earningsResponse.summary);
+          saveCachedEarnings(earningsResponse.summary);
+          // Set multi-currency earnings
+          if (earningsResponse.earningsByCurrency) {
+            setEarningsByCurrency(earningsResponse.earningsByCurrency);
+          }
         }
       } catch (err) {
         // Earnings fetch failed silently
@@ -449,8 +514,8 @@ export function AdminDashboard() {
       const eventsByMonth = generateMonthlyEventData(events || [], eventTickets || []);
       setEventChartData(eventsByMonth);
 
-      // Set stats
-      setStats({
+      // Set stats and cache for instant render next time
+      const newStats: DashboardStats = {
         totalAccounts: allUsers?.length || 0,
         activeAccounts: allUsers?.filter(u => u.status === 'ACTIVE').length || 0,
         totalCustomers: users.length,
@@ -480,7 +545,9 @@ export function AdminDashboard() {
         successfulTransactions: successfulTxns,
         failedTransactions: failedTxns,
         pendingTransactions: pendingTxns,
-      });
+      };
+      setStats(newStats);
+      saveCachedStats(newStats);
 
       // Format recent transactions
       if (transactions && transactions.length > 0) {
@@ -827,7 +894,7 @@ export function AdminDashboard() {
               </Link>
             </motion.div>
 
-            {/* Platform Profit Card */}
+            {/* Platform Profit Card - Multi-Currency */}
             <motion.div
               className="mt-4 cursor-pointer"
               initial={{ opacity: 0, y: 20 }}
@@ -836,43 +903,75 @@ export function AdminDashboard() {
               onClick={() => setFloatOverviewOpen(true)}
             >
               <Card className="p-5 bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-600 text-white hover:shadow-xl transition-all">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <div className="p-3 bg-white/20 rounded-xl">
                       <TrendingUp className="w-6 h-6" />
                     </div>
                     <div>
                       <p className="text-sm text-emerald-100">Platform Profit (This Month)</p>
-                      {loading ? (
-                        <Skeleton className="h-9 w-32 mt-1 bg-white/20" />
-                      ) : (
-                        <p className="text-3xl font-bold">{currencySymbol} {platformEarnings.totalEarnings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                      )}
+                      <p className="text-xs text-emerald-200/70">{platformEarnings.count} transactions</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="flex items-center gap-1 text-emerald-100 text-sm mb-1">
-                      <ArrowUpRight className="w-4 h-4" />
-                      <span>{platformEarnings.count} transactions</span>
+                  <ArrowUpRight className="w-5 h-5 text-emerald-100" />
+                </div>
+
+                {/* Multi-Currency Profit Display */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  {/* SLE Profit */}
+                  <div className="p-3 bg-white/10 rounded-xl border border-white/20">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-lg">🇸🇱</span>
+                      <span className="text-xs text-emerald-100">Leones (SLE)</span>
                     </div>
+                    {loading ? (
+                      <Skeleton className="h-8 w-28 bg-white/20" />
+                    ) : (
+                      <p className="text-2xl font-bold">
+                        NLe {(earningsByCurrency?.SLE?.totalEarnings || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                    )}
+                    <p className="text-xs text-emerald-200/70 mt-1">
+                      {earningsByCurrency?.SLE?.count || 0} txns
+                    </p>
+                  </div>
+
+                  {/* USD Profit */}
+                  <div className="p-3 bg-white/10 rounded-xl border border-white/20">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-lg">🇺🇸</span>
+                      <span className="text-xs text-emerald-100">Dollars (USD)</span>
+                    </div>
+                    {loading ? (
+                      <Skeleton className="h-8 w-28 bg-white/20" />
+                    ) : (
+                      <p className="text-2xl font-bold">
+                        $ {(earningsByCurrency?.USD?.totalEarnings || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                    )}
+                    <p className="text-xs text-emerald-200/70 mt-1">
+                      {earningsByCurrency?.USD?.count || 0} txns
+                    </p>
                   </div>
                 </div>
-                <div className="grid grid-cols-4 gap-4 mt-4 pt-4 border-t border-white/20">
+
+                {/* Fee Breakdown (Combined) */}
+                <div className="grid grid-cols-4 gap-3 pt-3 border-t border-white/20">
                   <div className="text-center">
-                    <p className="text-lg font-bold">{currencySymbol} {platformEarnings.withdrawalFees.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                    <p className="text-xs text-emerald-100">Withdrawal Fees</p>
+                    <p className="text-sm font-bold">{currencySymbol} {platformEarnings.withdrawalFees.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    <p className="text-xs text-emerald-100">Withdrawals</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-lg font-bold">{currencySymbol} {platformEarnings.transactionFees.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                    <p className="text-xs text-emerald-100">Transaction Fees</p>
+                    <p className="text-sm font-bold">{currencySymbol} {platformEarnings.transactionFees.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    <p className="text-xs text-emerald-100">Transactions</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-lg font-bold">{currencySymbol} {platformEarnings.checkoutFees.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                    <p className="text-xs text-emerald-100">Checkout Fees</p>
+                    <p className="text-sm font-bold">{currencySymbol} {platformEarnings.checkoutFees.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    <p className="text-xs text-emerald-100">Checkout</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-lg font-bold">{currencySymbol} {platformEarnings.depositFees.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                    <p className="text-xs text-emerald-100">Subscriptions</p>
+                    <p className="text-sm font-bold">{currencySymbol} {platformEarnings.depositFees.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    <p className="text-xs text-emerald-100">Subs</p>
                   </div>
                 </div>
               </Card>

@@ -105,6 +105,7 @@ export function UserDetailPage() {
   });
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [avatarLoadError, setAvatarLoadError] = useState(false);
 
   // Currency state
   const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
@@ -142,6 +143,7 @@ export function UserDetailPage() {
       }
 
       setUser(userData);
+      setAvatarLoadError(false); // Reset avatar error state for new user
 
       // Fetch wallets
       const { data: walletData } = await supabase
@@ -368,11 +370,12 @@ export function UserDetailPage() {
             <div className="flex-shrink-0">
               <div className="relative">
                 <div className="w-32 h-32 bg-primary-100 rounded-full flex items-center justify-center">
-                  {user.profile_picture ? (
+                  {user.profile_picture && !avatarLoadError ? (
                     <img
                       src={user.profile_picture}
                       alt={`${user.first_name} ${user.last_name}`}
                       className="w-32 h-32 rounded-full object-cover"
+                      onError={() => setAvatarLoadError(true)}
                     />
                   ) : (
                     <span className="text-4xl font-bold text-primary-600">

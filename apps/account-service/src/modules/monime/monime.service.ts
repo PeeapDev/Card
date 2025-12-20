@@ -69,7 +69,17 @@ export class MonimeService {
       this.logger.warn(`Wallet not found in Supabase: ${dto.walletId}`);
       throw new NotFoundException('Wallet not found');
     }
-    this.logger.log(`Found wallet in Supabase: ${supabaseWallet.id}, balance: ${supabaseWallet.balance}`);
+    this.logger.log(`Found wallet in Supabase: ${supabaseWallet.id}, balance: ${supabaseWallet.balance}, currency: ${supabaseWallet.currency}`);
+
+    // Ensure deposit currency matches wallet currency
+    const walletCurrency = supabaseWallet.currency?.toUpperCase() || 'SLE';
+    const depositCurrency = dto.currency?.toUpperCase() || 'SLE';
+    if (depositCurrency !== walletCurrency) {
+      throw new BadRequestException(
+        `Currency mismatch. Wallet is ${walletCurrency} but deposit is ${depositCurrency}. ` +
+        `Please deposit ${walletCurrency} to this wallet or select a ${depositCurrency} wallet.`
+      );
+    }
 
     // Use the wallet's user_id if not provided via header
     const effectiveUserId = userId || supabaseWallet.user_id;
@@ -162,6 +172,17 @@ export class MonimeService {
     const currentBalance = parseFloat(wallet.balance?.toString() || '0');
     if (currentBalance < dto.amount) {
       throw new BadRequestException('Insufficient funds');
+    }
+
+    // USD wallets can only payout to bank accounts (no mobile money)
+    const walletCurrency = wallet.currency?.toUpperCase() || 'SLE';
+    if (walletCurrency === 'USD' && dto.method === WithdrawMethod.MOBILE_MONEY) {
+      throw new BadRequestException('USD payouts are only available to bank accounts. Mobile money is not supported for USD.');
+    }
+
+    // Ensure currency matches wallet currency
+    if (dto.currency?.toUpperCase() !== walletCurrency) {
+      throw new BadRequestException(`Currency mismatch. Wallet currency is ${walletCurrency}, but requested ${dto.currency?.toUpperCase()}`);
     }
 
     const idempotencyKey = uuidv4();

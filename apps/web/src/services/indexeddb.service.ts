@@ -117,7 +117,7 @@ export interface LocalSalesReport {
 }
 
 const DB_NAME = 'peeap_pos_db';
-const DB_VERSION = 7; // Bumped to 7 for admin notifications
+const DB_VERSION = 8; // Bumped to 8 for user avatars cache
 
 // Store names
 export const STORES = {
@@ -150,6 +150,8 @@ export const STORES = {
   EVENT_SCANS: 'event_scans',
   // Admin Notifications store
   ADMIN_NOTIFICATIONS: 'admin_notifications',
+  // User avatars cache for offline contact search
+  USER_AVATARS: 'user_avatars',
 } as const;
 
 let db: IDBDatabase | null = null;
@@ -378,6 +380,12 @@ export const initDB = (): Promise<IDBDatabase> => {
         adminNotifStore.createIndex('status', 'status', { unique: false });
         adminNotifStore.createIndex('priority', 'priority', { unique: false });
         adminNotifStore.createIndex('created_at', 'created_at', { unique: false });
+      }
+
+      // ================== User Avatars Cache Store ==================
+      if (!database.objectStoreNames.contains(STORES.USER_AVATARS)) {
+        const avatarStore = database.createObjectStore(STORES.USER_AVATARS, { keyPath: 'user_id' });
+        avatarStore.createIndex('cached_at', 'cached_at', { unique: false });
       }
 
     };
@@ -1476,6 +1484,113 @@ export const clearSupportTicketsCache = async (): Promise<void> => {
   await clearStore(STORES.SUPPORT_TICKETS);
 };
 
+// ================== User Avatar Cache Types and Functions ==================
+
+export interface CachedUserAvatar {
+  user_id: string;
+  avatar_url: string | null;
+  first_name: string;
+  last_name: string;
+  phone?: string | null;
+  email?: string | null;
+  username?: string | null;
+  cached_at: string;
+}
+
+/**
+ * Save a single user avatar to cache
+ */
+export const saveUserAvatar = async (avatar: Omit<CachedUserAvatar, 'cached_at'>): Promise<void> => {
+  const avatarWithMeta: CachedUserAvatar = {
+    ...avatar,
+    cached_at: new Date().toISOString(),
+  };
+  await put(STORES.USER_AVATARS, avatarWithMeta);
+};
+
+/**
+ * Save multiple user avatars to cache (batch operation)
+ */
+export const saveUserAvatars = async (avatars: Omit<CachedUserAvatar, 'cached_at'>[]): Promise<void> => {
+  const avatarsWithMeta: CachedUserAvatar[] = avatars.map(a => ({
+    ...a,
+    cached_at: new Date().toISOString(),
+  }));
+  await putMany(STORES.USER_AVATARS, avatarsWithMeta);
+};
+
+/**
+ * Get a single cached user avatar by user ID
+ */
+export const getCachedUserAvatar = async (userId: string): Promise<CachedUserAvatar | undefined> => {
+  return getByKey<CachedUserAvatar>(STORES.USER_AVATARS, userId);
+};
+
+/**
+ * Get all cached user avatars
+ */
+export const getAllCachedUserAvatars = async (): Promise<CachedUserAvatar[]> => {
+  return getAll<CachedUserAvatar>(STORES.USER_AVATARS);
+};
+
+/**
+ * Get cached avatars for multiple user IDs
+ */
+export const getCachedUserAvatarsByIds = async (userIds: string[]): Promise<Map<string, CachedUserAvatar>> => {
+  const allAvatars = await getAllCachedUserAvatars();
+  const avatarMap = new Map<string, CachedUserAvatar>();
+
+  allAvatars.forEach(avatar => {
+    if (userIds.includes(avatar.user_id)) {
+      avatarMap.set(avatar.user_id, avatar);
+    }
+  });
+
+  return avatarMap;
+};
+
+/**
+ * Delete a cached user avatar
+ */
+export const deleteCachedUserAvatar = async (userId: string): Promise<void> => {
+  await deleteByKey(STORES.USER_AVATARS, userId);
+};
+
+/**
+ * Clear all cached user avatars
+ */
+export const clearUserAvatarsCache = async (): Promise<void> => {
+  await clearStore(STORES.USER_AVATARS);
+};
+
+/**
+ * Clean up old cached avatars (older than specified days)
+ */
+export const cleanupOldAvatars = async (maxAgeDays: number = 30): Promise<void> => {
+  const database = await initDB();
+  const cutoffDate = new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000).toISOString();
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(STORES.USER_AVATARS, 'readwrite');
+    const store = transaction.objectStore(STORES.USER_AVATARS);
+    const request = store.openCursor();
+
+    request.onsuccess = (event) => {
+      const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+      if (cursor) {
+        const avatar = cursor.value as CachedUserAvatar;
+        if (avatar.cached_at < cutoffDate) {
+          cursor.delete();
+        }
+        cursor.continue();
+      }
+    };
+
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+};
+
 // Export the service
 export const indexedDBService = {
   initDB,
@@ -1606,6 +1721,15 @@ export const indexedDBService = {
   getEventScansByStaff,
   addEventScan,
   getEventAnalytics,
+  // User Avatars Cache
+  saveUserAvatar,
+  saveUserAvatars,
+  getCachedUserAvatar,
+  getAllCachedUserAvatars,
+  getCachedUserAvatarsByIds,
+  deleteCachedUserAvatar,
+  clearUserAvatarsCache,
+  cleanupOldAvatars,
 };
 
 // ================== Admin Notification Types ==================
@@ -1622,7 +1746,8 @@ export type AdminNotificationType =
   | 'deposit'
   | 'payout'
   | 'withdrawal'
-  | 'transfer';
+  | 'transfer'
+  | 'cashout';
 
 export type AdminNotificationPriority = 'low' | 'medium' | 'high' | 'urgent';
 export type AdminNotificationStatus = 'unread' | 'read' | 'archived';

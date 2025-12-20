@@ -32,7 +32,8 @@ export type AdminNotificationType =
   | 'deposit'
   | 'payout'
   | 'withdrawal'
-  | 'transfer';
+  | 'transfer'
+  | 'cashout';
 
 export type AdminNotificationPriority = 'low' | 'medium' | 'high' | 'urgent';
 export type AdminNotificationStatus = 'unread' | 'read' | 'archived';
