@@ -215,6 +215,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleAnalyticsPages(req, res);
     } else if (path === 'analytics/visitors' || path === 'analytics/visitors/') {
       return await handleAnalyticsVisitors(req, res);
+    // ========== REFUND ENDPOINTS ==========
+    } else if (path === 'refunds' || path === 'refunds/') {
+      return await handleRefunds(req, res);
+    } else if (path === 'refunds/pending' || path === 'refunds/pending/') {
+      return await handleRefundsPending(req, res);
+    } else if (path.match(/^refunds\/[^/]+\/cancel$/)) {
+      const refundId = path.split('/')[1];
+      return await handleRefundCancel(req, res, refundId);
+    } else if (path.match(/^refunds\/[^/]+$/)) {
+      const refundId = path.split('/')[1];
+      return await handleRefundById(req, res, refundId);
+    } else if (path === 'cron/process-refunds' || path === 'cron/process-refunds/') {
+      return await handleCronProcessRefunds(req, res);
     // ========== PUSH NOTIFICATION ENDPOINTS ==========
     } else if (path === 'notifications/send' || path === 'notifications/send/') {
       return await handleNotificationSend(req, res);
@@ -4906,7 +4919,64 @@ async function handleMobileMoneySend(req: VercelRequest, res: VercelResponse) {
         console.error('[MobileMoneySend] Failed to debit system float:', floatErr);
       }
 
-      // Create notification
+      // Record platform earning from withdrawal fee
+      if (platformFee > 0) {
+        try {
+          await supabase.from('platform_earnings').insert({
+            earning_type: 'withdrawal_fee',
+            source_type: 'user',
+            source_id: authenticatedUserId,
+            transaction_id: transaction.id,
+            amount: platformFee,
+            currency: currency,
+            description: `Mobile money send fee (2%)`,
+            metadata: {
+              payout_id: payoutResult.payoutId,
+              principal_amount: amount,
+              recipient_phone: fullPhoneNumber,
+            }
+          });
+          console.log('[MobileMoneySend] Platform earning recorded:', { platformFee, currency });
+        } catch (earningErr) {
+          console.error('[MobileMoneySend] Failed to record platform earning:', earningErr);
+        }
+      }
+
+      // Insert into payouts table for Float dashboard tracking
+      try {
+        await supabase.from('payouts').insert({
+          external_id: externalId,
+          user_id: authenticatedUserId,
+          wallet_id: walletId,
+          payout_type: 'USER_CASHOUT',
+          amount: amount,
+          fee: platformFee,
+          total_deduction: totalDeduction,
+          currency: currency,
+          destination_type: 'momo',
+          provider_id: providerId,
+          provider_name: providerId === 'm17' ? 'Orange Money' : providerId === 'm18' ? 'Africell Money' : 'Mobile Money',
+          account_number: fullPhoneNumber,
+          status: payoutResult.status === 'completed' ? 'COMPLETED' : 'PROCESSING',
+          monime_payout_id: payoutResult.payoutId,
+          monime_status: payoutResult.status,
+          description: description || `Send to mobile money`,
+        });
+        console.log('[MobileMoneySend] Payout record created');
+      } catch (payoutErr) {
+        console.error('[MobileMoneySend] Failed to create payout record:', payoutErr);
+      }
+
+      // Get user info for notifications
+      const { data: userData } = await supabase
+        .from('users')
+        .select('first_name, last_name, email')
+        .eq('id', authenticatedUserId)
+        .single();
+
+      const userName = userData ? `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || userData.email : 'A user';
+
+      // Create user notification
       await supabase.from('user_notifications').insert({
         user_id: authenticatedUserId,
         type: 'mobile_money_send',
@@ -4920,6 +4990,28 @@ async function handleMobileMoneySend(req: VercelRequest, res: VercelResponse) {
           provider: providerId,
         },
       });
+
+      // Create admin notification
+      try {
+        await supabase.from('admin_notifications').insert({
+          type: 'cashout',
+          title: 'User Cashout',
+          message: `${userName} sent ${currency} ${amount.toLocaleString()} to ${providerId === 'm17' ? 'Orange Money' : 'Mobile Money'} ${phoneNumber}`,
+          priority: 'medium',
+          category: 'transaction',
+          metadata: {
+            transaction_id: transaction.id,
+            user_id: authenticatedUserId,
+            amount,
+            fee: platformFee,
+            phone_number: fullPhoneNumber,
+            provider: providerId,
+          },
+        });
+        console.log('[MobileMoneySend] Admin notification created');
+      } catch (adminNotifErr) {
+        console.error('[MobileMoneySend] Failed to create admin notification:', adminNotifErr);
+      }
 
       return res.status(200).json({
         success: true,
@@ -8851,4 +8943,346 @@ async function handleFuelTypes(req: VercelRequest, res: VercelResponse) {
   }
 
   return res.status(405).json({ error: 'Method not allowed' });
+}
+
+// ============================================================================
+// REFUND HANDLERS
+// ============================================================================
+
+/**
+ * Map database row to refund response
+ */
+function mapRefundRequest(row: any) {
+  return {
+    id: row.id,
+    reference: row.reference,
+    originalTransactionId: row.original_transaction_id,
+    senderId: row.sender_id,
+    senderWalletId: row.sender_wallet_id,
+    recipientId: row.recipient_id,
+    recipientWalletId: row.recipient_wallet_id,
+    amount: parseFloat(row.amount) || 0,
+    currency: row.currency || 'SLE',
+    reason: row.reason,
+    status: row.status,
+    senderStatus: row.sender_status,
+    recipientStatus: row.recipient_status,
+    createdAt: row.created_at,
+    releaseAt: row.release_at,
+    completedAt: row.completed_at,
+    cancelledAt: row.cancelled_at,
+    cancelledBy: row.cancelled_by,
+    cancellationReason: row.cancellation_reason,
+    sender: row.sender ? {
+      id: row.sender.id,
+      firstName: row.sender.first_name,
+      lastName: row.sender.last_name,
+      email: row.sender.email,
+      phone: row.sender.phone,
+      profilePicture: row.sender.profile_picture,
+    } : undefined,
+    recipient: row.recipient ? {
+      id: row.recipient.id,
+      firstName: row.recipient.first_name,
+      lastName: row.recipient.last_name,
+      email: row.recipient.email,
+      phone: row.recipient.phone,
+      profilePicture: row.recipient.profile_picture,
+    } : undefined,
+  };
+}
+
+/**
+ * GET /api/refunds - List user's refunds (sent and received)
+ * POST /api/refunds - Create a new refund request
+ */
+async function handleRefunds(req: VercelRequest, res: VercelResponse) {
+  const auth = await validateSharedApiAuth(req);
+  if (!auth.valid) {
+    return res.status(401).json({ error: auth.error });
+  }
+
+  const userId = auth.userId!;
+
+  if (req.method === 'GET') {
+    try {
+      // Get refunds where user is sender or recipient
+      const { data, error } = await supabase
+        .from('refund_requests')
+        .select(`
+          *,
+          sender:users!refund_requests_sender_id_fkey(id, first_name, last_name, email, phone, profile_picture),
+          recipient:users!refund_requests_recipient_id_fkey(id, first_name, last_name, email, phone, profile_picture)
+        `)
+        .or(`sender_id.eq.${userId},recipient_id.eq.${userId}`)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('[Refunds] Error fetching refunds:', error);
+        return res.status(500).json({ error: error.message });
+      }
+
+      const refunds = (data || []).map(mapRefundRequest);
+      return res.status(200).json({ refunds });
+    } catch (err: any) {
+      console.error('[Refunds] Error:', err);
+      return res.status(500).json({ error: err.message || 'Failed to fetch refunds' });
+    }
+  }
+
+  if (req.method === 'POST') {
+    try {
+      const { recipientId, amount, reason, originalTransactionId } = req.body;
+
+      if (!recipientId) {
+        return res.status(400).json({ error: 'Recipient is required' });
+      }
+
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ error: 'Valid amount is required' });
+      }
+
+      // Call the database function to create refund
+      const { data: result, error } = await supabase.rpc('create_refund_request', {
+        p_sender_id: userId,
+        p_recipient_id: recipientId,
+        p_amount: amount,
+        p_reason: reason || null,
+        p_original_transaction_id: originalTransactionId || null,
+      });
+
+      if (error) {
+        console.error('[Refunds] Error creating refund:', error);
+        return res.status(500).json({ error: error.message });
+      }
+
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+
+      // Fetch the created refund with full details
+      const { data: refundData, error: fetchError } = await supabase
+        .from('refund_requests')
+        .select(`
+          *,
+          sender:users!refund_requests_sender_id_fkey(id, first_name, last_name, email, phone, profile_picture),
+          recipient:users!refund_requests_recipient_id_fkey(id, first_name, last_name, email, phone, profile_picture)
+        `)
+        .eq('id', result.refund_id)
+        .single();
+
+      if (fetchError) {
+        console.error('[Refunds] Error fetching created refund:', fetchError);
+        return res.status(201).json({
+          success: true,
+          refundId: result.refund_id,
+          reference: result.reference,
+          amount: result.amount,
+          releaseAt: result.release_at,
+        });
+      }
+
+      return res.status(201).json({
+        success: true,
+        refund: mapRefundRequest(refundData),
+      });
+    } catch (err: any) {
+      console.error('[Refunds] Error:', err);
+      return res.status(500).json({ error: err.message || 'Failed to create refund' });
+    }
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * GET /api/refunds/pending - Get pending refunds for user
+ */
+async function handleRefundsPending(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const auth = await validateSharedApiAuth(req);
+  if (!auth.valid) {
+    return res.status(401).json({ error: auth.error });
+  }
+
+  const userId = auth.userId!;
+
+  try {
+    // Get pending refunds sent by user
+    const { data: sent, error: sentError } = await supabase
+      .from('refund_requests')
+      .select(`
+        *,
+        recipient:users!refund_requests_recipient_id_fkey(id, first_name, last_name, email, phone, profile_picture)
+      `)
+      .eq('sender_id', userId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    // Get pending refunds received by user
+    const { data: received, error: receivedError } = await supabase
+      .from('refund_requests')
+      .select(`
+        *,
+        sender:users!refund_requests_sender_id_fkey(id, first_name, last_name, email, phone, profile_picture)
+      `)
+      .eq('recipient_id', userId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    if (sentError || receivedError) {
+      console.error('[Refunds] Error fetching pending:', sentError || receivedError);
+      return res.status(500).json({ error: (sentError || receivedError)!.message });
+    }
+
+    return res.status(200).json({
+      sent: (sent || []).map(mapRefundRequest),
+      received: (received || []).map(mapRefundRequest),
+    });
+  } catch (err: any) {
+    console.error('[Refunds] Error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to fetch pending refunds' });
+  }
+}
+
+/**
+ * GET /api/refunds/:id - Get refund by ID
+ */
+async function handleRefundById(req: VercelRequest, res: VercelResponse, refundId: string) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const auth = await validateSharedApiAuth(req);
+  if (!auth.valid) {
+    return res.status(401).json({ error: auth.error });
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('refund_requests')
+      .select(`
+        *,
+        sender:users!refund_requests_sender_id_fkey(id, first_name, last_name, email, phone, profile_picture),
+        recipient:users!refund_requests_recipient_id_fkey(id, first_name, last_name, email, phone, profile_picture)
+      `)
+      .eq('id', refundId)
+      .single();
+
+    if (error) {
+      console.error('[Refunds] Error fetching refund:', error);
+      return res.status(404).json({ error: 'Refund not found' });
+    }
+
+    // Check if user is sender or recipient
+    if (data.sender_id !== auth.userId && data.recipient_id !== auth.userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    return res.status(200).json({ refund: mapRefundRequest(data) });
+  } catch (err: any) {
+    console.error('[Refunds] Error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to fetch refund' });
+  }
+}
+
+/**
+ * POST /api/refunds/:id/cancel - Cancel a refund request (by recipient)
+ */
+async function handleRefundCancel(req: VercelRequest, res: VercelResponse, refundId: string) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const auth = await validateSharedApiAuth(req);
+  if (!auth.valid) {
+    return res.status(401).json({ error: auth.error });
+  }
+
+  const userId = auth.userId!;
+
+  try {
+    const { reason } = req.body || {};
+
+    // Call the database function to cancel refund
+    const { data: result, error } = await supabase.rpc('cancel_refund_request', {
+      p_refund_id: refundId,
+      p_cancelled_by: userId,
+      p_reason: reason || null,
+    });
+
+    if (error) {
+      console.error('[Refunds] Error cancelling refund:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: result.message || 'Refund cancelled successfully',
+    });
+  } catch (err: any) {
+    console.error('[Refunds] Error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to cancel refund' });
+  }
+}
+
+/**
+ * POST /api/cron/process-refunds - Process pending refunds (cron job)
+ * This should be called by a cron job to release funds after 5 days
+ */
+async function handleCronProcessRefunds(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST' && req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  // Verify cron secret or admin access
+  const cronSecret = req.headers['x-cron-secret'];
+  const expectedSecret = process.env.CRON_SECRET || 'peeap-cron-secret';
+
+  if (cronSecret !== expectedSecret) {
+    // Also allow admin users
+    const auth = await validateSharedApiAuth(req);
+    if (!auth.valid) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    // Check if user is admin
+    const { data: user } = await supabase
+      .from('users')
+      .select('roles')
+      .eq('id', auth.userId)
+      .single();
+
+    if (!user || !(user.roles?.includes('admin') || user.roles?.includes('superadmin'))) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+  }
+
+  try {
+    // Call the database function to process pending refunds
+    const { data: result, error } = await supabase.rpc('process_pending_refunds');
+
+    if (error) {
+      console.error('[Cron] Error processing refunds:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    console.log('[Cron] Processed refunds:', result);
+
+    return res.status(200).json({
+      success: true,
+      processed: result.processed,
+      errors: result.errors,
+    });
+  } catch (err: any) {
+    console.error('[Cron] Error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to process refunds' });
+  }
 }
