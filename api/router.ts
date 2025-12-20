@@ -1198,44 +1198,87 @@ async function handleMonimeWebhook(req: VercelRequest, res: VercelResponse) {
       }
 
       const walletId = pendingTx.wallet_id;
-      const amount = pendingTx.amount;
+      const grossAmount = pendingTx.amount; // Amount user intended to deposit
       const currency = pendingTx.currency;
-      const currentBalance = parseFloat(pendingTx.wallets?.balance?.toString() || '0');
-      const newBalance = currentBalance + amount;
 
-      // Credit wallet
+      // Get fee settings
+      const { data: feeSettings } = await supabase
+        .from('payment_settings')
+        .select('deposit_fee_percent, deposit_fee_flat')
+        .eq('id', SETTINGS_ID)
+        .single();
+
+      // Calculate fees
+      // Monime takes 1.5% from the gross amount
+      const MONIME_FEE_PERCENT = 1.5;
+      const monimeFee = grossAmount * (MONIME_FEE_PERCENT / 100);
+
+      // Peeap fee (your profit) - from settings or default 1%
+      const peeapFeePercent = feeSettings?.deposit_fee_percent || 1;
+      const peeapFeeFlat = feeSettings?.deposit_fee_flat || 0;
+      const peeapFee = (grossAmount * (peeapFeePercent / 100)) + peeapFeeFlat;
+
+      // Net amount user receives (after both fees)
+      const totalFees = monimeFee + peeapFee;
+      const netAmount = grossAmount - totalFees;
+
+      // Amount that actually comes into the float (after Monime's cut)
+      const floatAmount = grossAmount - monimeFee;
+
+      console.log('[Monime Webhook] Fee breakdown:', {
+        grossAmount,
+        monimeFee: monimeFee.toFixed(2),
+        peeapFee: peeapFee.toFixed(2),
+        totalFees: totalFees.toFixed(2),
+        netAmount: netAmount.toFixed(2),
+        floatAmount: floatAmount.toFixed(2),
+      });
+
+      const currentBalance = parseFloat(pendingTx.wallets?.balance?.toString() || '0');
+      const newBalance = currentBalance + netAmount;
+
+      // Credit wallet with NET amount (after fees)
       await supabase
         .from('wallets')
         .update({ balance: newBalance, updated_at: new Date().toISOString() })
         .eq('id', walletId);
 
-      // Update transaction
+      // Update transaction with fee details
       await supabase
         .from('transactions')
         .update({
           status: 'COMPLETED',
+          fee: peeapFee, // Track platform fee
           metadata: {
             ...pendingTx.metadata,
             completedAt: new Date().toISOString(),
             completedVia: 'webhook',
+            grossAmount,
+            monimeFee,
+            peeapFee,
+            netAmount,
+            feeBreakdown: {
+              monime: { percent: MONIME_FEE_PERCENT, amount: monimeFee },
+              peeap: { percent: peeapFeePercent, flat: peeapFeeFlat, amount: peeapFee },
+            },
           }
         })
         .eq('id', pendingTx.id);
 
-      // Credit system float
+      // Credit system float with the amount we actually received (after Monime)
       try {
         await supabase.rpc('credit_system_float', {
           p_currency: currency,
-          p_amount: amount,
+          p_amount: floatAmount, // What we actually received from Monime
           p_transaction_id: pendingTx.id,
-          p_description: `Mobile Money Deposit (webhook) - ${pendingTx.description || 'User deposit'}`,
+          p_description: `Mobile Money Deposit - Net after Monime fee (${peeapFee.toFixed(2)} profit)`,
         });
-        console.log('[Monime Webhook] System float credited:', { amount, currency });
+        console.log('[Monime Webhook] System float credited:', { floatAmount, peeapFee, currency });
       } catch (floatErr) {
         console.error('[Monime Webhook] Failed to credit system float:', floatErr);
       }
 
-      console.log('[Monime Webhook] Deposit completed:', { walletId, amount, newBalance });
+      console.log('[Monime Webhook] Deposit completed:', { walletId, grossAmount, netAmount, peeapFee, newBalance });
 
       // Create admin notification for the deposit
       try {
@@ -1250,15 +1293,18 @@ async function handleMonimeWebhook(req: VercelRequest, res: VercelResponse) {
         await supabase.from('admin_notifications').insert({
           type: 'deposit',
           title: 'New Deposit Received',
-          message: `${userName} deposited ${currency} ${amount.toLocaleString()} via Mobile Money`,
-          priority: amount >= 10000 ? 'high' : 'medium',
+          message: `${userName} deposited ${currency} ${grossAmount.toLocaleString()} via Mobile Money (Fee: ${peeapFee.toFixed(2)}, Net: ${netAmount.toFixed(2)})`,
+          priority: grossAmount >= 10000 ? 'high' : 'medium',
           related_entity_type: 'transaction',
           related_entity_id: pendingTx.id,
           action_url: `/admin/transactions?id=${pendingTx.id}`,
           metadata: {
             userId: pendingTx.user_id,
             userName,
-            amount,
+            grossAmount,
+            netAmount,
+            peeapFee,
+            monimeFee,
             currency,
             method: 'Mobile Money (Webhook)',
           },

@@ -80,9 +80,37 @@ class P2PTransferService {
       const response = await api.get(`/p2p/limits/${userType}`);
       return response.data;
     } catch (error) {
-      // Fallback limits
-      return this.getDefaultLimits(userType);
+      // Fallback: try to get from database
+      return this.getLimitsFromDatabase(userType);
     }
+  }
+
+  /**
+   * Get limits from database (fallback)
+   */
+  private async getLimitsFromDatabase(userType: string): Promise<TransferLimits> {
+    try {
+      const { data, error } = await supabase
+        .from('transfer_limits')
+        .select('*')
+        .eq('user_type', userType)
+        .eq('is_active', true)
+        .single();
+
+      if (data && !error) {
+        return {
+          dailyLimit: parseFloat(data.daily_limit),
+          monthlyLimit: parseFloat(data.monthly_limit),
+          perTransactionLimit: parseFloat(data.per_transaction_limit),
+          minAmount: parseFloat(data.min_amount),
+        };
+      }
+    } catch (err) {
+      console.error('Error fetching limits from database:', err);
+    }
+
+    // Ultimate fallback to hardcoded defaults
+    return this.getDefaultLimits(userType);
   }
 
   /**

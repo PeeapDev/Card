@@ -23,6 +23,8 @@ import {
   Loader2,
   AlertCircle,
   RefreshCw,
+  Users,
+  ArrowUpDown,
 } from 'lucide-react';
 import { Card, MotionCard } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
@@ -47,6 +49,26 @@ interface FeeConfig {
   isActive: boolean;
 }
 
+interface TransferLimit {
+  id: string;
+  userType: string;
+  dailyLimit: number;
+  monthlyLimit: number;
+  perTransactionLimit: number;
+  minAmount: number;
+  currency: string;
+  isActive: boolean;
+}
+
+const USER_TYPES = [
+  { value: 'standard', label: 'Standard User' },
+  { value: 'agent', label: 'Agent' },
+  { value: 'merchant', label: 'Merchant' },
+  { value: 'agent_plus', label: 'Agent+' },
+  { value: 'admin', label: 'Admin' },
+  { value: 'superadmin', label: 'Super Admin' },
+];
+
 const DEFAULT_CURRENCIES: Currency[] = [
   { code: 'SLE', name: 'Sierra Leone Leone', symbol: 'Le', isDefault: true, isActive: true },
   { code: 'USD', name: 'US Dollar', symbol: '$', isDefault: false, isActive: true },
@@ -70,6 +92,7 @@ const TRANSACTION_TYPES = [
 export function FeeSettingsPage() {
   const [currencies, setCurrencies] = useState<Currency[]>(DEFAULT_CURRENCIES);
   const [feeConfigs, setFeeConfigs] = useState<FeeConfig[]>([]);
+  const [transferLimits, setTransferLimits] = useState<TransferLimit[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
@@ -78,7 +101,9 @@ export function FeeSettingsPage() {
   // Modal states
   const [showFeeModal, setShowFeeModal] = useState(false);
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
+  const [showLimitModal, setShowLimitModal] = useState(false);
   const [editingFee, setEditingFee] = useState<FeeConfig | null>(null);
+  const [editingLimit, setEditingLimit] = useState<TransferLimit | null>(null);
   const [feeForm, setFeeForm] = useState<Partial<FeeConfig>>({
     transactionType: 'P2P_TRANSFER',
     percentage: 1,
@@ -93,6 +118,15 @@ export function FeeSettingsPage() {
     name: '',
     symbol: '',
     isDefault: false,
+    isActive: true,
+  });
+  const [limitForm, setLimitForm] = useState<Partial<TransferLimit>>({
+    userType: 'standard',
+    dailyLimit: 5000,
+    monthlyLimit: 25000,
+    perTransactionLimit: 2500,
+    minAmount: 1,
+    currency: 'SLE',
     isActive: true,
   });
 
@@ -141,10 +175,33 @@ export function FeeSettingsPage() {
       }
       // If no currencies in database, use DEFAULT_CURRENCIES (already set in state)
 
+      // Fetch transfer limits from database
+      const { data: limitsData, error: limitsError } = await supabase
+        .from('transfer_limits')
+        .select('*')
+        .order('user_type');
+
+      if (limitsData && limitsData.length > 0) {
+        setTransferLimits(limitsData.map(l => ({
+          id: l.id,
+          userType: l.user_type,
+          dailyLimit: parseFloat(l.daily_limit),
+          monthlyLimit: parseFloat(l.monthly_limit),
+          perTransactionLimit: parseFloat(l.per_transaction_limit),
+          minAmount: parseFloat(l.min_amount),
+          currency: l.currency,
+          isActive: l.is_active,
+        })));
+      } else {
+        // No limits in database - start with empty list
+        setTransferLimits([]);
+      }
+
     } catch (err) {
       console.error('Failed to fetch settings:', err);
       // On error, keep default currencies, clear fee configs
       setFeeConfigs([]);
+      setTransferLimits([]);
     } finally {
       setLoading(false);
     }
@@ -293,6 +350,115 @@ export function FeeSettingsPage() {
       isDefault: false,
       isActive: true,
     });
+  };
+
+  const resetLimitForm = () => {
+    setLimitForm({
+      userType: 'standard',
+      dailyLimit: 5000,
+      monthlyLimit: 25000,
+      perTransactionLimit: 2500,
+      minAmount: 1,
+      currency: 'SLE',
+      isActive: true,
+    });
+  };
+
+  const saveTransferLimit = async () => {
+    setSaving(true);
+    setError(null);
+
+    try {
+      const limitData = {
+        user_type: limitForm.userType,
+        daily_limit: limitForm.dailyLimit,
+        monthly_limit: limitForm.monthlyLimit,
+        per_transaction_limit: limitForm.perTransactionLimit,
+        min_amount: limitForm.minAmount,
+        currency: limitForm.currency,
+        is_active: limitForm.isActive,
+      };
+
+      if (editingLimit) {
+        // Update existing
+        const { error: updateError } = await supabase
+          .from('transfer_limits')
+          .update(limitData)
+          .eq('id', editingLimit.id);
+
+        if (updateError) throw updateError;
+
+        setTransferLimits(prev => prev.map(l =>
+          l.id === editingLimit.id ? { ...l, ...limitForm } as TransferLimit : l
+        ));
+      } else {
+        // Insert new
+        const { data: newLimit, error: insertError } = await supabase
+          .from('transfer_limits')
+          .insert(limitData)
+          .select()
+          .single();
+
+        if (insertError) {
+          // Table might not exist
+          throw insertError;
+        } else if (newLimit) {
+          setTransferLimits(prev => [...prev, {
+            id: newLimit.id,
+            userType: newLimit.user_type,
+            dailyLimit: parseFloat(newLimit.daily_limit),
+            monthlyLimit: parseFloat(newLimit.monthly_limit),
+            perTransactionLimit: parseFloat(newLimit.per_transaction_limit),
+            minAmount: parseFloat(newLimit.min_amount),
+            currency: newLimit.currency,
+            isActive: newLimit.is_active,
+          }]);
+        }
+      }
+
+      setSuccess('Transfer limit saved successfully');
+      setShowLimitModal(false);
+      setEditingLimit(null);
+      resetLimitForm();
+
+      setTimeout(() => setSuccess(null), 3000);
+
+    } catch (err: any) {
+      setError(err.message || 'Failed to save transfer limit');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteTransferLimit = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this transfer limit?')) return;
+
+    try {
+      await supabase.from('transfer_limits').delete().eq('id', id);
+      setTransferLimits(prev => prev.filter(l => l.id !== id));
+      setSuccess('Transfer limit deleted');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      console.error('Delete error:', err);
+    }
+  };
+
+  const openEditLimit = (limit: TransferLimit) => {
+    setEditingLimit(limit);
+    setLimitForm({
+      userType: limit.userType,
+      dailyLimit: limit.dailyLimit,
+      monthlyLimit: limit.monthlyLimit,
+      perTransactionLimit: limit.perTransactionLimit,
+      minAmount: limit.minAmount,
+      currency: limit.currency,
+      isActive: limit.isActive,
+    });
+    setShowLimitModal(true);
+  };
+
+  const getUserTypeLabel = (type: string) => {
+    return USER_TYPES.find(t => t.value === type)?.label || type;
   };
 
   const saveCurrency = async () => {
@@ -633,6 +799,118 @@ export function FeeSettingsPage() {
           )}
         </Card>
 
+        {/* Transfer Limits */}
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                <ArrowUpDown className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Transfer Limits</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Set daily, monthly, and per-transaction limits by user type</p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setEditingLimit(null);
+                resetLimitForm();
+                setShowLimitModal(true);
+              }}
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Add Limit
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 dark:bg-gray-700/50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">User Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Daily Limit</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Monthly Limit</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Per Transaction</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Min Amount</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                {transferLimits.map((limit) => (
+                  <tr key={limit.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                    <td className="px-4 py-4">
+                      <span className="font-medium text-gray-900 dark:text-white">
+                        {getUserTypeLabel(limit.userType)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4">
+                      <span className="text-gray-700 dark:text-gray-300">
+                        {formatCurrency(limit.dailyLimit, limit.currency)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4">
+                      <span className="text-gray-700 dark:text-gray-300">
+                        {formatCurrency(limit.monthlyLimit, limit.currency)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4">
+                      <span className="text-gray-700 dark:text-gray-300">
+                        {formatCurrency(limit.perTransactionLimit, limit.currency)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4">
+                      <span className="text-gray-700 dark:text-gray-300">
+                        {formatCurrency(limit.minAmount, limit.currency)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4">
+                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                        limit.isActive ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                      }`}>
+                        {limit.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => openEditLimit(limit)}
+                          className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                          title="Edit"
+                        >
+                          <Edit className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                        </button>
+                        <button
+                          onClick={() => deleteTransferLimit(limit.id)}
+                          className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-500 dark:text-red-400" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {transferLimits.length === 0 && (
+            <div className="text-center py-8">
+              <Users className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+              <p className="text-gray-500 dark:text-gray-400">No transfer limits configured</p>
+              <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">Add limits to control how much users can transfer</p>
+              <button
+                onClick={() => setShowLimitModal(true)}
+                className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+              >
+                Add Transfer Limit
+              </button>
+            </div>
+          )}
+        </Card>
+
         {/* Fee Formula Info */}
         <Card className="p-6 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
           <div className="flex items-start gap-3">
@@ -912,6 +1190,157 @@ export function FeeSettingsPage() {
                     <>
                       <Save className="w-4 h-4" />
                       Add Currency
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Transfer Limit Modal */}
+        {showLimitModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-lg mx-4">
+              <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                  {editingLimit ? 'Edit Transfer Limit' : 'Add Transfer Limit'}
+                </h2>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    User Type
+                  </label>
+                  <select
+                    value={limitForm.userType}
+                    onChange={(e) => setLimitForm({ ...limitForm, userType: e.target.value })}
+                    disabled={!!editingLimit}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
+                  >
+                    {USER_TYPES.map((type) => (
+                      <option key={type.value} value={type.value}>
+                        {type.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Daily Limit ({getCurrencySymbol(limitForm.currency || 'SLE')})
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={limitForm.dailyLimit}
+                      onChange={(e) => setLimitForm({ ...limitForm, dailyLimit: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Monthly Limit ({getCurrencySymbol(limitForm.currency || 'SLE')})
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={limitForm.monthlyLimit}
+                      onChange={(e) => setLimitForm({ ...limitForm, monthlyLimit: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Per Transaction Limit ({getCurrencySymbol(limitForm.currency || 'SLE')})
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={limitForm.perTransactionLimit}
+                      onChange={(e) => setLimitForm({ ...limitForm, perTransactionLimit: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Minimum Amount ({getCurrencySymbol(limitForm.currency || 'SLE')})
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={limitForm.minAmount}
+                      onChange={(e) => setLimitForm({ ...limitForm, minAmount: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Currency
+                  </label>
+                  <select
+                    value={limitForm.currency}
+                    onChange={(e) => setLimitForm({ ...limitForm, currency: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500"
+                  >
+                    {currencies.filter(c => c.isActive).map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.code} - {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="limitIsActive"
+                    checked={limitForm.isActive}
+                    onChange={(e) => setLimitForm({ ...limitForm, isActive: e.target.checked })}
+                    className="w-4 h-4 text-primary-600 border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500"
+                  />
+                  <label htmlFor="limitIsActive" className="text-sm text-gray-700 dark:text-gray-300">
+                    Active
+                  </label>
+                </div>
+              </div>
+
+              <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowLimitModal(false);
+                    setEditingLimit(null);
+                    resetLimitForm();
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveTransferLimit}
+                  disabled={saving}
+                  className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      {editingLimit ? 'Update' : 'Add'} Limit
                     </>
                   )}
                 </button>
