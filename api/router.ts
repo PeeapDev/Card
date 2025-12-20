@@ -5893,16 +5893,23 @@ async function handleUserCashout(req: VercelRequest, res: VercelResponse) {
 
     try {
       // Create payout via Monime
+      // For momo: use phoneNumber, for bank: use accountNumber
+      const destination: any = {
+        type: destinationType,
+        providerId,
+      };
+      if (destinationType === 'momo') {
+        destination.phoneNumber = normalizedAccountNumber;
+      } else {
+        destination.accountNumber = normalizedAccountNumber;
+      }
+
       const monimeResult = await monimeService.createPayout({
         amount: {
           currency,
           value: Math.round(amount * 100), // Monime uses minor units
         },
-        destination: {
-          type: destinationType,
-          providerId,
-          accountNumber: normalizedAccountNumber,
-        },
+        destination,
         source: {
           financialAccountId: sourceAccount.id,
         },
@@ -6275,16 +6282,23 @@ async function handleMerchantWithdraw(req: VercelRequest, res: VercelResponse) {
 
     try {
       // Create payout via Monime
+      // For momo: use phoneNumber, for bank: use accountNumber
+      const merchantDestination: any = {
+        type: destinationType,
+        providerId,
+      };
+      if (destinationType === 'momo') {
+        merchantDestination.phoneNumber = normalizedAccountNumber;
+      } else {
+        merchantDestination.accountNumber = normalizedAccountNumber;
+      }
+
       const monimeResult = await monimeService.createPayout({
         amount: {
           currency,
           value: Math.round(amount * 100), // Monime uses minor units
         },
-        destination: {
-          type: destinationType,
-          providerId,
-          accountNumber: normalizedAccountNumber,
-        },
+        destination: merchantDestination,
         source: {
           financialAccountId: sourceAccount.id,
         },
