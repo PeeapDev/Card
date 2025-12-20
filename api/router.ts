@@ -4793,17 +4793,25 @@ async function handleMobileMoneySend(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Wallet is not active' });
     }
 
-    // The amount to send is whatever the user requested (from their wallet balance)
-    // Platform fee calculation - 2% only (new Leone after redenomination)
-    const feePercentage = 0.02;
-    let platformFee = Math.round(amount * feePercentage * 100) / 100;
+    // Get fee settings from payment_settings
+    const { data: feeSettings } = await supabase
+      .from('payment_settings')
+      .select('withdrawal_fee_percent, withdrawal_fee_flat')
+      .eq('id', SETTINGS_ID)
+      .single();
+
+    // Calculate fee from settings (default to 2% if not set)
+    const feePercent = parseFloat(feeSettings?.withdrawal_fee_percent?.toString() || '2');
+    const feeFlat = parseFloat(feeSettings?.withdrawal_fee_flat?.toString() || '0');
+    const percentFee = amount * (feePercent / 100);
+    let platformFee = Math.round((percentFee + feeFlat) * 100) / 100;
     const totalDeduction = amount + platformFee;
 
     // Check user has enough balance for amount + fee
     if (wallet.balance < totalDeduction) {
       return res.status(400).json({
         error: 'Insufficient balance',
-        message: `You need Le ${totalDeduction.toFixed(2)} (amount + 2% fee) but have Le ${wallet.balance.toFixed(2)}`,
+        message: `You need NLe ${totalDeduction.toFixed(2)} (amount + ${feePercent}% fee) but have NLe ${wallet.balance.toFixed(2)}`,
         required: totalDeduction,
         available: wallet.balance,
         fee: platformFee,
@@ -4929,7 +4937,7 @@ async function handleMobileMoneySend(req: VercelRequest, res: VercelResponse) {
             transaction_id: transaction.id,
             amount: platformFee,
             currency: currency,
-            description: `Mobile money send fee (2%)`,
+            description: `Mobile money send fee (${feePercent}%${feeFlat > 0 ? ` + NLe ${feeFlat}` : ''})`,
             metadata: {
               payout_id: payoutResult.payoutId,
               principal_amount: amount,
@@ -4994,11 +5002,13 @@ async function handleMobileMoneySend(req: VercelRequest, res: VercelResponse) {
       // Create admin notification
       try {
         await supabase.from('admin_notifications').insert({
-          type: 'cashout',
-          title: 'User Cashout',
+          type: 'payout',
+          title: 'Mobile Money Send',
           message: `${userName} sent ${currency} ${amount.toLocaleString()} to ${providerId === 'm17' ? 'Orange Money' : 'Mobile Money'} ${phoneNumber}`,
           priority: 'medium',
-          category: 'transaction',
+          related_entity_type: 'transaction',
+          related_entity_id: transaction.id,
+          action_url: `/admin/transactions?id=${transaction.id}`,
           metadata: {
             transaction_id: transaction.id,
             user_id: authenticatedUserId,
