@@ -87,6 +87,8 @@ import { PushNotificationsPage } from '@/pages/admin/PushNotificationsPage';
 import SsoSettingsPage from '@/pages/admin/SsoSettingsPage';
 import { WebsiteAnalyticsPage } from '@/pages/admin/WebsiteAnalyticsPage';
 import { ExchangeRatesPage } from '@/pages/admin/ExchangeRatesPage';
+import { AdminVirtualCardsPage } from '@/pages/admin/AdminVirtualCardsPage';
+import { VirtualCardsPage } from '@/pages/VirtualCardsPage';
 import { PaymentCheckoutPage } from '@/pages/PaymentCheckoutPage';
 import { PayPage } from '@/pages/PayPage';
 import { PaymentSuccessPage } from '@/pages/PaymentSuccessPage';
@@ -1290,6 +1292,7 @@ function App() {
                   <Route path="/cards" element={<ProtectedRoute><MyCardsPage /></ProtectedRoute>} />
                   <Route path="/cards/marketplace" element={<ProtectedRoute><CardMarketplacePage /></ProtectedRoute>} />
                   <Route path="/cards/legacy" element={<ProtectedRoute><CardsPage /></ProtectedRoute>} />
+                  <Route path="/cards/virtual" element={<ProtectedRoute><VirtualCardsPage /></ProtectedRoute>} />
                   <Route path="/transactions" element={<ProtectedRoute><TransactionsPage /></ProtectedRoute>} />
                   <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
                   <Route path="/send" element={<ProtectedRoute><SendMoneyPage /></ProtectedRoute>} />
@@ -1322,6 +1325,7 @@ function App() {
                   <Route path="/admin/card-programs" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><CardProgramsPage /></RoleBasedRoute>} />
                   <Route path="/admin/card-types" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><CardTypesPage /></RoleBasedRoute>} />
                   <Route path="/admin/card-orders" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><CardOrdersPage /></RoleBasedRoute>} />
+                  <Route path="/admin/virtual-cards" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><AdminVirtualCardsPage /></RoleBasedRoute>} />
                   <Route path="/admin/nfc-payment" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><AdminNFCPaymentPage /></RoleBasedRoute>} />
                   <Route path="/admin/card-products" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><CardProducts /></RoleBasedRoute>} />
                   <Route path="/admin/modules" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><Modules /></RoleBasedRoute>} />
