@@ -1527,16 +1527,12 @@ export const cardService = {
     cardColor?: string;
   }): Promise<{ success: boolean; cardId?: string; cardLastFour?: string; activationCode?: string; cvv?: string; error?: string }> {
     // Call the PostgreSQL function that handles CVV generation and hashing server-side
-    const { data, error } = await supabase.rpc('issue_virtual_card', {
+    const { data, error } = await supabase.rpc('request_card', {
       p_user_id: userId,
       p_wallet_id: params.walletId,
       p_card_name: params.cardName,
       p_card_label: params.cardLabel || null,
       p_card_color: params.cardColor || '#1a1a2e',
-      p_daily_limit: 100000,
-      p_weekly_limit: 500000,
-      p_monthly_limit: 1000000,
-      p_per_transaction_limit: 50000,
     });
 
     if (error) {
