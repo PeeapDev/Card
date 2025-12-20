@@ -201,7 +201,7 @@ export function AdminDashboard() {
     count: 0,
   });
 
-  useEffect(() => {</invoke>
+  useEffect(() => {
     currencyService.getDefaultCurrency().then(setDefaultCurrency);
 
     if (user) {
