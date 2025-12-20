@@ -156,9 +156,9 @@ export const agentService = {
     // Fallback: check if user is an agent and create basic profile
     const { data: user } = await supabase
       .from('users')
-      .select('id, first_name, last_name, phone, role')
+      .select('id, first_name, last_name, phone, roles')
       .eq('id', userId)
-      .eq('role', 'agent')
+      .eq('roles', 'agent')
       .maybeSingle();
 
     if (user) {
