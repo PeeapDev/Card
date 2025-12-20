@@ -58,6 +58,7 @@ import { authService } from '@/services/auth.service';
 import { useAuth } from '@/context/AuthContext';
 import { FloatManagementModal } from '@/components/admin/FloatManagementModal';
 import { FloatOverviewModal } from '@/components/admin/FloatOverviewModal';
+import { mobileMoneyFloatService, EarningsSummary } from '@/services/mobileMoneyFloat.service';
 
 interface DashboardStats {
   totalAccounts: number;
@@ -191,8 +192,16 @@ export function AdminDashboard() {
   const [floatModalMode, setFloatModalMode] = useState<'open' | 'replenish' | 'close' | 'history'>('open');
   const [floatModalCurrency, setFloatModalCurrency] = useState<string | undefined>();
   const [floatSidebarKey, setFloatSidebarKey] = useState(0);
+  const [platformEarnings, setPlatformEarnings] = useState<EarningsSummary>({
+    totalEarnings: 0,
+    depositFees: 0,
+    withdrawalFees: 0,
+    transactionFees: 0,
+    checkoutFees: 0,
+    count: 0,
+  });
 
-  useEffect(() => {
+  useEffect(() => {</invoke>
     currencyService.getDefaultCurrency().then(setDefaultCurrency);
 
     if (user) {
@@ -308,12 +317,40 @@ export function AdminDashboard() {
       // Fetch card counts
       const { data: cards } = await supabase.from('cards').select('id, status, type');
 
-      // Fetch transactions
-      const { data: allTransactions } = await supabase
-        .from('transactions')
-        .select('id, amount, type, status, created_at, user_id');
+      // Calculate date 30 days ago for filtering
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const thirtyDaysAgoISO = thirtyDaysAgo.toISOString();
 
-      // Fetch recent transactions
+      // Fetch transactions - only completed ones for accurate analytics
+      const { data: allTransactions, error: txnError } = await supabase
+        .from('transactions')
+        .select('id, amount, type, status, created_at, user_id')
+        .eq('status', 'completed')
+        .gte('created_at', thirtyDaysAgoISO)
+        .order('created_at', { ascending: false });
+
+      if (txnError) {
+        console.error('Error fetching transactions:', txnError);
+      }
+
+      // Debug: Log transaction types found
+      if (allTransactions && allTransactions.length > 0) {
+        const typeCount: Record<string, number> = {};
+        allTransactions.forEach(t => {
+          typeCount[t.type] = (typeCount[t.type] || 0) + 1;
+        });
+        console.log('[AdminDashboard] Transaction types (last 30 days, completed):', typeCount);
+      } else {
+        console.log('[AdminDashboard] No completed transactions found in last 30 days');
+      }
+
+      // Fetch all transactions for overall stats (not filtered by date)
+      const { data: allTimeTransactions } = await supabase
+        .from('transactions')
+        .select('id, status');
+
+      // Fetch recent transactions for the table
       const { data: transactions } = await supabase
         .from('transactions')
         .select('id, amount, type, status, created_at, user_id')
@@ -353,10 +390,21 @@ export function AdminDashboard() {
         // Analytics fetch failed silently
       }
 
-      // Calculate transaction stats
-      const successfulTxns = allTransactions?.filter(t => t.status === 'completed').length || 0;
-      const failedTxns = allTransactions?.filter(t => t.status === 'failed').length || 0;
-      const pendingTxns = allTransactions?.filter(t => t.status === 'pending').length || 0;
+      // Fetch platform earnings
+      try {
+        const earningsResponse = await mobileMoneyFloatService.getEarnings('month');
+        if (earningsResponse.success) {
+          setPlatformEarnings(earningsResponse.summary);
+        }
+      } catch (err) {
+        // Earnings fetch failed silently
+      }
+
+      // Calculate transaction stats from all-time data
+      const successfulTxns = allTimeTransactions?.filter(t => t.status === 'completed').length || 0;
+      const failedTxns = allTimeTransactions?.filter(t => t.status === 'failed').length || 0;
+      const pendingTxns = allTimeTransactions?.filter(t => t.status === 'pending').length || 0;
+      const totalTxns = allTimeTransactions?.length || 0;
 
       // Calculate event stats
       const publishedEventsCount = events?.filter(e => e.status === 'published').length || 0;
@@ -428,7 +476,7 @@ export function AdminDashboard() {
         publishedEvents: publishedEventsCount,
         totalTicketsSold,
         eventRevenue: eventRevenueTotal,
-        totalTransactions: allTransactions?.length || 0,
+        totalTransactions: totalTxns,
         successfulTransactions: successfulTxns,
         failedTransactions: failedTxns,
         pendingTransactions: pendingTxns,
@@ -685,89 +733,151 @@ export function AdminDashboard() {
               transition={{ staggerChildren: 0.1 }}
             >
               {/* Total Volume */}
-              <MotionCard className="p-5 bg-gradient-to-br from-indigo-500 to-indigo-600 text-white" delay={0}>
-                <div className="flex items-center justify-between">
-                  <div className="p-2 bg-white/20 rounded-lg">
-                    <CircleDollarSign className="w-5 h-5" />
+              <Link to="/admin/wallets">
+                <MotionCard className="p-5 bg-gradient-to-br from-indigo-500 to-indigo-600 text-white hover:from-indigo-600 hover:to-indigo-700 transition-all cursor-pointer" delay={0}>
+                  <div className="flex items-center justify-between">
+                    <div className="p-2 bg-white/20 rounded-lg">
+                      <CircleDollarSign className="w-5 h-5" />
+                    </div>
+                    <span className="flex items-center text-xs text-indigo-100">
+                      <ArrowUpRight className="w-3 h-3 mr-1" />
+                      View
+                    </span>
                   </div>
-                  <span className="flex items-center text-xs text-indigo-100">
-                    <TrendingUp className="w-3 h-3 mr-1" />
-                    +12%
-                  </span>
-                </div>
-                {loading ? (
-                  <Skeleton className="h-8 w-24 mt-3 bg-white/20" />
-                ) : (
-                  <p className="text-2xl font-bold mt-3">{currencySymbol}{formatCompactNumber(stats.totalVolume)}</p>
-                )}
-                <p className="text-sm text-indigo-100 mt-1">Total Volume</p>
-              </MotionCard>
+                  {loading ? (
+                    <Skeleton className="h-8 w-24 mt-3 bg-white/20" />
+                  ) : (
+                    <p className="text-2xl font-bold mt-3">{currencySymbol}{formatCompactNumber(stats.totalVolume)}</p>
+                  )}
+                  <p className="text-sm text-indigo-100 mt-1">Total Volume</p>
+                </MotionCard>
+              </Link>
 
               {/* Total Users */}
-              <MotionCard className="p-5" delay={0.1}>
-                <div className="flex items-center justify-between">
-                  <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                    <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              <Link to="/admin/users">
+                <MotionCard className="p-5 hover:shadow-lg transition-all cursor-pointer" delay={0.1}>
+                  <div className="flex items-center justify-between">
+                    <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                      <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    {loading ? (
+                      <Skeleton className="h-4 w-8" />
+                    ) : (
+                      <span className="text-xs text-green-600 dark:text-green-400 flex items-center">
+                        <ArrowUp className="w-3 h-3" />
+                        {stats.activeAccounts} active
+                      </span>
+                    )}
                   </div>
                   {loading ? (
-                    <Skeleton className="h-4 w-8" />
+                    <Skeleton className="h-8 w-20 mt-3" />
                   ) : (
-                    <span className="text-xs text-green-600 dark:text-green-400 flex items-center">
-                      <ArrowUp className="w-3 h-3" />
-                      {stats.activeAccounts}
-                    </span>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white mt-3">{stats.totalAccounts.toLocaleString()}</p>
                   )}
-                </div>
-                {loading ? (
-                  <Skeleton className="h-8 w-20 mt-3" />
-                ) : (
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-3">{stats.totalAccounts.toLocaleString()}</p>
-                )}
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Total Users</p>
-              </MotionCard>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Total Users</p>
+                </MotionCard>
+              </Link>
 
               {/* Transactions */}
-              <MotionCard className="p-5" delay={0.2}>
-                <div className="flex items-center justify-between">
-                  <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                    <BarChart3 className="w-5 h-5 text-green-600 dark:text-green-400" />
+              <Link to="/admin/transactions">
+                <MotionCard className="p-5 hover:shadow-lg transition-all cursor-pointer" delay={0.2}>
+                  <div className="flex items-center justify-between">
+                    <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                      <BarChart3 className="w-5 h-5 text-green-600 dark:text-green-400" />
+                    </div>
+                    {loading ? (
+                      <Skeleton className="h-4 w-16" />
+                    ) : (
+                      <span className="text-xs text-green-600 dark:text-green-400 flex items-center">
+                        {stats.successfulTransactions} completed
+                      </span>
+                    )}
                   </div>
                   {loading ? (
-                    <Skeleton className="h-4 w-16" />
+                    <Skeleton className="h-8 w-20 mt-3" />
                   ) : (
-                    <span className="text-xs text-green-600 dark:text-green-400 flex items-center">
-                      {stats.successfulTransactions} completed
-                    </span>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white mt-3">{stats.totalTransactions.toLocaleString()}</p>
                   )}
-                </div>
-                {loading ? (
-                  <Skeleton className="h-8 w-20 mt-3" />
-                ) : (
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-3">{stats.totalTransactions.toLocaleString()}</p>
-                )}
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Total Transactions</p>
-              </MotionCard>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Total Transactions</p>
+                </MotionCard>
+              </Link>
 
               {/* Cards */}
-              <MotionCard className="p-5" delay={0.3}>
-                <div className="flex items-center justify-between">
-                  <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                    <CreditCard className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+              <Link to="/admin/cards">
+                <MotionCard className="p-5 hover:shadow-lg transition-all cursor-pointer" delay={0.3}>
+                  <div className="flex items-center justify-between">
+                    <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                      <CreditCard className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    {loading ? (
+                      <Skeleton className="h-4 w-12" />
+                    ) : (
+                      <span className="text-xs text-purple-600 dark:text-purple-400">
+                        {stats.activeCards} active
+                      </span>
+                    )}
                   </div>
                   {loading ? (
-                    <Skeleton className="h-4 w-12" />
+                    <Skeleton className="h-8 w-16 mt-3" />
                   ) : (
-                    <span className="text-xs text-purple-600 dark:text-purple-400">
-                      {stats.activeCards} active
-                    </span>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white mt-3">{stats.totalCards.toLocaleString()}</p>
                   )}
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Cards Issued</p>
+                </MotionCard>
+              </Link>
+            </motion.div>
+
+            {/* Platform Profit Card */}
+            <motion.div
+              className="mt-4"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+            >
+              <MotionCard
+                className="p-5 bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-600 text-white cursor-pointer hover:shadow-xl transition-all"
+                delay={0.4}
+                onClick={() => setFloatOverviewOpen(true)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 bg-white/20 rounded-xl">
+                      <TrendingUp className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-emerald-100">Platform Profit (This Month)</p>
+                      {loading ? (
+                        <Skeleton className="h-9 w-32 mt-1 bg-white/20" />
+                      ) : (
+                        <p className="text-3xl font-bold">{currencySymbol} {platformEarnings.totalEarnings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="flex items-center gap-1 text-emerald-100 text-sm mb-1">
+                      <ArrowUpRight className="w-4 h-4" />
+                      <span>{platformEarnings.count} transactions</span>
+                    </div>
+                  </div>
                 </div>
-                {loading ? (
-                  <Skeleton className="h-8 w-16 mt-3" />
-                ) : (
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-3">{stats.totalCards.toLocaleString()}</p>
-                )}
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Cards Issued</p>
+                <div className="grid grid-cols-4 gap-4 mt-4 pt-4 border-t border-white/20">
+                  <div className="text-center">
+                    <p className="text-lg font-bold">{currencySymbol} {platformEarnings.withdrawalFees.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    <p className="text-xs text-emerald-100">Withdrawal Fees</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-lg font-bold">{currencySymbol} {platformEarnings.transactionFees.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    <p className="text-xs text-emerald-100">Transaction Fees</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-lg font-bold">{currencySymbol} {platformEarnings.checkoutFees.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    <p className="text-xs text-emerald-100">Checkout Fees</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-lg font-bold">{currencySymbol} {platformEarnings.depositFees.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    <p className="text-xs text-emerald-100">Subscriptions</p>
+                  </div>
+                </div>
               </MotionCard>
             </motion.div>
           </section>
