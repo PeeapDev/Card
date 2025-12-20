@@ -319,6 +319,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleFuelDippings(req, res);
     } else if (path === 'fuel/fuel-types' || path === 'fuel/fuel-types/') {
       return await handleFuelTypes(req, res);
+    }
+    // ============================================================================
+    // EXCHANGE ROUTES
+    // ============================================================================
+    else if (path === 'exchange/rate' || path === 'exchange/rate/') {
+      return await handleExchangeRate(req, res);
+    } else if (path === 'exchange/calculate' || path === 'exchange/calculate/') {
+      return await handleExchangeCalculate(req, res);
+    } else if (path === 'exchange/can-exchange' || path === 'exchange/can-exchange/') {
+      return await handleCanExchange(req, res);
+    } else if (path === 'exchange/execute' || path === 'exchange/execute/') {
+      return await handleExchangeExecute(req, res);
+    } else if (path === 'exchange/history' || path === 'exchange/history/') {
+      return await handleExchangeHistory(req, res);
+    } else if (path === 'exchange/admin/rates' || path === 'exchange/admin/rates/') {
+      return await handleExchangeAdminRates(req, res);
+    } else if (path === 'exchange/admin/rate' || path === 'exchange/admin/rate/') {
+      return await handleExchangeAdminSetRate(req, res);
+    } else if (path === 'exchange/admin/permissions' || path === 'exchange/admin/permissions/') {
+      return await handleExchangeAdminPermissions(req, res);
+    } else if (path === 'exchange/admin/permission' || path === 'exchange/admin/permission/') {
+      return await handleExchangeAdminSetPermission(req, res);
+    } else if (path === 'exchange/admin/transactions' || path === 'exchange/admin/transactions/') {
+      return await handleExchangeAdminTransactions(req, res);
     } else {
       return res.status(404).json({ error: 'Not found', path });
     }
@@ -9372,5 +9396,823 @@ async function handleCronProcessRefunds(req: VercelRequest, res: VercelResponse)
   } catch (err: any) {
     console.error('[Cron] Error:', err);
     return res.status(500).json({ error: err.message || 'Failed to process refunds' });
+  }
+}
+
+// ============================================================================
+// EXCHANGE HANDLERS
+// ============================================================================
+
+/**
+ * Get exchange rate between two currencies
+ */
+async function handleExchangeRate(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const url = new URL(req.url || '', `http://${req.headers.host}`);
+    const fromCurrency = url.searchParams.get('fromCurrency')?.toUpperCase() || 'USD';
+    const toCurrency = url.searchParams.get('toCurrency')?.toUpperCase() || 'SLE';
+
+    const { data: rate, error } = await supabase
+      .from('exchange_rates')
+      .select('*')
+      .eq('from_currency', fromCurrency)
+      .eq('to_currency', toCurrency)
+      .eq('is_active', true)
+      .single();
+
+    if (error || !rate) {
+      return res.status(404).json({ error: `Exchange rate not found for ${fromCurrency} to ${toCurrency}` });
+    }
+
+    const effectiveRate = Number(rate.rate) * (1 - Number(rate.margin_percentage || 0) / 100);
+
+    return res.status(200).json({
+      id: rate.id,
+      fromCurrency: rate.from_currency,
+      toCurrency: rate.to_currency,
+      rate: Number(rate.rate),
+      marginPercentage: Number(rate.margin_percentage || 0),
+      effectiveRate,
+      isActive: rate.is_active,
+      updatedAt: rate.updated_at,
+    });
+  } catch (err: any) {
+    console.error('[Exchange] Error getting rate:', err);
+    return res.status(500).json({ error: err.message || 'Failed to get exchange rate' });
+  }
+}
+
+/**
+ * Calculate exchange preview with fees
+ */
+async function handleExchangeCalculate(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const { amount, fromCurrency, toCurrency } = req.body;
+
+    if (!amount || !fromCurrency || !toCurrency) {
+      return res.status(400).json({ error: 'amount, fromCurrency, and toCurrency are required' });
+    }
+
+    const { data: rate, error: rateError } = await supabase
+      .from('exchange_rates')
+      .select('*')
+      .eq('from_currency', fromCurrency.toUpperCase())
+      .eq('to_currency', toCurrency.toUpperCase())
+      .eq('is_active', true)
+      .single();
+
+    if (rateError || !rate) {
+      return res.status(404).json({ error: `Exchange rate not found for ${fromCurrency} to ${toCurrency}` });
+    }
+
+    const effectiveRate = Number(rate.rate) * (1 - Number(rate.margin_percentage || 0) / 100);
+
+    let feePercentage = 0;
+    const auth = await validateSharedApiAuth(req);
+    if (auth.valid && auth.userId) {
+      const { data: user } = await supabase
+        .from('users')
+        .select('roles')
+        .eq('id', auth.userId)
+        .single();
+
+      if (user?.roles) {
+        const { data: permission } = await supabase
+          .from('exchange_permissions')
+          .select('fee_percentage')
+          .eq('user_type', user.roles)
+          .single();
+
+        if (permission) {
+          feePercentage = Number(permission.fee_percentage || 0);
+        }
+      }
+    }
+
+    const grossAmount = amount * effectiveRate;
+    const feeAmount = grossAmount * (feePercentage / 100);
+    const netAmount = grossAmount - feeAmount;
+
+    return res.status(200).json({
+      fromCurrency: fromCurrency.toUpperCase(),
+      toCurrency: toCurrency.toUpperCase(),
+      fromAmount: amount,
+      toAmount: grossAmount,
+      exchangeRate: effectiveRate,
+      feeAmount,
+      feePercentage,
+      netAmount,
+    });
+  } catch (err: any) {
+    console.error('[Exchange] Error calculating:', err);
+    return res.status(500).json({ error: err.message || 'Failed to calculate exchange' });
+  }
+}
+
+/**
+ * Check if user can exchange
+ */
+async function handleCanExchange(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const auth = await validateSharedApiAuth(req);
+    if (!auth.valid || !auth.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const url = new URL(req.url || '', `http://${req.headers.host}`);
+    const amount = parseFloat(url.searchParams.get('amount') || '0');
+
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('roles')
+      .eq('id', auth.userId)
+      .single();
+
+    if (userError || !user) {
+      return res.status(200).json({ allowed: false, reason: 'User not found' });
+    }
+
+    const { data: permission, error: permError } = await supabase
+      .from('exchange_permissions')
+      .select('*')
+      .eq('user_type', user.roles)
+      .single();
+
+    if (permError || !permission) {
+      return res.status(200).json({ allowed: false, reason: 'No exchange permission configured for your account type' });
+    }
+
+    if (!permission.can_exchange) {
+      return res.status(200).json({ allowed: false, reason: 'Exchange is not enabled for your account type' });
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const { data: dailyTxs } = await supabase
+      .from('exchange_transactions')
+      .select('from_amount, from_currency')
+      .eq('user_id', auth.userId)
+      .eq('status', 'COMPLETED')
+      .gte('created_at', today.toISOString());
+
+    const dailyUsed = (dailyTxs || []).reduce((sum: number, tx: any) => {
+      const usdAmount = tx.from_currency === 'USD' ? Number(tx.from_amount) : Number(tx.from_amount) * 0.044444;
+      return sum + usdAmount;
+    }, 0);
+
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const { data: monthlyTxs } = await supabase
+      .from('exchange_transactions')
+      .select('from_amount, from_currency')
+      .eq('user_id', auth.userId)
+      .eq('status', 'COMPLETED')
+      .gte('created_at', startOfMonth.toISOString());
+
+    const monthlyUsed = (monthlyTxs || []).reduce((sum: number, tx: any) => {
+      const usdAmount = tx.from_currency === 'USD' ? Number(tx.from_amount) : Number(tx.from_amount) * 0.044444;
+      return sum + usdAmount;
+    }, 0);
+
+    const dailyRemaining = permission.daily_limit ? Number(permission.daily_limit) - dailyUsed : undefined;
+    const monthlyRemaining = permission.monthly_limit ? Number(permission.monthly_limit) - monthlyUsed : undefined;
+
+    if (amount > 0) {
+      if (permission.daily_limit && dailyUsed + amount > Number(permission.daily_limit)) {
+        return res.status(200).json({
+          allowed: false,
+          reason: 'Daily exchange limit exceeded',
+          dailyRemaining,
+          monthlyRemaining,
+          feePercentage: Number(permission.fee_percentage || 0),
+        });
+      }
+
+      if (permission.monthly_limit && monthlyUsed + amount > Number(permission.monthly_limit)) {
+        return res.status(200).json({
+          allowed: false,
+          reason: 'Monthly exchange limit exceeded',
+          dailyRemaining,
+          monthlyRemaining,
+          feePercentage: Number(permission.fee_percentage || 0),
+        });
+      }
+    }
+
+    return res.status(200).json({
+      allowed: true,
+      dailyRemaining,
+      monthlyRemaining,
+      feePercentage: Number(permission.fee_percentage || 0),
+    });
+  } catch (err: any) {
+    console.error('[Exchange] Error checking permission:', err);
+    return res.status(500).json({ error: err.message || 'Failed to check exchange permission' });
+  }
+}
+
+/**
+ * Execute currency exchange
+ */
+async function handleExchangeExecute(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const auth = await validateSharedApiAuth(req);
+    if (!auth.valid || !auth.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { fromWalletId, toWalletId, amount } = req.body;
+
+    if (!fromWalletId || !toWalletId || !amount || amount <= 0) {
+      return res.status(400).json({ error: 'fromWalletId, toWalletId, and positive amount are required' });
+    }
+
+    const { data: fromWallet, error: fromError } = await supabase
+      .from('wallets')
+      .select('*')
+      .eq('id', fromWalletId)
+      .eq('user_id', auth.userId)
+      .single();
+
+    if (fromError || !fromWallet) {
+      return res.status(200).json({ success: false, error: 'Source wallet not found or not owned by user' });
+    }
+
+    if (fromWallet.status !== 'ACTIVE') {
+      return res.status(200).json({ success: false, error: 'Source wallet is not active' });
+    }
+
+    if (Number(fromWallet.balance) < amount) {
+      return res.status(200).json({ success: false, error: 'Insufficient balance in source wallet' });
+    }
+
+    const { data: toWallet, error: toError } = await supabase
+      .from('wallets')
+      .select('*')
+      .eq('id', toWalletId)
+      .eq('user_id', auth.userId)
+      .single();
+
+    if (toError || !toWallet) {
+      return res.status(200).json({ success: false, error: 'Destination wallet not found or not owned by user' });
+    }
+
+    if (toWallet.status !== 'ACTIVE') {
+      return res.status(200).json({ success: false, error: 'Destination wallet is not active' });
+    }
+
+    if (fromWallet.currency === toWallet.currency) {
+      return res.status(200).json({ success: false, error: 'Cannot exchange between wallets with same currency. Use transfer instead.' });
+    }
+
+    const { data: rate, error: rateError } = await supabase
+      .from('exchange_rates')
+      .select('*')
+      .eq('from_currency', fromWallet.currency)
+      .eq('to_currency', toWallet.currency)
+      .eq('is_active', true)
+      .single();
+
+    if (rateError || !rate) {
+      return res.status(200).json({ success: false, error: `Exchange rate not available for ${fromWallet.currency} to ${toWallet.currency}` });
+    }
+
+    const { data: user } = await supabase
+      .from('users')
+      .select('roles')
+      .eq('id', auth.userId)
+      .single();
+
+    let feePercentage = 0;
+    if (user?.roles) {
+      const { data: permission } = await supabase
+        .from('exchange_permissions')
+        .select('fee_percentage')
+        .eq('user_type', user.roles)
+        .single();
+
+      if (permission) {
+        feePercentage = Number(permission.fee_percentage || 0);
+      }
+    }
+
+    const effectiveRate = Number(rate.rate) * (1 - Number(rate.margin_percentage || 0) / 100);
+    const grossAmount = amount * effectiveRate;
+    const feeAmount = grossAmount * (feePercentage / 100);
+    const netAmount = grossAmount - feeAmount;
+
+    const reference = `EXC-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+    const { error: debitError } = await supabase
+      .from('wallets')
+      .update({
+        balance: Number(fromWallet.balance) - amount,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', fromWalletId);
+
+    if (debitError) {
+      return res.status(200).json({ success: false, error: 'Failed to debit source wallet' });
+    }
+
+    const { error: creditError } = await supabase
+      .from('wallets')
+      .update({
+        balance: Number(toWallet.balance) + netAmount,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', toWalletId);
+
+    if (creditError) {
+      await supabase
+        .from('wallets')
+        .update({
+          balance: Number(fromWallet.balance),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', fromWalletId);
+
+      return res.status(200).json({ success: false, error: 'Failed to credit destination wallet' });
+    }
+
+    const { data: transaction, error: txError } = await supabase
+      .from('exchange_transactions')
+      .insert({
+        user_id: auth.userId,
+        from_wallet_id: fromWalletId,
+        to_wallet_id: toWalletId,
+        from_currency: fromWallet.currency,
+        to_currency: toWallet.currency,
+        from_amount: amount,
+        to_amount: netAmount,
+        exchange_rate: effectiveRate,
+        fee_amount: feeAmount,
+        fee_currency: toWallet.currency,
+        status: 'COMPLETED',
+        reference,
+        rate_id: rate.id,
+      })
+      .select()
+      .single();
+
+    if (txError) {
+      console.error('[Exchange] Failed to record transaction:', txError);
+    }
+
+    const { data: updatedFromWallet } = await supabase
+      .from('wallets')
+      .select('balance')
+      .eq('id', fromWalletId)
+      .single();
+
+    const { data: updatedToWallet } = await supabase
+      .from('wallets')
+      .select('balance')
+      .eq('id', toWalletId)
+      .single();
+
+    return res.status(200).json({
+      success: true,
+      transaction: transaction ? {
+        id: transaction.id,
+        fromWalletId: transaction.from_wallet_id,
+        toWalletId: transaction.to_wallet_id,
+        fromCurrency: transaction.from_currency,
+        toCurrency: transaction.to_currency,
+        fromAmount: Number(transaction.from_amount),
+        toAmount: Number(transaction.to_amount),
+        exchangeRate: Number(transaction.exchange_rate),
+        feeAmount: Number(transaction.fee_amount),
+        status: transaction.status,
+        reference: transaction.reference,
+        createdAt: transaction.created_at,
+      } : undefined,
+      fromWalletNewBalance: updatedFromWallet?.balance,
+      toWalletNewBalance: updatedToWallet?.balance,
+    });
+  } catch (err: any) {
+    console.error('[Exchange] Error executing:', err);
+    return res.status(500).json({ error: err.message || 'Exchange failed' });
+  }
+}
+
+/**
+ * Get user's exchange history
+ */
+async function handleExchangeHistory(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const auth = await validateSharedApiAuth(req);
+    if (!auth.valid || !auth.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const url = new URL(req.url || '', `http://${req.headers.host}`);
+    const page = parseInt(url.searchParams.get('page') || '1');
+    const limit = parseInt(url.searchParams.get('limit') || '20');
+    const offset = (page - 1) * limit;
+
+    const { data: transactions, error, count } = await supabase
+      .from('exchange_transactions')
+      .select('*', { count: 'exact' })
+      .eq('user_id', auth.userId)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    return res.status(200).json({
+      data: (transactions || []).map((tx: any) => ({
+        id: tx.id,
+        fromWalletId: tx.from_wallet_id,
+        toWalletId: tx.to_wallet_id,
+        fromCurrency: tx.from_currency,
+        toCurrency: tx.to_currency,
+        fromAmount: Number(tx.from_amount),
+        toAmount: Number(tx.to_amount),
+        exchangeRate: Number(tx.exchange_rate),
+        feeAmount: Number(tx.fee_amount),
+        status: tx.status,
+        reference: tx.reference,
+        createdAt: tx.created_at,
+      })),
+      total: count || 0,
+      page,
+      limit,
+      totalPages: Math.ceil((count || 0) / limit),
+    });
+  } catch (err: any) {
+    console.error('[Exchange] Error getting history:', err);
+    return res.status(500).json({ error: err.message || 'Failed to get exchange history' });
+  }
+}
+
+/**
+ * Admin: Get all exchange rates
+ */
+async function handleExchangeAdminRates(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const auth = await validateSharedApiAuth(req);
+    if (!auth.valid || !auth.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { data: user } = await supabase
+      .from('users')
+      .select('roles')
+      .eq('id', auth.userId)
+      .single();
+
+    if (!user || !['admin', 'superadmin'].includes(user.roles)) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { data: rates, error } = await supabase
+      .from('exchange_rates')
+      .select('*')
+      .order('from_currency', { ascending: true });
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    return res.status(200).json((rates || []).map((rate: any) => ({
+      id: rate.id,
+      fromCurrency: rate.from_currency,
+      toCurrency: rate.to_currency,
+      rate: Number(rate.rate),
+      marginPercentage: Number(rate.margin_percentage || 0),
+      effectiveRate: Number(rate.rate) * (1 - Number(rate.margin_percentage || 0) / 100),
+      isActive: rate.is_active,
+      updatedAt: rate.updated_at,
+    })));
+  } catch (err: any) {
+    console.error('[Exchange Admin] Error getting rates:', err);
+    return res.status(500).json({ error: err.message || 'Failed to get exchange rates' });
+  }
+}
+
+/**
+ * Admin: Set exchange rate
+ */
+async function handleExchangeAdminSetRate(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const auth = await validateSharedApiAuth(req);
+    if (!auth.valid || !auth.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { data: user } = await supabase
+      .from('users')
+      .select('roles')
+      .eq('id', auth.userId)
+      .single();
+
+    if (!user || !['admin', 'superadmin'].includes(user.roles)) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { fromCurrency, toCurrency, rate, marginPercentage } = req.body;
+
+    if (!fromCurrency || !toCurrency || !rate) {
+      return res.status(400).json({ error: 'fromCurrency, toCurrency, and rate are required' });
+    }
+
+    const { data: existing } = await supabase
+      .from('exchange_rates')
+      .select('id')
+      .eq('from_currency', fromCurrency.toUpperCase())
+      .eq('to_currency', toCurrency.toUpperCase())
+      .single();
+
+    let result;
+    if (existing) {
+      const { data, error } = await supabase
+        .from('exchange_rates')
+        .update({
+          rate,
+          margin_percentage: marginPercentage ?? 0,
+          set_by: auth.userId,
+          is_active: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      result = data;
+    } else {
+      const { data, error } = await supabase
+        .from('exchange_rates')
+        .insert({
+          from_currency: fromCurrency.toUpperCase(),
+          to_currency: toCurrency.toUpperCase(),
+          rate,
+          margin_percentage: marginPercentage ?? 0,
+          set_by: auth.userId,
+          is_active: true,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      result = data;
+    }
+
+    return res.status(200).json({
+      id: result.id,
+      fromCurrency: result.from_currency,
+      toCurrency: result.to_currency,
+      rate: Number(result.rate),
+      marginPercentage: Number(result.margin_percentage || 0),
+      effectiveRate: Number(result.rate) * (1 - Number(result.margin_percentage || 0) / 100),
+      isActive: result.is_active,
+      updatedAt: result.updated_at,
+    });
+  } catch (err: any) {
+    console.error('[Exchange Admin] Error setting rate:', err);
+    return res.status(500).json({ error: err.message || 'Failed to set exchange rate' });
+  }
+}
+
+/**
+ * Admin: Get all exchange permissions
+ */
+async function handleExchangeAdminPermissions(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const auth = await validateSharedApiAuth(req);
+    if (!auth.valid || !auth.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { data: user } = await supabase
+      .from('users')
+      .select('roles')
+      .eq('id', auth.userId)
+      .single();
+
+    if (!user || !['admin', 'superadmin'].includes(user.roles)) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { data: permissions, error } = await supabase
+      .from('exchange_permissions')
+      .select('*')
+      .order('user_type', { ascending: true });
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    return res.status(200).json((permissions || []).map((p: any) => ({
+      id: p.id,
+      userType: p.user_type,
+      canExchange: p.can_exchange,
+      dailyLimit: p.daily_limit ? Number(p.daily_limit) : undefined,
+      monthlyLimit: p.monthly_limit ? Number(p.monthly_limit) : undefined,
+      minAmount: p.min_amount ? Number(p.min_amount) : undefined,
+      maxAmount: p.max_amount ? Number(p.max_amount) : undefined,
+      feePercentage: Number(p.fee_percentage || 0),
+      updatedAt: p.updated_at,
+    })));
+  } catch (err: any) {
+    console.error('[Exchange Admin] Error getting permissions:', err);
+    return res.status(500).json({ error: err.message || 'Failed to get exchange permissions' });
+  }
+}
+
+/**
+ * Admin: Set exchange permission for user type
+ */
+async function handleExchangeAdminSetPermission(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const auth = await validateSharedApiAuth(req);
+    if (!auth.valid || !auth.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { data: user } = await supabase
+      .from('users')
+      .select('roles')
+      .eq('id', auth.userId)
+      .single();
+
+    if (!user || user.roles !== 'superadmin') {
+      return res.status(403).json({ error: 'Superadmin access required' });
+    }
+
+    const { userType, canExchange, dailyLimit, monthlyLimit, minAmount, maxAmount, feePercentage } = req.body;
+
+    if (!userType || canExchange === undefined) {
+      return res.status(400).json({ error: 'userType and canExchange are required' });
+    }
+
+    const { data: existing } = await supabase
+      .from('exchange_permissions')
+      .select('id')
+      .eq('user_type', userType)
+      .single();
+
+    let result;
+    if (existing) {
+      const updateData: any = {
+        can_exchange: canExchange,
+        updated_at: new Date().toISOString(),
+      };
+      if (dailyLimit !== undefined) updateData.daily_limit = dailyLimit;
+      if (monthlyLimit !== undefined) updateData.monthly_limit = monthlyLimit;
+      if (minAmount !== undefined) updateData.min_amount = minAmount;
+      if (maxAmount !== undefined) updateData.max_amount = maxAmount;
+      if (feePercentage !== undefined) updateData.fee_percentage = feePercentage;
+
+      const { data, error } = await supabase
+        .from('exchange_permissions')
+        .update(updateData)
+        .eq('id', existing.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      result = data;
+    } else {
+      const { data, error } = await supabase
+        .from('exchange_permissions')
+        .insert({
+          user_type: userType,
+          can_exchange: canExchange,
+          daily_limit: dailyLimit,
+          monthly_limit: monthlyLimit,
+          min_amount: minAmount ?? 1,
+          max_amount: maxAmount,
+          fee_percentage: feePercentage ?? 0,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      result = data;
+    }
+
+    return res.status(200).json({
+      id: result.id,
+      userType: result.user_type,
+      canExchange: result.can_exchange,
+      dailyLimit: result.daily_limit ? Number(result.daily_limit) : undefined,
+      monthlyLimit: result.monthly_limit ? Number(result.monthly_limit) : undefined,
+      minAmount: result.min_amount ? Number(result.min_amount) : undefined,
+      maxAmount: result.max_amount ? Number(result.max_amount) : undefined,
+      feePercentage: Number(result.fee_percentage || 0),
+      updatedAt: result.updated_at,
+    });
+  } catch (err: any) {
+    console.error('[Exchange Admin] Error setting permission:', err);
+    return res.status(500).json({ error: err.message || 'Failed to set exchange permission' });
+  }
+}
+
+/**
+ * Admin: Get all exchange transactions
+ */
+async function handleExchangeAdminTransactions(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const auth = await validateSharedApiAuth(req);
+    if (!auth.valid || !auth.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { data: user } = await supabase
+      .from('users')
+      .select('roles')
+      .eq('id', auth.userId)
+      .single();
+
+    if (!user || !['admin', 'superadmin'].includes(user.roles)) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const url = new URL(req.url || '', `http://${req.headers.host}`);
+    const page = parseInt(url.searchParams.get('page') || '1');
+    const limit = parseInt(url.searchParams.get('limit') || '20');
+    const offset = (page - 1) * limit;
+
+    const { data: transactions, error, count } = await supabase
+      .from('exchange_transactions')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    return res.status(200).json({
+      data: (transactions || []).map((tx: any) => ({
+        id: tx.id,
+        userId: tx.user_id,
+        fromWalletId: tx.from_wallet_id,
+        toWalletId: tx.to_wallet_id,
+        fromCurrency: tx.from_currency,
+        toCurrency: tx.to_currency,
+        fromAmount: Number(tx.from_amount),
+        toAmount: Number(tx.to_amount),
+        exchangeRate: Number(tx.exchange_rate),
+        feeAmount: Number(tx.fee_amount),
+        status: tx.status,
+        reference: tx.reference,
+        createdAt: tx.created_at,
+      })),
+      total: count || 0,
+      page,
+      limit,
+      totalPages: Math.ceil((count || 0) / limit),
+    });
+  } catch (err: any) {
+    console.error('[Exchange Admin] Error getting transactions:', err);
+    return res.status(500).json({ error: err.message || 'Failed to get exchange transactions' });
   }
 }
