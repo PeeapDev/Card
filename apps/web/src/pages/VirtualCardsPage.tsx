@@ -115,13 +115,18 @@ export function VirtualCardsPage() {
   };
 
   const loadCards = async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      console.log('[VirtualCards] No user ID, skipping load');
+      return;
+    }
+    console.log('[VirtualCards] Loading cards for user:', user.id);
     setIsLoading(true);
     try {
       const userCards = await cardService.getIssuedCards(user.id);
+      console.log('[VirtualCards] Loaded cards:', userCards.length, userCards);
       setCards(userCards);
     } catch (err: any) {
-      console.error('Failed to load cards:', err);
+      console.error('[VirtualCards] Failed to load cards:', err);
     } finally {
       setIsLoading(false);
     }

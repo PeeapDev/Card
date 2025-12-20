@@ -1340,6 +1340,7 @@ export const cardService = {
    * Get all issued virtual cards for a user
    */
   async getIssuedCards(userId: string): Promise<IssuedCard[]> {
+    console.log('[CardService] Fetching issued cards for user:', userId);
     const { data, error } = await supabase
       .from('issued_cards')
       .select(`
@@ -1349,8 +1350,10 @@ export const cardService = {
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
+    console.log('[CardService] Query result - data:', data, 'error:', error);
+
     if (error) {
-      console.error('Error fetching issued cards:', error);
+      console.error('[CardService] Error fetching issued cards:', error);
       throw new Error(error.message);
     }
 
