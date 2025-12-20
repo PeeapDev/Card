@@ -16,6 +16,59 @@ export interface CreateCardRequest {
   monthlyLimit?: number;
 }
 
+// Issued Card (closed-loop virtual cards)
+export interface IssuedCard {
+  id: string;
+  userId: string;
+  walletId: string;
+  cardName: string;
+  cardLabel?: string;
+  cardNumber: string;
+  cardLastFour: string;
+  cardColor: string;
+  expiryMonth: number;
+  expiryYear: number;
+  cvv: string;
+  cardStatus: 'pending' | 'active' | 'frozen' | 'blocked' | 'expired';
+  isFrozen: boolean;
+  dailyLimit: number;
+  weeklyLimit: number;
+  monthlyLimit: number;
+  perTransactionLimit: number;
+  dailySpent: number;
+  contactlessEnabled: boolean;
+  internationalEnabled: boolean;
+  onlineEnabled: boolean;
+  onlinePaymentsEnabled: boolean;
+  atmEnabled: boolean;
+  atmWithdrawalsEnabled: boolean;
+  spentToday: number;
+  spentThisMonth: number;
+  createdAt: string;
+  updatedAt: string;
+  wallet?: {
+    id: string;
+    balance: number;
+    currency: string;
+  };
+}
+
+// Card Transaction
+export interface CardTransaction {
+  id: string;
+  cardId: string;
+  type: 'purchase' | 'refund' | 'topup' | 'withdrawal';
+  transactionType: 'purchase' | 'refund' | 'topup' | 'withdrawal';
+  amount: number;
+  currency: string;
+  description: string;
+  merchantName?: string;
+  merchantCategory?: string;
+  status: 'pending' | 'completed' | 'failed' | 'reversed';
+  reference: string;
+  createdAt: string;
+}
+
 export interface UpdateCardLimitsRequest {
   dailyLimit?: number;
   monthlyLimit?: number;
@@ -1279,5 +1332,416 @@ export const cardService = {
       success: true,
       transactionId: data,
     };
+  },
+
+  // ==========================================
+  // Issued Virtual Cards (Closed-Loop)
+  // ==========================================
+
+  /**
+   * Get all issued virtual cards for a user
+   */
+  async getIssuedCards(userId: string): Promise<IssuedCard[]> {
+    const { data, error } = await supabase
+      .from('issued_cards')
+      .select(`
+        *,
+        wallets:wallet_id (id, balance, currency)
+      `)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching issued cards:', error);
+      throw new Error(error.message);
+    }
+
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      userId: row.user_id,
+      walletId: row.wallet_id,
+      cardName: row.card_name || 'Virtual Card',
+      cardLabel: row.card_label,
+      cardNumber: row.card_number || '',
+      cardLastFour: row.card_last_four || row.card_number?.slice(-4) || '****',
+      cardColor: row.card_color || '#1a1a2e',
+      expiryMonth: row.expiry_month || 12,
+      expiryYear: row.expiry_year || new Date().getFullYear() + 3,
+      cvv: row.cvv || '',
+      cardStatus: row.card_status || 'pending',
+      isFrozen: row.is_frozen || false,
+      dailyLimit: parseFloat(row.daily_limit) || 100000,
+      weeklyLimit: parseFloat(row.weekly_limit) || 500000,
+      monthlyLimit: parseFloat(row.monthly_limit) || 1000000,
+      perTransactionLimit: parseFloat(row.per_transaction_limit) || 50000,
+      dailySpent: parseFloat(row.daily_spent) || 0,
+      contactlessEnabled: row.contactless_enabled ?? true,
+      internationalEnabled: row.international_enabled ?? false,
+      onlineEnabled: row.online_enabled ?? true,
+      onlinePaymentsEnabled: row.online_payments_enabled ?? true,
+      atmEnabled: row.atm_enabled ?? false,
+      atmWithdrawalsEnabled: row.atm_withdrawals_enabled ?? false,
+      spentToday: parseFloat(row.spent_today) || 0,
+      spentThisMonth: parseFloat(row.spent_this_month) || 0,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      wallet: row.wallets ? {
+        id: row.wallets.id,
+        balance: parseFloat(row.wallets.balance) || 0,
+        currency: row.wallets.currency || 'SLE',
+      } : undefined,
+    }));
+  },
+
+  /**
+   * Get a single issued card
+   */
+  async getIssuedCard(cardId: string, userId?: string): Promise<IssuedCard | null> {
+    let query = supabase
+      .from('issued_cards')
+      .select(`
+        *,
+        wallets:wallet_id (id, balance, currency)
+      `)
+      .eq('id', cardId);
+
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    const { data, error } = await query.maybeSingle();
+
+    if (error) {
+      console.error('Error fetching issued card:', error);
+      throw new Error(error.message);
+    }
+
+    if (!data) return null;
+
+    return {
+      id: data.id,
+      userId: data.user_id,
+      walletId: data.wallet_id,
+      cardName: data.card_name || 'Virtual Card',
+      cardLabel: data.card_label,
+      cardNumber: data.card_number || '',
+      cardLastFour: data.card_last_four || data.card_number?.slice(-4) || '****',
+      cardColor: data.card_color || '#1a1a2e',
+      expiryMonth: data.expiry_month || 12,
+      expiryYear: data.expiry_year || new Date().getFullYear() + 3,
+      cvv: data.cvv || '',
+      cardStatus: data.card_status || 'pending',
+      isFrozen: data.is_frozen || false,
+      dailyLimit: parseFloat(data.daily_limit) || 100000,
+      weeklyLimit: parseFloat(data.weekly_limit) || 500000,
+      monthlyLimit: parseFloat(data.monthly_limit) || 1000000,
+      perTransactionLimit: parseFloat(data.per_transaction_limit) || 50000,
+      dailySpent: parseFloat(data.daily_spent) || 0,
+      contactlessEnabled: data.contactless_enabled ?? true,
+      internationalEnabled: data.international_enabled ?? false,
+      onlineEnabled: data.online_enabled ?? true,
+      onlinePaymentsEnabled: data.online_payments_enabled ?? true,
+      atmEnabled: data.atm_enabled ?? false,
+      atmWithdrawalsEnabled: data.atm_withdrawals_enabled ?? false,
+      spentToday: parseFloat(data.spent_today) || 0,
+      spentThisMonth: parseFloat(data.spent_this_month) || 0,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+      wallet: data.wallets ? {
+        id: data.wallets.id,
+        balance: parseFloat(data.wallets.balance) || 0,
+        currency: data.wallets.currency || 'SLE',
+      } : undefined,
+    };
+  },
+
+  /**
+   * Get secure card details (card number, CVV, expiry)
+   */
+  async getCardSecureDetails(cardId: string, userId: string): Promise<{
+    cardNumber: string;
+    cvv: string;
+    expiryMonth: number;
+    expiryYear: number;
+  } | null> {
+    const { data, error } = await supabase
+      .from('issued_cards')
+      .select('card_number, cvv, expiry_month, expiry_year, user_id')
+      .eq('id', cardId)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error fetching card secure details:', error);
+      return null;
+    }
+
+    if (!data || data.user_id !== userId) {
+      return null;
+    }
+
+    return {
+      cardNumber: data.card_number,
+      cvv: data.cvv,
+      expiryMonth: data.expiry_month,
+      expiryYear: data.expiry_year,
+    };
+  },
+
+  /**
+   * Get card transactions
+   */
+  async getCardTransactions(cardId: string, options?: { limit?: number }): Promise<CardTransaction[]> {
+    const limit = options?.limit || 50;
+    const { data, error } = await supabase
+      .from('card_transactions')
+      .select('*')
+      .eq('card_id', cardId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.error('Error fetching card transactions:', error);
+      // Return empty array instead of throwing if table doesn't exist
+      return [];
+    }
+
+    return (data || []).map((row: any) => {
+      const txType = row.type || row.transaction_type || 'purchase';
+      return {
+        id: row.id,
+        cardId: row.card_id,
+        type: txType,
+        transactionType: txType,
+        amount: parseFloat(row.amount) || 0,
+        currency: row.currency || 'SLE',
+        description: row.description || '',
+        merchantName: row.merchant_name,
+        merchantCategory: row.merchant_category,
+        status: row.status || 'completed',
+        reference: row.reference || '',
+        createdAt: row.created_at,
+      };
+    });
+  },
+
+  /**
+   * Request a new virtual card
+   */
+  async requestVirtualCard(userId: string, params: {
+    walletId: string;
+    cardName: string;
+    cardLabel?: string;
+    cardColor?: string;
+  }): Promise<{ success: boolean; cardId?: string; cardLastFour?: string; activationCode?: string; cvv?: string; error?: string }> {
+    const cardNumber = generateCardNumber();
+    const cvv = generateCVV();
+    const activationCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const expiryDate = new Date();
+    expiryDate.setFullYear(expiryDate.getFullYear() + 3);
+
+    const { data, error } = await supabase
+      .from('issued_cards')
+      .insert({
+        user_id: userId,
+        wallet_id: params.walletId,
+        card_name: params.cardName,
+        card_label: params.cardLabel,
+        card_number: cardNumber,
+        card_last_four: cardNumber.slice(-4),
+        card_color: params.cardColor || '#1a1a2e',
+        cvv: cvv,
+        activation_code: activationCode,
+        expiry_month: expiryDate.getMonth() + 1,
+        expiry_year: expiryDate.getFullYear(),
+        card_status: 'pending',
+        is_frozen: false,
+        daily_limit: 100000, // 1000.00 in cents
+        weekly_limit: 500000,
+        monthly_limit: 1000000,
+        per_transaction_limit: 50000,
+        contactless_enabled: true,
+        international_enabled: false,
+        online_enabled: true,
+        online_payments_enabled: true,
+        atm_enabled: false,
+        atm_withdrawals_enabled: false,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error requesting virtual card:', error);
+      return { success: false, error: error.message };
+    }
+
+    return {
+      success: true,
+      cardId: data.id,
+      cardLastFour: data.card_last_four,
+      activationCode: activationCode,
+      cvv: cvv,
+    };
+  },
+
+  /**
+   * Activate a virtual card
+   */
+  async activateVirtualCard(cardId: string, userId: string, activationCode: string): Promise<{ success: boolean; error?: string }> {
+    // First verify the activation code
+    const { data: card, error: fetchError } = await supabase
+      .from('issued_cards')
+      .select('activation_code, card_status')
+      .eq('id', cardId)
+      .eq('user_id', userId)
+      .single();
+
+    if (fetchError || !card) {
+      return { success: false, error: 'Card not found' };
+    }
+
+    if (card.card_status !== 'pending') {
+      return { success: false, error: 'Card is already activated or blocked' };
+    }
+
+    if (card.activation_code !== activationCode) {
+      return { success: false, error: 'Invalid activation code' };
+    }
+
+    const { error } = await supabase
+      .from('issued_cards')
+      .update({
+        card_status: 'active',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', cardId)
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Error activating virtual card:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  },
+
+  /**
+   * Toggle card freeze status
+   */
+  async toggleCardFreeze(cardId: string, userId: string, freeze: boolean): Promise<{ success: boolean; error?: string }> {
+    const newStatus = freeze ? 'frozen' : 'active';
+
+    const { error } = await supabase
+      .from('issued_cards')
+      .update({
+        is_frozen: freeze,
+        card_status: newStatus,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', cardId)
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Error toggling card freeze:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  },
+
+  /**
+   * Update card spending limits
+   */
+  async updateCardSpendingLimits(cardId: string, userId: string, limits: {
+    dailyLimit?: number;
+    weeklyLimit?: number;
+    monthlyLimit?: number;
+    perTransactionLimit?: number;
+  }): Promise<{ success: boolean; error?: string }> {
+    const updates: any = { updated_at: new Date().toISOString() };
+    if (limits.dailyLimit !== undefined) updates.daily_limit = limits.dailyLimit;
+    if (limits.weeklyLimit !== undefined) updates.weekly_limit = limits.weeklyLimit;
+    if (limits.monthlyLimit !== undefined) updates.monthly_limit = limits.monthlyLimit;
+    if (limits.perTransactionLimit !== undefined) updates.per_transaction_limit = limits.perTransactionLimit;
+
+    const { error } = await supabase
+      .from('issued_cards')
+      .update(updates)
+      .eq('id', cardId)
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Error updating card limits:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  },
+
+  /**
+   * Update card controls (contactless, international, online, ATM)
+   */
+  async updateCardControls(cardId: string, userId: string, controls: {
+    contactlessEnabled?: boolean;
+    internationalEnabled?: boolean;
+    onlineEnabled?: boolean;
+    onlinePaymentsEnabled?: boolean;
+    atmEnabled?: boolean;
+    atmWithdrawalsEnabled?: boolean;
+  }): Promise<void> {
+    const updates: any = { updated_at: new Date().toISOString() };
+    if (controls.contactlessEnabled !== undefined) updates.contactless_enabled = controls.contactlessEnabled;
+    if (controls.internationalEnabled !== undefined) updates.international_enabled = controls.internationalEnabled;
+    if (controls.onlineEnabled !== undefined) updates.online_enabled = controls.onlineEnabled;
+    if (controls.onlinePaymentsEnabled !== undefined) updates.online_payments_enabled = controls.onlinePaymentsEnabled;
+    if (controls.atmEnabled !== undefined) updates.atm_enabled = controls.atmEnabled;
+    if (controls.atmWithdrawalsEnabled !== undefined) updates.atm_withdrawals_enabled = controls.atmWithdrawalsEnabled;
+
+    const { error } = await supabase
+      .from('issued_cards')
+      .update(updates)
+      .eq('id', cardId)
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Error updating card controls:', error);
+      throw new Error(error.message);
+    }
+  },
+
+  /**
+   * Block an issued card (admin)
+   */
+  async blockIssuedCard(cardId: string): Promise<void> {
+    const { error } = await supabase
+      .from('issued_cards')
+      .update({
+        card_status: 'blocked',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', cardId);
+
+    if (error) {
+      console.error('Error blocking issued card:', error);
+      throw new Error(error.message);
+    }
+  },
+
+  /**
+   * Unblock an issued card (admin)
+   */
+  async unblockIssuedCard(cardId: string): Promise<void> {
+    const { error } = await supabase
+      .from('issued_cards')
+      .update({
+        card_status: 'active',
+        is_frozen: false,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', cardId);
+
+    if (error) {
+      console.error('Error unblocking issued card:', error);
+      throw new Error(error.message);
+    }
   },
 };
