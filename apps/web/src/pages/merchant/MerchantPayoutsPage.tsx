@@ -9,15 +9,18 @@ import {
   Loader2,
   RefreshCw,
   AlertTriangle,
+  ArrowUpRight,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
 import { currencyService, Currency } from '@/services/currency.service';
 import { merchantService, MerchantPayout } from '@/services/merchant.service';
 import { useAuth } from '@/context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 export function MerchantPayoutsPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [payouts, setPayouts] = useState<MerchantPayout[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -111,20 +114,38 @@ export function MerchantPayoutsPage() {
               <Download className="w-4 h-4" />
               Export
             </button>
+            <button
+              onClick={() => navigate('/withdraw')}
+              disabled={stats.availableBalance <= 0}
+              className="px-4 py-2 text-sm bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg flex items-center gap-2 font-medium"
+            >
+              <ArrowUpRight className="w-4 h-4" />
+              Request Payout
+            </button>
           </div>
         </div>
 
         {/* Balance Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                <Wallet className="w-6 h-6 text-green-600 dark:text-green-400" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                  <Wallet className="w-6 h-6 text-green-600 dark:text-green-400" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Available Balance</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(stats.availableBalance)}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Available Balance</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(stats.availableBalance)}</p>
-              </div>
+              {stats.availableBalance > 0 && (
+                <button
+                  onClick={() => navigate('/withdraw')}
+                  className="px-3 py-1.5 text-xs bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium"
+                >
+                  Withdraw
+                </button>
+              )}
             </div>
           </Card>
           <Card className="p-6">
