@@ -10691,11 +10691,21 @@ async function handleKycSierraLeoneVerification(req: VercelRequest, res: VercelR
   try {
     const { idCardFrontBase64, selfieBase64, mimeType, phoneNumber } = req.body;
 
+    console.log('[KYC] SL Verification request:', {
+      hasIdCard: !!idCardFrontBase64,
+      idCardLength: idCardFrontBase64?.length || 0,
+      hasSelfie: !!selfieBase64,
+      selfieLength: selfieBase64?.length || 0,
+      mimeType,
+      phoneNumber,
+    });
+
     if (!idCardFrontBase64 || !phoneNumber) {
       return res.status(400).json({ error: 'ID card image and phone number are required' });
     }
 
     const { userId, user } = auth;
+    console.log('[KYC] Authenticated user:', userId, 'email:', user?.email);
     const issues: string[] = [];
 
     // Normalize phone number for storage (with +232 prefix)
@@ -10799,18 +10809,23 @@ async function handleKycSierraLeoneVerification(req: VercelRequest, res: VercelR
 
     if (existingApp) {
       // Update existing
-      await supabase
+      const { error: updateError } = await supabase
         .from('kyc_applications')
         .update({
           verification_result: verificationResultData,
-          status: phoneVerified ? 'PENDING' : 'PENDING',
+          status: 'PENDING',
           updated_at: new Date().toISOString(),
         })
         .eq('id', existingApp.id);
+
+      if (updateError) {
+        console.error('[KYC] Error updating kyc_applications:', updateError);
+        throw new Error(`Database update failed: ${updateError.message}`);
+      }
       kycApplicationId = existingApp.id;
     } else {
       // Create new
-      const { data: newApp } = await supabase
+      const { data: newApp, error: insertError } = await supabase
         .from('kyc_applications')
         .insert({
           user_id: userId,
@@ -10820,6 +10835,11 @@ async function handleKycSierraLeoneVerification(req: VercelRequest, res: VercelR
         })
         .select('id')
         .single();
+
+      if (insertError) {
+        console.error('[KYC] Error inserting kyc_applications:', insertError);
+        throw new Error(`Database insert failed: ${insertError.message}`);
+      }
       kycApplicationId = newApp?.id || '';
     }
 
