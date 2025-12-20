@@ -954,11 +954,12 @@ function CardItem({
 
   return (
     <div className="space-y-3">
-      {/* Card Visual - Realistic Credit Card Design */}
+      {/* Card Visual - Realistic Credit Card Design with proper aspect ratio */}
       <div
-        className="relative h-52 rounded-2xl p-5 text-white shadow-2xl cursor-pointer overflow-hidden transform transition-transform hover:scale-[1.02]"
+        className="relative w-full max-w-[400px] rounded-2xl p-5 text-white shadow-2xl cursor-pointer overflow-hidden transform transition-transform hover:scale-[1.02]"
         style={{
           background: `linear-gradient(135deg, ${card.cardColor} 0%, ${card.cardColor}dd 50%, ${card.cardColor}99 100%)`,
+          aspectRatio: '1.586 / 1', // Standard credit card ratio (85.6mm × 53.98mm)
         }}
         onClick={onToggleNumber}
       >
