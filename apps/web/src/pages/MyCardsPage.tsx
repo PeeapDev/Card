@@ -53,6 +53,7 @@ import { NFCLinkGenerator } from '@/components/payment/NFCLinkGenerator';
 import { useAuth } from '@/context/AuthContext';
 import { useNFCPaymentLinks, NFCPaymentLink } from '@/hooks/useNFCPayments';
 import { supabase } from '@/lib/supabase';
+import { cardService, IssuedCard } from '@/services/card.service';
 
 export function MyCardsPage() {
   const navigate = useNavigate();
@@ -95,6 +96,42 @@ export function MyCardsPage() {
   const [sourceWalletId, setSourceWalletId] = useState<string>('');
   const [topUpError, setTopUpError] = useState<string>('');
   const [topUpSuccess, setTopUpSuccess] = useState<boolean>(false);
+
+  // Virtual Cards state
+  const [virtualCards, setVirtualCards] = useState<IssuedCard[]>([]);
+  const [virtualCardsLoading, setVirtualCardsLoading] = useState(false);
+  const [showVirtualCardModal, setShowVirtualCardModal] = useState(false);
+  const [selectedVirtualCard, setSelectedVirtualCard] = useState<IssuedCard | null>(null);
+  const [showVirtualCardDetails, setShowVirtualCardDetails] = useState<string | null>(null);
+
+  // Fetch virtual cards
+  useEffect(() => {
+    const fetchVirtualCards = async () => {
+      if (!user?.id) return;
+      setVirtualCardsLoading(true);
+      try {
+        const cards = await cardService.getIssuedCards(user.id);
+        setVirtualCards(cards);
+      } catch (error) {
+        console.error('Failed to fetch virtual cards:', error);
+      } finally {
+        setVirtualCardsLoading(false);
+      }
+    };
+    fetchVirtualCards();
+  }, [user?.id]);
+
+  // Handle virtual card freeze/unfreeze
+  const handleToggleVirtualCardFreeze = async (card: IssuedCard) => {
+    try {
+      await cardService.toggleCardFreeze(card.id, user!.id);
+      // Refresh virtual cards
+      const cards = await cardService.getIssuedCards(user!.id);
+      setVirtualCards(cards);
+    } catch (error: any) {
+      alert(error.message || 'Failed to update card');
+    }
+  };
 
   // Get connected wallet for a card
   const getConnectedWallet = (walletId: string) => {
@@ -494,6 +531,126 @@ export function MyCardsPage() {
             </Button>
           </Card>
         )}
+
+        {/* Virtual Cards Section */}
+        <div className="mt-8">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Virtual Cards</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Peeap closed-loop cards with spending controls</p>
+            </div>
+            <Button onClick={() => navigate('/cards/virtual')} variant="outline" size="sm">
+              <Plus className="w-4 h-4 mr-2" />
+              Request Card
+            </Button>
+          </div>
+
+          {virtualCardsLoading ? (
+            <div className="text-center py-8">Loading virtual cards...</div>
+          ) : virtualCards.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {virtualCards.map((card) => (
+                <div
+                  key={card.id}
+                  className="relative bg-gradient-to-br from-emerald-600 to-teal-800 rounded-2xl p-6 text-white shadow-lg overflow-hidden"
+                  style={{ backgroundColor: card.cardColor }}
+                >
+                  {/* Card Pattern */}
+                  <div className="absolute inset-0 opacity-10">
+                    <div className="absolute top-0 right-0 w-40 h-40 bg-white rounded-full -translate-y-1/2 translate-x-1/2" />
+                    <div className="absolute bottom-0 left-0 w-32 h-32 bg-white rounded-full translate-y-1/2 -translate-x-1/2" />
+                  </div>
+
+                  {/* Card Status Badge */}
+                  <div className="absolute top-4 right-4">
+                    <span className={clsx(
+                      'px-2 py-1 text-xs font-medium rounded-full',
+                      card.cardStatus === 'active' && 'bg-green-500/20 text-green-100',
+                      card.cardStatus === 'frozen' && 'bg-blue-500/20 text-blue-100',
+                      card.cardStatus === 'pending' && 'bg-yellow-500/20 text-yellow-100',
+                      card.cardStatus === 'blocked' && 'bg-red-500/20 text-red-100'
+                    )}>
+                      {card.cardStatus.charAt(0).toUpperCase() + card.cardStatus.slice(1)}
+                    </span>
+                  </div>
+
+                  {/* Card Content */}
+                  <div className="relative z-10">
+                    <div className="flex items-center gap-2 mb-6">
+                      <CreditCard className="w-8 h-8" />
+                      <span className="text-sm font-medium opacity-80">Peeap Virtual</span>
+                    </div>
+
+                    {/* Card Number */}
+                    <div className="mb-4">
+                      <p className="font-mono text-xl tracking-widest">
+                        •••• •••• •••• {card.cardLastFour}
+                      </p>
+                    </div>
+
+                    {/* Card Name & Expiry */}
+                    <div className="flex items-end justify-between">
+                      <div>
+                        <p className="text-xs opacity-70 mb-1">Card Name</p>
+                        <p className="font-medium">{card.cardName}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs opacity-70 mb-1">Expires</p>
+                        <p className="font-medium">{String(card.expiryMonth).padStart(2, '0')}/{String(card.expiryYear).slice(-2)}</p>
+                      </div>
+                    </div>
+
+                    {/* Balance */}
+                    <div className="mt-4 pt-4 border-t border-white/20">
+                      <p className="text-xs opacity-70 mb-1">Available Balance</p>
+                      <p className="text-lg font-bold">
+                        {currencySymbol} {(card.wallet?.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex gap-2 mt-4">
+                      <button
+                        onClick={() => handleToggleVirtualCardFreeze(card)}
+                        className={clsx(
+                          'flex-1 py-2 rounded-lg text-sm font-medium transition-colors',
+                          card.cardStatus === 'frozen'
+                            ? 'bg-white/20 hover:bg-white/30'
+                            : 'bg-white/10 hover:bg-white/20'
+                        )}
+                        disabled={card.cardStatus === 'blocked' || card.cardStatus === 'pending'}
+                      >
+                        {card.cardStatus === 'frozen' ? (
+                          <><Unlock className="w-4 h-4 inline mr-1" /> Unfreeze</>
+                        ) : (
+                          <><Lock className="w-4 h-4 inline mr-1" /> Freeze</>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => navigate('/cards/virtual')}
+                        className="flex-1 py-2 rounded-lg text-sm font-medium bg-white/10 hover:bg-white/20 transition-colors"
+                      >
+                        <Settings className="w-4 h-4 inline mr-1" /> Manage
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <Card className="text-center py-8 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border-emerald-200 dark:border-emerald-800">
+              <CreditCard className="w-10 h-10 text-emerald-500 mx-auto mb-3" />
+              <h3 className="text-base font-medium text-gray-900 dark:text-white mb-1">No Virtual Cards Yet</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                Get a virtual card with spending limits and controls
+              </p>
+              <Button onClick={() => navigate('/cards/virtual')} size="sm">
+                <Plus className="w-4 h-4 mr-2" />
+                Request Virtual Card
+              </Button>
+            </Card>
+          )}
+        </div>
       </div>
 
       {/* QR Scanner Modal */}
