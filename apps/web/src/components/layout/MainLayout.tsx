@@ -21,6 +21,7 @@ import {
   Ticket,
   Settings,
   ChevronDown,
+  ShieldAlert,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useUserApps } from '@/context/UserAppsContext';
@@ -30,6 +31,8 @@ import { NFCIndicator } from '@/components/nfc';
 import { supabase } from '@/lib/supabase';
 import { SkipLink } from '@/components/ui/SkipLink';
 import { ProfileAvatar } from '@/components/ui/ProfileAvatar';
+import { VerificationModal } from '@/components/kyc/VerificationModal';
+import { useVerification } from '@/hooks/useVerification';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -58,6 +61,16 @@ export function MainLayout({ children }: MainLayoutProps) {
   const { isAppEnabled } = useUserApps();
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Verification status and modal controls
+  const {
+    isVerified,
+    verificationPercentage,
+    showVerificationModal,
+    modalReason,
+    blockedAction,
+    closeVerificationModal,
+  } = useVerification();
 
   // Close user menu when clicking outside
   useEffect(() => {
@@ -234,20 +247,31 @@ export function MainLayout({ children }: MainLayoutProps) {
 
             {/* Right side - KYC Status, Theme, Notifications, User Menu */}
             <div className="flex items-center space-x-4 ml-auto">
-              <span className="text-sm text-gray-500 dark:text-gray-400 hidden sm:inline">
-                KYC Status:{' '}
-                <span
-                  className={clsx(
-                    'font-medium',
-                    user?.kycStatus === 'VERIFIED' && 'text-green-600',
-                    user?.kycStatus === 'PENDING' && 'text-yellow-600',
-                    user?.kycStatus === 'REJECTED' && 'text-red-600'
-                  )}
-                  aria-label={`KYC status: ${user?.kycStatus}`}
+              {/* Verification Warning Badge */}
+              {!isVerified && (
+                <button
+                  onClick={() => navigate('/verify')}
+                  className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-red-500 to-red-600 text-white text-sm font-medium rounded-full hover:from-red-600 hover:to-red-700 transition-all shadow-sm hover:shadow-md animate-pulse"
                 >
-                  {user?.kycStatus}
+                  <ShieldAlert className="w-4 h-4" />
+                  <span>Verify Now</span>
+                  {verificationPercentage > 0 && (
+                    <span className="bg-white/20 px-1.5 py-0.5 rounded text-xs">
+                      {verificationPercentage}%
+                    </span>
+                  )}
+                </button>
+              )}
+              {isVerified && (
+                <span className="text-sm text-gray-500 dark:text-gray-400 hidden sm:inline">
+                  <span className="flex items-center gap-1 text-green-600">
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    Verified
+                  </span>
                 </span>
-              </span>
+              )}
               <NFCIndicator />
               <ThemeToggle />
               <NotificationBell />
@@ -333,6 +357,36 @@ export function MainLayout({ children }: MainLayoutProps) {
           {children}
         </main>
       </div>
+
+      {/* Verification Modal - appears from any page */}
+      <VerificationModal
+        isOpen={showVerificationModal}
+        onClose={closeVerificationModal}
+        canClose={true}
+        reason={modalReason}
+        blockedAction={blockedAction}
+      />
+
+      {/* Mobile Verification Banner - Fixed at bottom for unverified users */}
+      {!isVerified && (
+        <div className="fixed bottom-0 left-0 right-0 lg:left-64 bg-gradient-to-r from-red-600 to-red-500 text-white px-4 py-3 sm:hidden z-40 safe-area-bottom">
+          <button
+            onClick={() => navigate('/verify')}
+            className="flex items-center justify-between w-full"
+          >
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="w-5 h-5" />
+              <div>
+                <p className="font-medium text-sm">Account Not Verified</p>
+                <p className="text-xs text-red-100">Tap to unlock all features</p>
+              </div>
+            </div>
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

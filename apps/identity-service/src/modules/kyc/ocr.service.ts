@@ -26,6 +26,16 @@ export interface ExtractedIdData {
   confidence: number;
 }
 
+export interface SierraLeoneIdData extends ExtractedIdData {
+  nin?: string; // National Identification Number
+  placeOfBirth?: string;
+  district?: string;
+  chiefdom?: string;
+  section?: string;
+  cardNumber?: string;
+  dateOfIssue?: string;
+}
+
 export interface DocumentVerificationResult {
   isValid: boolean;
   documentType: string;
@@ -431,5 +441,188 @@ export class OcrService {
     }
 
     return dp[m][n];
+  }
+
+  /**
+   * Process Sierra Leone National ID card
+   */
+  async processSierraLeoneId(base64Image: string, mimeType: string = 'image/jpeg'): Promise<OcrResult> {
+    try {
+      const dataUrl = `data:${mimeType};base64,${base64Image}`;
+
+      this.logger.log('Processing Sierra Leone National ID card...');
+
+      const output = await this.replicate.run(
+        'lucataco/deepseek-ocr:latest',
+        {
+          input: {
+            image: dataUrl,
+          },
+        },
+      );
+
+      const text = typeof output === 'string' ? output : JSON.stringify(output);
+
+      this.logger.log('Sierra Leone ID OCR processing complete');
+
+      // Extract Sierra Leone specific data
+      const extractedData = this.parseSierraLeoneId(text);
+
+      return {
+        success: true,
+        text,
+        extractedData,
+      };
+    } catch (error: any) {
+      this.logger.error(`Sierra Leone ID OCR processing failed: ${error.message}`);
+      return {
+        success: false,
+        text: '',
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Parse Sierra Leone National ID card text
+   */
+  private parseSierraLeoneId(text: string): SierraLeoneIdData {
+    const data: SierraLeoneIdData = {
+      documentType: 'SIERRA_LEONE_NID',
+      issuingCountry: 'SL',
+      nationality: 'Sierra Leonean',
+      confidence: 0,
+    };
+
+    const upperText = text.toUpperCase();
+
+    // Extract NIN (National Identification Number) - Format: Typically alphanumeric
+    const ninPatterns = [
+      /(?:NIN|N\.?I\.?N\.?|NATIONAL\s*(?:ID|IDENTIFICATION)\s*(?:NO|NUMBER)?)[:\s]*([A-Z0-9]{8,15})/i,
+      /(?:ID\s*(?:NO|NUMBER)?)[:\s]*([A-Z0-9]{8,15})/i,
+      /\b([A-Z]{2,3}\d{6,12})\b/, // Common Sierra Leone NIN format
+      /\b(\d{8,12}[A-Z]?)\b/, // Alternative format
+    ];
+
+    for (const pattern of ninPatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        data.nin = match[1].toUpperCase();
+        data.documentNumber = data.nin;
+        break;
+      }
+    }
+
+    // Extract Card Number (different from NIN)
+    const cardNumberMatch = text.match(/(?:CARD\s*(?:NO|NUMBER)?)[:\s]*([A-Z0-9\-]{8,20})/i);
+    if (cardNumberMatch) {
+      data.cardNumber = cardNumberMatch[1];
+    }
+
+    // Extract Full Name - Sierra Leone IDs often have full name on one line
+    const fullNamePatterns = [
+      /(?:NAME|FULL\s*NAME)[:\s]*([A-Z][A-Za-z\-'\s]+)/i,
+      /(?:SURNAME|FAMILY\s*NAME)[:\s]*([A-Z][A-Za-z\-']+)/i,
+    ];
+
+    const surnameMatch = text.match(/(?:SURNAME|FAMILY\s*NAME|LAST\s*NAME)[:\s]*([A-Z][A-Za-z\-']+)/i);
+    if (surnameMatch) {
+      data.lastName = surnameMatch[1].trim();
+    }
+
+    const givenNameMatch = text.match(/(?:GIVEN\s*NAME|FIRST\s*NAME|OTHER\s*NAME|FORENAME)[:\s]*([A-Z][A-Za-z\-'\s]+)/i);
+    if (givenNameMatch) {
+      data.firstName = givenNameMatch[1].trim().split(/\s+/)[0];
+    }
+
+    const fullNameMatch = text.match(/(?:FULL\s*NAME|NAME)[:\s]*([A-Z][A-Za-z\-'\s]+)/i);
+    if (fullNameMatch) {
+      data.fullName = fullNameMatch[1].trim();
+      // Try to extract first and last if not already found
+      if (!data.firstName || !data.lastName) {
+        const parts = data.fullName.split(/\s+/);
+        if (parts.length >= 2) {
+          data.firstName = data.firstName || parts[0];
+          data.lastName = data.lastName || parts[parts.length - 1];
+        }
+      }
+    }
+
+    // Extract Date of Birth
+    const dobPatterns = [
+      /(?:DATE\s*OF\s*BIRTH|DOB|BIRTH\s*DATE|BORN)[:\s]*(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})/i,
+      /(?:DATE\s*OF\s*BIRTH|DOB|BIRTH\s*DATE|BORN)[:\s]*(\d{1,2}\s+[A-Za-z]+\s+\d{2,4})/i,
+    ];
+
+    for (const pattern of dobPatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        data.dateOfBirth = this.normalizeDate(match[1]);
+        break;
+      }
+    }
+
+    // Extract Date of Issue
+    const issueMatch = text.match(/(?:DATE\s*OF\s*ISSUE|ISSUE\s*DATE|ISSUED)[:\s]*(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}|\d{1,2}\s+[A-Za-z]+\s+\d{2,4})/i);
+    if (issueMatch) {
+      data.dateOfIssue = this.normalizeDate(issueMatch[1]);
+    }
+
+    // Extract Expiry Date
+    const expiryMatch = text.match(/(?:EXPIRY|EXPIRES|EXP|VALID\s*UNTIL|VALID\s*THRU)[:\s]*(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}|\d{1,2}\s+[A-Za-z]+\s+\d{2,4})/i);
+    if (expiryMatch) {
+      data.expiryDate = this.normalizeDate(expiryMatch[1]);
+    }
+
+    // Extract Gender/Sex
+    const genderMatch = text.match(/(?:SEX|GENDER)[:\s]*(M|F|MALE|FEMALE)/i);
+    if (genderMatch) {
+      data.gender = genderMatch[1].toUpperCase().startsWith('M') ? 'MALE' : 'FEMALE';
+    }
+
+    // Extract Place of Birth
+    const pobMatch = text.match(/(?:PLACE\s*OF\s*BIRTH|POB|BIRTH\s*PLACE)[:\s]*([A-Za-z\-'\s]+)/i);
+    if (pobMatch) {
+      data.placeOfBirth = pobMatch[1].trim();
+    }
+
+    // Extract District (specific to Sierra Leone)
+    const districtMatch = text.match(/(?:DISTRICT)[:\s]*([A-Za-z\-'\s]+)/i);
+    if (districtMatch) {
+      data.district = districtMatch[1].trim();
+    }
+
+    // Extract Chiefdom (specific to Sierra Leone)
+    const chiefdomMatch = text.match(/(?:CHIEFDOM)[:\s]*([A-Za-z\-'\s]+)/i);
+    if (chiefdomMatch) {
+      data.chiefdom = chiefdomMatch[1].trim();
+    }
+
+    // Extract Section (specific to Sierra Leone)
+    const sectionMatch = text.match(/(?:SECTION)[:\s]*([A-Za-z\-'\s]+)/i);
+    if (sectionMatch) {
+      data.section = sectionMatch[1].trim();
+    }
+
+    // Extract Address
+    const addressMatch = text.match(/(?:ADDRESS|RESIDENCE)[:\s]*([A-Za-z0-9\-',\.\s]+)/i);
+    if (addressMatch) {
+      data.address = addressMatch[1].trim();
+    }
+
+    // Calculate confidence based on extracted fields
+    let fieldsFound = 0;
+    if (data.nin) fieldsFound += 2; // NIN is most important
+    if (data.firstName) fieldsFound++;
+    if (data.lastName) fieldsFound++;
+    if (data.fullName) fieldsFound++;
+    if (data.dateOfBirth) fieldsFound++;
+    if (data.gender) fieldsFound++;
+    if (data.placeOfBirth) fieldsFound++;
+    if (data.district) fieldsFound++;
+
+    data.confidence = Math.min((fieldsFound / 10) * 100, 100);
+
+    return data;
   }
 }

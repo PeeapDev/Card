@@ -30,6 +30,7 @@ import { PayoutPage } from '@/pages/PayoutPage';
 import { PotsPage } from '@/pages/PotsPage';
 import { PotDetailPage } from '@/pages/PotDetailPage';
 import { SupportPage } from '@/pages/SupportPage';
+import { VerifyPage } from '@/pages/VerifyPage';
 // New Card Management Pages
 import { CardMarketplacePage } from '@/pages/CardMarketplacePage';
 import { MyCardsPage } from '@/pages/MyCardsPage';
@@ -277,6 +278,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <DashboardPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/verify"
+                element={
+                  <ProtectedRoute>
+                    <VerifyPage />
                   </ProtectedRoute>
                 }
               />
