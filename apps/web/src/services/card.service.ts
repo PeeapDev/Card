@@ -1341,20 +1341,28 @@ export const cardService = {
    */
   async getIssuedCards(userId: string): Promise<IssuedCard[]> {
     console.log('[CardService] Fetching issued cards for user:', userId);
-    const { data, error } = await supabase
-      .from('issued_cards')
-      .select(`
-        *,
-        wallets:wallet_id (id, balance, currency)
-      `)
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+
+    // Use RPC function that securely gets cards for authenticated user
+    const { data, error } = await supabase.rpc('get_my_issued_cards');
 
     console.log('[CardService] Query result - data:', data, 'error:', error);
 
     if (error) {
       console.error('[CardService] Error fetching issued cards:', error);
-      throw new Error(error.message);
+      // Fallback to direct query if RPC not available
+      const fallback = await supabase
+        .from('issued_cards')
+        .select(`
+          *,
+          wallets:wallet_id (id, balance, currency)
+        `)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (fallback.error) {
+        throw new Error(fallback.error.message);
+      }
+      return this.mapIssuedCards(fallback.data || []);
     }
 
     return (data || []).map((row: any) => ({
