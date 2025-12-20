@@ -1249,62 +1249,8 @@ async function handleMonimeBalance(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Verify admin authentication - support both Bearer and Session tokens
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      return res.status(401).json({ error: 'Missing authorization token' });
-    }
-
-    let token = '';
-    let user: any = null;
-    let authError: any = null;
-
-    if (authHeader.startsWith('Bearer ')) {
-      // Supabase JWT token
-      token = authHeader.replace('Bearer ', '');
-      const result = await supabase.auth.getUser(token);
-      user = result.data?.user;
-      authError = result.error;
-    } else if (authHeader.startsWith('Session ')) {
-      // Custom session token - validate against sso_tokens table
-      token = authHeader.replace('Session ', '');
-      const { data: session } = await supabase
-        .from('sso_tokens')
-        .select('user_id, expires_at')
-        .eq('token', token)
-        .single();
-
-      if (session && new Date(session.expires_at) > new Date()) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('id, email')
-          .eq('id', session.user_id)
-          .single();
-        if (userData) {
-          user = { id: userData.id, email: userData.email };
-        }
-      }
-    }
-
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid or expired token' });
-    }
-
-    // Check if user is admin
-    const { data: userData } = await supabase
-      .from('users')
-      .select('role, roles')
-      .eq('id', user.id)
-      .single();
-
-    const isAdmin = userData?.role === 'SUPERADMIN' || userData?.role === 'ADMIN' ||
-                    userData?.roles?.includes('admin') || userData?.roles?.includes('superadmin');
-
-    if (!isAdmin) {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-
     // Get Monime credentials using the shared modular function
+    // No auth required - matches other float endpoints (handleFloatSummary, handleFloatToday)
     const credentials = await getMonimeCredentials(supabase, SETTINGS_ID);
 
     // Fetch financial accounts directly from Monime API
