@@ -1001,14 +1001,13 @@ function CardItem({
         <div className="relative h-full flex flex-col justify-between z-[1]">
           {/* Top Row - Logo and Status */}
           <div className="flex justify-between items-start">
-            <div className="flex items-center gap-2">
-              {/* Peeap Logo/Brand */}
-              <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                <span className="text-lg font-bold">P</span>
-              </div>
-              <div>
-                <p className="text-xs font-semibold tracking-wider">PEEAP</p>
-                <p className="text-[10px] opacity-70">Virtual Card</p>
+            <div className="flex items-center gap-3">
+              {/* Peeap Logo - Clean Professional Design */}
+              <div className="text-white">
+                <span className="text-xl font-black tracking-tight" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+                  PEEAP
+                </span>
+                <span className="text-[10px] ml-1 opacity-60 font-light">PAY</span>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -1018,26 +1017,43 @@ function CardItem({
             </div>
           </div>
 
-          {/* EMV Chip */}
+          {/* EMV Chip - Realistic Design */}
           <div className="flex items-center gap-4">
-            {/* Chip Design */}
-            <div className="w-12 h-9 rounded-md bg-gradient-to-br from-yellow-300 via-yellow-400 to-yellow-600 shadow-md flex items-center justify-center overflow-hidden">
-              <div className="w-full h-full grid grid-cols-3 grid-rows-3 gap-[1px] p-[3px]">
-                <div className="bg-yellow-600/50 rounded-sm"></div>
-                <div className="bg-yellow-600/30 rounded-sm"></div>
-                <div className="bg-yellow-600/50 rounded-sm"></div>
-                <div className="bg-yellow-600/30 rounded-sm"></div>
-                <div className="bg-yellow-600/60 rounded-sm"></div>
-                <div className="bg-yellow-600/30 rounded-sm"></div>
-                <div className="bg-yellow-600/50 rounded-sm"></div>
-                <div className="bg-yellow-600/30 rounded-sm"></div>
-                <div className="bg-yellow-600/50 rounded-sm"></div>
-              </div>
-            </div>
-            {/* Contactless Icon */}
-            <div className="opacity-70">
-              <Wifi className="w-6 h-6 rotate-90" />
-            </div>
+            {/* Realistic EMV Chip */}
+            <svg width="50" height="40" viewBox="0 0 50 40" className="drop-shadow-sm">
+              <defs>
+                <linearGradient id={`chipGradient-${card.id}`} x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#D4AF37" />
+                  <stop offset="25%" stopColor="#F5E6A3" />
+                  <stop offset="50%" stopColor="#D4AF37" />
+                  <stop offset="75%" stopColor="#B8962E" />
+                  <stop offset="100%" stopColor="#D4AF37" />
+                </linearGradient>
+                <linearGradient id={`chipShine-${card.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor="rgba(255,255,255,0.4)" />
+                  <stop offset="50%" stopColor="rgba(255,255,255,0)" />
+                  <stop offset="100%" stopColor="rgba(0,0,0,0.1)" />
+                </linearGradient>
+              </defs>
+              {/* Main chip body */}
+              <rect x="2" y="2" width="46" height="36" rx="4" fill={`url(#chipGradient-${card.id})`} />
+              {/* Chip contacts */}
+              <rect x="6" y="6" width="14" height="10" rx="1" fill="#C9A227" stroke="#A08020" strokeWidth="0.5" />
+              <rect x="6" y="18" width="14" height="6" rx="1" fill="#C9A227" stroke="#A08020" strokeWidth="0.5" />
+              <rect x="6" y="26" width="14" height="10" rx="1" fill="#C9A227" stroke="#A08020" strokeWidth="0.5" />
+              <rect x="22" y="6" width="10" height="28" rx="1" fill="#C9A227" stroke="#A08020" strokeWidth="0.5" />
+              <rect x="34" y="6" width="12" height="12" rx="1" fill="#C9A227" stroke="#A08020" strokeWidth="0.5" />
+              <rect x="34" y="20" width="12" height="16" rx="1" fill="#C9A227" stroke="#A08020" strokeWidth="0.5" />
+              {/* Shine overlay */}
+              <rect x="2" y="2" width="46" height="36" rx="4" fill={`url(#chipShine-${card.id})`} />
+            </svg>
+            {/* Contactless Icon - More subtle */}
+            <svg width="24" height="24" viewBox="0 0 24 24" className="opacity-80">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="none"/>
+              <path d="M8.5 14.5c0-1.93 1.57-3.5 3.5-3.5s3.5 1.57 3.5 3.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+              <path d="M6 17c0-3.31 2.69-6 6-6s6 2.69 6 6" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+              <path d="M3.5 19.5c0-4.69 3.81-8.5 8.5-8.5s8.5 3.81 8.5 8.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+            </svg>
           </div>
 
           {/* Card Number */}
