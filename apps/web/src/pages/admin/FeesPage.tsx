@@ -9,56 +9,44 @@ import {
   AlertCircle,
   CheckCircle,
   Edit,
-  Plus,
-  Users,
-  Building2,
-  Zap,
-  User,
   ArrowUpRight,
   ArrowDownRight,
-  Wallet,
+  Store,
   TrendingUp,
+  Wallet,
 } from 'lucide-react';
 import { Card, MotionCard } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
-import { supabase } from '@/lib/supabase';
 import { currencyService, Currency } from '@/services/currency.service';
 
-interface PaymentSettings {
-  withdrawal_fee_percent: number;
-  withdrawal_fee_flat: number;
-  min_withdrawal_amount: number;
-  max_withdrawal_amount: number;
-  daily_withdrawal_limit: number;
-  min_deposit_amount: number;
-  max_deposit_amount: number;
-  withdrawal_auto_approve_under: number;
+interface FeeSettings {
+  // Withdrawal
+  withdrawalFeePercent: number;
+  withdrawalFeeFlat: number;
+  // P2P
+  p2pFeePercent: number;
+  p2pFeeFlat: number;
+  // Card
+  cardTxnFeePercent: number;
+  cardTxnFeeFlat: number;
+  virtualCardFee: number;
+  physicalCardFee: number;
+  // Checkout/Merchant
+  checkoutFeePercent: number;
+  checkoutFeeFlat: number;
+  merchantPayoutFeePercent: number;
+  merchantPayoutFeeFlat: number;
 }
 
-interface FeeConfig {
-  id: string;
-  name: string;
-  description: string;
-  type: 'percentage' | 'fixed' | 'tiered';
-  value: number;
-  minFee?: number;
-  maxFee?: number;
-  category: 'transfer' | 'card' | 'merchant' | 'withdrawal' | 'p2p';
-  userType: 'standard' | 'agent' | 'agent_plus' | 'merchant' | 'all_users';
-  isActive: boolean;
-  dbField?: string;
+interface LimitSettings {
+  minWithdrawalAmount: number;
+  maxWithdrawalAmount: number;
+  dailyWithdrawalLimit: number;
+  minDepositAmount: number;
+  maxDepositAmount: number;
+  withdrawalAutoApproveUnder: number;
 }
 
-interface TransferLimit {
-  id: string;
-  userType: string;
-  dailyLimit: number;
-  monthlyLimit: number;
-  perTransactionLimit: number;
-  minAmount: number;
-}
-
-// API base URL
 const getApiUrl = () => {
   if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
     return `${window.location.origin}/api`;
@@ -67,26 +55,35 @@ const getApiUrl = () => {
 };
 
 export function FeesPage() {
-  const [activeTab, setActiveTab] = useState<'withdrawal' | 'deposit' | 'p2p' | 'card' | 'limits'>('withdrawal');
   const [isEditing, setIsEditing] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Currency state
   const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
 
-  // Payment settings from database
-  const [settings, setSettings] = useState<PaymentSettings>({
-    withdrawal_fee_percent: 2,
-    withdrawal_fee_flat: 0,
-    min_withdrawal_amount: 1,
-    max_withdrawal_amount: 50000,
-    daily_withdrawal_limit: 100000,
-    min_deposit_amount: 1,
-    max_deposit_amount: 100000,
-    withdrawal_auto_approve_under: 1000,
+  const [fees, setFees] = useState<FeeSettings>({
+    withdrawalFeePercent: 2,
+    withdrawalFeeFlat: 0,
+    p2pFeePercent: 0,
+    p2pFeeFlat: 0,
+    cardTxnFeePercent: 1.5,
+    cardTxnFeeFlat: 0,
+    virtualCardFee: 1,
+    physicalCardFee: 10,
+    checkoutFeePercent: 2.9,
+    checkoutFeeFlat: 0.30,
+    merchantPayoutFeePercent: 0.25,
+    merchantPayoutFeeFlat: 0,
+  });
+
+  const [limits, setLimits] = useState<LimitSettings>({
+    minWithdrawalAmount: 1,
+    maxWithdrawalAmount: 50000,
+    dailyWithdrawalLimit: 100000,
+    minDepositAmount: 1,
+    maxDepositAmount: 100000,
+    withdrawalAutoApproveUnder: 1000,
   });
 
   useEffect(() => {
@@ -94,7 +91,7 @@ export function FeesPage() {
     fetchSettings();
   }, []);
 
-  const currencySymbol = defaultCurrency?.symbol || 'Le';
+  const currencySymbol = defaultCurrency?.symbol || 'NLe';
 
   const formatCurrency = (amount: number): string => {
     return `${currencySymbol} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -105,21 +102,36 @@ export function FeesPage() {
     setError(null);
     try {
       const response = await fetch(`${getApiUrl()}/settings`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch settings');
-      }
+      if (!response.ok) throw new Error('Failed to fetch settings');
       const data = await response.json();
 
-      setSettings({
-        withdrawal_fee_percent: data.withdrawalSettings?.withdrawalFeePercent || 2,
-        withdrawal_fee_flat: data.withdrawalSettings?.withdrawalFeeFlat || 0,
-        min_withdrawal_amount: data.withdrawalSettings?.minWithdrawalAmount || 1,
-        max_withdrawal_amount: data.withdrawalSettings?.maxWithdrawalAmount || 50000,
-        daily_withdrawal_limit: data.withdrawalSettings?.dailyWithdrawalLimit || 100000,
-        min_deposit_amount: data.depositSettings?.minDepositAmount || 1,
-        max_deposit_amount: data.depositSettings?.maxDepositAmount || 100000,
-        withdrawal_auto_approve_under: data.withdrawalSettings?.autoApproveUnder || 1000,
-      });
+      if (data.feeSettings) {
+        setFees({
+          withdrawalFeePercent: data.feeSettings.withdrawalFeePercent || 2,
+          withdrawalFeeFlat: data.feeSettings.withdrawalFeeFlat || 0,
+          p2pFeePercent: data.feeSettings.p2pFeePercent || 0,
+          p2pFeeFlat: data.feeSettings.p2pFeeFlat || 0,
+          cardTxnFeePercent: data.feeSettings.cardTxnFeePercent || 1.5,
+          cardTxnFeeFlat: data.feeSettings.cardTxnFeeFlat || 0,
+          virtualCardFee: data.feeSettings.virtualCardFee || 1,
+          physicalCardFee: data.feeSettings.physicalCardFee || 10,
+          checkoutFeePercent: data.feeSettings.checkoutFeePercent || 2.9,
+          checkoutFeeFlat: data.feeSettings.checkoutFeeFlat || 0.30,
+          merchantPayoutFeePercent: data.feeSettings.merchantPayoutFeePercent || 0.25,
+          merchantPayoutFeeFlat: data.feeSettings.merchantPayoutFeeFlat || 0,
+        });
+      }
+
+      if (data.withdrawalSettings) {
+        setLimits({
+          minWithdrawalAmount: data.withdrawalSettings.minWithdrawalAmount || 1,
+          maxWithdrawalAmount: data.withdrawalSettings.maxWithdrawalAmount || 50000,
+          dailyWithdrawalLimit: data.withdrawalSettings.dailyWithdrawalLimit || 100000,
+          minDepositAmount: data.depositSettings?.minDepositAmount || 1,
+          maxDepositAmount: data.depositSettings?.maxDepositAmount || 100000,
+          withdrawalAutoApproveUnder: data.withdrawalSettings.autoApproveUnder || 1000,
+        });
+      }
     } catch (err) {
       console.error('Error fetching settings:', err);
       setError('Failed to load fee settings');
@@ -133,25 +145,33 @@ export function FeesPage() {
     setError(null);
     try {
       const response = await fetch(`${getApiUrl()}/settings`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          withdrawalFeePercent: settings.withdrawal_fee_percent,
-          withdrawalFeeFlat: settings.withdrawal_fee_flat,
-          minWithdrawalAmount: settings.min_withdrawal_amount,
-          maxWithdrawalAmount: settings.max_withdrawal_amount,
-          dailyWithdrawalLimit: settings.daily_withdrawal_limit,
-          minDepositAmount: settings.min_deposit_amount,
-          maxDepositAmount: settings.max_deposit_amount,
-          withdrawalAutoApproveUnder: settings.withdrawal_auto_approve_under,
+          // Fees
+          withdrawalFeePercent: fees.withdrawalFeePercent,
+          withdrawalFeeFlat: fees.withdrawalFeeFlat,
+          p2pFeePercent: fees.p2pFeePercent,
+          p2pFeeFlat: fees.p2pFeeFlat,
+          cardTxnFeePercent: fees.cardTxnFeePercent,
+          cardTxnFeeFlat: fees.cardTxnFeeFlat,
+          virtualCardFee: fees.virtualCardFee,
+          physicalCardFee: fees.physicalCardFee,
+          checkoutFeePercent: fees.checkoutFeePercent,
+          checkoutFeeFlat: fees.checkoutFeeFlat,
+          merchantPayoutFeePercent: fees.merchantPayoutFeePercent,
+          merchantPayoutFeeFlat: fees.merchantPayoutFeeFlat,
+          // Limits
+          minWithdrawalAmount: limits.minWithdrawalAmount,
+          maxWithdrawalAmount: limits.maxWithdrawalAmount,
+          dailyWithdrawalLimit: limits.dailyWithdrawalLimit,
+          minDepositAmount: limits.minDepositAmount,
+          maxDepositAmount: limits.maxDepositAmount,
+          withdrawalAutoApproveUnder: limits.withdrawalAutoApproveUnder,
         }),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to save settings');
-      }
+      if (!response.ok) throw new Error('Failed to save settings');
 
       setSaved(true);
       setIsEditing(false);
@@ -164,37 +184,125 @@ export function FeesPage() {
     }
   };
 
-  const updateSetting = (field: keyof PaymentSettings, value: number) => {
-    setSettings(prev => ({ ...prev, [field]: value }));
-  };
+  const FeeCard = ({
+    title,
+    description,
+    icon: Icon,
+    color,
+    percentValue,
+    flatValue,
+    onPercentChange,
+    onFlatChange,
+    showFlat = true,
+  }: {
+    title: string;
+    description: string;
+    icon: any;
+    color: string;
+    percentValue: number;
+    flatValue: number;
+    onPercentChange: (v: number) => void;
+    onFlatChange: (v: number) => void;
+    showFlat?: boolean;
+  }) => (
+    <Card className="p-5">
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          <div className={`p-3 rounded-xl ${color}`}>
+            <Icon className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-900 dark:text-white">{title}</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{description}</p>
+          </div>
+        </div>
+      </div>
+      <div className={`grid ${showFlat ? 'grid-cols-2' : 'grid-cols-1'} gap-4 mt-4`}>
+        <div>
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Percentage Fee</label>
+          {isEditing ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                step="0.1"
+                value={percentValue}
+                onChange={(e) => onPercentChange(parseFloat(e.target.value) || 0)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-lg font-bold"
+              />
+              <span className="text-gray-500">%</span>
+            </div>
+          ) : (
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{percentValue}%</p>
+          )}
+        </div>
+        {showFlat && (
+          <div>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Flat Fee</label>
+            {isEditing ? (
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500">{currencySymbol}</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={flatValue}
+                  onChange={(e) => onFlatChange(parseFloat(e.target.value) || 0)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-lg font-bold"
+                />
+              </div>
+            ) : (
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(flatValue)}</p>
+            )}
+          </div>
+        )}
+      </div>
+    </Card>
+  );
 
-  // P2P fees (these would need a separate table in future)
-  const [p2pFees] = useState([
-    { id: 'p2p-standard', name: 'Standard User', description: 'Fee for regular user transfers', value: 1.0, userType: 'standard' },
-    { id: 'p2p-agent', name: 'Agent', description: 'Fee for agent transfers', value: 0.5, userType: 'agent' },
-    { id: 'p2p-agent-plus', name: 'Agent+', description: 'Fee for Agent+ transfers', value: 0.2, userType: 'agent_plus' },
-    { id: 'p2p-merchant', name: 'Merchant', description: 'Fee for merchant transfers', value: 0.5, userType: 'merchant' },
-  ]);
-
-  const getUserTypeIcon = (userType: string) => {
-    switch (userType) {
-      case 'standard': return <User className="w-4 h-4" />;
-      case 'agent': return <Users className="w-4 h-4" />;
-      case 'agent_plus': return <Zap className="w-4 h-4" />;
-      case 'merchant': return <Building2 className="w-4 h-4" />;
-      default: return <Users className="w-4 h-4" />;
-    }
-  };
-
-  const getUserTypeColor = (userType: string) => {
-    switch (userType) {
-      case 'standard': return 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400';
-      case 'agent': return 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400';
-      case 'agent_plus': return 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400';
-      case 'merchant': return 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
-      default: return 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300';
-    }
-  };
+  const FixedFeeCard = ({
+    title,
+    description,
+    icon: Icon,
+    color,
+    value,
+    onChange,
+  }: {
+    title: string;
+    description: string;
+    icon: any;
+    color: string;
+    value: number;
+    onChange: (v: number) => void;
+  }) => (
+    <Card className="p-5">
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          <div className={`p-3 rounded-xl ${color}`}>
+            <Icon className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-900 dark:text-white">{title}</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{description}</p>
+          </div>
+        </div>
+        <div className="text-right">
+          {isEditing ? (
+            <div className="flex items-center gap-2">
+              <span className="text-gray-500">{currencySymbol}</span>
+              <input
+                type="number"
+                step="0.01"
+                value={value}
+                onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+                className="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-lg font-bold text-right"
+              />
+            </div>
+          ) : (
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(value)}</p>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
 
   return (
     <AdminLayout>
@@ -203,7 +311,7 @@ export function FeesPage() {
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Fees & Pricing</h1>
-            <p className="text-gray-500 dark:text-gray-400">Configure transaction fees and limits</p>
+            <p className="text-gray-500 dark:text-gray-400">Configure transaction fees for all services</p>
           </div>
           <div className="flex items-center gap-3">
             {saved && (
@@ -235,7 +343,7 @@ export function FeesPage() {
               }`}
             >
               <Edit className="w-4 h-4" />
-              {isEditing ? 'Cancel' : 'Edit Fees'}
+              {isEditing ? 'Cancel' : 'Edit All Fees'}
             </button>
             {isEditing && (
               <button
@@ -244,413 +352,228 @@ export function FeesPage() {
                 className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2 disabled:opacity-50"
               >
                 <Save className={`w-4 h-4 ${saving ? 'animate-spin' : ''}`} />
-                {saving ? 'Saving...' : 'Save Changes'}
+                {saving ? 'Saving...' : 'Save All'}
               </button>
             )}
           </div>
         </div>
 
-        {/* Main Fee Card - Withdrawal Fee (Most Important) */}
-        <MotionCard className="p-6 bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-600 text-white" delay={0.1}>
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-white/20 rounded-xl">
-                <TrendingUp className="w-8 h-8" />
+        {/* Withdrawal Fees - Main Revenue */}
+        <section>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <ArrowUpRight className="w-5 h-5 text-red-500" />
+            Withdrawal / Cashout Fees
+            <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full">Main Revenue</span>
+          </h2>
+          <FeeCard
+            title="User Withdrawal Fee"
+            description="Charged when users cash out to mobile money"
+            icon={Wallet}
+            color="bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
+            percentValue={fees.withdrawalFeePercent}
+            flatValue={fees.withdrawalFeeFlat}
+            onPercentChange={(v) => setFees({ ...fees, withdrawalFeePercent: v })}
+            onFlatChange={(v) => setFees({ ...fees, withdrawalFeeFlat: v })}
+          />
+        </section>
+
+        {/* P2P Transfer Fees */}
+        <section>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <ArrowLeftRight className="w-5 h-5 text-blue-500" />
+            P2P Transfer Fees
+          </h2>
+          <FeeCard
+            title="P2P Transfer Fee"
+            description="Charged on peer-to-peer transfers between users"
+            icon={ArrowLeftRight}
+            color="bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+            percentValue={fees.p2pFeePercent}
+            flatValue={fees.p2pFeeFlat}
+            onPercentChange={(v) => setFees({ ...fees, p2pFeePercent: v })}
+            onFlatChange={(v) => setFees({ ...fees, p2pFeeFlat: v })}
+          />
+        </section>
+
+        {/* Card Fees */}
+        <section>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <CreditCard className="w-5 h-5 text-purple-500" />
+            Card Fees
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FeeCard
+              title="Card Transaction Fee"
+              description="Charged on every card transaction"
+              icon={CreditCard}
+              color="bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400"
+              percentValue={fees.cardTxnFeePercent}
+              flatValue={fees.cardTxnFeeFlat}
+              onPercentChange={(v) => setFees({ ...fees, cardTxnFeePercent: v })}
+              onFlatChange={(v) => setFees({ ...fees, cardTxnFeeFlat: v })}
+            />
+            <div className="space-y-4">
+              <FixedFeeCard
+                title="Virtual Card Creation"
+                description="One-time fee for new virtual cards"
+                icon={CreditCard}
+                color="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400"
+                value={fees.virtualCardFee}
+                onChange={(v) => setFees({ ...fees, virtualCardFee: v })}
+              />
+              <FixedFeeCard
+                title="Physical Card Creation"
+                description="One-time fee for physical cards"
+                icon={CreditCard}
+                color="bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400"
+                value={fees.physicalCardFee}
+                onChange={(v) => setFees({ ...fees, physicalCardFee: v })}
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* Merchant/Checkout Fees */}
+        <section>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <Store className="w-5 h-5 text-orange-500" />
+            Merchant & Checkout Fees
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FeeCard
+              title="Checkout Fee"
+              description="Charged on customer payments via checkout"
+              icon={Store}
+              color="bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400"
+              percentValue={fees.checkoutFeePercent}
+              flatValue={fees.checkoutFeeFlat}
+              onPercentChange={(v) => setFees({ ...fees, checkoutFeePercent: v })}
+              onFlatChange={(v) => setFees({ ...fees, checkoutFeeFlat: v })}
+            />
+            <FeeCard
+              title="Merchant Payout Fee"
+              description="Charged when merchants withdraw earnings"
+              icon={TrendingUp}
+              color="bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400"
+              percentValue={fees.merchantPayoutFeePercent}
+              flatValue={fees.merchantPayoutFeeFlat}
+              onPercentChange={(v) => setFees({ ...fees, merchantPayoutFeePercent: v })}
+              onFlatChange={(v) => setFees({ ...fees, merchantPayoutFeeFlat: v })}
+            />
+          </div>
+        </section>
+
+        {/* Transaction Limits */}
+        <section>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <DollarSign className="w-5 h-5 text-green-500" />
+            Transaction Limits
+          </h2>
+          <Card className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Min Withdrawal</label>
+                {isEditing ? (
+                  <input
+                    type="number"
+                    value={limits.minWithdrawalAmount}
+                    onChange={(e) => setLimits({ ...limits, minWithdrawalAmount: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  />
+                ) : (
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{formatCurrency(limits.minWithdrawalAmount)}</p>
+                )}
               </div>
               <div>
-                <h2 className="text-2xl font-bold">Withdrawal Fee</h2>
-                <p className="text-emerald-100">Your main source of platform profit</p>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Max Withdrawal</label>
+                {isEditing ? (
+                  <input
+                    type="number"
+                    value={limits.maxWithdrawalAmount}
+                    onChange={(e) => setLimits({ ...limits, maxWithdrawalAmount: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  />
+                ) : (
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{formatCurrency(limits.maxWithdrawalAmount)}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Daily Limit</label>
+                {isEditing ? (
+                  <input
+                    type="number"
+                    value={limits.dailyWithdrawalLimit}
+                    onChange={(e) => setLimits({ ...limits, dailyWithdrawalLimit: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  />
+                ) : (
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{formatCurrency(limits.dailyWithdrawalLimit)}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Min Deposit</label>
+                {isEditing ? (
+                  <input
+                    type="number"
+                    value={limits.minDepositAmount}
+                    onChange={(e) => setLimits({ ...limits, minDepositAmount: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  />
+                ) : (
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{formatCurrency(limits.minDepositAmount)}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Max Deposit</label>
+                {isEditing ? (
+                  <input
+                    type="number"
+                    value={limits.maxDepositAmount}
+                    onChange={(e) => setLimits({ ...limits, maxDepositAmount: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  />
+                ) : (
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{formatCurrency(limits.maxDepositAmount)}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Auto-Approve Under</label>
+                {isEditing ? (
+                  <input
+                    type="number"
+                    value={limits.withdrawalAutoApproveUnder}
+                    onChange={(e) => setLimits({ ...limits, withdrawalAutoApproveUnder: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  />
+                ) : (
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{formatCurrency(limits.withdrawalAutoApproveUnder)}</p>
+                )}
               </div>
             </div>
-            <div className="text-right">
-              {!isEditing ? (
-                <>
-                  <p className="text-4xl font-bold">{settings.withdrawal_fee_percent}%</p>
-                  {settings.withdrawal_fee_flat > 0 && (
-                    <p className="text-emerald-100">+ {formatCurrency(settings.withdrawal_fee_flat)} flat</p>
-                  )}
-                </>
-              ) : (
-                <div className="flex items-center gap-3">
-                  <div>
-                    <label className="text-xs text-emerald-100 block mb-1">Percent (%)</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={settings.withdrawal_fee_percent}
-                      onChange={(e) => updateSetting('withdrawal_fee_percent', parseFloat(e.target.value) || 0)}
-                      className="w-24 px-3 py-2 bg-white/20 border border-white/30 rounded-lg text-white text-right text-xl font-bold focus:ring-2 focus:ring-white/50"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-emerald-100 block mb-1">Flat Fee</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={settings.withdrawal_fee_flat}
-                      onChange={(e) => updateSetting('withdrawal_fee_flat', parseFloat(e.target.value) || 0)}
-                      className="w-24 px-3 py-2 bg-white/20 border border-white/30 rounded-lg text-white text-right text-xl font-bold focus:ring-2 focus:ring-white/50"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-4 pt-4 border-t border-white/20">
-            <div className="text-center">
-              <p className="text-sm text-emerald-100 mb-1">Min Withdrawal</p>
-              {isEditing ? (
-                <input
-                  type="number"
-                  value={settings.min_withdrawal_amount}
-                  onChange={(e) => updateSetting('min_withdrawal_amount', parseFloat(e.target.value) || 0)}
-                  className="w-full px-2 py-1 bg-white/20 border border-white/30 rounded text-white text-center font-bold focus:ring-2 focus:ring-white/50"
-                />
-              ) : (
-                <p className="text-xl font-bold">{formatCurrency(settings.min_withdrawal_amount)}</p>
-              )}
-            </div>
-            <div className="text-center">
-              <p className="text-sm text-emerald-100 mb-1">Max Withdrawal</p>
-              {isEditing ? (
-                <input
-                  type="number"
-                  value={settings.max_withdrawal_amount}
-                  onChange={(e) => updateSetting('max_withdrawal_amount', parseFloat(e.target.value) || 0)}
-                  className="w-full px-2 py-1 bg-white/20 border border-white/30 rounded text-white text-center font-bold focus:ring-2 focus:ring-white/50"
-                />
-              ) : (
-                <p className="text-xl font-bold">{formatCurrency(settings.max_withdrawal_amount)}</p>
-              )}
-            </div>
-            <div className="text-center">
-              <p className="text-sm text-emerald-100 mb-1">Daily Limit</p>
-              {isEditing ? (
-                <input
-                  type="number"
-                  value={settings.daily_withdrawal_limit}
-                  onChange={(e) => updateSetting('daily_withdrawal_limit', parseFloat(e.target.value) || 0)}
-                  className="w-full px-2 py-1 bg-white/20 border border-white/30 rounded text-white text-center font-bold focus:ring-2 focus:ring-white/50"
-                />
-              ) : (
-                <p className="text-xl font-bold">{formatCurrency(settings.daily_withdrawal_limit)}</p>
-              )}
-            </div>
-          </div>
-        </MotionCard>
+          </Card>
+        </section>
 
-        {/* Category Tabs */}
-        <Card className="p-1">
-          <div className="flex gap-1">
-            {[
-              { id: 'withdrawal', label: 'Withdrawal', icon: ArrowUpRight },
-              { id: 'deposit', label: 'Deposit', icon: ArrowDownRight },
-              { id: 'p2p', label: 'P2P Fees', icon: ArrowLeftRight },
-              { id: 'card', label: 'Card Fees', icon: CreditCard },
-              { id: 'limits', label: 'Limits', icon: Users },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`flex-1 px-4 py-3 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 ${
-                  activeTab === tab.id
-                    ? 'bg-primary-600 text-white'
-                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                }`}
-              >
-                <tab.icon className="w-4 h-4" />
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </Card>
-
-        {/* Withdrawal Tab */}
-        {activeTab === 'withdrawal' && (
-          <div className="space-y-4">
-            <Card className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Withdrawal Settings</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Fee Percentage (%)
-                  </label>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
-                    Applied to all user withdrawals
-                  </p>
-                  {isEditing ? (
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={settings.withdrawal_fee_percent}
-                      onChange={(e) => updateSetting('withdrawal_fee_percent', parseFloat(e.target.value) || 0)}
-                      className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xl font-bold"
-                    />
-                  ) : (
-                    <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
-                      {settings.withdrawal_fee_percent}%
+        {/* Fee Calculator */}
+        <section>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Fee Calculator</h2>
+          <Card className="p-6 bg-gray-50 dark:bg-gray-800/50">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[10, 50, 100, 500, 1000, 5000, 10000, 50000].map((amount) => {
+                const percentFee = amount * (fees.withdrawalFeePercent / 100);
+                const totalFee = percentFee + fees.withdrawalFeeFlat;
+                return (
+                  <div key={amount} className="p-4 bg-white dark:bg-gray-700 rounded-lg">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Withdraw {formatCurrency(amount)}</p>
+                    <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                      Fee: {formatCurrency(totalFee)}
                     </p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Flat Fee ({currencySymbol})
-                  </label>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
-                    Additional fixed amount per withdrawal
-                  </p>
-                  {isEditing ? (
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={settings.withdrawal_fee_flat}
-                      onChange={(e) => updateSetting('withdrawal_fee_flat', parseFloat(e.target.value) || 0)}
-                      className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xl font-bold"
-                    />
-                  ) : (
-                    <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                      {formatCurrency(settings.withdrawal_fee_flat)}
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Auto-Approve Under
-                  </label>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
-                    Withdrawals below this amount are auto-approved
-                  </p>
-                  {isEditing ? (
-                    <input
-                      type="number"
-                      value={settings.withdrawal_auto_approve_under}
-                      onChange={(e) => updateSetting('withdrawal_auto_approve_under', parseFloat(e.target.value) || 0)}
-                      className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xl font-bold"
-                    />
-                  ) : (
-                    <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                      {formatCurrency(settings.withdrawal_auto_approve_under)}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </Card>
-
-            {/* Fee Calculator */}
-            <Card className="p-6 bg-gray-50 dark:bg-gray-800/50">
-              <h4 className="font-semibold text-gray-900 dark:text-white mb-4">Fee Calculator</h4>
-              <div className="grid grid-cols-3 gap-4">
-                {[100, 500, 1000, 5000, 10000, 50000].map((amount) => {
-                  const percentFee = amount * (settings.withdrawal_fee_percent / 100);
-                  const totalFee = percentFee + settings.withdrawal_fee_flat;
-                  return (
-                    <div key={amount} className="p-4 bg-white dark:bg-gray-700 rounded-lg">
-                      <p className="text-sm text-gray-500 dark:text-gray-400">Withdraw {formatCurrency(amount)}</p>
-                      <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
-                        Fee: {formatCurrency(totalFee)}
-                      </p>
-                      <p className="text-xs text-gray-400">User gets: {formatCurrency(amount - totalFee)}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            </Card>
-          </div>
-        )}
-
-        {/* Deposit Tab */}
-        {activeTab === 'deposit' && (
-          <div className="space-y-4">
-            <Card className="p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                  <ArrowDownRight className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Deposit Settings</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">No fees on deposits - money coming in</p>
-                </div>
-              </div>
-
-              <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800 mb-6">
-                <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
-                  <CheckCircle className="w-5 h-5" />
-                  <span className="font-medium">Deposits are FREE for users</span>
-                </div>
-                <p className="text-sm text-green-600 dark:text-green-500 mt-1">
-                  We encourage users to deposit by not charging any fees on incoming money.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Minimum Deposit
-                  </label>
-                  {isEditing ? (
-                    <input
-                      type="number"
-                      value={settings.min_deposit_amount}
-                      onChange={(e) => updateSetting('min_deposit_amount', parseFloat(e.target.value) || 0)}
-                      className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xl font-bold"
-                    />
-                  ) : (
-                    <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                      {formatCurrency(settings.min_deposit_amount)}
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Maximum Deposit
-                  </label>
-                  {isEditing ? (
-                    <input
-                      type="number"
-                      value={settings.max_deposit_amount}
-                      onChange={(e) => updateSetting('max_deposit_amount', parseFloat(e.target.value) || 0)}
-                      className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xl font-bold"
-                    />
-                  ) : (
-                    <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                      {formatCurrency(settings.max_deposit_amount)}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </Card>
-          </div>
-        )}
-
-        {/* P2P Tab */}
-        {activeTab === 'p2p' && (
-          <div className="space-y-4">
-            <Card className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-yellow-800 dark:text-yellow-300">Coming Soon</p>
-                  <p className="text-sm text-yellow-700 dark:text-yellow-400 mt-1">
-                    P2P fee configuration will be available in a future update. Currently using default values.
-                  </p>
-                </div>
-              </div>
-            </Card>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {p2pFees.map((fee) => (
-                <Card key={fee.id} className="p-5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-lg ${getUserTypeColor(fee.userType)}`}>
-                        {getUserTypeIcon(fee.userType)}
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-gray-900 dark:text-white">{fee.name}</h4>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">{fee.description}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-2xl font-bold text-gray-900 dark:text-white">{fee.value}%</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">per transfer</p>
-                    </div>
+                    <p className="text-xs text-gray-400">User gets: {formatCurrency(amount - totalFee)}</p>
                   </div>
-                </Card>
-              ))}
+                );
+              })}
             </div>
-          </div>
-        )}
-
-        {/* Card Tab */}
-        {activeTab === 'card' && (
-          <div className="space-y-4">
-            <Card className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-yellow-800 dark:text-yellow-300">Coming Soon</p>
-                  <p className="text-sm text-yellow-700 dark:text-yellow-400 mt-1">
-                    Card fee configuration will be available in a future update.
-                  </p>
-                </div>
-              </div>
-            </Card>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {[
-                { name: 'Virtual Card Creation', value: 1.00, type: 'fixed' },
-                { name: 'Physical Card Creation', value: 10.00, type: 'fixed' },
-                { name: 'Card Transaction Fee', value: 1.5, type: 'percentage' },
-                { name: 'Monthly Maintenance', value: 1.00, type: 'fixed' },
-              ].map((fee, index) => (
-                <Card key={index} className="p-5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                        <CreditCard className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-gray-900 dark:text-white">{fee.name}</h4>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{fee.type}</p>
-                      </div>
-                    </div>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                      {fee.type === 'percentage' ? `${fee.value}%` : formatCurrency(fee.value)}
-                    </p>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Limits Tab */}
-        {activeTab === 'limits' && (
-          <div className="space-y-4">
-            <Card className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">Transaction Limits</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="p-5 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-200 dark:border-red-800">
-                  <div className="flex items-center gap-2 mb-4">
-                    <ArrowUpRight className="w-5 h-5 text-red-600 dark:text-red-400" />
-                    <h4 className="font-semibold text-gray-900 dark:text-white">Withdrawal Limits</h4>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">Minimum</span>
-                      <span className="font-bold text-gray-900 dark:text-white">{formatCurrency(settings.min_withdrawal_amount)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">Maximum</span>
-                      <span className="font-bold text-gray-900 dark:text-white">{formatCurrency(settings.max_withdrawal_amount)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">Daily Limit</span>
-                      <span className="font-bold text-gray-900 dark:text-white">{formatCurrency(settings.daily_withdrawal_limit)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-5 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-800">
-                  <div className="flex items-center gap-2 mb-4">
-                    <ArrowDownRight className="w-5 h-5 text-green-600 dark:text-green-400" />
-                    <h4 className="font-semibold text-gray-900 dark:text-white">Deposit Limits</h4>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">Minimum</span>
-                      <span className="font-bold text-gray-900 dark:text-white">{formatCurrency(settings.min_deposit_amount)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">Maximum</span>
-                      <span className="font-bold text-gray-900 dark:text-white">{formatCurrency(settings.max_deposit_amount)}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </Card>
-          </div>
-        )}
+          </Card>
+        </section>
       </div>
     </AdminLayout>
   );

@@ -601,8 +601,8 @@ async function handleGetSettings(res: VercelResponse) {
       minWithdrawalAmount: Number(settings.min_withdrawal_amount),
       maxWithdrawalAmount: Number(settings.max_withdrawal_amount),
       dailyWithdrawalLimit: Number(settings.daily_withdrawal_limit),
-      withdrawalFeePercent: Number(settings.withdrawal_fee_percent),
-      withdrawalFeeFlat: Number(settings.withdrawal_fee_flat),
+      withdrawalFeePercent: Number(settings.withdrawal_fee_percent || 2),
+      withdrawalFeeFlat: Number(settings.withdrawal_fee_flat || 0),
       requirePin: settings.withdrawal_require_pin,
       autoApproveUnder: Number(settings.withdrawal_auto_approve_under),
     },
@@ -612,6 +612,25 @@ async function handleGetSettings(res: VercelResponse) {
       mobileMoneyEnabled: settings.deposit_mobile_money_enabled,
       minDepositAmount: Number(settings.min_deposit_amount),
       maxDepositAmount: Number(settings.max_deposit_amount),
+    },
+    // All fee settings for the Fees page
+    feeSettings: {
+      // Withdrawal fees
+      withdrawalFeePercent: Number(settings.withdrawal_fee_percent || 2),
+      withdrawalFeeFlat: Number(settings.withdrawal_fee_flat || 0),
+      // P2P transfer fees
+      p2pFeePercent: Number(settings.p2p_fee_percent || 0),
+      p2pFeeFlat: Number(settings.p2p_fee_flat || 0),
+      // Card fees
+      cardTxnFeePercent: Number(settings.card_txn_fee_percent || 1.5),
+      cardTxnFeeFlat: Number(settings.card_txn_fee_flat || 0),
+      virtualCardFee: Number(settings.virtual_card_fee || 1),
+      physicalCardFee: Number(settings.physical_card_fee || 10),
+      // Checkout/merchant fees
+      checkoutFeePercent: Number(settings.checkout_fee_percent || 2.9),
+      checkoutFeeFlat: Number(settings.checkout_fee_flat || 0.30),
+      merchantPayoutFeePercent: Number(settings.merchant_payout_fee_percent || 0.25),
+      merchantPayoutFeeFlat: Number(settings.merchant_payout_fee_flat || 0),
     },
   });
 }
@@ -647,6 +666,22 @@ async function handleUpdateSettings(req: VercelRequest, res: VercelResponse) {
     updateData.deposit_mobile_money_enabled = body.depositMobileMoneyEnabled;
   if (body.minDepositAmount !== undefined) updateData.min_deposit_amount = body.minDepositAmount;
   if (body.maxDepositAmount !== undefined) updateData.max_deposit_amount = body.maxDepositAmount;
+
+  // P2P transfer fees
+  if (body.p2pFeePercent !== undefined) updateData.p2p_fee_percent = body.p2pFeePercent;
+  if (body.p2pFeeFlat !== undefined) updateData.p2p_fee_flat = body.p2pFeeFlat;
+
+  // Card fees
+  if (body.cardTxnFeePercent !== undefined) updateData.card_txn_fee_percent = body.cardTxnFeePercent;
+  if (body.cardTxnFeeFlat !== undefined) updateData.card_txn_fee_flat = body.cardTxnFeeFlat;
+  if (body.virtualCardFee !== undefined) updateData.virtual_card_fee = body.virtualCardFee;
+  if (body.physicalCardFee !== undefined) updateData.physical_card_fee = body.physicalCardFee;
+
+  // Checkout/merchant fees
+  if (body.checkoutFeePercent !== undefined) updateData.checkout_fee_percent = body.checkoutFeePercent;
+  if (body.checkoutFeeFlat !== undefined) updateData.checkout_fee_flat = body.checkoutFeeFlat;
+  if (body.merchantPayoutFeePercent !== undefined) updateData.merchant_payout_fee_percent = body.merchantPayoutFeePercent;
+  if (body.merchantPayoutFeeFlat !== undefined) updateData.merchant_payout_fee_flat = body.merchantPayoutFeeFlat;
 
   updateData.updated_at = new Date().toISOString();
 
