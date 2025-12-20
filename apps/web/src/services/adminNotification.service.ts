@@ -838,6 +838,28 @@ export const adminNotificationService = {
   },
 
   /**
+   * Get count of pending KYC verifications
+   */
+  async getPendingKycCount(): Promise<number> {
+    try {
+      const { count, error } = await supabase
+        .from('kyc_applications')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'PENDING');
+
+      if (error) {
+        console.error('Error fetching pending KYC count:', error);
+        return 0;
+      }
+
+      return count || 0;
+    } catch (error) {
+      console.error('Error fetching pending KYC count:', error);
+      return 0;
+    }
+  },
+
+  /**
    * Get recent deposits for admin dashboard
    */
   async getRecentDeposits(limit: number = 10): Promise<Array<{id: string; amount: number; currency: string; userName: string; createdAt: string}>> {

@@ -343,6 +343,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleExchangeAdminSetPermission(req, res);
     } else if (path === 'exchange/admin/transactions' || path === 'exchange/admin/transactions/') {
       return await handleExchangeAdminTransactions(req, res);
+    }
+    // ============================================================================
+    // KYC VERIFICATION ROUTES
+    // ============================================================================
+    else if (path === 'kyc/verification/status' || path === 'kyc/verification/status/') {
+      return await handleKycVerificationStatus(req, res);
+    } else if (path === 'kyc/verification/required' || path === 'kyc/verification/required/') {
+      return await handleKycVerificationRequired(req, res);
+    } else if (path === 'kyc/verification/sierra-leone' || path === 'kyc/verification/sierra-leone/') {
+      return await handleKycSierraLeoneVerification(req, res);
+    } else if (path === 'kyc/verification/provider-kyc' || path === 'kyc/verification/provider-kyc/') {
+      return await handleKycProviderKyc(req, res);
+    } else if (path === 'kyc/verification/match-names' || path === 'kyc/verification/match-names/') {
+      return await handleKycMatchNames(req, res);
+    } else if (path === 'kyc/verification/phone/initiate' || path === 'kyc/verification/phone/initiate/') {
+      return await handleKycPhoneInitiate(req, res);
+    } else if (path === 'kyc/verification/phone/verify' || path === 'kyc/verification/phone/verify/') {
+      return await handleKycPhoneVerify(req, res);
     } else {
       return res.status(404).json({ error: 'Not found', path });
     }
@@ -10214,5 +10232,629 @@ async function handleExchangeAdminTransactions(req: VercelRequest, res: VercelRe
   } catch (err: any) {
     console.error('[Exchange Admin] Error getting transactions:', err);
     return res.status(500).json({ error: err.message || 'Failed to get exchange transactions' });
+  }
+}
+
+// ============================================================================
+// KYC VERIFICATION HANDLERS
+// ============================================================================
+
+/**
+ * Helper function to authenticate user for KYC routes
+ */
+async function authenticateKycUser(req: VercelRequest): Promise<{ userId: string; user: any } | null> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return null;
+  }
+
+  // Support both "Bearer" and "Session" prefixes
+  let token = '';
+  if (authHeader.startsWith('Bearer ')) {
+    token = authHeader.slice(7);
+  } else if (authHeader.startsWith('Session ')) {
+    token = authHeader.slice(8);
+  } else {
+    return null;
+  }
+
+  // Try Supabase auth first
+  const { data: { user }, error: authError } = await supabaseAnon.auth.getUser(token);
+
+  if (!authError && user) {
+    const { data: userData } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+
+    if (userData) {
+      return { userId: user.id, user: userData };
+    }
+  }
+
+  // Fall back to custom session token
+  const { data: session } = await supabase
+    .from('sessions')
+    .select('user_id')
+    .eq('token', token)
+    .eq('is_active', true)
+    .gt('expires_at', new Date().toISOString())
+    .single();
+
+  if (session) {
+    const { data: userData } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', session.user_id)
+      .single();
+
+    if (userData) {
+      return { userId: session.user_id, user: userData };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * GET /api/kyc/verification/status
+ * Get verification status for the authenticated user
+ */
+async function handleKycVerificationStatus(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const auth = await authenticateKycUser(req);
+  if (!auth) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const { userId, user } = auth;
+
+    // Get the latest KYC application
+    const { data: kycApplication } = await supabase
+      .from('kyc_applications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    const metadata = user.metadata || {};
+    const slVerification = kycApplication?.verification_result?.slVerification;
+
+    const hasIdVerification = !!(
+      slVerification?.nin ||
+      kycApplication?.verification_result?.extractedData?.documentNumber ||
+      metadata.nin
+    );
+
+    const hasPhoneVerification = !!(
+      slVerification?.phoneVerified ||
+      metadata.phoneVerifiedAt
+    );
+
+    const hasNameMatch = (slVerification?.nameMatchScore || 0) >= 70;
+    const overallVerified = hasIdVerification && hasPhoneVerification && hasNameMatch;
+
+    // Calculate verification percentage
+    let percentage = 0;
+    if (hasIdVerification) percentage += 40;
+    if (hasPhoneVerification) percentage += 30;
+    if (hasNameMatch) percentage += 30;
+
+    // Determine pending steps
+    const pendingSteps: string[] = [];
+    if (!hasIdVerification) pendingSteps.push('Upload Sierra Leone National ID');
+    if (!hasPhoneVerification) pendingSteps.push('Verify phone number');
+    if (hasIdVerification && hasPhoneVerification && !hasNameMatch) {
+      pendingSteps.push('Name verification pending');
+    }
+
+    return res.status(200).json({
+      userId,
+      hasIdVerification,
+      hasPhoneVerification,
+      hasNameMatch,
+      overallVerified,
+      verificationPercentage: percentage,
+      pendingSteps,
+      idCardName: slVerification?.idCardName || kycApplication?.verification_result?.extractedData?.fullName,
+      simRegisteredName: slVerification?.simRegisteredName,
+      nin: slVerification?.nin || kycApplication?.verification_result?.extractedData?.documentNumber || metadata.nin,
+      phoneNumber: slVerification?.phoneNumber || metadata.phoneVerifiedNumber,
+    });
+  } catch (error: any) {
+    console.error('[KYC] Error getting verification status:', error);
+    return res.status(500).json({ error: error.message || 'Failed to get verification status' });
+  }
+}
+
+/**
+ * GET /api/kyc/verification/required
+ * Check if verification is required for the user
+ */
+async function handleKycVerificationRequired(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const auth = await authenticateKycUser(req);
+  if (!auth) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const { userId, user } = auth;
+
+    // Check if user is already verified
+    if (user.kyc_status === 'approved' || user.kyc_tier >= 2) {
+      return res.status(200).json({ required: false });
+    }
+
+    // Get the latest KYC application
+    const { data: kycApplication } = await supabase
+      .from('kyc_applications')
+      .select('status')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (kycApplication?.status === 'APPROVED') {
+      return res.status(200).json({ required: false });
+    }
+
+    return res.status(200).json({
+      required: true,
+      reason: 'Complete your identity verification to unlock all features',
+      verificationUrl: '/verify',
+    });
+  } catch (error: any) {
+    console.error('[KYC] Error checking verification required:', error);
+    return res.status(500).json({ error: error.message || 'Failed to check verification status' });
+  }
+}
+
+/**
+ * POST /api/kyc/verification/provider-kyc
+ * Get SIM registered name from Monime provider KYC
+ */
+async function handleKycProviderKyc(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const auth = await authenticateKycUser(req);
+  if (!auth) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const { phoneNumber, provider } = req.body;
+
+    if (!phoneNumber) {
+      return res.status(400).json({ error: 'Phone number is required' });
+    }
+
+    // Normalize phone number for storage (with +232 prefix)
+    let normalized = phoneNumber.replace(/[^\d+]/g, '');
+    if (normalized.startsWith('+232')) {
+      // Already has country code
+    } else if (normalized.startsWith('232')) {
+      normalized = `+${normalized}`;
+    } else if (normalized.startsWith('0')) {
+      normalized = `+232${normalized.substring(1)}`;
+    } else if (normalized.length === 8) {
+      normalized = `+232${normalized}`;
+    }
+
+    // Get local number (without country code) for provider detection
+    const localNumber = normalized.replace('+232', '').replace('232', '');
+
+    // Detect provider from phone number if not provided
+    let detectedProvider = provider;
+    if (!detectedProvider) {
+      if (/^(76|77|78)/.test(localNumber) || /^(0?76|0?77|0?78)/.test(localNumber)) {
+        detectedProvider = 'orange';
+      } else if (/^(30|33|34|88|99)/.test(localNumber) || /^(0?30|0?33|0?34|0?88|0?99)/.test(localNumber)) {
+        detectedProvider = 'africell';
+      } else if (/^(25|31|32)/.test(localNumber) || /^(0?25|0?31|0?32)/.test(localNumber)) {
+        detectedProvider = 'qcell';
+      }
+    }
+
+    // Map provider names to Monime provider IDs
+    const providerIdMap: Record<string, string> = {
+      'orange': 'orange-money-sl',
+      'africell': 'afrimoney-sl',
+      'qcell': 'qmoney-sl',
+    };
+
+    const providerId = providerIdMap[detectedProvider?.toLowerCase()] || 'orange-money-sl';
+
+    // Format account number for Monime API: must be local format with leading 0
+    // Monime expects: 072334047 (not +23272334047 or 23272334047)
+    let accountNumber = localNumber;
+    // If number doesn't start with 0, add it
+    if (!accountNumber.startsWith('0')) {
+      accountNumber = '0' + accountNumber;
+    }
+
+    console.log(`[KYC] Provider KYC lookup - Original: ${phoneNumber}, Normalized: ${normalized}, Monime format: ${accountNumber}, Provider: ${providerId}`);
+
+    // Create Monime service and lookup account
+    const monimeService = await createMonimeService(supabase, SETTINGS_ID);
+    const result = await monimeService.lookupAccountName(providerId, accountNumber);
+
+    if (result.verified && result.accountName) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          accountHolderName: result.accountName,
+          accountNumber: result.accountNumber,
+          provider: detectedProvider || 'unknown',
+          kycStatus: 'verified',
+        },
+      });
+    } else {
+      return res.status(200).json({
+        success: false,
+        error: 'Could not verify phone number with provider',
+      });
+    }
+  } catch (error: any) {
+    console.error('[KYC] Error getting provider KYC:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get provider KYC'
+    });
+  }
+}
+
+/**
+ * POST /api/kyc/verification/match-names
+ * Check if ID name matches SIM registered name
+ */
+async function handleKycMatchNames(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const auth = await authenticateKycUser(req);
+  if (!auth) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const { idFirstName, idLastName, simRegisteredName } = req.body;
+
+    if (!simRegisteredName) {
+      return res.status(400).json({ error: 'SIM registered name is required' });
+    }
+
+    // Simple name matching algorithm
+    const normalizeStr = (s: string) => s?.toLowerCase().trim().replace(/[^a-z\s]/g, '') || '';
+
+    const firstName = normalizeStr(idFirstName);
+    const lastName = normalizeStr(idLastName);
+    const fullName = `${firstName} ${lastName}`.trim();
+    const simName = normalizeStr(simRegisteredName);
+    const simParts = simName.split(/\s+/);
+
+    // Check for matches
+    const firstNameMatch = simParts.some(part =>
+      part === firstName ||
+      firstName.includes(part) ||
+      part.includes(firstName)
+    );
+
+    const lastNameMatch = simParts.some(part =>
+      part === lastName ||
+      lastName.includes(part) ||
+      part.includes(lastName)
+    );
+
+    // Calculate similarity score
+    let score = 0;
+    if (firstNameMatch) score += 40;
+    if (lastNameMatch) score += 40;
+
+    // Bonus for full match
+    if (simName === fullName || simName.includes(fullName) || fullName.includes(simName)) {
+      score += 20;
+    } else if (firstNameMatch && lastNameMatch) {
+      score += 20;
+    }
+
+    // Cap at 100
+    score = Math.min(score, 100);
+
+    return res.status(200).json({
+      match: score >= 70,
+      score,
+      details: {
+        firstNameMatch,
+        lastNameMatch,
+        fullNameSimilarity: score / 100,
+      },
+    });
+  } catch (error: any) {
+    console.error('[KYC] Error matching names:', error);
+    return res.status(500).json({ error: error.message || 'Failed to match names' });
+  }
+}
+
+/**
+ * POST /api/kyc/verification/phone/initiate
+ * Initiate phone OTP verification
+ * Note: OTP via SMS is a fallback - primary method is provider KYC lookup
+ */
+async function handleKycPhoneInitiate(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const auth = await authenticateKycUser(req);
+  if (!auth) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const { phoneNumber } = req.body;
+
+    if (!phoneNumber) {
+      return res.status(400).json({ error: 'Phone number is required' });
+    }
+
+    // Generate OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const requestId = randomUUID();
+
+    // For now, log it for development (OTP SMS sending not yet implemented)
+    console.log(`[KYC] OTP for ${phoneNumber}: ${otp} (requestId: ${requestId})`);
+
+    // Note: In production, we would:
+    // 1. Store the OTP in a verification_otps table
+    // 2. Send the OTP via SMS using Monime or another provider
+
+    return res.status(200).json({
+      success: true,
+      message: 'OTP verification is not yet implemented. Please use the Verify Phone button which uses provider KYC lookup.',
+      requestId,
+    });
+  } catch (error: any) {
+    console.error('[KYC] Error initiating phone verification:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to send verification code'
+    });
+  }
+}
+
+/**
+ * POST /api/kyc/verification/phone/verify
+ * Verify phone with OTP
+ * Note: OTP verification is a fallback - primary method is provider KYC lookup
+ */
+async function handleKycPhoneVerify(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const auth = await authenticateKycUser(req);
+  if (!auth) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const { phoneNumber, otp, requestId } = req.body;
+
+    if (!phoneNumber || !otp || !requestId) {
+      return res.status(400).json({ error: 'Phone number, OTP, and request ID are required' });
+    }
+
+    // Note: OTP verification table not yet implemented
+    // For now, return an error guiding user to use provider KYC
+    return res.status(200).json({
+      success: false,
+      verified: false,
+      message: 'OTP verification is not yet implemented. Phone verification happens automatically via provider KYC lookup.',
+    });
+  } catch (error: any) {
+    console.error('[KYC] Error verifying phone OTP:', error);
+    return res.status(500).json({
+      success: false,
+      verified: false,
+      message: error.message || 'Failed to verify phone'
+    });
+  }
+}
+
+/**
+ * POST /api/kyc/verification/sierra-leone
+ * Submit Sierra Leone ID verification (simplified for Vercel API)
+ */
+async function handleKycSierraLeoneVerification(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const auth = await authenticateKycUser(req);
+  if (!auth) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const { idCardFrontBase64, selfieBase64, mimeType, phoneNumber } = req.body;
+
+    if (!idCardFrontBase64 || !phoneNumber) {
+      return res.status(400).json({ error: 'ID card image and phone number are required' });
+    }
+
+    const { userId, user } = auth;
+    const issues: string[] = [];
+
+    // Normalize phone number for storage (with +232 prefix)
+    let normalized = phoneNumber.replace(/[^\d+]/g, '');
+    if (normalized.startsWith('+232')) {
+      // Already correct
+    } else if (normalized.startsWith('232')) {
+      normalized = `+${normalized}`;
+    } else if (normalized.startsWith('0')) {
+      normalized = `+232${normalized.substring(1)}`;
+    } else if (normalized.length === 8) {
+      normalized = `+232${normalized}`;
+    }
+
+    // Get local number (without country code)
+    const localNumber = normalized.replace('+232', '').replace('232', '');
+
+    // Detect provider
+    let provider = 'unknown';
+    if (/^(76|77|78)/.test(localNumber) || /^(0?76|0?77|0?78)/.test(localNumber)) {
+      provider = 'orange';
+    } else if (/^(30|33|34|88|99)/.test(localNumber) || /^(0?30|0?33|0?34|0?88|0?99)/.test(localNumber)) {
+      provider = 'africell';
+    } else if (/^(25|31|32)/.test(localNumber) || /^(0?25|0?31|0?32)/.test(localNumber)) {
+      provider = 'qcell';
+    }
+
+    // Get SIM registered name from provider
+    let simRegisteredName = '';
+    let phoneVerified = false;
+
+    try {
+      const providerIdMap: Record<string, string> = {
+        'orange': 'orange-money-sl',
+        'africell': 'afrimoney-sl',
+        'qcell': 'qmoney-sl',
+      };
+      const providerId = providerIdMap[provider] || 'orange-money-sl';
+
+      // Format account number for Monime API: must be local format with leading 0
+      let accountNumber = localNumber;
+      if (!accountNumber.startsWith('0')) {
+        accountNumber = '0' + accountNumber;
+      }
+
+      console.log(`[KYC] SL Verification - Phone: ${phoneNumber}, Normalized: ${normalized}, Monime format: ${accountNumber}, Provider: ${providerId}`);
+
+      const monimeService = await createMonimeService(supabase, SETTINGS_ID);
+      const result = await monimeService.lookupAccountName(providerId, accountNumber);
+
+      if (result.verified && result.accountName) {
+        simRegisteredName = result.accountName;
+        phoneVerified = true;
+      } else {
+        issues.push('Could not verify phone number with provider');
+      }
+    } catch (error: any) {
+      console.error('[KYC] Error getting provider KYC:', error);
+      issues.push('Phone verification service unavailable');
+    }
+
+    // Create or update KYC application
+    const verificationResultData = {
+      documentCheck: true,
+      faceMatch: !!selfieBase64,
+      addressVerified: false,
+      watchlistClear: true,
+      riskScore: 0,
+      notes: `Sierra Leone ID verification. Phone: ${normalized}`,
+      documentType: 'SIERRA_LEONE_NID',
+      idCardImage: idCardFrontBase64,
+      idCardImageMimeType: mimeType || 'image/jpeg',
+      idCardCapturedAt: new Date().toISOString(),
+      // Selfie image for admin verification
+      selfieImage: selfieBase64 || null,
+      selfieImageMimeType: selfieBase64 ? 'image/jpeg' : null,
+      selfieCapturedAt: selfieBase64 ? new Date().toISOString() : null,
+      slVerification: {
+        phoneNumber: normalized,
+        simRegisteredName,
+        phoneVerified,
+        nameMatchScore: 0,
+        verificationMethod: 'provider_kyc',
+        verified: false,
+        completedAt: undefined as string | undefined,
+      },
+      issues,
+      ocrProcessedAt: new Date().toISOString(),
+    };
+
+    // Check for existing application
+    const { data: existingApp } = await supabase
+      .from('kyc_applications')
+      .select('id')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    let kycApplicationId: string;
+
+    if (existingApp) {
+      // Update existing
+      await supabase
+        .from('kyc_applications')
+        .update({
+          verification_result: verificationResultData,
+          status: phoneVerified ? 'PENDING' : 'PENDING',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingApp.id);
+      kycApplicationId = existingApp.id;
+    } else {
+      // Create new
+      const { data: newApp } = await supabase
+        .from('kyc_applications')
+        .insert({
+          user_id: userId,
+          status: 'PENDING',
+          type: 'INDIVIDUAL',
+          verification_result: verificationResultData,
+        })
+        .select('id')
+        .single();
+      kycApplicationId = newApp?.id || '';
+    }
+
+    // If phone verified, update user metadata
+    if (phoneVerified) {
+      await supabase
+        .from('users')
+        .update({
+          metadata: {
+            ...user.metadata,
+            phoneVerifiedAt: new Date().toISOString(),
+            phoneVerifiedNumber: normalized,
+          },
+        })
+        .eq('id', userId);
+    }
+
+    return res.status(200).json({
+      success: true,
+      verified: false, // Always requires manual review for ID verification
+      stage: phoneVerified ? 'name_matching' : 'phone_verification',
+      phoneVerification: {
+        verified: phoneVerified,
+        simRegisteredName,
+        phoneNumber: normalized,
+        provider,
+        issues: phoneVerified ? [] : issues,
+        verificationMethod: 'provider_kyc',
+      },
+      issues,
+      requiresManualReview: true,
+      kycApplicationId,
+    });
+  } catch (error: any) {
+    console.error('[KYC] Error processing Sierra Leone verification:', error);
+    return res.status(500).json({ error: error.message || 'Failed to process verification' });
   }
 }

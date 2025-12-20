@@ -70,6 +70,7 @@ const navSections: NavSection[] = [
     title: 'User Management',
     items: [
       { path: '/admin/users', label: 'Users', icon: Users },
+      { path: '/admin/kyc-verifications', label: 'KYC Verifications', icon: ShieldCheck, badge: 'New', badgeColor: 'primary' },
       { path: '/admin/merchants', label: 'Merchants', icon: Wallet },
       { path: '/admin/businesses', label: 'Businesses', icon: Store, badge: 'New', badgeColor: 'primary' },
       { path: '/admin/agents', label: 'Agents', icon: Layers },

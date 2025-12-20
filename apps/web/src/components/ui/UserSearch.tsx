@@ -14,7 +14,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo, SyntheticEvent } from 'react';
-import { Search, Phone, AtSign, X, Loader2 } from 'lucide-react';
+import { Search, Phone, AtSign, X, Loader2, CheckCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { clsx } from 'clsx';
 import { useAuth } from '@/context/AuthContext';
@@ -34,6 +34,7 @@ export interface SearchResult {
   phone: string | null;
   email: string | null;
   profile_picture: string | null;
+  kyc_status?: string;
 }
 
 interface UserSearchProps {
@@ -126,7 +127,7 @@ export function UserSearch({
         // Step 2: Fetch fresh data from server (includes profile_picture)
         const { data, error } = await supabase
           .from('users')
-          .select('id, first_name, last_name, phone, email, username, profile_picture, roles, status')
+          .select('id, first_name, last_name, phone, email, username, profile_picture, roles, status, kyc_status')
           .eq('status', 'ACTIVE')
           .limit(500);
 
@@ -391,6 +392,9 @@ export function UserSearch({
                           <p className="font-medium text-gray-900 truncate flex items-center gap-1">
                             <AtSign className="w-4 h-4 text-primary-500" />
                             {resultUser.username}
+                            {resultUser.kyc_status === 'approved' && (
+                              <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" fill="currentColor" stroke="white" strokeWidth={2} />
+                            )}
                           </p>
                           <p className="text-sm text-gray-500 truncate">
                             {resultUser.first_name} {resultUser.last_name}
@@ -398,8 +402,11 @@ export function UserSearch({
                         </>
                       ) : (
                         <>
-                          <p className="font-medium text-gray-900 truncate">
+                          <p className="font-medium text-gray-900 truncate flex items-center gap-1">
                             {resultUser.first_name} {resultUser.last_name}
+                            {resultUser.kyc_status === 'approved' && (
+                              <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" fill="currentColor" stroke="white" strokeWidth={2} />
+                            )}
                           </p>
                           {resultUser.phone && (
                             <p className="text-sm text-gray-500 flex items-center gap-1">

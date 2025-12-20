@@ -116,11 +116,12 @@ export async function checkVerificationRequired(): Promise<{
 }
 
 /**
- * Submit Sierra Leone ID verification with phone matching
+ * Submit Sierra Leone ID verification with phone matching and selfie
  */
 export async function verifySierraLeoneId(data: {
   idCardFrontBase64: string;
   idCardBackBase64?: string;
+  selfieBase64?: string;
   mimeType?: string;
   phoneNumber: string;
 }): Promise<VerificationResult> {

@@ -224,6 +224,7 @@ export function AdminNotificationBell() {
   const [refreshing, setRefreshing] = useState(false);
   const [hasPermission, setHasPermission] = useState(false);
   const [pendingBusinessCount, setPendingBusinessCount] = useState(0);
+  const [pendingKycCount, setPendingKycCount] = useState(0);
   const [recentDepositsCount, setRecentDepositsCount] = useState(0);
   const [recentPayoutsCount, setRecentPayoutsCount] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -251,12 +252,16 @@ export function AdminNotificationBell() {
     }
   }, []);
 
-  // Fetch special counts (pending businesses, deposits, payouts)
+  // Fetch special counts (pending businesses, KYC, deposits, payouts)
   const fetchSpecialCounts = useCallback(async () => {
     try {
       // Get pending business count
       const businessCount = await adminNotificationService.getPendingBusinessCount();
       setPendingBusinessCount(businessCount);
+
+      // Get pending KYC verification count
+      const kycCount = await adminNotificationService.getPendingKycCount();
+      setPendingKycCount(kycCount);
 
       // Get recent deposits (last 24h)
       const deposits = await adminNotificationService.getRecentDeposits(50);
@@ -421,7 +426,19 @@ export function AdminNotificationBell() {
     <div className="relative" ref={dropdownRef}>
       {/* Special Bubbles Row */}
       <div className="flex items-center gap-2">
-        {/* Pending Business Verification Bubble - GREEN (most important) */}
+        {/* Pending KYC Verification Bubble - PURPLE (urgent) */}
+        {pendingKycCount > 0 && (
+          <button
+            onClick={() => navigate('/admin/kyc-verifications')}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 rounded-full text-xs font-medium hover:bg-purple-200 dark:hover:bg-purple-900/60 transition-colors animate-pulse"
+            title="Pending KYC Verifications"
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>{pendingKycCount} KYC pending</span>
+          </button>
+        )}
+
+        {/* Pending Business Verification Bubble - GREEN */}
         {pendingBusinessCount > 0 && (
           <button
             onClick={() => navigate('/admin/businesses')}

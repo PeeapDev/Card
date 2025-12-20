@@ -86,6 +86,46 @@ interface Transaction {
   wallet_id: string;
 }
 
+interface KycApplication {
+  id: string;
+  user_id: string;
+  status: string;
+  type: string;
+  first_name?: string;
+  last_name?: string;
+  id_number?: string;
+  verification_result?: {
+    documentCheck?: boolean;
+    faceMatch?: boolean;
+    idCardImage?: string;
+    idCardImageMimeType?: string;
+    idCardCapturedAt?: string;
+    selfieImage?: string;
+    selfieImageMimeType?: string;
+    selfieCapturedAt?: string;
+    slVerification?: {
+      nin?: string;
+      phoneNumber?: string;
+      simRegisteredName?: string;
+      idCardName?: string;
+      phoneVerified?: boolean;
+      nameMatchScore?: number;
+      verified?: boolean;
+    };
+    extractedData?: {
+      documentNumber?: string;
+      firstName?: string;
+      lastName?: string;
+      fullName?: string;
+      dateOfBirth?: string;
+      expiryDate?: string;
+    };
+    issues?: string[];
+  };
+  created_at: string;
+  updated_at: string;
+}
+
 export function UserDetailPage() {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
@@ -94,6 +134,7 @@ export function UserDetailPage() {
   const [wallets, setWallets] = useState<WalletData[]>([]);
   const [cards, setCards] = useState<CardData[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [kycApplication, setKycApplication] = useState<KycApplication | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'transactions' | 'cards' | 'kyc'>('overview');
   const [showEditModal, setShowEditModal] = useState(false);
@@ -106,6 +147,9 @@ export function UserDetailPage() {
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [avatarLoadError, setAvatarLoadError] = useState(false);
+  const [kycProcessing, setKycProcessing] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
 
   // Currency state
   const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
@@ -172,6 +216,19 @@ export function UserDetailPage() {
           .limit(50);
 
         setTransactions(txData || []);
+      }
+
+      // Fetch KYC application
+      const { data: kycData } = await supabase
+        .from('kyc_applications')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (kycData) {
+        setKycApplication(kycData);
       }
     } catch (error) {
       console.error('Error fetching user data:', error);
@@ -265,6 +322,94 @@ export function UserDetailPage() {
       setShowEditModal(false);
     }
     setSaving(false);
+  };
+
+  // Handle KYC approval
+  const handleApproveKyc = async () => {
+    if (!kycApplication || !user) return;
+    setKycProcessing(true);
+
+    try {
+      // Update KYC application status
+      await supabase
+        .from('kyc_applications')
+        .update({
+          status: 'APPROVED',
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq('id', kycApplication.id);
+
+      // Update user's KYC status
+      await supabase
+        .from('users')
+        .update({
+          kyc_status: 'approved',
+          kyc_tier: 2,
+        })
+        .eq('id', user.id);
+
+      // Update local state
+      setKycApplication({ ...kycApplication, status: 'APPROVED' });
+      setUser({ ...user, kyc_status: 'approved', kyc_tier: 2 });
+
+      // Optionally create a notification for the user
+      await supabase.from('user_notifications').insert({
+        user_id: user.id,
+        title: 'Identity Verified',
+        message: 'Congratulations! Your identity has been verified. You now have full access to all features.',
+        type: 'kyc_approved',
+        read: false,
+      });
+    } catch (error) {
+      console.error('Error approving KYC:', error);
+    } finally {
+      setKycProcessing(false);
+    }
+  };
+
+  // Handle KYC rejection
+  const handleRejectKyc = async () => {
+    if (!kycApplication || !user || !rejectReason) return;
+    setKycProcessing(true);
+
+    try {
+      // Update KYC application status
+      await supabase
+        .from('kyc_applications')
+        .update({
+          status: 'REJECTED',
+          reviewed_at: new Date().toISOString(),
+          rejection_reason: rejectReason,
+        })
+        .eq('id', kycApplication.id);
+
+      // Update user's KYC status
+      await supabase
+        .from('users')
+        .update({
+          kyc_status: 'rejected',
+        })
+        .eq('id', user.id);
+
+      // Update local state
+      setKycApplication({ ...kycApplication, status: 'REJECTED' });
+      setUser({ ...user, kyc_status: 'rejected' });
+      setShowRejectModal(false);
+      setRejectReason('');
+
+      // Create a notification for the user
+      await supabase.from('user_notifications').insert({
+        user_id: user.id,
+        title: 'Verification Requires Attention',
+        message: `Your identity verification could not be completed. Reason: ${rejectReason}. Please try again or contact support.`,
+        type: 'kyc_rejected',
+        read: false,
+      });
+    } catch (error) {
+      console.error('Error rejecting KYC:', error);
+    } finally {
+      setKycProcessing(false);
+    }
   };
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -787,110 +932,333 @@ export function UserDetailPage() {
         )}
 
         {activeTab === 'kyc' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* KYC Status */}
-            <Card className="p-6">
-              <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <Shield className="w-5 h-5" />
-                KYC Verification
-              </h3>
-              <div className="space-y-4">
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-gray-600">Status</span>
-                    {getKycBadge(user.kyc_status, user.kyc_tier)}
+          <div className="space-y-6">
+            {/* Top row: Status and Verification Photos */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* KYC Status */}
+              <Card className="p-6">
+                <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <Shield className="w-5 h-5" />
+                  KYC Verification
+                </h3>
+                <div className="space-y-4">
+                  <div className="p-4 bg-gray-50 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-gray-600">Status</span>
+                      {getKycBadge(user.kyc_status, user.kyc_tier)}
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-gray-50 rounded-lg">
+                    <p className="text-gray-600 mb-1">Verification Tier</p>
+                    <p className="font-semibold text-lg">Tier {user.kyc_tier}</p>
+                    <div className="mt-2 flex gap-1">
+                      {[1, 2, 3].map((tier) => (
+                        <div
+                          key={tier}
+                          className={`flex-1 h-2 rounded-full ${
+                            tier <= user.kyc_tier ? 'bg-primary-600' : 'bg-gray-200'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <p className="text-gray-600 mb-1">Email</p>
+                      <p className={`font-semibold flex items-center gap-1 ${
+                        user.email_verified ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {user.email_verified ? (
+                          <><CheckCircle className="w-4 h-4" /> Verified</>
+                        ) : (
+                          <><XCircle className="w-4 h-4" /> No</>
+                        )}
+                      </p>
+                    </div>
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <p className="text-gray-600 mb-1">Phone</p>
+                      <p className={`font-semibold flex items-center gap-1 ${
+                        user.phone_verified || kycApplication?.verification_result?.slVerification?.phoneVerified ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {user.phone_verified || kycApplication?.verification_result?.slVerification?.phoneVerified ? (
+                          <><CheckCircle className="w-4 h-4" /> Verified</>
+                        ) : (
+                          <><XCircle className="w-4 h-4" /> No</>
+                        )}
+                      </p>
+                    </div>
                   </div>
                 </div>
+              </Card>
 
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <p className="text-gray-600 mb-1">Verification Tier</p>
-                  <p className="font-semibold text-lg">Tier {user.kyc_tier}</p>
-                  <div className="mt-2 flex gap-1">
-                    {[1, 2, 3].map((tier) => (
-                      <div
-                        key={tier}
-                        className={`flex-1 h-2 rounded-full ${
-                          tier <= user.kyc_tier ? 'bg-primary-600' : 'bg-gray-200'
-                        }`}
+              {/* Selfie Image */}
+              <Card className="p-6">
+                <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <Camera className="w-5 h-5" />
+                  Selfie Photo
+                </h3>
+                {kycApplication?.verification_result?.selfieImage ? (
+                  <div className="space-y-3">
+                    <div className="relative w-full aspect-square bg-gray-100 rounded-xl overflow-hidden">
+                      <img
+                        src={`data:${kycApplication.verification_result.selfieImageMimeType || 'image/jpeg'};base64,${kycApplication.verification_result.selfieImage}`}
+                        alt="User Selfie"
+                        className="w-full h-full object-cover"
                       />
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-gray-50 rounded-lg">
-                    <p className="text-gray-600 mb-1">Email Verified</p>
-                    <p className={`font-semibold flex items-center gap-1 ${
-                      user.email_verified ? 'text-green-600' : 'text-red-600'
+                    </div>
+                    {kycApplication.verification_result.selfieCapturedAt && (
+                      <p className="text-xs text-gray-500 text-center">
+                        Captured: {new Date(kycApplication.verification_result.selfieCapturedAt).toLocaleString()}
+                      </p>
+                    )}
+                    <div className={`p-2 rounded-lg text-center text-sm font-medium ${
+                      kycApplication.verification_result.faceMatch
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-yellow-100 text-yellow-700'
                     }`}>
-                      {user.email_verified ? (
-                        <><CheckCircle className="w-4 h-4" /> Yes</>
-                      ) : (
-                        <><XCircle className="w-4 h-4" /> No</>
-                      )}
+                      {kycApplication.verification_result.faceMatch ? 'Face Captured' : 'Pending Review'}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="w-full aspect-square bg-gray-100 rounded-xl flex items-center justify-center">
+                    <div className="text-center text-gray-400">
+                      <Camera className="w-12 h-12 mx-auto mb-2" />
+                      <p className="text-sm">No selfie uploaded</p>
+                    </div>
+                  </div>
+                )}
+              </Card>
+
+              {/* ID Card Image */}
+              <Card className="p-6">
+                <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <FileText className="w-5 h-5" />
+                  ID Document
+                </h3>
+                {kycApplication?.verification_result?.idCardImage ? (
+                  <div className="space-y-3">
+                    <div className="relative w-full aspect-[1.5] bg-gray-100 rounded-xl overflow-hidden">
+                      <img
+                        src={`data:${kycApplication.verification_result.idCardImageMimeType || 'image/jpeg'};base64,${kycApplication.verification_result.idCardImage}`}
+                        alt="ID Card"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    {kycApplication.verification_result.idCardCapturedAt && (
+                      <p className="text-xs text-gray-500 text-center">
+                        Captured: {new Date(kycApplication.verification_result.idCardCapturedAt).toLocaleString()}
+                      </p>
+                    )}
+                    <div className={`p-2 rounded-lg text-center text-sm font-medium ${
+                      kycApplication.verification_result.documentCheck
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-yellow-100 text-yellow-700'
+                    }`}>
+                      {kycApplication.verification_result.documentCheck ? 'Document Verified' : 'Pending Review'}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="w-full aspect-[1.5] bg-gray-100 rounded-xl flex items-center justify-center">
+                    <div className="text-center text-gray-400">
+                      <FileText className="w-12 h-12 mx-auto mb-2" />
+                      <p className="text-sm">No ID uploaded</p>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            </div>
+
+            {/* Bottom row: Sierra Leone Verification Details & Personal Details */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* SL Verification Details */}
+              {kycApplication?.verification_result?.slVerification && (
+                <Card className="p-6">
+                  <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <Shield className="w-5 h-5" />
+                    Sierra Leone ID Verification
+                  </h3>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <p className="text-xs text-gray-500 mb-1">NIN</p>
+                        <p className="font-mono font-semibold text-sm">
+                          {kycApplication.verification_result.slVerification.nin || 'Not extracted'}
+                        </p>
+                      </div>
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <p className="text-xs text-gray-500 mb-1">Phone Number</p>
+                        <p className="font-mono font-semibold text-sm">
+                          {kycApplication.verification_result.slVerification.phoneNumber || 'Not provided'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-xs text-gray-500 mb-1">ID Card Name</p>
+                      <p className="font-semibold">
+                        {kycApplication.verification_result.slVerification.idCardName || 'Not extracted'}
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-xs text-gray-500 mb-1">SIM Registered Name</p>
+                      <p className="font-semibold">
+                        {kycApplication.verification_result.slVerification.simRegisteredName || 'Not available'}
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <p className="text-xs text-gray-500 mb-1">Name Match Score</p>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${
+                                (kycApplication.verification_result.slVerification.nameMatchScore || 0) >= 70
+                                  ? 'bg-green-500'
+                                  : (kycApplication.verification_result.slVerification.nameMatchScore || 0) >= 50
+                                  ? 'bg-yellow-500'
+                                  : 'bg-red-500'
+                              }`}
+                              style={{ width: `${kycApplication.verification_result.slVerification.nameMatchScore || 0}%` }}
+                            />
+                          </div>
+                          <span className="font-semibold text-sm">
+                            {kycApplication.verification_result.slVerification.nameMatchScore || 0}%
+                          </span>
+                        </div>
+                      </div>
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <p className="text-xs text-gray-500 mb-1">Phone Verified</p>
+                        <p className={`font-semibold flex items-center gap-1 ${
+                          kycApplication.verification_result.slVerification.phoneVerified
+                            ? 'text-green-600'
+                            : 'text-red-600'
+                        }`}>
+                          {kycApplication.verification_result.slVerification.phoneVerified ? (
+                            <><CheckCircle className="w-4 h-4" /> Yes</>
+                          ) : (
+                            <><XCircle className="w-4 h-4" /> No</>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Issues if any */}
+                    {kycApplication.verification_result.issues && kycApplication.verification_result.issues.length > 0 && (
+                      <div className="p-3 bg-red-50 rounded-lg border border-red-200">
+                        <p className="text-xs text-red-600 font-semibold mb-2 flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" /> Issues Found
+                        </p>
+                        <ul className="text-sm text-red-700 space-y-1">
+                          {kycApplication.verification_result.issues.map((issue, idx) => (
+                            <li key={idx} className="flex items-start gap-2">
+                              <span className="text-red-400">•</span>
+                              {issue}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Approve/Reject Actions */}
+                    {kycApplication.status === 'PENDING' && (
+                      <div className="pt-4 border-t border-gray-200 flex gap-3">
+                        <button
+                          onClick={handleApproveKyc}
+                          disabled={kycProcessing}
+                          className="flex-1 flex items-center justify-center gap-2 py-3 px-4 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white font-medium rounded-lg transition-colors"
+                        >
+                          {kycProcessing ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <CheckCircle className="w-4 h-4" />
+                          )}
+                          Approve Verification
+                        </button>
+                        <button
+                          onClick={() => setShowRejectModal(true)}
+                          disabled={kycProcessing}
+                          className="flex-1 flex items-center justify-center gap-2 py-3 px-4 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white font-medium rounded-lg transition-colors"
+                        >
+                          <XCircle className="w-4 h-4" />
+                          Reject
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Show status badge for approved/rejected */}
+                    {kycApplication.status === 'APPROVED' && (
+                      <div className="pt-4 border-t border-gray-200">
+                        <div className="flex items-center justify-center gap-2 py-3 px-4 bg-green-100 text-green-700 rounded-lg">
+                          <CheckCircle className="w-5 h-5" />
+                          <span className="font-medium">Verification Approved</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {kycApplication.status === 'REJECTED' && (
+                      <div className="pt-4 border-t border-gray-200">
+                        <div className="flex items-center justify-center gap-2 py-3 px-4 bg-red-100 text-red-700 rounded-lg">
+                          <XCircle className="w-5 h-5" />
+                          <span className="font-medium">Verification Rejected</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              )}
+
+              {/* Personal Details */}
+              <Card className="p-6">
+                <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <User className="w-5 h-5" />
+                  Personal Details
+                </h3>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-500">First Name</p>
+                      <p className="font-medium">{user.first_name}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Last Name</p>
+                      <p className="font-medium">{user.last_name}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Email</p>
+                    <p className="font-medium">{user.email || 'Not provided'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Phone</p>
+                    <p className="font-medium">{user.phone || 'Not provided'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Date of Birth</p>
+                    <p className="font-medium">
+                      {kycApplication?.verification_result?.extractedData?.dateOfBirth || user.date_of_birth || 'Not provided'}
                     </p>
                   </div>
-                  <div className="p-4 bg-gray-50 rounded-lg">
-                    <p className="text-gray-600 mb-1">Phone Verified</p>
-                    <p className={`font-semibold flex items-center gap-1 ${
-                      user.phone_verified ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      {user.phone_verified ? (
-                        <><CheckCircle className="w-4 h-4" /> Yes</>
-                      ) : (
-                        <><XCircle className="w-4 h-4" /> No</>
-                      )}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </Card>
-
-            {/* Personal Details */}
-            <Card className="p-6">
-              <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <User className="w-5 h-5" />
-                Personal Details
-              </h3>
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-sm text-gray-500">First Name</p>
-                    <p className="font-medium">{user.first_name}</p>
+                    <p className="text-sm text-gray-500">Address</p>
+                    <p className="font-medium">{user.address || 'Not provided'}</p>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Last Name</p>
-                    <p className="font-medium">{user.last_name}</p>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Email</p>
-                  <p className="font-medium">{user.email || 'Not provided'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Phone</p>
-                  <p className="font-medium">{user.phone || 'Not provided'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Date of Birth</p>
-                  <p className="font-medium">{user.date_of_birth || 'Not provided'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Address</p>
-                  <p className="font-medium">{user.address || 'Not provided'}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-500">City</p>
-                    <p className="font-medium">{user.city || 'Not provided'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Country</p>
-                    <p className="font-medium">{user.country || 'Not provided'}</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-500">City</p>
+                      <p className="font-medium">{user.city || 'Not provided'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Country</p>
+                      <p className="font-medium">{user.country || 'Not provided'}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </Card>
+              </Card>
+            </div>
           </div>
         )}
 
@@ -963,6 +1331,77 @@ export function UserDetailPage() {
                     </>
                   ) : (
                     'Save Changes'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Reject KYC Modal */}
+        {showRejectModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md">
+              <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Reject Verification</h2>
+                <button onClick={() => setShowRejectModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+                  <p className="text-sm text-red-700 dark:text-red-300">
+                    Please provide a reason for rejecting this verification. The user will be notified and can try again.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Rejection Reason
+                  </label>
+                  <textarea
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    placeholder="e.g., ID card image is blurry, name doesn't match SIM registration..."
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-red-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  />
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  Common rejection reasons:
+                  <ul className="mt-2 space-y-1 text-gray-600 dark:text-gray-400">
+                    <li>• ID card image is unclear or blurry</li>
+                    <li>• ID card appears to be expired</li>
+                    <li>• Name on ID doesn't match SIM registration</li>
+                    <li>• Selfie doesn't match ID photo</li>
+                    <li>• Document appears to be altered</li>
+                  </ul>
+                </div>
+              </div>
+              <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowRejectModal(false);
+                    setRejectReason('');
+                  }}
+                  className="flex-1 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-200 dark:hover:bg-gray-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleRejectKyc}
+                  disabled={kycProcessing || !rejectReason.trim()}
+                  className="flex-1 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 disabled:bg-red-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {kycProcessing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Rejecting...
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="w-4 h-4" />
+                      Reject Verification
+                    </>
                   )}
                 </button>
               </div>
