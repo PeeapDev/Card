@@ -51,18 +51,16 @@ export function PaymentCheckoutPage() {
   const [isNFCSupported, setIsNFCSupported] = useState(false);
   const [isAppInstalled, setIsAppInstalled] = useState(false);
 
-  // Format currency
-  // Format amount - SLE uses whole units, no conversion needed
+  // Format amount - SLE (New Leone) uses 2 decimal places like USD
   const formatAmount = (amount: number, currency: string) => {
-    // SLE is a whole number currency, no division by 100 needed
-    if (currency === 'SLE' || currency === 'SLL') {
-      return `NLe ${new Intl.NumberFormat('en-US', { minimumFractionDigits: 0 }).format(amount)}`;
+    if (currency === 'SLE') {
+      return `NLe ${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)}`;
     }
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: currency,
       minimumFractionDigits: 2
-    }).format(amount / 100); // Only for non-SLE currencies
+    }).format(amount);
   };
 
   // Format time remaining

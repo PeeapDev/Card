@@ -1,10 +1,10 @@
 /**
  * Currency Utilities for Sierra Leone New Leone (SLE/NLe)
  *
- * As of 2024, Sierra Leone redenominated its currency, removing 3 zeros:
+ * Sierra Leone redenominated its currency in 2022, removing 3 zeros:
  * - Old Le 1,000 (SLL) = NLe 1.00 (SLE)
  *
- * ISO 4217 code: SLE (New Leone, as of redenomination)
+ * ISO 4217 code: SLE (New Leone)
  * Symbol: NLe (placed before the amount with a space)
  * Decimal places: 2 (the New Leone uses cents)
  *
@@ -13,7 +13,9 @@
  * - NLe 5.50 = 5 New Leones and 50 cents
  * - NLe 100.00 = 100 New Leones
  *
- * IMPORTANT: SLE uses 2 decimal places like most modern currencies.
+ * Exchange rate: ~1 USD = 22.50 SLE (as of 2024)
+ *
+ * IMPORTANT: Only use SLE (New Leone). Old SLL is no longer supported.
  */
 
 export const CURRENCY_CONFIG = {
@@ -25,16 +27,7 @@ export const CURRENCY_CONFIG = {
     minorUnit: 100, // 100 cents = 1 Leone
     minAmount: 0.01, // Minimum 1 cent
   },
-  // Old Leone (deprecated - for historical reference only)
-  SLL: {
-    code: 'SLL',
-    symbol: 'Le',
-    name: 'Sierra Leonean Leone (old - deprecated)',
-    decimalPlaces: 0,
-    minorUnit: 1,
-    minAmount: 1,
-  },
-  // USD for reference
+  // USD for multi-currency support
   USD: {
     code: 'USD',
     symbol: '$',

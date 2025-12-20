@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, SyntheticEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Users,
   Search,
@@ -51,10 +51,25 @@ interface CreateUserForm {
 
 export function UsersManagementPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+
+  // Get initial filter from URL query params (e.g., /admin/users?filter=pending)
+  const initialFilter = searchParams.get('filter') || 'all';
+  const [statusFilter, setStatusFilter] = useState(initialFilter);
+
+  // Update URL when filter changes
+  const handleFilterChange = (newFilter: string) => {
+    setStatusFilter(newFilter);
+    if (newFilter === 'all') {
+      searchParams.delete('filter');
+    } else {
+      searchParams.set('filter', newFilter);
+    }
+    setSearchParams(searchParams);
+  };
 
   // Currency state
   const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
@@ -480,7 +495,7 @@ export function UsersManagementPage() {
             </div>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => handleFilterChange(e.target.value)}
               className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
             >
               <option value="all">All Status</option>

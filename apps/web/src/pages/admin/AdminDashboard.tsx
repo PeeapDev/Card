@@ -869,29 +869,31 @@ export function AdminDashboard() {
                 </MotionCard>
               </Link>
 
-              {/* Cards */}
-              <Link to="/admin/cards">
-                <MotionCard className="p-5 hover:shadow-lg transition-all cursor-pointer" delay={0.3}>
+              {/* Today's Profit */}
+              <div onClick={() => setFloatOverviewOpen(true)} className="cursor-pointer">
+                <MotionCard className="p-5 hover:shadow-lg transition-all bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border-emerald-200 dark:border-emerald-800" delay={0.3}>
                   <div className="flex items-center justify-between">
-                    <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                      <CreditCard className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                    <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
+                      <TrendingUp className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                     </div>
                     {loading ? (
                       <Skeleton className="h-4 w-12" />
                     ) : (
-                      <span className="text-xs text-purple-600 dark:text-purple-400">
-                        {stats.activeCards} active
+                      <span className="text-xs text-emerald-600 dark:text-emerald-400">
+                        {platformEarnings.count || 0} txns
                       </span>
                     )}
                   </div>
                   {loading ? (
-                    <Skeleton className="h-8 w-16 mt-3" />
+                    <Skeleton className="h-8 w-24 mt-3" />
                   ) : (
-                    <p className="text-2xl font-bold text-gray-900 dark:text-white mt-3">{stats.totalCards.toLocaleString()}</p>
+                    <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300 mt-3">
+                      {currencySymbol} {platformEarnings.totalEarnings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
                   )}
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Cards Issued</p>
+                  <p className="text-sm text-emerald-600 dark:text-emerald-400 mt-1">Today's Profit</p>
                 </MotionCard>
-              </Link>
+              </div>
             </motion.div>
 
             {/* Platform Profit Card - Multi-Currency */}

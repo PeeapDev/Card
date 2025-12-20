@@ -67,7 +67,6 @@ import CardProducts from '@/pages/admin/CardProducts';
 import { DevelopersPage } from '@/pages/admin/DevelopersPage';
 import { UsersManagementPage } from '@/pages/admin/UsersManagementPage';
 import { UserDetailPage } from '@/pages/admin/UserDetailPage';
-import { KycVerificationsPage } from '@/pages/admin/KycVerificationsPage';
 import { MerchantsManagementPage } from '@/pages/admin/MerchantsManagementPage';
 import { CreateMerchantPage } from '@/pages/admin/CreateMerchantPage';
 import { AgentsManagementPage } from '@/pages/admin/AgentsManagementPage';
@@ -81,6 +80,8 @@ import { PotsManagementPage } from '@/pages/admin/PotsManagementPage';
 import { BusinessCategoriesPage } from '@/pages/admin/BusinessCategoriesPage';
 import { BusinessesPage } from '@/pages/admin/BusinessesPage';
 import { BusinessDetailPage } from '@/pages/admin/BusinessDetailPage';
+import { DriversPage } from '@/pages/admin/DriversPage';
+import { FuelStationsPage } from '@/pages/admin/FuelStationsPage';
 import { SupportTicketsPage } from '@/pages/admin/SupportTicketsPage';
 import { AdminNotificationsPage } from '@/pages/admin/AdminNotificationsPage';
 import { SmtpSettingsPage } from '@/pages/admin/SmtpSettingsPage';
@@ -813,6 +814,23 @@ function App() {
                   </RoleBasedRoute>
                 }
               />
+              {/* Transport Routes */}
+              <Route
+                path="/admin/drivers"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <DriversPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/admin/fuel-stations"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <FuelStationsPage />
+                  </RoleBasedRoute>
+                }
+              />
 
               {/* Merchant Routes */}
               <Route
@@ -1351,7 +1369,6 @@ function App() {
                   <Route path="/admin/disputes" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><DisputesPage /></RoleBasedRoute>} />
                   <Route path="/admin/users" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><UsersManagementPage /></RoleBasedRoute>} />
                   <Route path="/admin/users/:userId" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><UserDetailPage /></RoleBasedRoute>} />
-                  <Route path="/admin/kyc-verifications" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><KycVerificationsPage /></RoleBasedRoute>} />
                   <Route path="/admin/merchants" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><MerchantsManagementPage /></RoleBasedRoute>} />
                   <Route path="/admin/merchants/create" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><CreateMerchantPage /></RoleBasedRoute>} />
                   <Route path="/admin/agents" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><AgentsManagementPage /></RoleBasedRoute>} />
@@ -1375,6 +1392,9 @@ function App() {
                   <Route path="/admin/settings/sso" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><SsoSettingsPage /></RoleBasedRoute>} />
                   <Route path="/admin/analytics" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><WebsiteAnalyticsPage /></RoleBasedRoute>} />
                   <Route path="/admin/exchange-rates" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><ExchangeRatesPage /></RoleBasedRoute>} />
+                  {/* Transport Routes */}
+                  <Route path="/admin/drivers" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><DriversPage /></RoleBasedRoute>} />
+                  <Route path="/admin/fuel-stations" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><FuelStationsPage /></RoleBasedRoute>} />
 
                   {/* User Notifications Route */}
                   <Route path="/notifications" element={<ProtectedRoute><UserNotificationsPage /></ProtectedRoute>} />

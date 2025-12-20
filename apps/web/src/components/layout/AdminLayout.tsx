@@ -37,6 +37,8 @@ import {
   Mail,
   Wifi,
   BellRing,
+  Car,
+  Fuel,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { AdminNotificationBell } from '@/components/ui/AdminNotificationBell';
@@ -70,7 +72,6 @@ const navSections: NavSection[] = [
     title: 'User Management',
     items: [
       { path: '/admin/users', label: 'Users', icon: Users },
-      { path: '/admin/kyc-verifications', label: 'KYC Verifications', icon: ShieldCheck, badge: 'New', badgeColor: 'primary' },
       { path: '/admin/merchants', label: 'Merchants', icon: Wallet },
       { path: '/admin/businesses', label: 'Businesses', icon: Store, badge: 'New', badgeColor: 'primary' },
       { path: '/admin/agents', label: 'Agents', icon: Layers },
@@ -125,6 +126,13 @@ const navSections: NavSection[] = [
       { path: '/admin/smtp-settings', label: 'SMTP / Email', icon: Mail },
       { path: '/admin/push-notifications', label: 'Push Notifications', icon: BellRing },
       { path: '/admin/compliance', label: 'Compliance', icon: FileCheck, badge: 'Pending', badgeColor: 'yellow' },
+    ],
+  },
+  {
+    title: 'Transport',
+    items: [
+      { path: '/admin/drivers', label: 'Drivers', icon: Car, badge: 'New', badgeColor: 'primary' },
+      { path: '/admin/fuel-stations', label: 'Fuel Stations', icon: Fuel, badge: 'New', badgeColor: 'primary' },
     ],
   },
   {

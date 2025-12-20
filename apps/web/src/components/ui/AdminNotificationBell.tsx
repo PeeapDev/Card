@@ -429,9 +429,9 @@ export function AdminNotificationBell() {
         {/* Pending KYC Verification Bubble - PURPLE (urgent) */}
         {pendingKycCount > 0 && (
           <button
-            onClick={() => navigate('/admin/kyc-verifications')}
+            onClick={() => navigate('/admin/users?filter=pending')}
             className="flex items-center gap-1.5 px-2.5 py-1.5 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 rounded-full text-xs font-medium hover:bg-purple-200 dark:hover:bg-purple-900/60 transition-colors animate-pulse"
-            title="Pending KYC Verifications"
+            title="Pending KYC Verifications - Click to view users"
           >
             <ShieldCheck className="w-3.5 h-3.5" />
             <span>{pendingKycCount} KYC pending</span>

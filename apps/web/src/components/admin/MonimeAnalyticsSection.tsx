@@ -77,7 +77,7 @@ const MonimeAnalyticsSection: React.FC<MonimeAnalyticsSectionProps> = ({
       if (analytics) {
         // Update currency from API response
         if (analytics.currency) {
-          // Map SLL to SLE for display
+          // Always use SLE (New Leone) - convert legacy SLL if Monime API returns it
           const displayCurrency = analytics.currency === 'SLL' ? 'SLE' : analytics.currency;
           setCurrency(displayCurrency);
         }

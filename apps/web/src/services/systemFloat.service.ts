@@ -8,12 +8,13 @@
 
 import { supabase } from '@/lib/supabase';
 
-// API base URL - uses the same domain as the current page in production
+// API base URL - uses the same domain as the current page
 const getApiUrl = () => {
-  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+  if (typeof window !== 'undefined') {
+    // Always use current origin to handle any port
     return `${window.location.origin}/api`;
   }
-  return import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+  return import.meta.env.VITE_API_URL || '/api';
 };
 
 export interface SystemFloat {

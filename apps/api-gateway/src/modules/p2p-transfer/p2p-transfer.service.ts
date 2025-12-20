@@ -88,66 +88,66 @@ export class P2PTransferService {
   }
 
   private initializeDefaultFees() {
-    // Standard user fee: 1% with min Le 1,000, max Le 100,000
+    // Standard user fee: 1% with min NLe 1.00, max NLe 100.00 (New Leone / SLE)
     this.feeConfigs.set('standard', {
       type: 'percentage',
       value: 1.0,
-      minFee: 1000,
-      maxFee: 100000,
+      minFee: 1,
+      maxFee: 100,
     });
 
-    // Agent+ fee: 0.2% with min Le 500, max Le 50,000
+    // Agent+ fee: 0.2% with min NLe 0.50, max NLe 50.00
     this.feeConfigs.set('agent_plus', {
       type: 'percentage',
       value: 0.2,
-      minFee: 500,
-      maxFee: 50000,
+      minFee: 0.50,
+      maxFee: 50,
     });
 
-    // Merchant fee: 0.5% with min Le 1,000, max Le 250,000
+    // Merchant fee: 0.5% with min NLe 1.00, max NLe 250.00
     this.feeConfigs.set('merchant', {
       type: 'percentage',
       value: 0.5,
-      minFee: 1000,
-      maxFee: 250000,
+      minFee: 1,
+      maxFee: 250,
     });
 
-    // Tiered fee for high-volume users
+    // Tiered fee for high-volume users (New Leone / SLE)
     this.feeConfigs.set('tiered', {
       type: 'tiered',
       value: 0,
       tiers: [
-        { min: 0, max: 100000, fee: 5000, type: 'fixed' },           // Le 5,000 fixed for < Le 100,000
-        { min: 100000, max: 1000000, fee: 1.0, type: 'percentage' }, // 1% for Le 100K - 1M
-        { min: 1000000, max: 10000000, fee: 0.75, type: 'percentage' }, // 0.75% for Le 1M - 10M
-        { min: 10000000, max: Infinity, fee: 0.5, type: 'percentage' }, // 0.5% for > Le 10M
+        { min: 0, max: 100, fee: 5, type: 'fixed' },             // NLe 5 fixed for < NLe 100
+        { min: 100, max: 1000, fee: 1.0, type: 'percentage' },   // 1% for NLe 100 - 1,000
+        { min: 1000, max: 10000, fee: 0.75, type: 'percentage' }, // 0.75% for NLe 1K - 10K
+        { min: 10000, max: Infinity, fee: 0.5, type: 'percentage' }, // 0.5% for > NLe 10K
       ],
     });
   }
 
   private initializeDefaultLimits() {
-    // Standard user limits (in Leones)
+    // Standard user limits (in New Leone / SLE)
     this.userLimits.set('standard', {
-      dailyLimit: 5000000,        // Le 5,000,000 per day
-      monthlyLimit: 25000000,     // Le 25,000,000 per month
-      perTransactionLimit: 2500000, // Le 2,500,000 per transaction
-      minAmount: 1000,            // Le 1,000 minimum
+      dailyLimit: 5000,           // NLe 5,000 per day (~$222 USD)
+      monthlyLimit: 25000,        // NLe 25,000 per month
+      perTransactionLimit: 2500,  // NLe 2,500 per transaction
+      minAmount: 1,               // NLe 1 minimum
     });
 
     // Agent+ limits (much higher)
     this.userLimits.set('agent_plus', {
-      dailyLimit: 100000000,      // Le 100,000,000 per day
-      monthlyLimit: 500000000,    // Le 500,000,000 per month
-      perTransactionLimit: 50000000, // Le 50,000,000 per transaction
-      minAmount: 100,             // Le 100 minimum
+      dailyLimit: 100000,         // NLe 100,000 per day (~$4,444 USD)
+      monthlyLimit: 500000,       // NLe 500,000 per month
+      perTransactionLimit: 50000, // NLe 50,000 per transaction
+      minAmount: 0.10,            // NLe 0.10 minimum
     });
 
     // Merchant limits
     this.userLimits.set('merchant', {
-      dailyLimit: 50000000,       // Le 50,000,000 per day
-      monthlyLimit: 200000000,    // Le 200,000,000 per month
-      perTransactionLimit: 25000000, // Le 25,000,000 per transaction
-      minAmount: 100,             // Le 100 minimum
+      dailyLimit: 50000,          // NLe 50,000 per day (~$2,222 USD)
+      monthlyLimit: 200000,       // NLe 200,000 per month
+      perTransactionLimit: 25000, // NLe 25,000 per transaction
+      minAmount: 0.10,            // NLe 0.10 minimum
     });
   }
 

@@ -293,38 +293,38 @@ class P2PTransferService {
   }
 
   /**
-   * Get default limits by user type (in Leones)
+   * Get default limits by user type (in New Leone / SLE)
    */
   private getDefaultLimits(userType: string): TransferLimits {
     switch (userType) {
       case 'agent_plus':
         return {
-          dailyLimit: 100000000,      // Le 100,000,000 per day
-          monthlyLimit: 500000000,    // Le 500,000,000 per month
-          perTransactionLimit: 50000000, // Le 50,000,000 per transaction
-          minAmount: 100,             // Le 100 minimum
+          dailyLimit: 100000,         // NLe 100,000 per day (~$4,444 USD)
+          monthlyLimit: 500000,       // NLe 500,000 per month
+          perTransactionLimit: 50000, // NLe 50,000 per transaction
+          minAmount: 0.10,            // NLe 0.10 minimum
         };
       case 'agent':
         return {
-          dailyLimit: 20000000,       // Le 20,000,000 per day
-          monthlyLimit: 100000000,    // Le 100,000,000 per month
-          perTransactionLimit: 10000000, // Le 10,000,000 per transaction
-          minAmount: 500,             // Le 500 minimum
+          dailyLimit: 20000,          // NLe 20,000 per day (~$889 USD)
+          monthlyLimit: 100000,       // NLe 100,000 per month
+          perTransactionLimit: 10000, // NLe 10,000 per transaction
+          minAmount: 0.50,            // NLe 0.50 minimum
         };
       case 'merchant':
         return {
-          dailyLimit: 50000000,       // Le 50,000,000 per day
-          monthlyLimit: 200000000,    // Le 200,000,000 per month
-          perTransactionLimit: 25000000, // Le 25,000,000 per transaction
-          minAmount: 100,             // Le 100 minimum
+          dailyLimit: 50000,          // NLe 50,000 per day (~$2,222 USD)
+          monthlyLimit: 200000,       // NLe 200,000 per month
+          perTransactionLimit: 25000, // NLe 25,000 per transaction
+          minAmount: 0.10,            // NLe 0.10 minimum
         };
       case 'standard':
       default:
         return {
-          dailyLimit: 5000000,        // Le 5,000,000 per day
-          monthlyLimit: 25000000,     // Le 25,000,000 per month
-          perTransactionLimit: 2500000, // Le 2,500,000 per transaction
-          minAmount: 1000,            // Le 1,000 minimum
+          dailyLimit: 5000,           // NLe 5,000 per day (~$222 USD)
+          monthlyLimit: 25000,        // NLe 25,000 per month
+          perTransactionLimit: 2500,  // NLe 2,500 per transaction
+          minAmount: 1,               // NLe 1 minimum
         };
     }
   }
