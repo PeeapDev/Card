@@ -397,6 +397,8 @@ export function NotificationBell() {
   useEffect(() => {
     if (!user?.id) return;
 
+    console.log('[NotificationBell] Setting up realtime subscription for user:', user.id);
+
     // Subscribe to new notifications in real-time
     const channel = supabase
       .channel(`notifications:${user.id}`)
@@ -430,7 +432,9 @@ export function NotificationBell() {
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[NotificationBell] Subscription status:', status);
+      });
 
     // Initial fetch
     fetchUnreadCount();
