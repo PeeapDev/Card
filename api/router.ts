@@ -862,30 +862,15 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
           amount = parseFloat(pendingTx.amount?.toString() || '0');
           currency = pendingTx.currency || 'SLE';
 
-          // Get deposit fee settings
-          const { data: feeSettings } = await supabase
-            .from('payment_settings')
-            .select('deposit_fee_percent, deposit_fee_flat')
-            .eq('id', SETTINGS_ID)
-            .single();
-
-          // Calculate deposit fee
-          const feePercent = parseFloat(feeSettings?.deposit_fee_percent?.toString() || '0');
-          const feeFlat = parseFloat(feeSettings?.deposit_fee_flat?.toString() || '0');
-          const percentFee = amount * (feePercent / 100);
-          const depositFee = Math.round((percentFee + feeFlat) * 100) / 100; // Round to 2 decimals
-          const netAmount = amount - depositFee; // Amount credited to user's wallet
-
+          // No fees on deposits - we charge fees on withdrawals/payouts only
           console.log('[Deposit Success] Processing deposit:', {
             transactionId: pendingTx.id,
-            grossAmount: amount,
-            depositFee,
-            netAmount,
+            amount,
             currency,
             walletId
           });
 
-          // Credit the wallet with NET amount (after fee)
+          // Credit the wallet with full amount (no deposit fees)
           const { data: wallet, error: walletError } = await supabase
             .from('wallets')
             .select('balance')
@@ -898,12 +883,11 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
 
           if (wallet) {
             const currentBalance = parseFloat(wallet.balance?.toString() || '0');
-            newBalance = currentBalance + netAmount; // Credit net amount
+            newBalance = currentBalance + amount; // Credit full amount
 
             console.log('[Deposit Success] Updating wallet balance:', {
               currentBalance,
-              depositAmount: netAmount,
-              fee: depositFee,
+              depositAmount: amount,
               newBalance
             });
 
@@ -922,20 +906,15 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
               console.log('[Deposit Success] Wallet balance updated successfully');
             }
 
-            // Update transaction status with fee info
+            // Update transaction status (no fees on deposits)
             const { error: txUpdateError } = await supabase
               .from('transactions')
               .update({
                 status: 'COMPLETED',
-                fee: depositFee,
                 metadata: {
                   ...pendingTx.metadata,
                   completedAt: new Date().toISOString(),
                   monimeStatus: sessionStatus.status,
-                  grossAmount: amount,
-                  netAmount: netAmount,
-                  feePercent: feePercent,
-                  feeFlat: feeFlat,
                 }
               })
               .eq('id', pendingTx.id);
@@ -944,31 +923,7 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
               console.error('[Deposit Success] Failed to update transaction:', txUpdateError);
             }
 
-            // Record platform earning from deposit fee
-            if (depositFee > 0) {
-              try {
-                await supabase.from('platform_earnings').insert({
-                  earning_type: 'deposit_fee',
-                  source_type: 'user',
-                  source_id: pendingTx.user_id,
-                  transaction_id: pendingTx.id,
-                  amount: depositFee,
-                  currency: currency,
-                  description: `Deposit fee (${feePercent}% + Le ${feeFlat})`,
-                  metadata: {
-                    grossAmount: amount,
-                    netAmount: netAmount,
-                    feePercent: feePercent,
-                    feeFlat: feeFlat,
-                  }
-                });
-                console.log('[Deposit Success] Platform earning recorded:', { depositFee, currency });
-              } catch (earningErr) {
-                console.error('[Deposit Success] Failed to record platform earning:', earningErr);
-              }
-            }
-
-            console.log('[Deposit Success] Wallet credited:', { walletId, netAmount, fee: depositFee, newBalance });
+            console.log('[Deposit Success] Wallet credited:', { walletId, amount, newBalance });
 
             // Credit the system float - money came into the platform via mobile money
             try {
@@ -5754,6 +5709,28 @@ async function handleUserCashout(req: VercelRequest, res: VercelResponse) {
           console.error('[UserCashout] Failed to debit system float:', floatErr);
           // Don't fail the payout if float update fails
         }
+
+        // Record platform earning from withdrawal fee
+        if (fee > 0) {
+          try {
+            await supabase.from('platform_earnings').insert({
+              earning_type: 'withdrawal_fee',
+              source_type: 'user',
+              source_id: userId,
+              transaction_id: payout.id,
+              amount: fee,
+              currency: currency,
+              description: `User cashout fee (${feePercent}%)`,
+              metadata: {
+                payout_id: payout.id,
+                principal_amount: amount,
+              }
+            });
+            console.log('[UserCashout] Platform earning recorded:', { fee, currency });
+          } catch (earningErr) {
+            console.error('[UserCashout] Failed to record platform earning:', earningErr);
+          }
+        }
       }
 
       // Create notification
@@ -6108,6 +6085,29 @@ async function handleMerchantWithdraw(req: VercelRequest, res: VercelResponse) {
           console.log('[MerchantWithdraw] System float debited:', { amount, currency });
         } catch (floatErr) {
           console.error('[MerchantWithdraw] Failed to debit system float:', floatErr);
+        }
+
+        // Record platform earning from withdrawal fee
+        if (fee > 0) {
+          try {
+            await supabase.from('platform_earnings').insert({
+              earning_type: 'withdrawal_fee',
+              source_type: 'merchant',
+              source_id: merchantId,
+              transaction_id: payout.id,
+              amount: fee,
+              currency: currency,
+              description: `Merchant withdrawal fee (${feePercent}%)`,
+              metadata: {
+                payout_id: payout.id,
+                principal_amount: amount,
+                merchant_name: merchant.business_name,
+              }
+            });
+            console.log('[MerchantWithdraw] Platform earning recorded:', { fee, currency });
+          } catch (earningErr) {
+            console.error('[MerchantWithdraw] Failed to record platform earning:', earningErr);
+          }
         }
       }
 

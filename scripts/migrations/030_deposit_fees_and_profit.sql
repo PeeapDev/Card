@@ -1,15 +1,16 @@
 -- ============================================================================
--- DEPOSIT FEES AND PROFIT TRACKING
--- Add deposit fee settings and platform earnings tracking
+-- PLATFORM EARNINGS TRACKING
+-- Track profit from withdrawal fees, transaction fees, subscriptions, etc.
+-- Note: No fees on deposits - we charge 2% on withdrawals/payouts
 -- ============================================================================
 
--- Add deposit fee columns to payment_settings
+-- Add deposit fee columns to payment_settings (keeping for backwards compatibility, but set to 0)
 ALTER TABLE payment_settings ADD COLUMN IF NOT EXISTS deposit_fee_percent DECIMAL(5,2) DEFAULT 0;
 ALTER TABLE payment_settings ADD COLUMN IF NOT EXISTS deposit_fee_flat DECIMAL(10,2) DEFAULT 0;
 
--- Set default deposit fee (e.g., 1% fee on deposits)
+-- Ensure deposit fees are 0 (we don't charge on deposits)
 UPDATE payment_settings
-SET deposit_fee_percent = 1.0, deposit_fee_flat = 0
+SET deposit_fee_percent = 0, deposit_fee_flat = 0
 WHERE id = '00000000-0000-0000-0000-000000000001';
 
 -- Create platform_earnings table to track all platform profits
@@ -73,19 +74,19 @@ $$ LANGUAGE plpgsql;
 -- Enable RLS
 ALTER TABLE platform_earnings ENABLE ROW LEVEL SECURITY;
 
--- Only admins can view platform earnings
+-- Only admins can view platform earnings (using LIKE for text roles column)
 CREATE POLICY "Admins can view platform_earnings" ON platform_earnings
     FOR SELECT USING (
         EXISTS (
             SELECT 1 FROM users
             WHERE users.id = auth.uid()
-            AND (users.roles @> ARRAY['admin'] OR users.roles @> ARRAY['superadmin'])
+            AND (users.roles LIKE '%admin%' OR users.roles LIKE '%superadmin%')
         )
     );
 
 -- Comments
-COMMENT ON TABLE platform_earnings IS 'Platform earnings from transaction fees';
-COMMENT ON COLUMN platform_earnings.earning_type IS 'Type of earning: deposit_fee, withdrawal_fee, transaction_fee, checkout_fee';
+COMMENT ON TABLE platform_earnings IS 'Platform earnings from transaction fees (withdrawal, checkout, subscriptions)';
+COMMENT ON COLUMN platform_earnings.earning_type IS 'Type of earning: withdrawal_fee, transaction_fee, checkout_fee, subscription_fee';
 COMMENT ON COLUMN platform_earnings.source_type IS 'Source of earning: user or merchant';
-COMMENT ON COLUMN payment_settings.deposit_fee_percent IS 'Percentage fee charged on deposits';
-COMMENT ON COLUMN payment_settings.deposit_fee_flat IS 'Flat fee charged on deposits';
+COMMENT ON COLUMN payment_settings.deposit_fee_percent IS 'Deprecated - we do not charge deposit fees (set to 0)';
+COMMENT ON COLUMN payment_settings.deposit_fee_flat IS 'Deprecated - we do not charge deposit fees (set to 0)';

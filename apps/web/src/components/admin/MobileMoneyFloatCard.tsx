@@ -357,18 +357,9 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
             {/* Earnings Breakdown */}
             <div className="grid grid-cols-2 gap-2">
               <div className="p-2 bg-white/40 dark:bg-gray-800/40 rounded-lg">
-                <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400 mb-1">
-                  <ArrowDownRight className="w-3 h-3" />
-                  <span className="text-xs">Deposit Fees</span>
-                </div>
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                  {formatCurrency(earnings.depositFees)}
-                </p>
-              </div>
-              <div className="p-2 bg-white/40 dark:bg-gray-800/40 rounded-lg">
                 <div className="flex items-center gap-1 text-red-600 dark:text-red-400 mb-1">
                   <ArrowUpRight className="w-3 h-3" />
-                  <span className="text-xs">Withdrawal Fees</span>
+                  <span className="text-xs">Withdrawal Fees (2%)</span>
                 </div>
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">
                   {formatCurrency(earnings.withdrawalFees)}
@@ -390,6 +381,15 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
                 </div>
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">
                   {formatCurrency(earnings.checkoutFees)}
+                </p>
+              </div>
+              <div className="p-2 bg-white/40 dark:bg-gray-800/40 rounded-lg">
+                <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400 mb-1">
+                  <Building2 className="w-3 h-3" />
+                  <span className="text-xs">Subscriptions</span>
+                </div>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                  {formatCurrency(earnings.depositFees)}
                 </p>
               </div>
             </div>
