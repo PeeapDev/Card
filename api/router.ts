@@ -3988,14 +3988,44 @@ async function handleCheckoutSessionCardPay(req: VercelRequest, res: VercelRespo
     }
 
     // 2. Verify the card exists and belongs to the wallet
-    const { data: card, error: cardError } = await supabase
+    // First try the legacy 'cards' table
+    let card: { id: string; wallet_id: string; cardholder_name: string; cvv?: string; status: string; card_name?: string } | null = null;
+    let isIssuedCard = false;
+
+    const { data: legacyCard, error: cardError } = await supabase
       .from('cards')
       .select('id, wallet_id, cardholder_name, cvv, status')
       .eq('id', cardId)
       .single();
 
-    if (cardError || !card) {
-      console.error('[CardPay] Card not found:', cardId, cardError);
+    if (legacyCard) {
+      card = legacyCard;
+    } else {
+      // Try the issued_cards table (closed-loop virtual cards)
+      const { data: issuedCard, error: issuedCardError } = await supabase
+        .from('issued_cards')
+        .select('id, wallet_id, card_name, card_status, is_frozen')
+        .eq('id', cardId)
+        .single();
+
+      if (issuedCard) {
+        isIssuedCard = true;
+        card = {
+          id: issuedCard.id,
+          wallet_id: issuedCard.wallet_id,
+          cardholder_name: issuedCard.card_name,
+          status: issuedCard.card_status === 'active' ? 'ACTIVE' : issuedCard.card_status.toUpperCase(),
+        };
+
+        // Check if frozen
+        if (issuedCard.is_frozen) {
+          return res.status(400).json({ error: 'Card is frozen. Please unfreeze your card in the app.' });
+        }
+      }
+    }
+
+    if (!card) {
+      console.error('[CardPay] Card not found in either table:', cardId, cardError);
       return res.status(404).json({ error: 'Card not found' });
     }
 
@@ -4008,8 +4038,9 @@ async function handleCheckoutSessionCardPay(req: VercelRequest, res: VercelRespo
     }
 
     // 3. Verify the PIN (skip if CVV was already verified in step 1)
-    if (!cvvVerified) {
-      // If CVV wasn't verified in step 1, verify PIN against CVV
+    // For issued_cards, CVV was already verified via RPC in the frontend
+    if (!cvvVerified && !isIssuedCard) {
+      // Only for legacy cards, verify PIN against CVV
       if (!card.cvv) {
         return res.status(400).json({ error: 'Card CVV not set. Please contact support.' });
       }
@@ -4019,7 +4050,7 @@ async function handleCheckoutSessionCardPay(req: VercelRequest, res: VercelRespo
         return res.status(401).json({ error: 'Invalid PIN. Please check and try again.' });
       }
     }
-    // If cvvVerified is true, we trust that CVV was already validated in the frontend
+    // If cvvVerified is true OR isIssuedCard, we trust that CVV was already validated
 
     // 4. Get wallet and check balance
     const { data: wallet, error: walletError } = await supabase

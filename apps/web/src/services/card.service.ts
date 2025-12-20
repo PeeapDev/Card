@@ -1205,6 +1205,7 @@ export const cardService = {
   /**
    * Look up a card by its 16-digit number and CVV for payment
    * Returns card info with wallet balance (no sensitive data)
+   * Checks both the legacy 'cards' table and 'issued_cards' (closed-loop virtual cards)
    */
   async lookupCardForPayment(cardNumber: string, cvv?: string): Promise<{
     cardId: string;
@@ -1218,7 +1219,38 @@ export const cardService = {
     // Clean the card number (remove spaces/dashes)
     const cleanNumber = cardNumber.replace(/[\s-]/g, '');
 
+    console.log('[CardService] Looking up card for payment:', cleanNumber.slice(-4));
 
+    // First, try the issued_cards table (closed-loop virtual cards) using RPC function
+    // This function handles CVV verification using bcrypt comparison
+    if (cvv) {
+      const { data: issuedCardResult, error: rpcError } = await supabase.rpc('lookup_issued_card_for_payment', {
+        p_card_number: cleanNumber,
+        p_cvv: cvv,
+      });
+
+      console.log('[CardService] RPC result:', issuedCardResult, 'error:', rpcError);
+
+      if (!rpcError && issuedCardResult) {
+        // RPC function returns a JSON object
+        if (issuedCardResult.success) {
+          return {
+            cardId: issuedCardResult.cardId,
+            maskedNumber: issuedCardResult.maskedNumber,
+            cardholderName: issuedCardResult.cardholderName,
+            walletId: issuedCardResult.walletId,
+            walletBalance: parseFloat(issuedCardResult.walletBalance) || 0,
+            currency: issuedCardResult.currency || 'SLE',
+            status: issuedCardResult.status,
+          };
+        } else if (issuedCardResult.error) {
+          // Card was found but validation failed (wrong CVV, frozen, etc.)
+          throw new Error(issuedCardResult.error);
+        }
+      }
+    }
+
+    // Fallback: Try the legacy 'cards' table
     const { data, error } = await supabase
       .from('cards')
       .select(`
@@ -1234,6 +1266,7 @@ export const cardService = {
       .eq('card_number', cleanNumber)
       .maybeSingle();
 
+    console.log('[CardService] Legacy cards query result:', data, 'error:', error);
 
     if (error) {
       console.error('[CardService] Error looking up card:', error);
