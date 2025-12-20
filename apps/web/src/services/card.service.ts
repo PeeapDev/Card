@@ -28,7 +28,7 @@ export interface IssuedCard {
   cardColor: string;
   expiryMonth: number;
   expiryYear: number;
-  cvv: string;
+  cvv?: string; // Only available at creation time, not stored
   cardStatus: 'pending' | 'active' | 'frozen' | 'blocked' | 'expired';
   isFrozen: boolean;
   dailyLimit: number;
@@ -1365,7 +1365,6 @@ export const cardService = {
       cardColor: row.card_color || '#1a1a2e',
       expiryMonth: row.expiry_month || 12,
       expiryYear: row.expiry_year || new Date().getFullYear() + 3,
-      cvv: row.cvv || '',
       cardStatus: row.card_status || 'pending',
       isFrozen: row.is_frozen || false,
       dailyLimit: parseFloat(row.daily_limit) || 100000,
@@ -1425,7 +1424,6 @@ export const cardService = {
       cardColor: data.card_color || '#1a1a2e',
       expiryMonth: data.expiry_month || 12,
       expiryYear: data.expiry_year || new Date().getFullYear() + 3,
-      cvv: data.cvv || '',
       cardStatus: data.card_status || 'pending',
       isFrozen: data.is_frozen || false,
       dailyLimit: parseFloat(data.daily_limit) || 100000,
