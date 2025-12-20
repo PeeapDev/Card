@@ -30,6 +30,7 @@ import {
 import { Card, CardHeader, CardTitle, Button, Input } from '@/components/ui';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useAuth } from '@/context/AuthContext';
+import { useNotification } from '@/context/NotificationContext';
 import { useWallets } from '@/hooks/useWallets';
 import { clsx } from 'clsx';
 import { useNavigate } from 'react-router-dom';
@@ -44,6 +45,7 @@ import { formatDistanceToNow } from 'date-fns';
 export function VirtualCardsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { showToast } = useNotification();
   const { data: wallets } = useWallets();
 
   // State
@@ -165,11 +167,27 @@ export function VirtualCardsPage() {
           cvv: result.cvv,
         });
         loadCards();
+        // Show success toast notification
+        showToast({
+          type: 'success',
+          title: 'Virtual Card Created!',
+          message: `Your new card ending in ${result.cardLastFour} has been created. Save your activation code and CVV securely.`,
+        });
       } else {
         setError(result.error || 'Failed to request card');
+        showToast({
+          type: 'error',
+          title: 'Card Creation Failed',
+          message: result.error || 'Failed to request card',
+        });
       }
     } catch (err: any) {
       setError(err.message || 'Failed to request card');
+      showToast({
+        type: 'error',
+        title: 'Card Creation Failed',
+        message: err.message || 'Failed to request card',
+      });
     } finally {
       setIsRequesting(false);
     }
@@ -187,11 +205,27 @@ export function VirtualCardsPage() {
         setShowActivationModal(false);
         setActivationCode('');
         loadCards();
+        // Show success toast notification
+        showToast({
+          type: 'success',
+          title: 'Card Activated!',
+          message: `Your virtual card ending in ${selectedCard.cardLastFour} is now active and ready to use.`,
+        });
       } else {
         setError(result.error || 'Invalid activation code');
+        showToast({
+          type: 'error',
+          title: 'Activation Failed',
+          message: result.error || 'Invalid activation code',
+        });
       }
     } catch (err: any) {
       setError(err.message || 'Failed to activate card');
+      showToast({
+        type: 'error',
+        title: 'Activation Failed',
+        message: err.message || 'Failed to activate card',
+      });
     } finally {
       setIsActivating(false);
     }
