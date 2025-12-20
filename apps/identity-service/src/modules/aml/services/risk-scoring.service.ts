@@ -7,6 +7,7 @@ import {
   User,
   RiskLevel,
   ReviewFrequency,
+  KycStatus,
 } from '@payment-system/database';
 import { UpdateRiskProfileDto } from '../dto/aml.dto';
 
@@ -71,8 +72,8 @@ export class RiskScoringService {
     profile.kycRiskScore = this.calculateKycRiskScore(user);
 
     // Geographic risk score
-    if (user.nationality || (user.address as any)?.country) {
-      const country = user.nationality || (user.address as any)?.country;
+    if ((user as any).nationality || (user.address as any)?.country) {
+      const country = (user as any).nationality || (user.address as any)?.country;
       profile.geographicRiskScore = await this.calculateGeographicRiskScore(country);
       profile.residenceCountry = country;
     }
@@ -95,17 +96,16 @@ export class RiskScoringService {
     let score = 50; // Base score for unverified
 
     switch (user.kycStatus) {
-      case 'APPROVED':
+      case KycStatus.APPROVED:
         score = 10;
         break;
-      case 'PENDING':
-      case 'UNDER_REVIEW':
+      case KycStatus.PENDING:
         score = 30;
         break;
-      case 'REJECTED':
+      case KycStatus.REJECTED:
         score = 70;
         break;
-      case 'EXPIRED':
+      case KycStatus.EXPIRED:
         score = 60;
         break;
       default:

@@ -15,8 +15,11 @@ import {
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
+  ApiBody,
 } from '@nestjs/swagger';
 import { KycService } from './kyc.service';
+import { SLVerificationService } from './sl-verification.service';
+import { MonimeKycService } from './monime-kyc.service';
 import { SubmitKycDto, ReviewKycDto } from './dto/kyc.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -30,12 +33,44 @@ interface AuthenticatedUser {
   roles: string[];
 }
 
+class SierraLeoneVerificationDto {
+  idCardFrontBase64: string;
+  idCardBackBase64?: string;
+  mimeType?: string;
+  phoneNumber: string;
+}
+
+class ProviderKycDto {
+  phoneNumber: string;
+  provider?: string;
+}
+
+class MatchNamesDto {
+  idFirstName: string;
+  idLastName: string;
+  simRegisteredName: string;
+}
+
+class InitiatePhoneOtpDto {
+  phoneNumber: string;
+}
+
+class VerifyPhoneOtpDto {
+  phoneNumber: string;
+  otp: string;
+  requestId: string;
+}
+
 @ApiTags('KYC')
 @Controller('kyc')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class KycController {
-  constructor(private readonly kycService: KycService) {}
+  constructor(
+    private readonly kycService: KycService,
+    private readonly slVerificationService: SLVerificationService,
+    private readonly monimeKycService: MonimeKycService,
+  ) {}
 
   @Get('status')
   @ApiOperation({ summary: 'Get current user KYC status' })
@@ -80,6 +115,81 @@ export class KycController {
   @ApiResponse({ status: 204, description: 'Application cancelled' })
   async cancel(@CurrentUser() user: AuthenticatedUser) {
     await this.kycService.cancelApplication(user.userId);
+  }
+
+  // Sierra Leone Verification Endpoints
+  @Get('verification/status')
+  @ApiOperation({ summary: 'Get Sierra Leone verification status' })
+  @ApiResponse({ status: 200, description: 'Verification status' })
+  async getVerificationStatus(@CurrentUser() user: AuthenticatedUser) {
+    return this.slVerificationService.getVerificationStatus(user.userId);
+  }
+
+  @Get('verification/required')
+  @ApiOperation({ summary: 'Check if verification is required' })
+  @ApiResponse({ status: 200, description: 'Verification requirement status' })
+  async checkVerificationRequired(@CurrentUser() user: AuthenticatedUser) {
+    return this.slVerificationService.checkVerificationRequired(user.userId);
+  }
+
+  @Post('verification/sierra-leone')
+  @ApiOperation({ summary: 'Submit Sierra Leone ID verification' })
+  @ApiResponse({ status: 201, description: 'Verification result' })
+  @ApiBody({ type: SierraLeoneVerificationDto })
+  async verifySierraLeoneId(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: SierraLeoneVerificationDto,
+  ) {
+    return this.slVerificationService.verifySierraLeoneId({
+      userId: user.userId,
+      idCardFrontBase64: dto.idCardFrontBase64,
+      idCardBackBase64: dto.idCardBackBase64,
+      mimeType: dto.mimeType,
+      phoneNumber: dto.phoneNumber,
+    });
+  }
+
+  @Post('verification/provider-kyc')
+  @ApiOperation({ summary: 'Get SIM registered name from Monime' })
+  @ApiResponse({ status: 200, description: 'Provider KYC result' })
+  @ApiBody({ type: ProviderKycDto })
+  async getProviderKyc(@Body() dto: ProviderKycDto) {
+    return this.monimeKycService.getProviderKyc(dto.phoneNumber, dto.provider);
+  }
+
+  @Post('verification/match-names')
+  @ApiOperation({ summary: 'Check if names match' })
+  @ApiResponse({ status: 200, description: 'Name match result' })
+  @ApiBody({ type: MatchNamesDto })
+  async matchNames(@Body() dto: MatchNamesDto) {
+    return this.monimeKycService.matchNames(dto.idFirstName, dto.idLastName, dto.simRegisteredName);
+  }
+
+  @Post('verification/phone/initiate')
+  @ApiOperation({ summary: 'Initiate phone OTP verification' })
+  @ApiResponse({ status: 200, description: 'OTP sent' })
+  @ApiBody({ type: InitiatePhoneOtpDto })
+  async initiatePhoneOtp(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: InitiatePhoneOtpDto,
+  ) {
+    return this.slVerificationService.initiatePhoneVerification(user.userId, dto.phoneNumber);
+  }
+
+  @Post('verification/phone/verify')
+  @ApiOperation({ summary: 'Verify phone with OTP' })
+  @ApiResponse({ status: 200, description: 'OTP verification result' })
+  @ApiBody({ type: VerifyPhoneOtpDto })
+  async verifyPhoneOtp(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: VerifyPhoneOtpDto,
+  ) {
+    return this.slVerificationService.completePhoneVerification(
+      user.userId,
+      dto.phoneNumber,
+      dto.otp,
+      dto.requestId,
+    );
   }
 
   // Admin endpoints

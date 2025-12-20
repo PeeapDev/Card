@@ -38,9 +38,7 @@ export interface IssuedCard {
   dailySpent: number;
   contactlessEnabled: boolean;
   internationalEnabled: boolean;
-  onlineEnabled: boolean;
   onlinePaymentsEnabled: boolean;
-  atmEnabled: boolean;
   atmWithdrawalsEnabled: boolean;
   spentToday: number;
   spentThisMonth: number;
@@ -1377,9 +1375,7 @@ export const cardService = {
       dailySpent: parseFloat(row.daily_spent) || 0,
       contactlessEnabled: row.contactless_enabled ?? true,
       internationalEnabled: row.international_enabled ?? false,
-      onlineEnabled: row.online_enabled ?? true,
       onlinePaymentsEnabled: row.online_payments_enabled ?? true,
-      atmEnabled: row.atm_enabled ?? false,
       atmWithdrawalsEnabled: row.atm_withdrawals_enabled ?? false,
       spentToday: parseFloat(row.spent_today) || 0,
       spentThisMonth: parseFloat(row.spent_this_month) || 0,
@@ -1439,9 +1435,7 @@ export const cardService = {
       dailySpent: parseFloat(data.daily_spent) || 0,
       contactlessEnabled: data.contactless_enabled ?? true,
       internationalEnabled: data.international_enabled ?? false,
-      onlineEnabled: data.online_enabled ?? true,
       onlinePaymentsEnabled: data.online_payments_enabled ?? true,
-      atmEnabled: data.atm_enabled ?? false,
       atmWithdrawalsEnabled: data.atm_withdrawals_enabled ?? false,
       spentToday: parseFloat(data.spent_today) || 0,
       spentThisMonth: parseFloat(data.spent_this_month) || 0,
@@ -1561,9 +1555,7 @@ export const cardService = {
         per_transaction_limit: 50000,
         contactless_enabled: true,
         international_enabled: false,
-        online_enabled: true,
         online_payments_enabled: true,
-        atm_enabled: false,
         atm_withdrawals_enabled: false,
       })
       .select()
@@ -1683,17 +1675,13 @@ export const cardService = {
   async updateCardControls(cardId: string, userId: string, controls: {
     contactlessEnabled?: boolean;
     internationalEnabled?: boolean;
-    onlineEnabled?: boolean;
     onlinePaymentsEnabled?: boolean;
-    atmEnabled?: boolean;
     atmWithdrawalsEnabled?: boolean;
   }): Promise<void> {
     const updates: any = { updated_at: new Date().toISOString() };
     if (controls.contactlessEnabled !== undefined) updates.contactless_enabled = controls.contactlessEnabled;
     if (controls.internationalEnabled !== undefined) updates.international_enabled = controls.internationalEnabled;
-    if (controls.onlineEnabled !== undefined) updates.online_enabled = controls.onlineEnabled;
     if (controls.onlinePaymentsEnabled !== undefined) updates.online_payments_enabled = controls.onlinePaymentsEnabled;
-    if (controls.atmEnabled !== undefined) updates.atm_enabled = controls.atmEnabled;
     if (controls.atmWithdrawalsEnabled !== undefined) updates.atm_withdrawals_enabled = controls.atmWithdrawalsEnabled;
 
     const { error } = await supabase

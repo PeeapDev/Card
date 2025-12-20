@@ -14879,12 +14879,22 @@
       },
       {
         "source": "identity-service",
-        "target": "npm:express",
+        "target": "npm:class-validator",
+        "type": "static"
+      },
+      {
+        "source": "identity-service",
+        "target": "npm:class-transformer",
         "type": "static"
       },
       {
         "source": "identity-service",
         "target": "npm:typeorm",
+        "type": "static"
+      },
+      {
+        "source": "identity-service",
+        "target": "npm:express",
         "type": "static"
       },
       {
@@ -14895,11 +14905,6 @@
       {
         "source": "identity-service",
         "target": "npm:speakeasy",
-        "type": "static"
-      },
-      {
-        "source": "identity-service",
-        "target": "npm:class-validator",
         "type": "static"
       },
       {
@@ -14915,11 +14920,6 @@
       {
         "source": "identity-service",
         "target": "npm:@nestjs/terminus",
-        "type": "static"
-      },
-      {
-        "source": "identity-service",
-        "target": "npm:class-transformer",
         "type": "static"
       },
       {
@@ -15043,7 +15043,7 @@
       },
       {
         "source": "account-service",
-        "target": "npm:@nestjs/terminus",
+        "target": "npm:class-validator",
         "type": "static"
       },
       {
@@ -15053,7 +15053,7 @@
       },
       {
         "source": "account-service",
-        "target": "npm:class-validator",
+        "target": "npm:@nestjs/terminus",
         "type": "static"
       },
       {

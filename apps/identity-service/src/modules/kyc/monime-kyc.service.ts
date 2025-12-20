@@ -1,8 +1,10 @@
-import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User } from '@payment-system/database';
+import { User, PaymentSettings } from '@payment-system/database';
+
+const DEFAULT_SETTINGS_ID = '00000000-0000-0000-0000-000000000001';
 
 export interface MonimeKycCredentials {
   accessToken: string;
@@ -51,16 +53,30 @@ export class MonimeKycService {
     private readonly configService: ConfigService,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(PaymentSettings)
+    private readonly settingsRepository: Repository<PaymentSettings>,
   ) {
     this.baseUrl = this.configService.get<string>('MONIME_API_URL', 'https://api.monime.io');
   }
 
   private async getCredentials(): Promise<MonimeKycCredentials> {
-    // Get credentials from environment or settings
-    const accessToken = this.configService.get<string>('MONIME_ACCESS_TOKEN', '');
-    const spaceId = this.configService.get<string>('MONIME_SPACE_ID', '');
+    // Get credentials from PaymentSettings in database (same as account-service)
+    const settings = await this.settingsRepository.findOne({
+      where: { id: DEFAULT_SETTINGS_ID },
+    });
 
-    return { accessToken, spaceId };
+    if (settings) {
+      return {
+        accessToken: settings.monimeAccessToken || '',
+        spaceId: settings.monimeSpaceId || '',
+      };
+    }
+
+    // Fallback to environment variables
+    return {
+      accessToken: this.configService.get<string>('MONIME_ACCESS_TOKEN', ''),
+      spaceId: this.configService.get<string>('MONIME_SPACE_ID', ''),
+    };
   }
 
   private getHeaders(credentials: MonimeKycCredentials): Record<string, string> {
@@ -106,7 +122,13 @@ export class MonimeKycService {
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json() as {
+        message?: string;
+        accountHolderName?: string;
+        name?: string;
+        holderName?: string;
+        kycStatus?: string;
+      };
 
       if (!response.ok) {
         this.logger.error(`Provider KYC failed: ${JSON.stringify(data)}`);
@@ -119,7 +141,7 @@ export class MonimeKycService {
       return {
         success: true,
         data: {
-          accountHolderName: data.accountHolderName || data.name || data.holderName,
+          accountHolderName: data.accountHolderName || data.name || data.holderName || '',
           accountNumber: normalizedPhone,
           provider: providerCode,
           kycStatus: data.kycStatus || 'verified',
@@ -264,7 +286,7 @@ export class MonimeKycService {
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json() as { message?: string; requestId?: string; id?: string };
 
       if (!response.ok) {
         return {
@@ -318,7 +340,7 @@ export class MonimeKycService {
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json() as { verified?: boolean; message?: string };
 
       if (!response.ok) {
         return {

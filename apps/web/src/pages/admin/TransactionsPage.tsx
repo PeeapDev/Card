@@ -15,11 +15,16 @@ import {
   ChevronDown,
   CreditCard,
   DollarSign,
+  TrendingUp,
+  Activity,
+  FileSearch,
 } from 'lucide-react';
 import { Card, MotionCard } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
 import { currencyService, Currency } from '@/services/currency.service';
+import { AdminPageHeader, QuickStatsBar, StatItem } from '@/components/admin/AdminPageHeader';
+import { DataTableToolbar, FilterConfig, EmptyState } from '@/components/admin/DataTableToolbar';
 
 interface Transaction {
   id: string;
@@ -163,6 +168,95 @@ export function TransactionsPage() {
     }
   };
 
+  // Export transactions to CSV
+  const exportTransactions = () => {
+    const headers = ['ID', 'Customer', 'Amount', 'Currency', 'Type', 'Status', 'Merchant', 'Date'];
+    const csvContent = [
+      headers.join(','),
+      ...filteredTransactions.map(txn => [
+        txn.id,
+        `"${txn.customerName}"`,
+        txn.amount,
+        txn.currency,
+        txn.type,
+        txn.status,
+        `"${txn.merchantName}"`,
+        new Date(txn.createdAt).toISOString(),
+      ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `transactions-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  // Header stats
+  const headerStats: StatItem[] = [
+    {
+      label: 'Total Transactions',
+      value: stats.totalTransactions.toLocaleString(),
+      icon: <ArrowLeftRight className="w-4 h-4" />,
+      color: 'primary',
+    },
+    {
+      label: 'Volume',
+      value: `${currencySymbol}${(stats.volume / 1000000).toFixed(2)}M`,
+      icon: <TrendingUp className="w-4 h-4" />,
+      color: 'green',
+    },
+    {
+      label: 'Success Rate',
+      value: `${stats.successRate.toFixed(1)}%`,
+      icon: <CheckCircle className="w-4 h-4" />,
+      color: 'green',
+    },
+    {
+      label: 'Pending',
+      value: stats.pending.toString(),
+      icon: <Clock className="w-4 h-4" />,
+      color: 'yellow',
+    },
+    {
+      label: 'Failed',
+      value: stats.failed.toString(),
+      icon: <XCircle className="w-4 h-4" />,
+      color: 'red',
+    },
+  ];
+
+  // Filter configurations
+  const filterConfigs: FilterConfig[] = [
+    {
+      key: 'type',
+      label: 'Type',
+      options: [
+        { value: 'all', label: 'All Types' },
+        { value: 'authorization', label: 'Authorization' },
+        { value: 'clearing', label: 'Clearing' },
+        { value: 'refund', label: 'Refund' },
+        { value: 'transfer', label: 'Transfer' },
+      ],
+      value: filter,
+      onChange: (value: string) => setFilter(value as typeof filter),
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      options: [
+        { value: 'all', label: 'All Status' },
+        { value: 'completed', label: 'Completed' },
+        { value: 'pending', label: 'Pending' },
+        { value: 'failed', label: 'Failed' },
+      ],
+      value: statusFilter,
+      onChange: (value: string) => setStatusFilter(value as typeof statusFilter),
+    },
+  ];
+
   const getTypeBadge = (type: string) => {
     switch (type) {
       case 'authorization':
@@ -214,102 +308,47 @@ export function TransactionsPage() {
   return (
     <AdminLayout>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Transactions</h1>
-            <p className="text-gray-500 dark:text-gray-400">View and manage all transactions</p>
-          </div>
-          <div className="flex gap-3">
-            <button className="px-4 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center gap-2">
-              <RefreshCw className="w-4 h-4" />
-              Refresh
-            </button>
-            <button className="px-4 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center gap-2">
-              <Download className="w-4 h-4" />
-              Export
-            </button>
-          </div>
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-          <MotionCard className="p-4" delay={0}>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Total Transactions</p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalTransactions.toLocaleString()}</p>
-          </MotionCard>
-          <MotionCard className="p-4" delay={0.1}>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Total Volume</p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">{currencySymbol}{(stats.volume / 1000000).toFixed(2)}M</p>
-          </MotionCard>
-          <MotionCard className="p-4" delay={0.2}>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Pending</p>
-            <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{stats.pending}</p>
-          </MotionCard>
-          <MotionCard className="p-4" delay={0.3}>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Failed</p>
-            <p className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.failed}</p>
-          </MotionCard>
-          <MotionCard className="p-4" delay={0.4}>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Avg Transaction</p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">{currencySymbol}{stats.avgValue.toFixed(2)}</p>
-          </MotionCard>
-          <MotionCard className="p-4" delay={0.5}>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Success Rate</p>
-            <p className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.successRate}%</p>
-          </MotionCard>
-        </div>
+        {/* Header with Stats */}
+        <AdminPageHeader
+          title="Transactions"
+          description="View and manage all payment transactions across the platform"
+          icon={<ArrowLeftRight className="w-6 h-6" />}
+          breadcrumbs={[
+            { label: 'Admin', href: '/admin' },
+            { label: 'Transactions' },
+          ]}
+          onRefresh={fetchTransactions}
+          refreshing={loading}
+          onExport={exportTransactions}
+          stats={<QuickStatsBar stats={headerStats} />}
+        />
 
         {/* Filters */}
         <Card className="p-4">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex-1 min-w-64">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search by ID, customer, or merchant..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-gray-400" />
-              <div className="relative">
-                <select
-                  value={filter}
-                  onChange={(e) => setFilter(e.target.value as typeof filter)}
-                  className="appearance-none border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 pr-8 text-sm focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                >
-                  <option value="all">All Types</option>
-                  <option value="authorization">Authorization</option>
-                  <option value="clearing">Clearing</option>
-                  <option value="refund">Refund</option>
-                  <option value="transfer">Transfer</option>
-                </select>
-                <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-              </div>
-              <div className="relative">
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-                  className="appearance-none border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 pr-8 text-sm focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                >
-                  <option value="all">All Status</option>
-                  <option value="completed">Completed</option>
-                  <option value="pending">Pending</option>
-                  <option value="failed">Failed</option>
-                </select>
-                <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-              </div>
-            </div>
-          </div>
+          <DataTableToolbar
+            searchValue={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchPlaceholder="Search by ID, customer, or merchant..."
+            filters={filterConfigs}
+            totalCount={stats.totalTransactions}
+            onExport={exportTransactions}
+          />
         </Card>
 
         {/* Transactions Table */}
         <Card className="overflow-hidden">
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <RefreshCw className="w-8 h-8 text-gray-400 animate-spin" />
+            </div>
+          ) : filteredTransactions.length === 0 ? (
+            <EmptyState
+              icon={<FileSearch className="w-12 h-12" />}
+              title="No transactions found"
+              description={searchQuery ? "Try adjusting your search or filters" : "Transactions will appear here once customers start making payments"}
+            />
+          ) : (
+          <>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
@@ -420,6 +459,8 @@ export function TransactionsPage() {
               </button>
             </div>
           </div>
+          </>
+          )}
         </Card>
       </div>
     </AdminLayout>

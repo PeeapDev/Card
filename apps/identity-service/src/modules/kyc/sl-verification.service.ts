@@ -1,7 +1,7 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User, KycApplication, KycApplicationStatus, KycDocumentType } from '@payment-system/database';
+import { User, KycApplication, KycApplicationStatus } from '@payment-system/database';
 import { OcrService, ExtractedIdData, SierraLeoneIdData } from './ocr.service';
 import { MonimeKycService, PhoneVerificationResult, NameMatchResult } from './monime-kyc.service';
 
@@ -99,6 +99,29 @@ export class SLVerificationService {
       issues.push('Could not extract name from ID card');
     }
 
+    // Check if date of birth was extracted
+    if (!idData.dateOfBirth) {
+      issues.push('Could not extract date of birth from ID card');
+    }
+
+    // Check if ID card is expired
+    let isExpired = false;
+    if (idData.expiryDate) {
+      const expiryDate = new Date(idData.expiryDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      if (expiryDate < today) {
+        isExpired = true;
+        issues.push(`ID card has expired on ${idData.expiryDate}. Please provide a valid, non-expired ID card.`);
+        this.logger.warn(`ID card expired for user ${request.userId}. Expiry date: ${idData.expiryDate}`);
+      } else {
+        this.logger.log(`ID card is valid. Expiry date: ${idData.expiryDate}`);
+      }
+    } else {
+      this.logger.warn('Could not extract expiry date from ID card - manual review may be required');
+    }
+
     stage = 'phone_verification';
 
     // Step 3: Verify phone number with provider KYC
@@ -129,8 +152,10 @@ export class SLVerificationService {
     );
 
     // Determine overall verification status
+    // ID must have NIN, not be expired, phone verified, and name match score >= 70
     const verified =
       !!idData.nin &&
+      !isExpired &&
       phoneVerification.verified &&
       nameMatch.score >= 70;
 
@@ -140,43 +165,71 @@ export class SLVerificationService {
       order: { createdAt: 'DESC' },
     });
 
-    const kycData = {
-      idCardData: idData,
-      phoneVerification: {
+    // Store verification data in verificationResult field
+    const verificationResultData = {
+      documentCheck: !!idData.nin,
+      faceMatch: false,
+      addressVerified: false,
+      watchlistClear: true,
+      riskScore: nameMatch.score,
+      notes: `Sierra Leone ID verification. Phone: ${request.phoneNumber}`,
+      documentType: 'SIERRA_LEONE_NID',
+      extractedData: {
+        documentType: 'SIERRA_LEONE_NID',
+        documentNumber: idData.nin,
+        firstName: idData.firstName,
+        lastName: idData.lastName,
+        fullName: idData.fullName,
+        dateOfBirth: idData.dateOfBirth,
+        expiryDate: idData.expiryDate,
+        dateOfIssue: (idData as SierraLeoneIdData).dateOfIssue,
+        gender: idData.gender,
+        nationality: 'Sierra Leonean',
+        placeOfBirth: (idData as SierraLeoneIdData).placeOfBirth,
+        district: (idData as SierraLeoneIdData).district,
+        confidence: idData.confidence || 0,
+      },
+      matchScore: nameMatch.score,
+      issues,
+      ocrProcessedAt: new Date().toISOString(),
+      // ID card image for admin verification
+      idCardImage: request.idCardFrontBase64,
+      idCardImageMimeType: request.mimeType || 'image/jpeg',
+      idCardCapturedAt: new Date().toISOString(),
+      // Sierra Leone specific fields stored in notes-style JSON
+      slVerification: {
+        nin: idData.nin,
         phoneNumber: request.phoneNumber,
         simRegisteredName: phoneVerification.simRegisteredName,
-        verified: phoneVerification.verified,
+        idCardName: idData.fullName || `${idData.firstName || ''} ${idData.lastName || ''}`.trim(),
+        dateOfBirth: idData.dateOfBirth,
+        expiryDate: idData.expiryDate,
+        isExpired,
+        phoneVerified: phoneVerification.verified,
         nameMatchScore: nameMatch.score,
         verificationMethod: phoneVerification.verificationMethod,
-      },
-      verificationResult: {
         verified,
-        stage: verified ? 'completed' : stage,
-        issues,
         completedAt: verified ? new Date().toISOString() : undefined,
       },
-    };
+    } as any;
 
     if (kycApplication) {
       // Update existing application
-      kycApplication.documents = {
-        ...kycApplication.documents,
-        sierraLeoneVerification: kycData,
-      };
+      kycApplication.verificationResult = verificationResultData;
       kycApplication.status = verified ? KycApplicationStatus.APPROVED : KycApplicationStatus.PENDING;
-      kycApplication.verificationStatus = verified ? 'verified' : 'pending_review';
+      kycApplication.firstName = idData.firstName;
+      kycApplication.lastName = idData.lastName;
+      kycApplication.idNumber = idData.nin;
       await this.kycApplicationRepository.save(kycApplication);
     } else {
       // Create new KYC application
       kycApplication = this.kycApplicationRepository.create({
         userId: request.userId,
         status: verified ? KycApplicationStatus.APPROVED : KycApplicationStatus.PENDING,
-        documentType: 'SIERRA_LEONE_NID' as any,
-        documents: {
-          sierraLeoneVerification: kycData,
-        },
-        verificationStatus: verified ? 'verified' : 'pending_review',
-        extractedData: idData,
+        firstName: idData.firstName,
+        lastName: idData.lastName,
+        idNumber: idData.nin,
+        verificationResult: verificationResultData,
       });
       await this.kycApplicationRepository.save(kycApplication);
     }
@@ -230,20 +283,21 @@ export class SLVerificationService {
     });
 
     const metadata = (user as any).metadata || {};
-    const slVerification = kycApplication?.documents?.sierraLeoneVerification;
+    const slVerification = (kycApplication?.verificationResult as any)?.slVerification;
 
     const hasIdVerification = !!(
-      slVerification?.idCardData?.nin ||
+      slVerification?.nin ||
+      kycApplication?.verificationResult?.extractedData?.documentNumber ||
       metadata.nin
     );
 
     const hasPhoneVerification = !!(
-      slVerification?.phoneVerification?.verified ||
+      slVerification?.phoneVerified ||
       metadata.phoneVerifiedAt
     );
 
     const hasNameMatch = (
-      slVerification?.phoneVerification?.nameMatchScore >= 70
+      (slVerification?.nameMatchScore || 0) >= 70
     );
 
     const overallVerified = hasIdVerification && hasPhoneVerification && hasNameMatch;
@@ -270,10 +324,10 @@ export class SLVerificationService {
       overallVerified,
       verificationPercentage: percentage,
       pendingSteps,
-      idCardName: slVerification?.idCardData?.fullName,
-      simRegisteredName: slVerification?.phoneVerification?.simRegisteredName,
-      nin: slVerification?.idCardData?.nin || metadata.nin,
-      phoneNumber: slVerification?.phoneVerification?.phoneNumber || metadata.phoneVerifiedNumber,
+      idCardName: slVerification?.idCardName || kycApplication?.verificationResult?.extractedData?.fullName,
+      simRegisteredName: slVerification?.simRegisteredName,
+      nin: slVerification?.nin || kycApplication?.verificationResult?.extractedData?.documentNumber || metadata.nin,
+      phoneNumber: slVerification?.phoneNumber || metadata.phoneVerifiedNumber,
     };
   }
 

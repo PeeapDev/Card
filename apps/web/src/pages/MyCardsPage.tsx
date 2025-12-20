@@ -124,7 +124,7 @@ export function MyCardsPage() {
   // Handle virtual card freeze/unfreeze
   const handleToggleVirtualCardFreeze = async (card: IssuedCard) => {
     try {
-      await cardService.toggleCardFreeze(card.id, user!.id);
+      await cardService.toggleCardFreeze(card.id, user!.id, !card.isFrozen);
       // Refresh virtual cards
       const cards = await cardService.getIssuedCards(user!.id);
       setVirtualCards(cards);
@@ -520,34 +520,54 @@ export function MyCardsPage() {
               </div>
             )}
           </div>
-        ) : (
-          <Card className="text-center py-12">
-            <CreditCard className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No cards yet</h3>
-            <p className="text-gray-500 mb-4">Get your first card from the marketplace</p>
-            <Button onClick={() => navigate('/cards/marketplace')}>
-              <Plus className="w-4 h-4 mr-2" />
-              Browse Cards
-            </Button>
-          </Card>
+        ) : null}
+
+        {/* Empty States - 50/50 Grid Layout */}
+        {(!cards || cards.length === 0 || virtualCards.length === 0) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+            {/* Browse Physical Cards */}
+            {(!cards || cards.length === 0) && (
+              <Card className="text-center py-8">
+                <CreditCard className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+                <h3 className="text-base font-medium text-gray-900 dark:text-white mb-1">Physical Cards</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Get a card from the marketplace</p>
+                <Button onClick={() => navigate('/cards/marketplace')} size="sm">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Browse Cards
+                </Button>
+              </Card>
+            )}
+
+            {/* Virtual Cards Empty State */}
+            {virtualCards.length === 0 && !virtualCardsLoading && (
+              <Card className="text-center py-8 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border-emerald-200 dark:border-emerald-800">
+                <CreditCard className="w-10 h-10 text-emerald-500 mx-auto mb-3" />
+                <h3 className="text-base font-medium text-gray-900 dark:text-white mb-1">Virtual Cards</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                  Cards with spending limits and controls
+                </p>
+                <Button onClick={() => navigate('/cards/virtual')} size="sm">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Request Virtual Card
+                </Button>
+              </Card>
+            )}
+          </div>
         )}
 
-        {/* Virtual Cards Section */}
-        <div className="mt-8">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Virtual Cards</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Peeap closed-loop cards with spending controls</p>
+        {/* Virtual Cards Grid - when cards exist */}
+        {virtualCards.length > 0 && (
+          <div className="mt-8">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Virtual Cards</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Peeap closed-loop cards with spending controls</p>
+              </div>
+              <Button onClick={() => navigate('/cards/virtual')} variant="outline" size="sm">
+                <Plus className="w-4 h-4 mr-2" />
+                Request Card
+              </Button>
             </div>
-            <Button onClick={() => navigate('/cards/virtual')} variant="outline" size="sm">
-              <Plus className="w-4 h-4 mr-2" />
-              Request Card
-            </Button>
-          </div>
-
-          {virtualCardsLoading ? (
-            <div className="text-center py-8">Loading virtual cards...</div>
-          ) : virtualCards.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {virtualCards.map((card) => (
                 <div
@@ -637,20 +657,8 @@ export function MyCardsPage() {
                 </div>
               ))}
             </div>
-          ) : (
-            <Card className="text-center py-8 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border-emerald-200 dark:border-emerald-800">
-              <CreditCard className="w-10 h-10 text-emerald-500 mx-auto mb-3" />
-              <h3 className="text-base font-medium text-gray-900 dark:text-white mb-1">No Virtual Cards Yet</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                Get a virtual card with spending limits and controls
-              </p>
-              <Button onClick={() => navigate('/cards/virtual')} size="sm">
-                <Plus className="w-4 h-4 mr-2" />
-                Request Virtual Card
-              </Button>
-            </Card>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* QR Scanner Modal */}

@@ -10,6 +10,7 @@ import {
   AlertSeverity,
   RuleCategory,
   RuleType,
+  RiskLevel,
 } from '@payment-system/database';
 import { AlertService } from './alert.service';
 
@@ -520,7 +521,7 @@ export class TransactionMonitoringService {
       profile = this.riskProfileRepo.create({
         userId,
         overallRiskScore: 0,
-        riskLevel: 'low',
+        riskLevel: RiskLevel.LOW,
       });
     }
 
@@ -567,11 +568,11 @@ export class TransactionMonitoringService {
   /**
    * Get risk level from score
    */
-  private getRiskLevelFromScore(score: number): string {
-    if (score >= 80) return 'critical';
-    if (score >= 60) return 'high';
-    if (score >= 40) return 'medium';
-    return 'low';
+  private getRiskLevelFromScore(score: number): RiskLevel {
+    if (score >= 80) return RiskLevel.CRITICAL;
+    if (score >= 60) return RiskLevel.HIGH;
+    if (score >= 40) return RiskLevel.MEDIUM;
+    return RiskLevel.LOW;
   }
 
   /**

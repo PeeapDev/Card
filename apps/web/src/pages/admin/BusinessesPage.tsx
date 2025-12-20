@@ -21,11 +21,17 @@ import {
   Key,
   Calendar,
   User,
+  Download,
+  TrendingUp,
+  FileSearch,
+  Plus,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { businessService, MerchantBusiness } from '@/services/business.service';
 import { useAuth } from '@/context/AuthContext';
+import { AdminPageHeader, QuickStatsBar, StatItem } from '@/components/admin/AdminPageHeader';
+import { DataTableToolbar, FilterConfig, EmptyState } from '@/components/admin/DataTableToolbar';
 
 export function BusinessesPage() {
   const { user } = useAuth();
@@ -173,108 +179,116 @@ export function BusinessesPage() {
     live: businesses.filter(b => b.is_live_mode).length,
   };
 
+  // Export businesses to CSV
+  const exportBusinesses = () => {
+    const headers = ['Name', 'Slug', 'Email', 'Phone', 'Approval Status', 'Mode', 'Created'];
+    const csvContent = [
+      headers.join(','),
+      ...filteredBusinesses.map(b => [
+        `"${b.name}"`,
+        b.slug,
+        b.email || '',
+        b.phone || '',
+        b.approval_status,
+        b.is_live_mode ? 'Live' : 'Test',
+        new Date(b.created_at).toISOString(),
+      ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `businesses-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  // Header stats for QuickStatsBar
+  const headerStats: StatItem[] = [
+    {
+      label: 'Total Businesses',
+      value: stats.total.toString(),
+      icon: <Store className="w-4 h-4" />,
+      color: 'primary',
+    },
+    {
+      label: 'Pending Approval',
+      value: stats.pending.toString(),
+      icon: <Clock className="w-4 h-4" />,
+      color: 'yellow',
+    },
+    {
+      label: 'Approved',
+      value: stats.approved.toString(),
+      icon: <CheckCircle className="w-4 h-4" />,
+      color: 'green',
+    },
+    {
+      label: 'Live Mode',
+      value: stats.live.toString(),
+      icon: <Key className="w-4 h-4" />,
+      color: 'purple',
+    },
+  ];
+
+  // Filter configurations
+  const filterConfigs: FilterConfig[] = [
+    {
+      key: 'approval',
+      label: 'Approval',
+      options: [
+        { value: 'all', label: 'All Approval Status' },
+        { value: 'PENDING', label: 'Pending' },
+        { value: 'APPROVED', label: 'Approved' },
+        { value: 'REJECTED', label: 'Rejected' },
+        { value: 'SUSPENDED', label: 'Suspended' },
+      ],
+      value: approvalFilter,
+      onChange: (value: string) => setApprovalFilter(value),
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      options: [
+        { value: 'all', label: 'All Status' },
+        { value: 'ACTIVE', label: 'Active' },
+        { value: 'INACTIVE', label: 'Inactive' },
+        { value: 'SUSPENDED', label: 'Suspended' },
+      ],
+      value: statusFilter,
+      onChange: (value: string) => setStatusFilter(value),
+    },
+  ];
+
   return (
     <AdminLayout>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Business Management</h1>
-            <p className="text-gray-500">Review and manage merchant businesses</p>
-          </div>
-          <button
-            onClick={fetchBusinesses}
-            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Refresh
-          </button>
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Store className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Total Businesses</p>
-                <p className="text-xl font-semibold">{stats.total}</p>
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-yellow-100 rounded-lg">
-                <Clock className="w-5 h-5 text-yellow-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Pending Approval</p>
-                <p className="text-xl font-semibold">{stats.pending}</p>
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <CheckCircle className="w-5 h-5 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Approved</p>
-                <p className="text-xl font-semibold">{stats.approved}</p>
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <Key className="w-5 h-5 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Live Mode</p>
-                <p className="text-xl font-semibold">{stats.live}</p>
-              </div>
-            </div>
-          </Card>
-        </div>
+        {/* Header with Stats */}
+        <AdminPageHeader
+          title="Business Management"
+          description="Review and manage merchant businesses"
+          icon={<Store className="w-6 h-6" />}
+          breadcrumbs={[
+            { label: 'Admin', href: '/admin' },
+            { label: 'Businesses' },
+          ]}
+          onRefresh={fetchBusinesses}
+          refreshing={loading}
+          onExport={exportBusinesses}
+          stats={<QuickStatsBar stats={headerStats} />}
+        />
 
         {/* Filters */}
         <Card className="p-4">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search by business name or merchant email..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              />
-            </div>
-            <select
-              value={approvalFilter}
-              onChange={(e) => setApprovalFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            >
-              <option value="all">All Approval Status</option>
-              <option value="PENDING">Pending</option>
-              <option value="APPROVED">Approved</option>
-              <option value="REJECTED">Rejected</option>
-              <option value="SUSPENDED">Suspended</option>
-            </select>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            >
-              <option value="all">All Status</option>
-              <option value="ACTIVE">Active</option>
-              <option value="INACTIVE">Inactive</option>
-              <option value="SUSPENDED">Suspended</option>
-            </select>
-          </div>
+          <DataTableToolbar
+            searchValue={searchTerm}
+            onSearchChange={setSearchTerm}
+            searchPlaceholder="Search by business name or merchant email..."
+            filters={filterConfigs}
+            totalCount={stats.total}
+            onExport={exportBusinesses}
+          />
         </Card>
 
         {/* Businesses Table */}
@@ -427,10 +441,11 @@ export function BusinessesPage() {
             </table>
           )}
           {!loading && filteredBusinesses.length === 0 && (
-            <div className="p-8 text-center">
-              <Store className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500">No businesses found</p>
-            </div>
+            <EmptyState
+              icon={<FileSearch className="w-12 h-12" />}
+              title="No businesses found"
+              description={searchTerm ? "Try adjusting your search or filters" : "Businesses will appear here once merchants register"}
+            />
           )}
         </Card>
       </div>

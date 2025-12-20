@@ -42,6 +42,14 @@ export * from './entities/developer/webhook-delivery.entity';
 export * from './entities/notification/notification-template.entity';
 export * from './entities/notification/notification-log.entity';
 
+// Compliance/AML Entities
+export * from './entities/compliance/aml-alert.entity';
+export * from './entities/compliance/aml-monitoring-rule.entity';
+export * from './entities/compliance/aml-risk-profile.entity';
+export * from './entities/compliance/aml-sar.entity';
+export * from './entities/compliance/aml-screening-result.entity';
+export * from './entities/compliance/aml-watchlist.entity';
+
 // Enums
 export * from './enums/transaction-state.enum';
 export * from './enums/transaction-type.enum';

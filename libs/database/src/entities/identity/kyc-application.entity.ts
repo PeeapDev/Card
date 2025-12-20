@@ -115,6 +115,10 @@ export class KycApplication {
     matchScore?: number;
     issues?: string[];
     ocrProcessedAt?: string;
+    // ID card image for admin verification
+    idCardImage?: string; // Base64 encoded image
+    idCardImageMimeType?: string;
+    idCardCapturedAt?: string;
   };
 
   @Column({ name: 'rejection_reason', type: 'text', nullable: true })

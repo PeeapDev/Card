@@ -37,7 +37,9 @@ import {
 import { clsx } from 'clsx';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { notificationService, Notification, NotificationType } from '@/services/notification.service';
+import { notificationService, NotificationType } from '@/services/notification.service';
+import type { Notification as AppNotification } from '@/services/notification.service';
+import { supabase } from '@/lib/supabase';
 import { posService } from '@/services/pos.service';
 import { StaffInvitationModal } from './StaffInvitationModal';
 
@@ -141,7 +143,7 @@ function NotificationItem({
   userId,
   staffStatus,
 }: {
-  notification: Notification;
+  notification: AppNotification;
   onMarkAsRead: (id: string) => void;
   onDelete: (id: string) => void;
   onNavigate: (path: string) => void;
@@ -328,7 +330,7 @@ interface InvitationModalState {
 export function NotificationBell() {
   const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [markingAllRead, setMarkingAllRead] = useState(false);
@@ -391,12 +393,53 @@ export function NotificationBell() {
     }
   }, [user?.id]);
 
-  // Initial fetch and polling
+  // Real-time subscription for instant notifications
   useEffect(() => {
+    if (!user?.id) return;
+
+    // Subscribe to new notifications in real-time
+    const channel = supabase
+      .channel(`notifications:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log('[NotificationBell] New notification received:', payload);
+          // Update unread count
+          setUnreadCount((prev) => prev + 1);
+          // If panel is open, add the new notification to the list
+          if (isOpen) {
+            setNotifications((prev) => [payload.new as AppNotification, ...prev]);
+          }
+          // Optional: Play notification sound or show browser notification
+          try {
+            if ('Notification' in window && window.Notification.permission === 'granted') {
+              const notif = payload.new as AppNotification;
+              new window.Notification(notif.title, {
+                body: notif.message,
+                icon: '/favicon.ico',
+              });
+            }
+          } catch (e) {
+            // Browser notification not supported or blocked
+          }
+        }
+      )
+      .subscribe();
+
+    // Initial fetch
     fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 30000);
-    return () => clearInterval(interval);
-  }, [fetchUnreadCount]);
+
+    // Cleanup subscription on unmount
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, isOpen, fetchUnreadCount]);
 
   // Fetch notifications when panel opens
   useEffect(() => {

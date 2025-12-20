@@ -7,6 +7,7 @@
 
 import { supabase } from '@/lib/supabase';
 import type { Wallet, Transaction, PaginatedResponse } from '@/types';
+import { notificationService } from '@/services/notification.service';
 
 export type WalletType = 'primary' | 'driver' | 'pot' | 'merchant' | 'pos';
 
@@ -351,6 +352,65 @@ export const walletService = {
         .limit(1)
         .single();
 
+      // Create notifications for RPC transfer
+      try {
+        const { data: senderWallet } = await supabase
+          .from('wallets')
+          .select('user_id')
+          .eq('id', data.fromWalletId)
+          .single();
+
+        const { data: recipientWallet } = await supabase
+          .from('wallets')
+          .select('user_id')
+          .eq('id', toWalletId)
+          .single();
+
+        if (senderWallet?.user_id && recipientWallet?.user_id) {
+          const { data: senderProfile } = await supabase
+            .from('profiles')
+            .select('first_name, last_name, phone')
+            .eq('id', senderWallet.user_id)
+            .single();
+
+          const { data: recipientProfile } = await supabase
+            .from('profiles')
+            .select('first_name, last_name, phone')
+            .eq('id', recipientWallet.user_id)
+            .single();
+
+          const senderName = senderProfile
+            ? `${senderProfile.first_name || ''} ${senderProfile.last_name || ''}`.trim() || senderProfile.phone || 'Unknown'
+            : 'Unknown';
+
+          const recipientName = recipientProfile
+            ? `${recipientProfile.first_name || ''} ${recipientProfile.last_name || ''}`.trim() || recipientProfile.phone || 'Unknown'
+            : 'Unknown';
+
+          // Notify recipient
+          await notificationService.sendTransferNotification({
+            userId: recipientWallet.user_id,
+            amount: data.amount,
+            currency: 'SLE',
+            direction: 'received',
+            counterpartyName: senderName,
+            transactionId: tx?.reference || `TRF-${Date.now()}`,
+          });
+
+          // Notify sender
+          await notificationService.sendTransferNotification({
+            userId: senderWallet.user_id,
+            amount: data.amount,
+            currency: 'SLE',
+            direction: 'sent',
+            counterpartyName: recipientName,
+            transactionId: tx?.reference || `TRF-${Date.now()}`,
+          });
+        }
+      } catch (notifError) {
+        console.error('Error creating transfer notifications (RPC):', notifError);
+      }
+
       if (tx) return mapTransaction(tx);
     }
 
@@ -447,6 +507,73 @@ export const walletService = {
         description: data.description || 'Transfer received',
         reference,
       });
+
+    // Create notifications for both sender and recipient
+    try {
+      // Get sender and recipient user info
+      const { data: senderWallet } = await supabase
+        .from('wallets')
+        .select('user_id')
+        .eq('id', data.fromWalletId)
+        .single();
+
+      const { data: recipientWallet } = await supabase
+        .from('wallets')
+        .select('user_id')
+        .eq('id', toWalletId)
+        .single();
+
+      if (senderWallet?.user_id) {
+        // Get sender's name for recipient notification
+        const { data: senderProfile } = await supabase
+          .from('profiles')
+          .select('first_name, last_name, phone')
+          .eq('id', senderWallet.user_id)
+          .single();
+
+        const senderName = senderProfile
+          ? `${senderProfile.first_name || ''} ${senderProfile.last_name || ''}`.trim() || senderProfile.phone || 'Unknown'
+          : 'Unknown';
+
+        // Notify recipient of received transfer
+        if (recipientWallet?.user_id) {
+          await notificationService.sendTransferNotification({
+            userId: recipientWallet.user_id,
+            amount: data.amount,
+            currency: 'SLE',
+            direction: 'received',
+            counterpartyName: senderName,
+            transactionId: reference,
+          });
+        }
+
+        // Get recipient's name for sender notification
+        if (recipientWallet?.user_id) {
+          const { data: recipientProfile } = await supabase
+            .from('profiles')
+            .select('first_name, last_name, phone')
+            .eq('id', recipientWallet.user_id)
+            .single();
+
+          const recipientName = recipientProfile
+            ? `${recipientProfile.first_name || ''} ${recipientProfile.last_name || ''}`.trim() || recipientProfile.phone || 'Unknown'
+            : 'Unknown';
+
+          // Notify sender of sent transfer
+          await notificationService.sendTransferNotification({
+            userId: senderWallet.user_id,
+            amount: data.amount,
+            currency: 'SLE',
+            direction: 'sent',
+            counterpartyName: recipientName,
+            transactionId: reference,
+          });
+        }
+      }
+    } catch (notifError) {
+      console.error('Error creating transfer notifications:', notifError);
+      // Don't throw - transfer was successful, notification is secondary
+    }
 
     return debitTx ? mapTransaction(debitTx) : {
       id: reference,

@@ -9,6 +9,7 @@ import {
   User,
   ScreeningStatus,
   ScreeningType,
+  RiskLevel,
 } from '@payment-system/database';
 
 interface ScreeningMatch {
@@ -65,7 +66,7 @@ export class ScreeningService {
 
     // Calculate risk level based on matches
     const riskLevel = this.calculateRiskLevel(matches);
-    const requiresEdd = riskLevel === 'high' || riskLevel === 'critical' || matches.length > 0;
+    const requiresEdd = riskLevel === RiskLevel.HIGH || riskLevel === RiskLevel.CRITICAL || matches.length > 0;
 
     // Create screening result
     const screeningResult = this.screeningResultRepo.create({
@@ -75,7 +76,7 @@ export class ScreeningService {
       triggeredByUserId,
       screenedName,
       screenedDob,
-      screenedNationality: user.nationality || null,
+      screenedNationality: (user as any).nationality || null,
       totalMatches: matches.length,
       highestMatchScore: matches.length > 0 ? Math.max(...matches.map(m => m.matchScore)) : 0,
       matches,
@@ -426,8 +427,8 @@ export class ScreeningService {
   /**
    * Calculate risk level based on matches
    */
-  private calculateRiskLevel(matches: ScreeningMatch[]): string {
-    if (matches.length === 0) return 'low';
+  private calculateRiskLevel(matches: ScreeningMatch[]): RiskLevel {
+    if (matches.length === 0) return RiskLevel.LOW;
 
     const maxScore = Math.max(...matches.map(m => m.matchScore));
 
@@ -436,11 +437,11 @@ export class ScreeningService {
       m => ['OFAC_SDN', 'OFAC_CONS', 'UN_CONSOLIDATED', 'EU_SANCTIONS', 'UK_HMT'].includes(m.watchlistCode)
     );
 
-    if (hasSanctionsMatch && maxScore >= 90) return 'critical';
-    if (hasSanctionsMatch && maxScore >= 80) return 'high';
-    if (maxScore >= 90) return 'high';
-    if (maxScore >= 80) return 'medium';
-    return 'low';
+    if (hasSanctionsMatch && maxScore >= 90) return RiskLevel.CRITICAL;
+    if (hasSanctionsMatch && maxScore >= 80) return RiskLevel.HIGH;
+    if (maxScore >= 90) return RiskLevel.HIGH;
+    if (maxScore >= 80) return RiskLevel.MEDIUM;
+    return RiskLevel.LOW;
   }
 
   /**
@@ -449,7 +450,7 @@ export class ScreeningService {
   private async updateRiskProfileFromScreening(
     userId: string,
     matches: ScreeningMatch[],
-    riskLevel: string,
+    riskLevel: RiskLevel,
   ): Promise<void> {
     let profile = await this.riskProfileRepo.findOne({ where: { userId } });
 
@@ -457,7 +458,7 @@ export class ScreeningService {
       profile = this.riskProfileRepo.create({
         userId,
         overallRiskScore: 0,
-        riskLevel: 'low',
+        riskLevel: RiskLevel.LOW,
       });
     }
 
@@ -490,7 +491,7 @@ export class ScreeningService {
     profile.riskLevel = this.getRiskLevelFromScore(profile.overallRiskScore);
 
     // Set EDD requirement if high risk
-    if (profile.riskLevel === 'high' || profile.riskLevel === 'critical') {
+    if (profile.riskLevel === RiskLevel.HIGH || profile.riskLevel === RiskLevel.CRITICAL) {
       profile.eddRequired = true;
     }
 
@@ -528,13 +529,13 @@ export class ScreeningService {
   }
 
   /**
-   * Get risk level string from score
+   * Get risk level from score
    */
-  private getRiskLevelFromScore(score: number): string {
-    if (score >= 80) return 'critical';
-    if (score >= 60) return 'high';
-    if (score >= 40) return 'medium';
-    return 'low';
+  private getRiskLevelFromScore(score: number): RiskLevel {
+    if (score >= 80) return RiskLevel.CRITICAL;
+    if (score >= 60) return RiskLevel.HIGH;
+    if (score >= 40) return RiskLevel.MEDIUM;
+    return RiskLevel.LOW;
   }
 
   /**

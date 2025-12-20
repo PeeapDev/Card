@@ -20,7 +20,7 @@ export default defineConfig({
         secure: true,
       },
       '/api': {
-        target: 'https://api.peeap.com',
+        target: 'https://my.peeap.com',
         changeOrigin: true,
         secure: true,
       },
