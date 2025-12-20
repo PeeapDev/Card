@@ -360,7 +360,8 @@ export function AdminDashboard() {
   const formatCompactNumber = (num: number): string => {
     if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
     if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-    return num.toString();
+    // For smaller numbers, format with max 2 decimal places
+    return num.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
   };
 
   const fetchDashboardData = async () => {

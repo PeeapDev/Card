@@ -1,7 +1,10 @@
 -- Transfer Limits Configuration Table
 -- Allows admin to set daily, monthly, and per-transaction limits for each user type
 
-CREATE TABLE IF NOT EXISTS transfer_limits (
+-- Drop and recreate to ensure correct schema
+DROP TABLE IF EXISTS transfer_limits CASCADE;
+
+CREATE TABLE transfer_limits (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_type VARCHAR(50) NOT NULL UNIQUE,
     daily_limit DECIMAL(18, 2) NOT NULL DEFAULT 5000,
@@ -21,11 +24,14 @@ INSERT INTO transfer_limits (user_type, daily_limit, monthly_limit, per_transact
     ('merchant', 50000, 200000, 25000, 0.10, 'SLE'),
     ('agent_plus', 100000, 500000, 50000, 0.10, 'SLE'),
     ('admin', 1000000, 10000000, 500000, 0.01, 'SLE'),
-    ('superadmin', 10000000, 100000000, 5000000, 0.01, 'SLE')
-ON CONFLICT (user_type) DO NOTHING;
+    ('superadmin', 10000000, 100000000, 5000000, 0.01, 'SLE');
 
 -- Enable RLS
 ALTER TABLE transfer_limits ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if any
+DROP POLICY IF EXISTS "transfer_limits_read_all" ON transfer_limits;
+DROP POLICY IF EXISTS "transfer_limits_admin_all" ON transfer_limits;
 
 -- Policy: Anyone can read transfer limits
 CREATE POLICY "transfer_limits_read_all" ON transfer_limits
