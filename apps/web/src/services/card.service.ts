@@ -1452,13 +1452,14 @@ export const cardService = {
    */
   async getCardSecureDetails(cardId: string, userId: string): Promise<{
     cardNumber: string;
-    cvv: string;
     expiryMonth: number;
     expiryYear: number;
   } | null> {
+    // Note: CVV is stored as a hash and cannot be retrieved
+    // User must enter CVV themselves for payment verification
     const { data, error } = await supabase
       .from('issued_cards')
-      .select('card_number, cvv, expiry_month, expiry_year, user_id')
+      .select('card_number, expiry_month, expiry_year, user_id')
       .eq('id', cardId)
       .maybeSingle();
 
@@ -1473,7 +1474,6 @@ export const cardService = {
 
     return {
       cardNumber: data.card_number,
-      cvv: data.cvv,
       expiryMonth: data.expiry_month,
       expiryYear: data.expiry_year,
     };
@@ -1518,6 +1518,7 @@ export const cardService = {
 
   /**
    * Request a new virtual card
+   * Uses PostgreSQL function to handle CVV hashing server-side
    */
   async requestVirtualCard(userId: string, params: {
     walletId: string;
@@ -1525,51 +1526,34 @@ export const cardService = {
     cardLabel?: string;
     cardColor?: string;
   }): Promise<{ success: boolean; cardId?: string; cardLastFour?: string; activationCode?: string; cvv?: string; error?: string }> {
-    const cardNumber = generateCardNumber();
-    const cvv = generateCVV();
-    const activationCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const expiryDate = new Date();
-    expiryDate.setFullYear(expiryDate.getFullYear() + 3);
-
-    const { data, error } = await supabase
-      .from('issued_cards')
-      .insert({
-        user_id: userId,
-        wallet_id: params.walletId,
-        card_name: params.cardName,
-        card_label: params.cardLabel,
-        card_number: cardNumber,
-        card_last_four: cardNumber.slice(-4),
-        card_color: params.cardColor || '#1a1a2e',
-        cvv: cvv,
-        activation_code: activationCode,
-        expiry_month: expiryDate.getMonth() + 1,
-        expiry_year: expiryDate.getFullYear(),
-        card_status: 'pending',
-        is_frozen: false,
-        daily_limit: 100000, // 1000.00 in cents
-        weekly_limit: 500000,
-        monthly_limit: 1000000,
-        per_transaction_limit: 50000,
-        contactless_enabled: true,
-        international_enabled: false,
-        online_payments_enabled: true,
-        atm_withdrawals_enabled: false,
-      })
-      .select()
-      .single();
+    // Call the PostgreSQL function that handles CVV generation and hashing server-side
+    const { data, error } = await supabase.rpc('issue_virtual_card', {
+      p_user_id: userId,
+      p_wallet_id: params.walletId,
+      p_card_name: params.cardName,
+      p_card_label: params.cardLabel || null,
+      p_card_color: params.cardColor || '#1a1a2e',
+      p_daily_limit: 100000,
+      p_weekly_limit: 500000,
+      p_monthly_limit: 1000000,
+      p_per_transaction_limit: 50000,
+    });
 
     if (error) {
       console.error('Error requesting virtual card:', error);
       return { success: false, error: error.message };
     }
 
+    if (!data || !data.success) {
+      return { success: false, error: data?.message || 'Failed to issue card' };
+    }
+
     return {
       success: true,
-      cardId: data.id,
+      cardId: data.card_id,
       cardLastFour: data.card_last_four,
-      activationCode: activationCode,
-      cvv: cvv,
+      activationCode: data.activation_code,
+      cvv: data.cvv, // CVV returned only once during creation
     };
   },
 
