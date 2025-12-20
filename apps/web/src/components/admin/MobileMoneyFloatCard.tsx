@@ -20,6 +20,12 @@ import {
   ChevronUp,
   Wallet,
   AlertCircle,
+  Users,
+  Building2,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  Send,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -27,6 +33,7 @@ import {
   mobileMoneyFloatService,
   MobileMoneyFloatSummary,
   MobileMoneyFloatHistory,
+  FloatPayout,
   PROVIDER_INFO,
 } from '@/services/mobileMoneyFloat.service';
 import { currencyService } from '@/services/currency.service';
@@ -47,14 +54,24 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
     fees: 0,
   });
   const [recentTransactions, setRecentTransactions] = useState<MobileMoneyFloatHistory[]>([]);
+  const [recentPayouts, setRecentPayouts] = useState<FloatPayout[]>([]);
+  const [payoutsSummary, setPayoutsSummary] = useState<{
+    totalAmount: number;
+    completedCount: number;
+    pendingCount: number;
+    failedCount: number;
+  }>({ totalAmount: 0, completedCount: 0, pendingCount: 0, failedCount: 0 });
   const [expanded, setExpanded] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
+  const [showPayouts, setShowPayouts] = useState(false);
   const [monimeBalance, setMonimeBalance] = useState<MonimeBalanceResponse | null>(null);
   const [monimeLoading, setMonimeLoading] = useState(true);
+  const [payoutsLoading, setPayoutsLoading] = useState(false);
 
   useEffect(() => {
     loadData();
     loadMonimeBalance();
+    loadPayouts();
 
     // Set up real-time subscriptions using system_float tables
     const floatSubscription = supabase
@@ -71,6 +88,13 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
         { event: 'INSERT', schema: 'public', table: 'system_float_history' },
         () => {
           loadData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'payouts' },
+        () => {
+          loadPayouts();
         }
       )
       .subscribe();
@@ -95,6 +119,19 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
       console.error('Error loading Monime balance:', error);
     } finally {
       setMonimeLoading(false);
+    }
+  };
+
+  const loadPayouts = async () => {
+    setPayoutsLoading(true);
+    try {
+      const result = await mobileMoneyFloatService.getPayouts({ limit: 20 });
+      setRecentPayouts(result.payouts);
+      setPayoutsSummary(result.summary);
+    } catch (error) {
+      console.error('Error loading payouts:', error);
+    } finally {
+      setPayoutsLoading(false);
     }
   };
 
@@ -195,7 +232,7 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
               <div className="flex items-center justify-center py-2">
                 <RefreshCw className="w-5 h-5 animate-spin text-indigo-400" />
               </div>
-            ) : monimeBalance ? (
+            ) : monimeBalance && monimeBalance.success ? (
               <div className="space-y-2">
                 <div className="flex items-baseline gap-2">
                   <p className="text-3xl font-bold text-indigo-700 dark:text-indigo-300">
@@ -212,7 +249,20 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
             ) : (
               <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
                 <AlertCircle className="w-4 h-4" />
-                <span className="text-sm">Unable to fetch Monime balance</span>
+                <div className="flex flex-col">
+                  <span className="text-sm">Unable to fetch Monime balance</span>
+                  {monimeBalance?.error && (
+                    <span className="text-xs opacity-75">
+                      {monimeBalance.error.includes('not enabled')
+                        ? 'Monime module is disabled'
+                        : monimeBalance.error.includes('not configured') || monimeBalance.error.includes('CREDENTIALS_MISSING')
+                        ? 'API credentials not configured'
+                        : monimeBalance.error.includes('token') || monimeBalance.error.includes('401')
+                        ? 'Authentication required'
+                        : monimeBalance.error}
+                    </span>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -349,6 +399,124 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
             )}
           </div>
 
+          {/* Payouts Section */}
+          <div className="p-4 bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 rounded-xl border border-red-200 dark:border-red-800">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-red-100 dark:bg-red-900/50 rounded-lg">
+                  <Send className="w-5 h-5 text-red-600 dark:text-red-400" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-red-900 dark:text-red-100">Payouts</h4>
+                  <p className="text-xs text-red-600 dark:text-red-400">User & Merchant Withdrawals</p>
+                </div>
+              </div>
+              <button
+                onClick={loadPayouts}
+                disabled={payoutsLoading}
+                className="p-1.5 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg"
+              >
+                <RefreshCw className={`w-4 h-4 ${payoutsLoading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+
+            {/* Payout Stats */}
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              <div className="p-2 bg-white/60 dark:bg-gray-800/60 rounded-lg text-center">
+                <div className="flex items-center justify-center gap-1 text-green-600 dark:text-green-400">
+                  <CheckCircle2 className="w-3 h-3" />
+                  <span className="text-xs font-medium">{payoutsSummary.completedCount}</span>
+                </div>
+                <p className="text-xs text-gray-500">Completed</p>
+              </div>
+              <div className="p-2 bg-white/60 dark:bg-gray-800/60 rounded-lg text-center">
+                <div className="flex items-center justify-center gap-1 text-amber-600 dark:text-amber-400">
+                  <Clock className="w-3 h-3" />
+                  <span className="text-xs font-medium">{payoutsSummary.pendingCount}</span>
+                </div>
+                <p className="text-xs text-gray-500">Processing</p>
+              </div>
+              <div className="p-2 bg-white/60 dark:bg-gray-800/60 rounded-lg text-center">
+                <div className="flex items-center justify-center gap-1 text-red-600 dark:text-red-400">
+                  <XCircle className="w-3 h-3" />
+                  <span className="text-xs font-medium">{payoutsSummary.failedCount}</span>
+                </div>
+                <p className="text-xs text-gray-500">Failed</p>
+              </div>
+            </div>
+
+            {/* Toggle Payouts List */}
+            <button
+              onClick={() => setShowPayouts(!showPayouts)}
+              className="w-full flex items-center justify-between p-2 bg-white/40 dark:bg-gray-800/40 rounded-lg text-sm text-red-700 dark:text-red-300 hover:bg-white/60 dark:hover:bg-gray-800/60"
+            >
+              <span className="flex items-center gap-2">
+                <History className="w-4 h-4" />
+                Recent Payouts ({recentPayouts.length})
+              </span>
+              {showPayouts ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+
+            {/* Payouts List */}
+            {showPayouts && (
+              <div className="mt-3 space-y-2 max-h-64 overflow-y-auto">
+                {payoutsLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <RefreshCw className="w-5 h-5 animate-spin text-red-400" />
+                  </div>
+                ) : recentPayouts.length === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-4">No recent payouts</p>
+                ) : (
+                  recentPayouts.map((payout) => {
+                    const isUserCashout = payout.payout_type === 'USER_CASHOUT';
+                    const statusColor = payout.status === 'COMPLETED' ? 'text-green-600' :
+                                        payout.status === 'FAILED' ? 'text-red-600' : 'text-amber-600';
+                    const statusBg = payout.status === 'COMPLETED' ? 'bg-green-100 dark:bg-green-900/30' :
+                                     payout.status === 'FAILED' ? 'bg-red-100 dark:bg-red-900/30' : 'bg-amber-100 dark:bg-amber-900/30';
+
+                    return (
+                      <div
+                        key={payout.id}
+                        className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`p-1.5 rounded-lg ${isUserCashout ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-purple-100 dark:bg-purple-900/30'}`}>
+                            {isUserCashout ? (
+                              <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                            ) : (
+                              <Building2 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">
+                              {payout.displayName}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {payout.provider_name} • {payout.account_number.slice(-4).padStart(payout.account_number.length, '•')}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-medium text-red-600 dark:text-red-400">
+                            -{formatCurrency(payout.amount)}
+                          </p>
+                          <div className="flex items-center justify-end gap-1">
+                            <span className={`text-xs ${statusColor}`}>
+                              {payout.status}
+                            </span>
+                            <span className="text-xs text-gray-400">
+                              {new Date(payout.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Recent Transactions Toggle */}
           <button
             onClick={() => setShowHistory(!showHistory)}
@@ -356,7 +524,7 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
           >
             <span className="flex items-center gap-2">
               <History className="w-4 h-4" />
-              Recent Transactions
+              Recent Float Transactions
             </span>
             {showHistory ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>

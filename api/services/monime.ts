@@ -907,30 +907,74 @@ interface PaymentSettings {
   monime_enabled: boolean | null;
 }
 
-/**
- * Create MonimeService instance from Supabase settings
- * Checks both the module is_enabled and payment_settings.monime_enabled
- */
-export async function createMonimeService(supabase: any, settingsId: string): Promise<MonimeService> {
-  // First check if the Monime module is enabled
-  const { data: module } = await supabase
-    .from('modules')
-    .select('is_enabled')
-    .eq('code', 'monime')
-    .single();
+interface GatewayConfig {
+  is_active: boolean;
+  api_key_encrypted: string | null;
+  config: {
+    space_id?: string;
+    webhook_secret?: string;
+    source_account_id?: string;
+    payout_account_id?: string;
+  } | null;
+}
 
-  if (!module?.is_enabled) {
-    throw new MonimeError('Monime module is not enabled. Enable it in Admin > Modules.', 'MODULE_DISABLED', 400);
+/**
+ * Get Monime credentials from the modular config system
+ * Checks payment_gateway_config first, then falls back to payment_settings
+ * Module check is optional for backwards compatibility
+ */
+export async function getMonimeCredentials(supabase: any, settingsId: string, options?: { skipModuleCheck?: boolean }): Promise<{
+  accessToken: string;
+  spaceId: string;
+  sourceAccountId?: string;
+  payoutAccountId?: string;
+}> {
+  // Check if the Monime module is enabled (optional check for backwards compatibility)
+  if (!options?.skipModuleCheck) {
+    const { data: module } = await supabase
+      .from('modules')
+      .select('is_enabled')
+      .eq('code', 'monime')
+      .single();
+
+    // Only block if module explicitly exists and is disabled
+    if (module && module.is_enabled === false) {
+      throw new MonimeError('Monime module is disabled. Enable it in Admin > Modules.', 'MODULE_DISABLED', 400);
+    }
+    // If module doesn't exist, continue (backwards compatibility)
   }
 
-  // Then check payment settings for credentials
+  // Try payment_gateway_config first (modular approach)
+  try {
+    const { data: gatewayConfig } = await supabase
+      .from('payment_gateway_config')
+      .select('is_active, api_key_encrypted, config')
+      .eq('module_code', 'monime')
+      .eq('environment', 'production')
+      .single();
+
+    if (gatewayConfig?.is_active && gatewayConfig?.api_key_encrypted && gatewayConfig?.config?.space_id) {
+      console.log('[Monime] Using credentials from payment_gateway_config');
+      return {
+        accessToken: gatewayConfig.api_key_encrypted,
+        spaceId: gatewayConfig.config.space_id,
+        sourceAccountId: gatewayConfig.config.source_account_id,
+        payoutAccountId: gatewayConfig.config.payout_account_id,
+      };
+    }
+  } catch (e) {
+    // Table might not exist, continue to fallback
+    console.log('[Monime] payment_gateway_config not available, using fallback');
+  }
+
+  // Fallback to payment_settings for backwards compatibility
   const { data, error } = await supabase
     .from('payment_settings')
-    .select('monime_access_token, monime_space_id, monime_enabled')
+    .select('monime_access_token, monime_space_id, monime_enabled, monime_source_account_id, monime_payout_account_id')
     .eq('id', settingsId)
     .single();
 
-  const settings = data as PaymentSettings | null;
+  const settings = data as (PaymentSettings & { monime_source_account_id?: string; monime_payout_account_id?: string }) | null;
 
   if (error || !settings) {
     throw new MonimeError('Payment settings not found', 'SETTINGS_NOT_FOUND', 500);
@@ -944,9 +988,25 @@ export async function createMonimeService(supabase: any, settingsId: string): Pr
     throw new MonimeError('Monime credentials not configured. Go to Admin > Settings > Payment.', 'CREDENTIALS_MISSING', 500);
   }
 
-  return new MonimeService({
+  console.log('[Monime] Using credentials from payment_settings');
+  return {
     accessToken: settings.monime_access_token,
     spaceId: settings.monime_space_id,
+    sourceAccountId: settings.monime_source_account_id || undefined,
+    payoutAccountId: settings.monime_payout_account_id || undefined,
+  };
+}
+
+/**
+ * Create MonimeService instance from Supabase settings
+ * Uses the modular getMonimeCredentials function
+ */
+export async function createMonimeService(supabase: any, settingsId: string): Promise<MonimeService> {
+  const credentials = await getMonimeCredentials(supabase, settingsId);
+
+  return new MonimeService({
+    accessToken: credentials.accessToken,
+    spaceId: credentials.spaceId,
   });
 }
 

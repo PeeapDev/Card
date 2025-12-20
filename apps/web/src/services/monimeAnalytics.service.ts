@@ -72,6 +72,8 @@ export interface MonimeBalanceResponse {
   }>;
   accountCount: number;
   updatedAt: string;
+  error?: string;
+  code?: string;
 }
 
 // Cache for analytics data (5 minute TTL)
@@ -270,15 +272,37 @@ export const monimeAnalyticsService = {
         return response;
       }
 
-      console.error('[MonimeAnalytics] Balance API returned unsuccessful response');
-      return null;
-    } catch (error) {
+      console.error('[MonimeAnalytics] Balance API returned unsuccessful response:', response);
+      // Return error response for better debugging
+      return {
+        success: false,
+        balance: 0,
+        balancesByCurrency: {},
+        accountCount: 0,
+        updatedAt: new Date().toISOString(),
+        error: (response as any).error || 'Unknown error',
+        code: (response as any).code,
+      };
+    } catch (error: any) {
       console.error('[MonimeAnalytics] Error fetching balance:', error);
+
+      // Return error response with details for better debugging
+      const errorMessage = error?.message || 'Failed to fetch balance';
+
       // Return cached data if available, even if expired
       if (balanceCache.data) {
         return balanceCache.data;
       }
-      return null;
+
+      // Return error response instead of null for better error handling
+      return {
+        success: false,
+        balance: 0,
+        balancesByCurrency: {},
+        accountCount: 0,
+        updatedAt: new Date().toISOString(),
+        error: errorMessage,
+      };
     }
   },
 
@@ -287,7 +311,7 @@ export const monimeAnalyticsService = {
    */
   async getPrimaryBalance(): Promise<number> {
     const balance = await this.getBalance();
-    return balance?.balance || 0;
+    return balance?.success ? balance.balance : 0;
   },
 
   /**

@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
-import { createMonimeService, MonimeError } from './services/monime';
+import { createMonimeService, getMonimeCredentials, MonimeError } from './services/monime';
 import { sendEmailWithConfig, SmtpConfig } from './services/email';
 import { sendNotification, storeNotification, getNotificationHistory, getUsersWithTokens, getTokenStats, SendNotificationRequest } from './services/push-notification';
 import { readFileSync } from 'fs';
@@ -161,6 +161,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleFloatSummary(req, res);
     } else if (path === 'float/today' || path === 'float/today/') {
       return await handleFloatToday(req, res);
+    } else if (path === 'float/payouts' || path === 'float/payouts/') {
+      return await handleFloatPayouts(req, res);
     } else if (path === 'deposit/verify' || path === 'deposit/verify/') {
       return await handleDepositVerify(req, res);
     } else if (path === 'payouts' || path === 'payouts/') {
@@ -1302,10 +1304,30 @@ async function handleMonimeBalance(req: VercelRequest, res: VercelResponse) {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
-    const monimeService = await createMonimeService(supabase, SETTINGS_ID);
+    // Get Monime credentials using the shared modular function
+    const credentials = await getMonimeCredentials(supabase, SETTINGS_ID);
 
-    // Get all financial accounts with balances
-    const accounts = await monimeService.getFinancialAccounts(true);
+    // Fetch financial accounts directly from Monime API
+    const response = await fetch('https://api.monime.io/v1/financial-accounts?withBalance=true', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${credentials.accessToken}`,
+        'Monime-Space-Id': credentials.spaceId,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('[Monime Balance] Monime API error:', response.status, errorData);
+      return res.status(response.status).json({
+        error: errorData.message || `Monime API error: ${response.status}`,
+        code: 'MONIME_API_ERROR'
+      });
+    }
+
+    const data = await response.json();
+    const accounts = data.result || [];
 
     // Calculate total balance per currency
     const balancesByCurrency: Record<string, {
@@ -1444,6 +1466,154 @@ async function handleFloatToday(req: VercelRequest, res: VercelResponse) {
   } catch (error: any) {
     console.error('[Float Today] Error:', error);
     return res.status(500).json({ error: error.message || 'Failed to fetch today movements' });
+  }
+}
+
+/**
+ * Get recent payouts for float dashboard
+ * GET /api/float/payouts
+ * Returns user cashouts and merchant withdrawals for the float system
+ */
+async function handleFloatPayouts(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const url = new URL(req.url || '', `http://${req.headers.host}`);
+    const limit = parseInt(url.searchParams.get('limit') || '50');
+    const offset = parseInt(url.searchParams.get('offset') || '0');
+    const status = url.searchParams.get('status'); // Optional: filter by status
+    const type = url.searchParams.get('type'); // Optional: USER_CASHOUT or MERCHANT_WITHDRAW
+    const period = url.searchParams.get('period'); // Optional: today, week, month
+
+    // Build query
+    let query = supabase
+      .from('payouts')
+      .select(`
+        id,
+        external_id,
+        user_id,
+        merchant_id,
+        wallet_id,
+        payout_type,
+        amount,
+        fee,
+        total_deduction,
+        currency,
+        destination_type,
+        provider_id,
+        provider_name,
+        account_number,
+        account_name,
+        status,
+        monime_payout_id,
+        monime_status,
+        description,
+        created_at,
+        updated_at,
+        completed_at,
+        metadata
+      `, { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    // Apply filters
+    if (status) {
+      query = query.eq('status', status.toUpperCase());
+    }
+    if (type) {
+      query = query.eq('payout_type', type.toUpperCase());
+    }
+
+    // Apply period filter
+    if (period) {
+      const now = new Date();
+      let startDate: Date;
+
+      if (period === 'today') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      } else if (period === 'week') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+      } else if (period === 'month') {
+        startDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+      } else {
+        startDate = new Date(0); // All time
+      }
+
+      query = query.gte('created_at', startDate.toISOString());
+    }
+
+    const { data: payouts, error, count } = await query;
+
+    if (error) {
+      console.error('[Float Payouts] Error:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    // Fetch user/merchant names for display
+    const userIds = [...new Set((payouts || []).filter(p => p.user_id).map(p => p.user_id))];
+    const merchantIds = [...new Set((payouts || []).filter(p => p.merchant_id).map(p => p.merchant_id))];
+
+    let users: Record<string, any> = {};
+    let merchants: Record<string, any> = {};
+
+    if (userIds.length > 0) {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, email, phone')
+        .in('id', userIds);
+
+      (userData || []).forEach(u => {
+        users[u.id] = u;
+      });
+    }
+
+    if (merchantIds.length > 0) {
+      const { data: merchantData } = await supabase
+        .from('merchants')
+        .select('id, business_name, email, phone')
+        .in('id', merchantIds);
+
+      (merchantData || []).forEach(m => {
+        merchants[m.id] = m;
+      });
+    }
+
+    // Enrich payouts with user/merchant info
+    const enrichedPayouts = (payouts || []).map(p => ({
+      ...p,
+      user: p.user_id ? users[p.user_id] : null,
+      merchant: p.merchant_id ? merchants[p.merchant_id] : null,
+      displayName: p.user_id
+        ? (users[p.user_id] ? `${users[p.user_id].first_name || ''} ${users[p.user_id].last_name || ''}`.trim() || users[p.user_id].email : 'Unknown User')
+        : (p.merchant_id && merchants[p.merchant_id] ? merchants[p.merchant_id].business_name : 'Unknown Merchant'),
+    }));
+
+    // Calculate summary stats
+    const totalAmount = (payouts || []).reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+    const totalFees = (payouts || []).reduce((sum, p) => sum + (parseFloat(p.fee) || 0), 0);
+    const completedCount = (payouts || []).filter(p => p.status === 'COMPLETED').length;
+    const pendingCount = (payouts || []).filter(p => p.status === 'PROCESSING' || p.status === 'PENDING').length;
+    const failedCount = (payouts || []).filter(p => p.status === 'FAILED').length;
+
+    return res.status(200).json({
+      success: true,
+      payouts: enrichedPayouts,
+      total: count || 0,
+      limit,
+      offset,
+      summary: {
+        totalAmount,
+        totalFees,
+        completedCount,
+        pendingCount,
+        failedCount,
+      },
+    });
+  } catch (error: any) {
+    console.error('[Float Payouts] Error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to fetch payouts' });
   }
 }
 
@@ -6974,7 +7144,7 @@ async function handleSharedUsersSearch(req: VercelRequest, res: VercelResponse) 
     // Using ilike for case-insensitive search
     const { data: users, error } = await supabase
       .from('users')
-      .select('id, email, first_name, last_name, phone, avatar_url, created_at')
+      .select('id, email, first_name, last_name, phone, profile_picture, created_at')
       .or(`email.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%,first_name.ilike.%${searchQuery}%,last_name.ilike.%${searchQuery}%`)
       .neq('id', auth.userId) // Exclude the current user
       .limit(20);
@@ -6992,7 +7162,7 @@ async function handleSharedUsersSearch(req: VercelRequest, res: VercelResponse) 
       lastName: user.last_name,
       fullName: [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email,
       phone: user.phone,
-      avatarUrl: user.avatar_url,
+      avatarUrl: user.profile_picture,
       createdAt: user.created_at,
     }));
 

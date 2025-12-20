@@ -47,6 +47,61 @@ export interface MobileMoneyFloatHistory {
   createdAt: string;
 }
 
+export interface FloatPayout {
+  id: string;
+  external_id: string;
+  user_id: string | null;
+  merchant_id: string | null;
+  wallet_id: string;
+  payout_type: 'USER_CASHOUT' | 'MERCHANT_WITHDRAW';
+  amount: number;
+  fee: number;
+  total_deduction: number;
+  currency: string;
+  destination_type: 'momo' | 'bank';
+  provider_id: string;
+  provider_name: string;
+  account_number: string;
+  account_name: string | null;
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  monime_payout_id: string | null;
+  monime_status: string | null;
+  description: string | null;
+  created_at: string;
+  updated_at: string | null;
+  completed_at: string | null;
+  metadata: Record<string, any>;
+  user: {
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    email: string;
+    phone: string | null;
+  } | null;
+  merchant: {
+    id: string;
+    business_name: string;
+    email: string;
+    phone: string | null;
+  } | null;
+  displayName: string;
+}
+
+export interface FloatPayoutsResponse {
+  success: boolean;
+  payouts: FloatPayout[];
+  total: number;
+  limit: number;
+  offset: number;
+  summary: {
+    totalAmount: number;
+    totalFees: number;
+    completedCount: number;
+    pendingCount: number;
+    failedCount: number;
+  };
+}
+
 // Provider display info
 export const PROVIDER_INFO: Record<string, { name: string; color: string; bgColor: string; icon: string }> = {
   'm17': { name: 'Orange Money', color: 'text-orange-600', bgColor: 'bg-orange-100', icon: 'OM' },
@@ -172,5 +227,94 @@ export const mobileMoneyFloatService = {
       bgColor: 'bg-gray-100',
       icon: '??',
     };
+  },
+
+  /**
+   * Get payouts for float dashboard (user cashouts and merchant withdrawals)
+   */
+  async getPayouts(options?: {
+    limit?: number;
+    offset?: number;
+    status?: string;
+    type?: 'USER_CASHOUT' | 'MERCHANT_WITHDRAW';
+    period?: 'today' | 'week' | 'month';
+  }): Promise<FloatPayoutsResponse> {
+    try {
+      const params = new URLSearchParams();
+      if (options?.limit) params.append('limit', options.limit.toString());
+      if (options?.offset) params.append('offset', options.offset.toString());
+      if (options?.status) params.append('status', options.status);
+      if (options?.type) params.append('type', options.type);
+      if (options?.period) params.append('period', options.period);
+
+      const queryString = params.toString();
+      const url = `${getApiUrl()}/float/payouts${queryString ? `?${queryString}` : ''}`;
+
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        console.error('API error fetching payouts:', response.status);
+        return {
+          success: false,
+          payouts: [],
+          total: 0,
+          limit: options?.limit || 50,
+          offset: options?.offset || 0,
+          summary: {
+            totalAmount: 0,
+            totalFees: 0,
+            completedCount: 0,
+            pendingCount: 0,
+            failedCount: 0,
+          },
+        };
+      }
+
+      const result = await response.json();
+      return result;
+    } catch (error) {
+      console.error('Error fetching payouts:', error);
+      return {
+        success: false,
+        payouts: [],
+        total: 0,
+        limit: options?.limit || 50,
+        offset: options?.offset || 0,
+        summary: {
+          totalAmount: 0,
+          totalFees: 0,
+          completedCount: 0,
+          pendingCount: 0,
+          failedCount: 0,
+        },
+      };
+    }
+  },
+
+  /**
+   * Get today's payouts summary
+   */
+  async getTodayPayoutsSummary(): Promise<{
+    totalAmount: number;
+    count: number;
+    userCashouts: number;
+    merchantWithdrawals: number;
+  }> {
+    try {
+      const result = await this.getPayouts({ period: 'today', limit: 1000 });
+
+      const userCashouts = result.payouts.filter(p => p.payout_type === 'USER_CASHOUT');
+      const merchantWithdrawals = result.payouts.filter(p => p.payout_type === 'MERCHANT_WITHDRAW');
+
+      return {
+        totalAmount: result.summary.totalAmount,
+        count: result.total,
+        userCashouts: userCashouts.reduce((sum, p) => sum + p.amount, 0),
+        merchantWithdrawals: merchantWithdrawals.reduce((sum, p) => sum + p.amount, 0),
+      };
+    } catch (error) {
+      console.error('Error fetching today payouts summary:', error);
+      return { totalAmount: 0, count: 0, userCashouts: 0, merchantWithdrawals: 0 };
+    }
   },
 };
