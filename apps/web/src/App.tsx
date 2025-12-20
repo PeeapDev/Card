@@ -324,6 +324,14 @@ function App() {
                 }
               />
               <Route
+                path="/cards/virtual"
+                element={
+                  <ProtectedRoute>
+                    <VirtualCardsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/transactions"
                 element={
                   <ProtectedRoute>
@@ -577,6 +585,14 @@ function App() {
                 element={
                   <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
                     <CardOrdersPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/admin/virtual-cards"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <AdminVirtualCardsPage />
                   </RoleBasedRoute>
                 }
               />
