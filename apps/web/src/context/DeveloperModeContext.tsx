@@ -10,6 +10,7 @@ interface DeveloperModeContextType {
   businessCount: number;
   checkBusinesses: () => Promise<void>;
   isSaving: boolean;
+  isLoading: boolean;
 }
 
 const DeveloperModeContext = createContext<DeveloperModeContextType | undefined>(undefined);
@@ -20,22 +21,19 @@ export function DeveloperModeProvider({ children }: { children: ReactNode }) {
   const [businessCount, setBusinessCount] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const isInitialLoad = useRef(true);
+  const hasCheckedBusinesses = useRef(false);
 
   // Get user ID from session on mount and load developer mode from database
   useEffect(() => {
     const initUser = async () => {
+      setIsLoading(true);
       const user = await sessionService.validateSession();
       if (user) {
         setUserId(user.id);
 
-        // First, check localStorage for instant UI (cached value)
-        const cached = localStorage.getItem(`developerMode_${user.id}`);
-        if (cached === 'true') {
-          setIsDeveloperMode(true);
-        }
-
-        // Then load from database (source of truth)
+        // Load from database ONLY (no localStorage)
         try {
           const { data, error } = await supabase
             .from('users')
@@ -46,20 +44,20 @@ export function DeveloperModeProvider({ children }: { children: ReactNode }) {
           if (!error && data) {
             const dbValue = data.developer_mode_enabled === true;
             setIsDeveloperMode(dbValue);
-            // Update localStorage cache
-            localStorage.setItem(`developerMode_${user.id}`, String(dbValue));
           }
         } catch (err) {
           console.error('Error loading developer mode from database:', err);
         }
 
         isInitialLoad.current = false;
+        setIsLoading(false);
       } else {
         setUserId(null);
         setIsDeveloperMode(false);
         setHasBusinesses(false);
         setBusinessCount(0);
         isInitialLoad.current = false;
+        setIsLoading(false);
       }
     };
     initUser();
@@ -67,7 +65,8 @@ export function DeveloperModeProvider({ children }: { children: ReactNode }) {
 
   // Check businesses when userId is set
   useEffect(() => {
-    if (userId) {
+    if (userId && !hasCheckedBusinesses.current) {
+      hasCheckedBusinesses.current = true;
       checkBusinesses();
     }
   }, [userId]);
@@ -80,10 +79,7 @@ export function DeveloperModeProvider({ children }: { children: ReactNode }) {
     const saveToDB = async () => {
       setIsSaving(true);
       try {
-        // Save to localStorage for instant cache
-        localStorage.setItem(`developerMode_${userId}`, String(isDeveloperMode));
-
-        // Save to database (source of truth)
+        // Save to database ONLY (no localStorage)
         const { error } = await supabase
           .from('users')
           .update({ developer_mode_enabled: isDeveloperMode })
@@ -121,8 +117,14 @@ export function DeveloperModeProvider({ children }: { children: ReactNode }) {
       setBusinessCount(count);
       setHasBusinesses(count > 0);
 
-      // Auto-enable developer mode if user has businesses
-      if (count > 0) {
+      // Auto-enable developer mode if user has businesses AND save to database
+      if (count > 0 && !isDeveloperMode) {
+        // Update database directly
+        await supabase
+          .from('users')
+          .update({ developer_mode_enabled: true })
+          .eq('id', userId);
+
         setIsDeveloperMode(true);
       }
     } catch (err) {
@@ -146,7 +148,8 @@ export function DeveloperModeProvider({ children }: { children: ReactNode }) {
       hasBusinesses,
       businessCount,
       checkBusinesses,
-      isSaving
+      isSaving,
+      isLoading
     }}>
       {children}
     </DeveloperModeContext.Provider>
