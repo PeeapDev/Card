@@ -1359,10 +1359,45 @@ export const cardService = {
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
+      console.log('[CardService] Fallback query result:', fallback.data, fallback.error);
+
       if (fallback.error) {
         throw new Error(fallback.error.message);
       }
-      return this.mapIssuedCards(fallback.data || []);
+
+      // Map fallback data the same way
+      return (fallback.data || []).map((row: any) => ({
+        id: row.id,
+        userId: row.user_id,
+        walletId: row.wallet_id,
+        cardName: row.card_name || 'Virtual Card',
+        cardLabel: row.card_label,
+        cardNumber: row.card_number || '',
+        cardLastFour: row.card_last_four || row.card_number?.slice(-4) || '****',
+        cardColor: row.card_color || '#1a1a2e',
+        expiryMonth: row.expiry_month || 12,
+        expiryYear: row.expiry_year || new Date().getFullYear() + 3,
+        cardStatus: row.card_status || 'pending',
+        isFrozen: row.is_frozen || false,
+        dailyLimit: parseFloat(row.daily_limit) || 100000,
+        weeklyLimit: parseFloat(row.weekly_limit) || 500000,
+        monthlyLimit: parseFloat(row.monthly_limit) || 1000000,
+        perTransactionLimit: parseFloat(row.per_transaction_limit) || 50000,
+        dailySpent: parseFloat(row.daily_spent) || 0,
+        contactlessEnabled: row.contactless_enabled ?? true,
+        internationalEnabled: row.international_enabled ?? false,
+        onlinePaymentsEnabled: row.online_payments_enabled ?? true,
+        atmWithdrawalsEnabled: row.atm_withdrawals_enabled ?? false,
+        spentToday: parseFloat(row.spent_today) || 0,
+        spentThisMonth: parseFloat(row.spent_this_month) || 0,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        wallet: row.wallets ? {
+          id: row.wallets.id,
+          balance: parseFloat(row.wallets.balance) || 0,
+          currency: row.wallets.currency || 'SLE',
+        } : undefined,
+      }));
     }
 
     return (data || []).map((row: any) => ({
