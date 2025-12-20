@@ -259,7 +259,7 @@ export function PeeapCardPayment({
                   <div className="flex-1">
                     <p className="font-medium text-gray-900 dark:text-white">{selectedCard.cardName}</p>
                     <p className="text-sm text-gray-500">
-                      **** {selectedCard.cardLastFour} | Balance: {formatAmount((selectedCard.wallet?.balance || 0) * 100)}
+                      **** {selectedCard.cardLastFour} | Exp: {String(selectedCard.expiryMonth).padStart(2, '0')}/{String(selectedCard.expiryYear).slice(-2)} | Bal: {formatAmount((selectedCard.wallet?.balance || 0) * 100)}
                     </p>
                   </div>
                   <ChevronDown className={clsx('w-5 h-5 text-gray-400 transition-transform', showCardSelector && 'rotate-180')} />
@@ -303,7 +303,7 @@ export function PeeapCardPayment({
                     <div className="flex-1 text-left">
                       <p className="font-medium text-gray-900 dark:text-white">{card.cardName}</p>
                       <p className="text-sm text-gray-500">
-                        Balance: {formatAmount((card.wallet?.balance || 0) * 100)}
+                        **** {card.cardLastFour} | Exp: {String(card.expiryMonth).padStart(2, '0')}/{String(card.expiryYear).slice(-2)} | Bal: {formatAmount((card.wallet?.balance || 0) * 100)}
                       </p>
                     </div>
                     {selectedCard?.id === card.id && (
