@@ -88,66 +88,66 @@ export class P2PTransferService {
   }
 
   private initializeDefaultFees() {
-    // Standard user fee: 1% with min $0.10, max $10
+    // Standard user fee: 1% with min Le 1,000, max Le 100,000
     this.feeConfigs.set('standard', {
       type: 'percentage',
       value: 1.0,
-      minFee: 0.10,
-      maxFee: 10.0,
+      minFee: 1000,
+      maxFee: 100000,
     });
 
-    // Agent+ fee: 0.2% with min $0.05
+    // Agent+ fee: 0.2% with min Le 500, max Le 50,000
     this.feeConfigs.set('agent_plus', {
       type: 'percentage',
       value: 0.2,
-      minFee: 0.05,
-      maxFee: 5.0,
+      minFee: 500,
+      maxFee: 50000,
     });
 
-    // Merchant fee: 0.5%
+    // Merchant fee: 0.5% with min Le 1,000, max Le 250,000
     this.feeConfigs.set('merchant', {
       type: 'percentage',
       value: 0.5,
-      minFee: 0.10,
-      maxFee: 25.0,
+      minFee: 1000,
+      maxFee: 250000,
     });
 
-    // Tiered fee example
+    // Tiered fee for high-volume users
     this.feeConfigs.set('tiered', {
       type: 'tiered',
       value: 0,
       tiers: [
-        { min: 0, max: 100, fee: 0.50, type: 'fixed' },
-        { min: 100, max: 1000, fee: 1.0, type: 'percentage' },
-        { min: 1000, max: 10000, fee: 0.75, type: 'percentage' },
-        { min: 10000, max: Infinity, fee: 0.5, type: 'percentage' },
+        { min: 0, max: 100000, fee: 5000, type: 'fixed' },           // Le 5,000 fixed for < Le 100,000
+        { min: 100000, max: 1000000, fee: 1.0, type: 'percentage' }, // 1% for Le 100K - 1M
+        { min: 1000000, max: 10000000, fee: 0.75, type: 'percentage' }, // 0.75% for Le 1M - 10M
+        { min: 10000000, max: Infinity, fee: 0.5, type: 'percentage' }, // 0.5% for > Le 10M
       ],
     });
   }
 
   private initializeDefaultLimits() {
-    // Standard user limits
+    // Standard user limits (in Leones)
     this.userLimits.set('standard', {
-      dailyLimit: 5000,
-      monthlyLimit: 25000,
-      perTransactionLimit: 2500,
-      minAmount: 1.0,
+      dailyLimit: 5000000,        // Le 5,000,000 per day
+      monthlyLimit: 25000000,     // Le 25,000,000 per month
+      perTransactionLimit: 2500000, // Le 2,500,000 per transaction
+      minAmount: 1000,            // Le 1,000 minimum
     });
 
     // Agent+ limits (much higher)
     this.userLimits.set('agent_plus', {
-      dailyLimit: 1000000,
-      monthlyLimit: 10000000,
-      perTransactionLimit: 500000,
-      minAmount: 0.01,
+      dailyLimit: 100000000,      // Le 100,000,000 per day
+      monthlyLimit: 500000000,    // Le 500,000,000 per month
+      perTransactionLimit: 50000000, // Le 50,000,000 per transaction
+      minAmount: 100,             // Le 100 minimum
     });
 
     // Merchant limits
     this.userLimits.set('merchant', {
-      dailyLimit: 100000,
-      monthlyLimit: 1000000,
-      perTransactionLimit: 50000,
-      minAmount: 0.01,
+      dailyLimit: 50000000,       // Le 50,000,000 per day
+      monthlyLimit: 200000000,    // Le 200,000,000 per month
+      perTransactionLimit: 25000000, // Le 25,000,000 per transaction
+      minAmount: 100,             // Le 100 minimum
     });
   }
 

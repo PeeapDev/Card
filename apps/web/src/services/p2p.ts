@@ -293,38 +293,38 @@ class P2PTransferService {
   }
 
   /**
-   * Get default limits by user type
+   * Get default limits by user type (in Leones)
    */
   private getDefaultLimits(userType: string): TransferLimits {
     switch (userType) {
       case 'agent_plus':
         return {
-          dailyLimit: 1000000,
-          monthlyLimit: 10000000,
-          perTransactionLimit: 500000,
-          minAmount: 0.01,
+          dailyLimit: 100000000,      // Le 100,000,000 per day
+          monthlyLimit: 500000000,    // Le 500,000,000 per month
+          perTransactionLimit: 50000000, // Le 50,000,000 per transaction
+          minAmount: 100,             // Le 100 minimum
         };
       case 'agent':
         return {
-          dailyLimit: 50000,
-          monthlyLimit: 250000,
-          perTransactionLimit: 25000,
-          minAmount: 0.50,
+          dailyLimit: 20000000,       // Le 20,000,000 per day
+          monthlyLimit: 100000000,    // Le 100,000,000 per month
+          perTransactionLimit: 10000000, // Le 10,000,000 per transaction
+          minAmount: 500,             // Le 500 minimum
         };
       case 'merchant':
         return {
-          dailyLimit: 100000,
-          monthlyLimit: 1000000,
-          perTransactionLimit: 50000,
-          minAmount: 0.01,
+          dailyLimit: 50000000,       // Le 50,000,000 per day
+          monthlyLimit: 200000000,    // Le 200,000,000 per month
+          perTransactionLimit: 25000000, // Le 25,000,000 per transaction
+          minAmount: 100,             // Le 100 minimum
         };
       case 'standard':
       default:
         return {
-          dailyLimit: 5000,
-          monthlyLimit: 25000,
-          perTransactionLimit: 2500,
-          minAmount: 1.00,
+          dailyLimit: 5000000,        // Le 5,000,000 per day
+          monthlyLimit: 25000000,     // Le 25,000,000 per month
+          perTransactionLimit: 2500000, // Le 2,500,000 per transaction
+          minAmount: 1000,            // Le 1,000 minimum
         };
     }
   }
