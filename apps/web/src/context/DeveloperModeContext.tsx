@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { sessionService } from '@/services/session.service';
+import { useAuth } from '@/context/AuthContext';
 
 interface DeveloperModeContextType {
   isDeveloperMode: boolean;
@@ -16,65 +16,79 @@ interface DeveloperModeContextType {
 const DeveloperModeContext = createContext<DeveloperModeContextType | undefined>(undefined);
 
 export function DeveloperModeProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [isDeveloperMode, setIsDeveloperMode] = useState(false);
   const [hasBusinesses, setHasBusinesses] = useState(false);
   const [businessCount, setBusinessCount] = useState(0);
-  const [userId, setUserId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const isInitialLoad = useRef(true);
+  const hasLoadedFromDB = useRef(false);
   const hasCheckedBusinesses = useRef(false);
+  const lastUserId = useRef<string | null>(null);
 
-  // Get user ID from session on mount and load developer mode from database
+  // Reset refs when user changes (different user logged in)
   useEffect(() => {
-    const initUser = async () => {
-      setIsLoading(true);
-      const user = await sessionService.validateSession();
-      if (user) {
-        setUserId(user.id);
+    if (user?.id && user.id !== lastUserId.current) {
+      // New user logged in - reset refs
+      hasLoadedFromDB.current = false;
+      hasCheckedBusinesses.current = false;
+      isInitialLoad.current = true;
+      lastUserId.current = user.id;
+    }
+  }, [user?.id]);
 
-        // Load from database ONLY (no localStorage)
-        try {
-          const { data, error } = await supabase
-            .from('users')
-            .select('developer_mode_enabled')
-            .eq('id', user.id)
-            .single();
-
-          if (!error && data) {
-            const dbValue = data.developer_mode_enabled === true;
-            setIsDeveloperMode(dbValue);
-          }
-        } catch (err) {
-          console.error('Error loading developer mode from database:', err);
-        }
-
-        isInitialLoad.current = false;
+  // Load developer mode from database when user changes
+  useEffect(() => {
+    const loadDeveloperMode = async () => {
+      if (!user?.id) {
+        // No user - just stop loading, don't reset mode (might be temporary)
         setIsLoading(false);
-      } else {
-        setUserId(null);
-        setIsDeveloperMode(false);
-        setHasBusinesses(false);
-        setBusinessCount(0);
+        return;
+      }
+
+      // Only load from DB once per user session
+      if (hasLoadedFromDB.current) {
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('developer_mode_enabled')
+          .eq('id', user.id)
+          .single();
+
+        if (!error && data) {
+          const dbValue = data.developer_mode_enabled === true;
+          setIsDeveloperMode(dbValue);
+          hasLoadedFromDB.current = true;
+        }
+      } catch (err) {
+        console.error('Error loading developer mode from database:', err);
+      } finally {
         isInitialLoad.current = false;
         setIsLoading(false);
       }
     };
-    initUser();
-  }, []);
 
-  // Check businesses when userId is set
+    loadDeveloperMode();
+  }, [user?.id]);
+
+  // Check businesses when user is set
   useEffect(() => {
-    if (userId && !hasCheckedBusinesses.current) {
+    if (user?.id && !hasCheckedBusinesses.current) {
       hasCheckedBusinesses.current = true;
       checkBusinesses();
     }
-  }, [userId]);
+  }, [user?.id]);
 
   // Save developer mode setting to database when it changes
   useEffect(() => {
-    // Skip saving during initial load
-    if (isInitialLoad.current || !userId) return;
+    // Skip saving during initial load or if no user
+    if (isInitialLoad.current || !user?.id) return;
 
     const saveToDB = async () => {
       setIsSaving(true);
@@ -83,7 +97,7 @@ export function DeveloperModeProvider({ children }: { children: ReactNode }) {
         const { error } = await supabase
           .from('users')
           .update({ developer_mode_enabled: isDeveloperMode })
-          .eq('id', userId);
+          .eq('id', user.id);
 
         if (error) {
           console.error('Error saving developer mode to database:', error);
@@ -96,17 +110,17 @@ export function DeveloperModeProvider({ children }: { children: ReactNode }) {
     };
 
     saveToDB();
-  }, [isDeveloperMode, userId]);
+  }, [isDeveloperMode, user?.id]);
 
   // Check if user has businesses (and auto-enable developer mode)
   const checkBusinesses = async () => {
-    if (!userId) return;
+    if (!user?.id) return;
 
     try {
       const { data, error } = await supabase
         .from('merchant_businesses')
         .select('id')
-        .eq('merchant_id', userId);
+        .eq('merchant_id', user.id);
 
       if (error) {
         console.error('Error checking businesses:', error);
@@ -123,7 +137,7 @@ export function DeveloperModeProvider({ children }: { children: ReactNode }) {
         await supabase
           .from('users')
           .update({ developer_mode_enabled: true })
-          .eq('id', userId);
+          .eq('id', user.id);
 
         setIsDeveloperMode(true);
       }
