@@ -829,16 +829,13 @@ export function AdminDashboard() {
 
             {/* Platform Profit Card */}
             <motion.div
-              className="mt-4"
+              className="mt-4 cursor-pointer"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
+              onClick={() => setFloatOverviewOpen(true)}
             >
-              <MotionCard
-                className="p-5 bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-600 text-white cursor-pointer hover:shadow-xl transition-all"
-                delay={0.4}
-                onClick={() => setFloatOverviewOpen(true)}
-              >
+              <Card className="p-5 bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-600 text-white hover:shadow-xl transition-all">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="p-3 bg-white/20 rounded-xl">
@@ -878,7 +875,7 @@ export function AdminDashboard() {
                     <p className="text-xs text-emerald-100">Subscriptions</p>
                   </div>
                 </div>
-              </MotionCard>
+              </Card>
             </motion.div>
           </section>
 
