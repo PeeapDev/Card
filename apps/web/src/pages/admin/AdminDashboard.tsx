@@ -48,7 +48,7 @@ import {
   Legend,
 } from 'recharts';
 import { SafeResponsiveContainer } from '@/components/charts/SafeResponsiveContainer';
-import { MotionCard } from '@/components/ui/Card';
+import { Card, MotionCard } from '@/components/ui/Card';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase, supabaseAdmin } from '@/lib/supabase';
