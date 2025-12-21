@@ -388,35 +388,44 @@ class MarketplaceService {
     search?: string;
     featured?: boolean;
   }): Promise<MarketplaceStore[]> {
-    let query = supabase
-      .from('marketplace_stores')
-      .select('*')
-      .eq('is_listed', true);
+    try {
+      let query = supabase
+        .from('marketplace_stores')
+        .select('*')
+        .eq('is_listed', true);
 
-    if (filters?.category) {
-      query = query.contains('store_categories', [filters.category]);
+      if (filters?.category) {
+        query = query.contains('store_categories', [filters.category]);
+      }
+
+      if (filters?.city) {
+        query = query.ilike('city', `%${filters.city}%`);
+      }
+
+      if (filters?.search) {
+        query = query.or(`store_name.ilike.%${filters.search}%,description.ilike.%${filters.search}%`);
+      }
+
+      if (filters?.featured) {
+        query = query.eq('is_featured', true);
+      }
+
+      const { data, error } = await query.order('is_featured', { ascending: false }).order('total_orders', { ascending: false });
+
+      // Handle table not existing gracefully
+      if (error) {
+        if (error.code === '42P01' || error.message?.includes('does not exist')) {
+          return [];
+        }
+        console.error('Error fetching stores:', error);
+        throw error;
+      }
+
+      return data || [];
+    } catch (e) {
+      // Table doesn't exist
+      return [];
     }
-
-    if (filters?.city) {
-      query = query.ilike('city', `%${filters.city}%`);
-    }
-
-    if (filters?.search) {
-      query = query.or(`store_name.ilike.%${filters.search}%,description.ilike.%${filters.search}%`);
-    }
-
-    if (filters?.featured) {
-      query = query.eq('is_featured', true);
-    }
-
-    const { data, error } = await query.order('is_featured', { ascending: false }).order('total_orders', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching stores:', error);
-      throw error;
-    }
-
-    return data || [];
   }
 
   async getStoreBySlug(slug: string): Promise<MarketplaceStore | null> {
@@ -768,7 +777,13 @@ class MarketplaceService {
       .eq('customer_id', customerId)
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
+    // Handle table not existing (404) gracefully
+    if (error) {
+      if (error.code === '42P01' || error.message?.includes('does not exist')) {
+        return []; // Table doesn't exist yet
+      }
+      throw error;
+    }
     return data || [];
   }
 
@@ -887,19 +902,29 @@ class MarketplaceService {
     is_featured: boolean;
   }[]> {
     // First try to get from marketplace_listings
-    const { data: listingsData, error: listingsError } = await supabase
-      .from('marketplace_listings')
-      .select(`
-        id,
-        marketplace_price,
-        is_featured,
-        product:pos_products(id, name, price, image_url),
-        store:marketplace_stores(id, store_name, store_slug, logo_url, is_listed, is_verified)
-      `)
-      .eq('is_listed', true)
-      .order('is_featured', { ascending: false })
-      .order('view_count', { ascending: false })
-      .limit(limit);
+    let listingsData: any[] | null = null;
+    let listingsError: any = null;
+
+    try {
+      const result = await supabase
+        .from('marketplace_listings')
+        .select(`
+          id,
+          marketplace_price,
+          is_featured,
+          product:pos_products(id, name, price, image_url),
+          store:marketplace_stores(id, store_name, store_slug, logo_url, is_listed, is_verified)
+        `)
+        .eq('is_listed', true)
+        .order('is_featured', { ascending: false })
+        .order('view_count', { ascending: false })
+        .limit(limit);
+      listingsData = result.data;
+      listingsError = result.error;
+    } catch (e) {
+      // Table doesn't exist
+      listingsError = e;
+    }
 
     if (!listingsError && listingsData && listingsData.length > 0) {
       // Filter to only include products from listed stores and transform data

@@ -91,11 +91,10 @@ export const getUserAppsSettings = async (userId: string): Promise<UserAppsSetti
       .from('user_apps_settings')
       .select('*')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle(); // Use maybeSingle to avoid 406 error when no rows exist
 
-    if (error && error.code !== 'PGRST116') {
-      console.error('Error fetching user apps settings:', error);
-      // Fall back to IndexedDB cache
+    if (error) {
+      // Silently fall back to IndexedDB cache
       return getCachedAppsSettings(userId);
     }
 

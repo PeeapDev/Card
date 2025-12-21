@@ -19,17 +19,55 @@ function getSessionToken(): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+// Get Supabase auth token from localStorage
+function getSupabaseToken(): string | null {
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    // Try the standard Supabase storage key pattern
+    const keys = Object.keys(localStorage).filter(k => k.includes('supabase') && k.includes('auth-token'));
+    for (const key of keys) {
+      const data = localStorage.getItem(key);
+      if (data) {
+        const parsed = JSON.parse(data);
+        if (parsed?.access_token) {
+          return parsed.access_token;
+        }
+      }
+    }
+    // Also try the project-specific key pattern
+    const sbKey = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
+    if (sbKey) {
+      const data = localStorage.getItem(sbKey);
+      if (data) {
+        const parsed = JSON.parse(data);
+        if (parsed?.access_token) {
+          return parsed.access_token;
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[API] Error getting Supabase token:', e);
+  }
+  return null;
+}
+
 /**
- * Get authentication headers from stored tokens (secure cookie)
+ * Get authentication headers from stored tokens (secure cookie or Supabase)
  */
 function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
 
-  // Get token from secure cookie instead of localStorage
-  const accessToken = getSessionToken();
-  if (accessToken) {
-    // Send the session token - backend validates it against the database
-    headers['Authorization'] = `Session ${accessToken}`;
+  // First try secure cookie session token
+  const sessionToken = getSessionToken();
+  if (sessionToken) {
+    headers['Authorization'] = `Session ${sessionToken}`;
+    return headers;
+  }
+
+  // Fall back to Supabase auth token
+  const supabaseToken = getSupabaseToken();
+  if (supabaseToken) {
+    headers['Authorization'] = `Bearer ${supabaseToken}`;
   }
 
   return headers;

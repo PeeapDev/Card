@@ -1244,25 +1244,33 @@ export interface EventsSettings {
 }
 
 export const isEventsSetupCompleted = async (merchantId: string): Promise<boolean> => {
-  const { data, error } = await supabaseAdmin
-    .from('events_settings')
-    .select('setup_completed')
-    .eq('merchant_id', merchantId)
-    .single();
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('events_settings')
+      .select('setup_completed')
+      .eq('merchant_id', merchantId)
+      .maybeSingle(); // Use maybeSingle to avoid 406 error when no rows exist
 
-  if (error || !data) return false;
-  return data.setup_completed === true;
+    if (error || !data) return false;
+    return data.setup_completed === true;
+  } catch {
+    return false;
+  }
 };
 
 export const getEventsSettings = async (merchantId: string): Promise<EventsSettings | null> => {
-  const { data, error } = await supabaseAdmin
-    .from('events_settings')
-    .select('*')
-    .eq('merchant_id', merchantId)
-    .single();
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('events_settings')
+      .select('*')
+      .eq('merchant_id', merchantId)
+      .maybeSingle(); // Use maybeSingle to avoid 406 error when no rows exist
 
-  if (error) return null;
-  return data;
+    if (error) return null;
+    return data;
+  } catch {
+    return null;
+  }
 };
 
 export const saveEventsSettings = async (

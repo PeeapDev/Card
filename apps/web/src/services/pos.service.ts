@@ -2517,20 +2517,16 @@ async function isPOSSetupCompleted(merchantId: string): Promise<boolean> {
       .from('pos_settings')
       .select('setup_completed')
       .eq('merchant_id', merchantId)
-      .single();
+      .maybeSingle(); // Use maybeSingle to avoid 406 error when no rows exist
 
     if (error) {
-      if (error.code === 'PGRST116') {
-        // Not found - not completed
-        return false;
-      }
-      console.error('Error checking POS setup:', error);
+      // Silently handle table not existing or other errors
       return false;
     }
 
     return data?.setup_completed === true;
   } catch (error) {
-    console.error('Error checking POS setup:', error);
+    // Silently handle errors - POS is just not set up
     return false;
   }
 }
