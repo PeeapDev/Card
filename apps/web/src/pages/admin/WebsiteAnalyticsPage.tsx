@@ -14,6 +14,8 @@ import {
   Calendar,
   FileText,
   ExternalLink,
+  BarChart3,
+  Zap,
 } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { MotionCard } from '@/components/ui/Card';
@@ -166,6 +168,52 @@ export function WebsiteAnalyticsPage() {
             >
               <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
             </button>
+          </div>
+        </div>
+
+        {/* Vercel Analytics Link */}
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-6 text-white">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-white/20 rounded-lg">
+                <BarChart3 className="h-8 w-8" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  Vercel Analytics
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-400/20 text-green-100 rounded-full text-xs font-medium">
+                    <Zap className="h-3 w-3" />
+                    Live
+                  </span>
+                </h3>
+                <p className="text-blue-100 text-sm mt-1">
+                  Real-time visitor tracking, page views, and performance metrics powered by Vercel
+                </p>
+              </div>
+            </div>
+            <a
+              href="https://vercel.com/peeapdev/my-peeap-com/analytics"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-white text-blue-600 font-medium rounded-lg hover:bg-blue-50 transition-colors"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Open Vercel Dashboard
+            </a>
+          </div>
+          <div className="mt-4 pt-4 border-t border-white/20 grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <Eye className="h-4 w-4 text-blue-200" />
+              <span className="text-blue-100">Page Views Tracking</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-blue-200" />
+              <span className="text-blue-100">Unique Visitors</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Globe className="h-4 w-4 text-blue-200" />
+              <span className="text-blue-100">Geographic Data</span>
+            </div>
           </div>
         </div>
 

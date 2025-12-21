@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Analytics } from '@vercel/analytics/react';
 import { AuthProvider } from '@/context/AuthContext';
 import { NFCProvider } from '@/hooks/useNFC';
 import { DeveloperModeProvider } from '@/context/DeveloperModeContext';
@@ -193,6 +194,7 @@ function App() {
                     <UserAppsProvider>
                   <NotificationWrapper />
                   <AnalyticsTracker />
+                  <Analytics />
                 <Routes>
               {/* Checkout App - Only show checkout and payment routes */}
               {isCheckoutMode && (
