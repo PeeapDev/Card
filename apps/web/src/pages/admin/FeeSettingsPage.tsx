@@ -98,6 +98,16 @@ export function FeeSettingsPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Gateway & Platform fees from payment_settings
+  const [platformFees, setPlatformFees] = useState({
+    gatewayDepositFeePercent: 1.5,
+    gatewayWithdrawalFeePercent: 0,
+    depositFeePercent: 1,
+    depositFeeFlat: 0,
+    withdrawalFeePercent: 2,
+    withdrawalFeeFlat: 0,
+  });
+
   // Modal states
   const [showFeeModal, setShowFeeModal] = useState(false);
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
@@ -137,6 +147,24 @@ export function FeeSettingsPage() {
   const fetchSettings = async () => {
     setLoading(true);
     try {
+      // Fetch platform fees from payment_settings
+      const { data: paymentSettings } = await supabase
+        .from('payment_settings')
+        .select('gateway_deposit_fee_percent, gateway_withdrawal_fee_percent, deposit_fee_percent, deposit_fee_flat, withdrawal_fee_percent, withdrawal_fee_flat')
+        .eq('id', '00000000-0000-0000-0000-000000000001')
+        .single();
+
+      if (paymentSettings) {
+        setPlatformFees({
+          gatewayDepositFeePercent: parseFloat(paymentSettings.gateway_deposit_fee_percent?.toString() || '1.5'),
+          gatewayWithdrawalFeePercent: parseFloat(paymentSettings.gateway_withdrawal_fee_percent?.toString() || '0'),
+          depositFeePercent: parseFloat(paymentSettings.deposit_fee_percent?.toString() || '1'),
+          depositFeeFlat: parseFloat(paymentSettings.deposit_fee_flat?.toString() || '0'),
+          withdrawalFeePercent: parseFloat(paymentSettings.withdrawal_fee_percent?.toString() || '2'),
+          withdrawalFeeFlat: parseFloat(paymentSettings.withdrawal_fee_flat?.toString() || '0'),
+        });
+      }
+
       // Try to fetch fee settings from database
       const { data: feeData, error: feeError } = await supabase
         .from('fee_settings')
@@ -362,6 +390,34 @@ export function FeeSettingsPage() {
       currency: 'SLE',
       isActive: true,
     });
+  };
+
+  const savePlatformFees = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const { error: updateError } = await supabase
+        .from('payment_settings')
+        .update({
+          gateway_deposit_fee_percent: platformFees.gatewayDepositFeePercent,
+          gateway_withdrawal_fee_percent: platformFees.gatewayWithdrawalFeePercent,
+          deposit_fee_percent: platformFees.depositFeePercent,
+          deposit_fee_flat: platformFees.depositFeeFlat,
+          withdrawal_fee_percent: platformFees.withdrawalFeePercent,
+          withdrawal_fee_flat: platformFees.withdrawalFeeFlat,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', '00000000-0000-0000-0000-000000000001');
+
+      if (updateError) throw updateError;
+
+      setSuccess('Platform fees saved successfully');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to save platform fees');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const saveTransferLimit = async () => {
@@ -608,6 +664,151 @@ export function FeeSettingsPage() {
             {error}
           </div>
         )}
+
+        {/* Gateway & Platform Fees */}
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
+                <DollarSign className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Gateway & Platform Fees</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Configure deposit and withdrawal fees</p>
+              </div>
+            </div>
+            <button
+              onClick={savePlatformFees}
+              disabled={saving}
+              className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Save Fees
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Deposit Fees */}
+            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
+              <h3 className="font-medium text-blue-900 dark:text-blue-300 mb-4 flex items-center gap-2">
+                <span className="text-lg">📥</span> Deposit Fees
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Gateway Fee (Monime) %
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    value={platformFees.gatewayDepositFeePercent}
+                    onChange={(e) => setPlatformFees({ ...platformFees, gatewayDepositFeePercent: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Fee charged by payment gateway</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Platform Fee %
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      value={platformFees.depositFeePercent}
+                      onChange={(e) => setPlatformFees({ ...platformFees, depositFeePercent: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Flat Fee (Le)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={platformFees.depositFeeFlat}
+                      onChange={(e) => setPlatformFees({ ...platformFees, depositFeeFlat: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+                <div className="p-3 bg-blue-100 dark:bg-blue-800/50 rounded-lg">
+                  <p className="text-sm text-blue-800 dark:text-blue-200">
+                    <strong>Total deducted from deposit:</strong> {(platformFees.gatewayDepositFeePercent + platformFees.depositFeePercent).toFixed(1)}%
+                    {platformFees.depositFeeFlat > 0 && ` + Le ${platformFees.depositFeeFlat}`}
+                  </p>
+                  <p className="text-xs text-blue-600 dark:text-blue-300 mt-1">
+                    Your profit: {platformFees.depositFeePercent}%{platformFees.depositFeeFlat > 0 && ` + Le ${platformFees.depositFeeFlat}`}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Withdrawal Fees */}
+            <div className="p-4 bg-orange-50 dark:bg-orange-900/20 rounded-xl border border-orange-200 dark:border-orange-800">
+              <h3 className="font-medium text-orange-900 dark:text-orange-300 mb-4 flex items-center gap-2">
+                <span className="text-lg">📤</span> Withdrawal Fees
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Gateway Fee (Monime) %
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    value={platformFees.gatewayWithdrawalFeePercent}
+                    onChange={(e) => setPlatformFees({ ...platformFees, gatewayWithdrawalFeePercent: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Fee charged by payment gateway (usually 0 for payouts)</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Platform Fee %
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      value={platformFees.withdrawalFeePercent}
+                      onChange={(e) => setPlatformFees({ ...platformFees, withdrawalFeePercent: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Flat Fee (Le)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={platformFees.withdrawalFeeFlat}
+                      onChange={(e) => setPlatformFees({ ...platformFees, withdrawalFeeFlat: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                </div>
+                <div className="p-3 bg-orange-100 dark:bg-orange-800/50 rounded-lg">
+                  <p className="text-sm text-orange-800 dark:text-orange-200">
+                    <strong>Total charged for withdrawal:</strong> {platformFees.withdrawalFeePercent}%
+                    {platformFees.withdrawalFeeFlat > 0 && ` + Le ${platformFees.withdrawalFeeFlat}`}
+                  </p>
+                  <p className="text-xs text-orange-600 dark:text-orange-300 mt-1">
+                    Your profit: {platformFees.withdrawalFeePercent}%{platformFees.withdrawalFeeFlat > 0 && ` + Le ${platformFees.withdrawalFeeFlat}`}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Card>
 
         {/* Currency Settings */}
         <Card className="p-6">

@@ -80,7 +80,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     { id: 'nav-analytics', title: 'Website Analytics', description: 'View site analytics', icon: <TrendingUp className="w-4 h-4" />, category: 'navigation', action: () => navigate('/admin/website-analytics') },
 
     // Settings
-    { id: 'nav-fees', title: 'Fee Settings', description: 'Configure transaction fees', icon: <Layers className="w-4 h-4" />, category: 'navigation', action: () => navigate('/admin/fees') },
+    { id: 'nav-fees', title: 'Fees & Pricing', description: 'Configure transaction fees', icon: <Layers className="w-4 h-4" />, category: 'navigation', action: () => navigate('/admin/fee-settings') },
     { id: 'nav-payment-settings', title: 'Payment Settings', description: 'Payment configuration', icon: <Settings className="w-4 h-4" />, category: 'navigation', action: () => navigate('/admin/payment-settings') },
     { id: 'nav-smtp', title: 'SMTP Settings', description: 'Email configuration', icon: <Mail className="w-4 h-4" />, category: 'navigation', action: () => navigate('/admin/smtp-settings') },
     { id: 'nav-sso', title: 'SSO Settings', description: 'Single sign-on', icon: <Key className="w-4 h-4" />, category: 'navigation', action: () => navigate('/admin/sso-settings') },

@@ -1201,17 +1201,17 @@ async function handleMonimeWebhook(req: VercelRequest, res: VercelResponse) {
       const grossAmount = pendingTx.amount; // Amount user intended to deposit
       const currency = pendingTx.currency;
 
-      // Get fee settings
+      // Get fee settings (including gateway fees)
       const { data: feeSettings } = await supabase
         .from('payment_settings')
-        .select('deposit_fee_percent, deposit_fee_flat')
+        .select('deposit_fee_percent, deposit_fee_flat, gateway_deposit_fee_percent')
         .eq('id', SETTINGS_ID)
         .single();
 
       // Calculate fees
-      // Monime takes 1.5% from the gross amount
-      const MONIME_FEE_PERCENT = 1.5;
-      const monimeFee = grossAmount * (MONIME_FEE_PERCENT / 100);
+      // Gateway (Monime) fee - from settings, defaults to 1.5%
+      const gatewayFeePercent = parseFloat(feeSettings?.gateway_deposit_fee_percent?.toString() || '1.5');
+      const monimeFee = grossAmount * (gatewayFeePercent / 100);
 
       // Peeap fee (your profit) - from settings or default 1%
       const peeapFeePercent = feeSettings?.deposit_fee_percent || 1;
@@ -1258,8 +1258,8 @@ async function handleMonimeWebhook(req: VercelRequest, res: VercelResponse) {
             peeapFee,
             netAmount,
             feeBreakdown: {
-              monime: { percent: MONIME_FEE_PERCENT, amount: monimeFee },
-              peeap: { percent: peeapFeePercent, flat: peeapFeeFlat, amount: peeapFee },
+              gateway: { percent: gatewayFeePercent, amount: monimeFee },
+              platform: { percent: peeapFeePercent, flat: peeapFeeFlat, amount: peeapFee },
             },
           }
         })

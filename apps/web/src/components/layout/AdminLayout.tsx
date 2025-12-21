@@ -105,8 +105,7 @@ const navSections: NavSection[] = [
     title: 'Configuration',
     items: [
       { path: '/admin/business-categories', label: 'Business Categories', icon: Briefcase, badge: 'New', badgeColor: 'primary' },
-      { path: '/admin/fees', label: 'Fees & Pricing', icon: CreditCard },
-      { path: '/admin/fee-settings', label: 'Fee Settings', icon: DollarSign },
+      { path: '/admin/fee-settings', label: 'Fees & Pricing', icon: DollarSign },
       { path: '/admin/subscriptions', label: 'Subscriptions', icon: Wallet },
     ],
   },
