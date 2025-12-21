@@ -4622,16 +4622,16 @@ async function handleNotificationSend(req: VercelRequest, res: VercelResponse) {
     const { data: { user }, error: authError } = await supabaseAnon.auth.getUser(token);
 
     if (authError || !user) {
-      // Try custom session token
-      const { data: session } = await supabase
-        .from('sessions')
+      // Try custom session token (stored in sso_tokens table)
+      const { data: ssoSession } = await supabase
+        .from('sso_tokens')
         .select('user_id')
         .eq('token', token)
-        .eq('is_active', true)
+        .in('target_app', ['peeap-pay', 'my'])
         .gt('expires_at', new Date().toISOString())
-        .single();
+        .maybeSingle();
 
-      if (!session) {
+      if (!ssoSession) {
         return res.status(401).json({ error: 'Invalid or expired token' });
       }
 
@@ -4639,7 +4639,7 @@ async function handleNotificationSend(req: VercelRequest, res: VercelResponse) {
       const { data: userData } = await supabase
         .from('users')
         .select('id, role')
-        .eq('id', session.user_id)
+        .eq('id', ssoSession.user_id)
         .single();
 
       if (!userData || !['admin', 'superadmin'].includes(userData.role)) {
@@ -10364,24 +10364,24 @@ async function authenticateKycUser(req: VercelRequest): Promise<{ userId: string
     }
   }
 
-  // Fall back to custom session token
-  const { data: session } = await supabase
-    .from('sessions')
+  // Fall back to custom session token (stored in sso_tokens table)
+  const { data: ssoSession } = await supabase
+    .from('sso_tokens')
     .select('user_id')
     .eq('token', token)
-    .eq('is_active', true)
+    .in('target_app', ['peeap-pay', 'my'])
     .gt('expires_at', new Date().toISOString())
-    .single();
+    .maybeSingle();
 
-  if (session) {
+  if (ssoSession) {
     const { data: userData } = await supabase
       .from('users')
       .select('*')
-      .eq('id', session.user_id)
+      .eq('id', ssoSession.user_id)
       .single();
 
     if (userData) {
-      return { userId: session.user_id, user: userData };
+      return { userId: ssoSession.user_id, user: userData };
     }
   }
 

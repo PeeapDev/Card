@@ -394,8 +394,9 @@ export function UsersManagementPage() {
     const matchesStatus = statusFilter === 'all' ||
       (statusFilter === 'active' && isActive) ||
       (statusFilter === 'inactive' && !isActive) ||
-      (statusFilter === 'verified' && user.kyc_status === 'APPROVED') ||
-      (statusFilter === 'pending' && user.kyc_status === 'PENDING');
+      (statusFilter === 'verified' && (user.kyc_status === 'APPROVED' || user.kyc_status === 'VERIFIED')) ||
+      (statusFilter === 'pending' && user.kyc_status === 'PENDING') ||
+      (statusFilter === 'unverified' && (!user.kyc_status || user.kyc_status === 'NOT_STARTED' || user.kyc_status === 'REJECTED'));
 
     return matchesSearch && matchesStatus;
   });
@@ -433,7 +434,7 @@ export function UsersManagementPage() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <MotionCard className="p-4" delay={0}>
             <div className="flex items-center gap-3">
               <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
@@ -467,6 +468,19 @@ export function UsersManagementPage() {
               </div>
             </div>
           </MotionCard>
+          <div onClick={() => handleFilterChange('unverified')} className="cursor-pointer">
+            <MotionCard className="p-4 hover:ring-2 hover:ring-orange-500/50" delay={0.25}>
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+                  <XCircle className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Unverified</p>
+                  <p className="text-xl font-semibold text-gray-900 dark:text-white">{users.filter(u => !u.kyc_status || u.kyc_status === 'NOT_STARTED' || u.kyc_status === 'REJECTED').length}</p>
+                </div>
+              </div>
+            </MotionCard>
+          </div>
           <MotionCard className="p-4" delay={0.3}>
             <div className="flex items-center gap-3">
               <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
@@ -503,6 +517,7 @@ export function UsersManagementPage() {
               <option value="inactive">Suspended</option>
               <option value="verified">KYC Verified</option>
               <option value="pending">KYC Pending</option>
+              <option value="unverified">KYC Unverified</option>
             </select>
             <button className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-700 dark:text-gray-300">
               <Download className="w-4 h-4" />
