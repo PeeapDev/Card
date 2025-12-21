@@ -65,9 +65,11 @@ export function POSWallet({ onBalanceChange, compact = false }: POSWalletProps) 
       const primary = await walletService.getWalletByType(user.id, 'primary');
       setPrimaryWallet(primary);
 
-      // Get all wallets for display
+      // Get all wallets for display - only show POS-relevant wallets (pos and primary)
       const wallets = await walletService.getWallets(user.id);
-      setAllWallets((wallets as ExtendedWallet[]).filter(w => w.walletType !== 'pot'));
+      setAllWallets((wallets as ExtendedWallet[]).filter(w =>
+        w.walletType === 'pos' || w.walletType === 'primary'
+      ));
     } catch (error) {
       console.error('Error loading wallets:', error);
     } finally {
