@@ -330,6 +330,22 @@ export class MonimeService {
   }
 
   /**
+   * Lookup account holder name by provider ID and account number
+   * Alias for lookupAccountHolder for backwards compatibility
+   * @param providerId - Mobile money provider ID (e.g., 'm17' for Orange Money)
+   * @param accountNumber - Phone number to lookup
+   * @returns Account holder information including name
+   */
+  async lookupAccountName(providerId: string, accountNumber: string): Promise<{
+    verified: boolean;
+    accountName?: string;
+    accountNumber?: string;
+    providerId?: string;
+  }> {
+    return this.lookupAccountHolder(providerId, accountNumber);
+  }
+
+  /**
    * Lookup mobile money account holder name (KYC verification)
    * Verifies the phone number and returns the account holder's name
    * @param providerId - Mobile money provider ID (e.g., 'm17' for Orange Money)
