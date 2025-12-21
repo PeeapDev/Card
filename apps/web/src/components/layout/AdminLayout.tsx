@@ -39,6 +39,8 @@ import {
   BellRing,
   Car,
   Fuel,
+  BarChart3,
+  ExternalLink,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { AdminNotificationBell } from '@/components/ui/AdminNotificationBell';
@@ -362,6 +364,16 @@ export function AdminLayout({ children }: AdminLayoutProps) {
               <span className="px-3 py-1 rounded-full text-xs font-medium bg-primary-100 text-primary-700">
                 Admin Portal
               </span>
+              <a
+                href="https://vercel.com/peeapdev/my-peeap-com/analytics"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg text-xs font-medium hover:from-blue-700 hover:to-indigo-700 transition-all shadow-sm"
+              >
+                <BarChart3 className="w-4 h-4" />
+                <span className="hidden sm:inline">Full Analytics</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
               <NFCIndicator />
               <ThemeToggle />
               <AdminNotificationBell />
