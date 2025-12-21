@@ -67,7 +67,6 @@ interface NavItem {
 // Base nav items (always available)
 const baseNavItems: NavItem[] = [
   { id: 'dashboard', path: '/merchant', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'collect-payment', path: '/merchant/collect-payment', label: 'Collect Payment', icon: Car },
   { id: 'driver-wallet', path: '/merchant/driver-wallet', label: 'Driver Wallet', icon: Wallet },
   { id: 'businesses', path: '/merchant/businesses', label: 'My Businesses', icon: Building2 },
   { id: 'transactions', path: '/merchant/transactions', label: 'Transactions', icon: ArrowLeftRight },
