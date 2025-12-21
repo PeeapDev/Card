@@ -70,8 +70,8 @@ import { UserDetailPage } from '@/pages/admin/UserDetailPage';
 import { MerchantsManagementPage } from '@/pages/admin/MerchantsManagementPage';
 import { CreateMerchantPage } from '@/pages/admin/CreateMerchantPage';
 import { AgentsManagementPage } from '@/pages/admin/AgentsManagementPage';
-import { FeesPage } from '@/pages/admin/FeesPage';
 import { FeeSettingsPage } from '@/pages/admin/FeeSettingsPage';
+import { KycVerificationsPage } from '@/pages/admin/KycVerificationsPage';
 import { PaymentSettingsPage } from '@/pages/admin/PaymentSettingsPage';
 import { DepositsPage } from '@/pages/admin/DepositsPage';
 import { SubscriptionsPage } from '@/pages/admin/SubscriptionsPage';
@@ -679,10 +679,10 @@ function App() {
                 }
               />
               <Route
-                path="/admin/fees"
+                path="/admin/kyc-verifications"
                 element={
                   <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
-                    <FeesPage />
+                    <KycVerificationsPage />
                   </RoleBasedRoute>
                 }
               />
@@ -1372,7 +1372,7 @@ function App() {
                   <Route path="/admin/merchants" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><MerchantsManagementPage /></RoleBasedRoute>} />
                   <Route path="/admin/merchants/create" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><CreateMerchantPage /></RoleBasedRoute>} />
                   <Route path="/admin/agents" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><AgentsManagementPage /></RoleBasedRoute>} />
-                  <Route path="/admin/fees" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><FeesPage /></RoleBasedRoute>} />
+                  <Route path="/admin/kyc-verifications" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><KycVerificationsPage /></RoleBasedRoute>} />
                   <Route path="/admin/fee-settings" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><FeeSettingsPage /></RoleBasedRoute>} />
                   <Route path="/admin/payment-settings" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><PaymentSettingsPage /></RoleBasedRoute>} />
                   <Route path="/admin/deposits" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><DepositsPage /></RoleBasedRoute>} />
