@@ -15,15 +15,10 @@
       "schedule": "0 8 * * *"
     }
   ],
-  "functions": {
-    "api/**/*.ts": {
-      "runtime": "@vercel/node@3"
-    }
-  },
   "rewrites": [
     { "source": "/api/router/(.*)", "destination": "/api/router" },
     { "source": "/api/(.*)", "destination": "/api/router" },
-    { "source": "/(.*)", "destination": "/api/router", "has": [{ "type": "host", "value": "api.peeap.com" }] },
+    { "source": "/:path((?!assets|_next).*)", "destination": "/api/router/:path", "has": [{ "type": "host", "value": "api.peeap.com" }] },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
