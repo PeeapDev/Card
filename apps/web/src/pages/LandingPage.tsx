@@ -188,6 +188,8 @@ const DEFAULT_SITE_SETTINGS: Partial<SiteSettings> = {
   integration_subtitle: 'Add Peeap to your website with just a few lines of code. Works with any platform.',
   show_sign_in: true,
   show_get_started: true,
+  maintenance_mode: false,
+  maintenance_message: 'We are currently undergoing scheduled maintenance. Please check back soon.',
 };
 
 export function LandingPage() {
@@ -381,6 +383,47 @@ export function LandingPage() {
       highlighted: false,
     },
   ];
+
+  // Show maintenance page if maintenance mode is enabled
+  if (siteSettings.maintenance_mode) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
+          className="max-w-lg w-full bg-white rounded-2xl shadow-2xl p-8 text-center"
+        >
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+            className="w-20 h-20 mx-auto mb-6 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full flex items-center justify-center"
+          >
+            <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </motion.div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-4">
+            {siteSettings.site_name || 'Peeap'}
+          </h1>
+          <h2 className="text-xl font-semibold text-gray-700 mb-4">Under Maintenance</h2>
+          <p className="text-gray-600 mb-6">
+            {siteSettings.maintenance_message || 'We are currently undergoing scheduled maintenance. Please check back soon.'}
+          </p>
+          <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+              className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full"
+            />
+            <span>We'll be back shortly</span>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white overflow-hidden">
