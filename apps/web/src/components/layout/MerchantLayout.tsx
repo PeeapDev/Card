@@ -31,6 +31,7 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { useDeveloperMode } from '@/context/DeveloperModeContext';
 import { useApps } from '@/context/AppsContext';
+import { useThemeColor } from '@/context/ThemeColorContext';
 import { NotificationBell } from '@/components/ui/NotificationBell';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { NFCIndicator } from '@/components/nfc';
@@ -170,9 +171,32 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const { user, logout } = useAuth();
   const { isDeveloperMode, checkBusinesses, hasBusinesses, businessCount } = useDeveloperMode();
   const { isAppEnabled } = useApps();
+  const { getGlassColors } = useThemeColor();
+
+  // Get themed glass colors for merchant dashboard
+  const glassColors = getGlassColors('merchant');
+
+  // Track dark mode changes
+  useEffect(() => {
+    const checkDarkMode = () => {
+      setIsDarkMode(document.documentElement.classList.contains('dark'));
+    };
+
+    checkDarkMode();
+
+    // Observer for class changes on html element
+    const observer = new MutationObserver(checkDarkMode);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+
+    return () => observer.disconnect();
+  }, []);
 
   // Nav items with persisted order (start with base items, apps will be added via useEffect)
   const [navItems, setNavItems] = useState<NavItem[]>(() => {
@@ -317,9 +341,16 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
       {/* Sidebar */}
       <aside
         className={clsx(
-          'fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-900/80 dark:backdrop-blur-xl border-r border-gray-200 dark:border-gray-700/50 transform transition-transform duration-300 ease-in-out lg:translate-x-0',
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          'fixed inset-y-0 left-0 z-50 w-64 border-r transform transition-transform duration-300 ease-in-out lg:translate-x-0',
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full',
+          !isDarkMode && 'bg-white border-gray-200'
         )}
+        style={isDarkMode ? {
+          backgroundColor: glassColors.bg,
+          borderColor: glassColors.border,
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+        } : undefined}
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
@@ -449,7 +480,18 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
       {/* Main content */}
       <div className="lg:pl-64">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 h-16 bg-white dark:bg-gray-900/80 dark:backdrop-blur-xl border-b border-gray-200 dark:border-gray-700/50">
+        <header
+          className={clsx(
+            'sticky top-0 z-30 h-16 border-b',
+            !isDarkMode && 'bg-white border-gray-200'
+          )}
+          style={isDarkMode ? {
+            backgroundColor: glassColors.bg,
+            borderColor: glassColors.border,
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+          } : undefined}
+        >
           <div className="flex items-center justify-between h-full px-4 lg:px-8">
             <button
               className="lg:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"

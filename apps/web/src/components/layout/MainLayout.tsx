@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useUserApps } from '@/context/UserAppsContext';
+import { useThemeColor } from '@/context/ThemeColorContext';
 import { NotificationBell } from '@/components/ui/NotificationBell';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { NFCIndicator } from '@/components/nfc';
@@ -56,11 +57,34 @@ export function MainLayout({ children }: MainLayoutProps) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [hasStaffPositions, setHasStaffPositions] = useState(false);
   const [hasEventStaffPositions, setHasEventStaffPositions] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const { user, logout } = useAuth();
   const { isAppEnabled } = useUserApps();
+  const { getGlassColors } = useThemeColor();
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Get themed glass colors for user dashboard
+  const glassColors = getGlassColors('user');
+
+  // Track dark mode changes
+  useEffect(() => {
+    const checkDarkMode = () => {
+      setIsDarkMode(document.documentElement.classList.contains('dark'));
+    };
+
+    checkDarkMode();
+
+    // Observer for class changes on html element
+    const observer = new MutationObserver(checkDarkMode);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+
+    return () => observer.disconnect();
+  }, []);
 
   // Verification status and modal controls
   const {
@@ -179,9 +203,16 @@ export function MainLayout({ children }: MainLayoutProps) {
       {/* Sidebar */}
       <aside
         className={clsx(
-          'fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-900/80 dark:backdrop-blur-xl border-r border-gray-200 dark:border-gray-700/50 transform transition-transform duration-300 ease-in-out lg:translate-x-0',
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          'fixed inset-y-0 left-0 z-50 w-64 border-r transform transition-transform duration-300 ease-in-out lg:translate-x-0',
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full',
+          !isDarkMode && 'bg-white border-gray-200'
         )}
+        style={isDarkMode ? {
+          backgroundColor: glassColors.bg,
+          borderColor: glassColors.border,
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+        } : undefined}
         aria-label="Main navigation"
         role="navigation"
       >
@@ -230,7 +261,19 @@ export function MainLayout({ children }: MainLayoutProps) {
       {/* Main content */}
       <div className="lg:pl-64">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 h-16 bg-white dark:bg-gray-900/80 dark:backdrop-blur-xl border-b border-gray-200 dark:border-gray-700/50" role="banner">
+        <header
+          className={clsx(
+            'sticky top-0 z-30 h-16 border-b',
+            !isDarkMode && 'bg-white border-gray-200'
+          )}
+          style={isDarkMode ? {
+            backgroundColor: glassColors.bg,
+            borderColor: glassColors.border,
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+          } : undefined}
+          role="banner"
+        >
           <div className="flex items-center justify-between h-full px-4 lg:px-8">
             {/* Left side - Menu button (mobile only) */}
             <div className="flex items-center">
@@ -301,7 +344,18 @@ export function MainLayout({ children }: MainLayoutProps) {
 
                 {/* Dropdown Menu */}
                 {userMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-900/90 dark:backdrop-blur-xl rounded-xl shadow-lg border border-gray-200 dark:border-gray-700/50 py-2 z-50">
+                  <div
+                    className={clsx(
+                      'absolute right-0 mt-2 w-56 rounded-xl shadow-lg border py-2 z-50',
+                      !isDarkMode && 'bg-white border-gray-200'
+                    )}
+                    style={isDarkMode ? {
+                      backgroundColor: glassColors.bg,
+                      borderColor: glassColors.border,
+                      backdropFilter: 'blur(24px)',
+                      WebkitBackdropFilter: 'blur(24px)',
+                    } : undefined}
+                  >
                     {/* User Info */}
                     <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700/50">
                       <p className="text-sm font-medium text-gray-900 dark:text-white">
