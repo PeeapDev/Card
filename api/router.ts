@@ -11011,18 +11011,30 @@ async function validateApiKey(req: VercelRequest): Promise<{ merchantId: string;
 
   const mode = isLiveKey ? 'live' : 'test';
 
-  // Look up the API key in the database
-  const { data: keyData, error } = await supabase
-    .from('api_keys')
-    .select('business_id, is_active')
-    .eq('key_value', apiKey)
+  // Determine which column to search based on key type
+  let keyColumn: string;
+  if (apiKey.startsWith('sk_live_')) {
+    keyColumn = 'live_secret_key';
+  } else if (apiKey.startsWith('pk_live_')) {
+    keyColumn = 'live_public_key';
+  } else if (apiKey.startsWith('sk_test_')) {
+    keyColumn = 'test_secret_key';
+  } else {
+    keyColumn = 'test_public_key';
+  }
+
+  // Look up the API key in the merchant_businesses table
+  const { data: merchant, error } = await supabase
+    .from('merchant_businesses')
+    .select('id, status')
+    .eq(keyColumn, apiKey)
     .single();
 
-  if (error || !keyData || !keyData.is_active) {
+  if (error || !merchant || merchant.status !== 'ACTIVE') {
     return null;
   }
 
-  return { merchantId: keyData.business_id, mode };
+  return { merchantId: merchant.id, mode };
 }
 
 /**

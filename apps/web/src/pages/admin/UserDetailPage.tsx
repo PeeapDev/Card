@@ -484,8 +484,43 @@ export function UserDetailPage() {
 
       if (uploadError) {
         console.log('Storage upload error (using fallback):', uploadError.message);
-        // If bucket doesn't exist or upload fails, use a placeholder URL
-        profilePictureUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.first_name || '')}+${encodeURIComponent(user.last_name || '')}&background=random&size=256`;
+        // If bucket doesn't exist or upload fails, resize and convert image to base64 data URL
+        const resizeImage = (file: File, maxSize: number = 150): Promise<string> => {
+          return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              const img = new Image();
+              img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+
+                // Scale down to maxSize while maintaining aspect ratio
+                if (width > height) {
+                  if (width > maxSize) {
+                    height = (height * maxSize) / width;
+                    width = maxSize;
+                  }
+                } else {
+                  if (height > maxSize) {
+                    width = (width * maxSize) / height;
+                    height = maxSize;
+                  }
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx?.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', 0.8));
+              };
+              img.src = e.target?.result as string;
+            };
+            reader.readAsDataURL(file);
+          });
+        };
+
+        profilePictureUrl = await resizeImage(file);
       } else {
         // Get public URL
         const { data: { publicUrl } } = supabaseAdmin.storage
