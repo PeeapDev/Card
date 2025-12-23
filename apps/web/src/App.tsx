@@ -106,6 +106,7 @@ import { DepositCancelPage } from '@/pages/DepositCancelPage';
 import { BusinessCheckoutPage } from '@/pages/BusinessCheckoutPage';
 import { CheckoutPage } from '@/pages/CheckoutPage';
 import { HostedCheckoutPage } from '@/pages/HostedCheckoutPage';
+import { PaymentIntentPage } from '@/pages/PaymentIntentPage';
 import { SubscriptionCheckoutPage } from '@/pages/SubscriptionCheckoutPage';
 import { CheckoutSuccessPage } from '@/pages/CheckoutSuccessPage';
 import { ScanPayPage } from '@/pages/ScanPayPage';
@@ -215,6 +216,7 @@ function App() {
                   {/* Payment Checkout Routes (NFC/QR) */}
                   <Route path="/t/:token" element={<PaymentCheckoutPage />} />
                   <Route path="/pay/:token" element={<PaymentCheckoutPage />} />
+                  <Route path="/i/:intentId" element={<PaymentIntentPage />} />
 
                   {/* Payment Link Route (query params) */}
                   <Route path="/pay" element={<PayPage />} />
@@ -274,6 +276,7 @@ function App() {
                   <Route path="/checkout/success" element={<CheckoutSuccessPage />} />
                   <Route path="/t/:token" element={<PaymentCheckoutPage />} />
                   <Route path="/pay/:token" element={<PaymentCheckoutPage />} />
+                  <Route path="/i/:intentId" element={<PaymentIntentPage />} />
                   <Route path="/pay" element={<PayPage />} />
                   <Route path="/app/pay/:paymentId" element={<AppPaymentRedirectPage />} />
 
@@ -818,6 +821,14 @@ function App() {
                 }
               />
               <Route
+                path="/admin/site-settings"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <SiteSettingsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
                 path="/admin/exchange-rates"
                 element={
                   <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
@@ -1336,6 +1347,7 @@ function App() {
                   {/* Payment Checkout Routes (NFC/QR) */}
                   <Route path="/t/:token" element={<PaymentCheckoutPage />} />
                   <Route path="/pay/:token" element={<PaymentCheckoutPage />} />
+                  <Route path="/i/:intentId" element={<PaymentIntentPage />} />
                   <Route path="/pay" element={<PayPage />} />
                   <Route path="/pay/nfc/:shortCode" element={<NFCPaymentPage />} />
                   <Route path="/payment/success" element={<PaymentSuccessPage />} />
