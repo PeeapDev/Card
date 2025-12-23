@@ -11,6 +11,7 @@ import { NotificationProvider } from '@/context/NotificationContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { NotificationWrapper } from '@/components/ui/NotificationWrapper';
 import { AnalyticsTracker } from '@/components/AnalyticsTracker';
+import { InactivityTracker } from '@/components/InactivityTracker';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { RoleBasedRoute } from '@/components/RoleBasedRoute';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -194,6 +195,7 @@ function App() {
         <ThemeProvider>
           <BrowserRouter>
             <AuthProvider>
+              <InactivityTracker>
               <NFCProvider>
               <NotificationProvider>
                 <DeveloperModeProvider>
@@ -1539,6 +1541,7 @@ function App() {
                 </DeveloperModeProvider>
               </NotificationProvider>
               </NFCProvider>
+              </InactivityTracker>
             </AuthProvider>
           </BrowserRouter>
         </ThemeProvider>

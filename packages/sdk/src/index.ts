@@ -42,6 +42,7 @@ import { DeveloperResource } from './resources/developer';
 import { SettlementResource } from './resources/settlement';
 import { QRCodeResource } from './resources/qrcode';
 import { NFCResource } from './resources/nfc';
+import { PaymentIntentsResource } from './resources/payment-intents';
 
 // Utilities
 import { verifyWebhookSignature, parseWebhookEvent, constructWebhookEvent, computeWebhookSignature } from './utils/webhooks';
@@ -79,6 +80,9 @@ export class PeeapCardSDK {
 
   /** NFC operations - tap-to-pay, tag management */
   public readonly nfc: NFCResource;
+
+  /** Payment Intents - channel-agnostic payments (NFC, QR, Card, Wallet) */
+  public readonly paymentIntents: PaymentIntentsResource;
 
   /** Webhook utilities */
   public readonly webhooks = {
@@ -134,6 +138,7 @@ export class PeeapCardSDK {
     this.settlements = new SettlementResource(this.client);
     this.qr = new QRCodeResource(this.client);
     this.nfc = new NFCResource(this.client);
+    this.paymentIntents = new PaymentIntentsResource(this.client);
   }
 
   /**
