@@ -15,10 +15,21 @@
       "schedule": "0 8 * * *"
     }
   ],
-  "rewrites": [
-    { "source": "/api/router/(.*)", "destination": "/api/router" },
-    { "source": "/api/(.*)", "destination": "/api/router" },
-    { "source": "/(.*)", "destination": "/api/router", "has": [{ "type": "host", "value": "api.peeap.com" }] },
-    { "source": "/(.*)", "destination": "/index.html" }
+  "routes": [
+    {
+      "src": "/api/router/(.*)",
+      "dest": "/api/router"
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/router"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
   ]
 }
