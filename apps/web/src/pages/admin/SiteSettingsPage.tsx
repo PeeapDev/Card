@@ -269,7 +269,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   sessionTimeoutMinutes: 0,
 };
 
-type TabType = 'general' | 'theme' | 'landing' | 'menu' | 'seo' | 'advanced';
+type TabType = 'general' | 'theme' | 'landing' | 'content' | 'menu' | 'seo' | 'advanced';
 
 const ICON_OPTIONS = [
   { value: 'Smartphone', label: 'Smartphone' },
@@ -494,6 +494,7 @@ export function SiteSettingsPage() {
     { id: 'general' as TabType, label: 'General', icon: Settings },
     { id: 'theme' as TabType, label: 'Theme', icon: Palette },
     { id: 'landing' as TabType, label: 'Landing Page', icon: Layout },
+    { id: 'content' as TabType, label: 'Content Pages', icon: FileText },
     { id: 'menu' as TabType, label: 'Menu & Navigation', icon: Menu },
     { id: 'seo' as TabType, label: 'SEO', icon: Globe },
     { id: 'advanced' as TabType, label: 'Advanced', icon: Code },
@@ -592,6 +593,9 @@ export function SiteSettingsPage() {
           )}
           {activeTab === 'landing' && (
             <LandingPageSettings settings={settings} setSettings={setSettings} />
+          )}
+          {activeTab === 'content' && (
+            <ContentPagesSettings />
           )}
           {activeTab === 'menu' && (
             <MenuSettings settings={settings} setSettings={setSettings} />
@@ -1518,6 +1522,311 @@ function LandingPageSettings({ settings, setSettings }: { settings: SiteSettings
             </button>
           </div>
         </Card>
+      )}
+    </div>
+  );
+}
+
+// Content Pages Settings Tab
+function ContentPagesSettings() {
+  const [pages, setPages] = useState<Array<{ id: string; title: string; slug: string; status: string; description: string | null; created_at: string; updated_at: string }>>([]);
+  const [templates, setTemplates] = useState<Array<{ id: string; name: string; description: string; category: string }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newPage, setNewPage] = useState({ title: '', slug: '', description: '', template_id: '' });
+  const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    fetchPages();
+    fetchTemplates();
+  }, []);
+
+  const fetchPages = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('pages')
+        .select('id, title, slug, status, description, created_at, updated_at')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setPages(data || []);
+    } catch (err) {
+      console.error('Error fetching pages:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchTemplates = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('page_templates')
+        .select('id, name, description, category')
+        .eq('is_active', true)
+        .order('name');
+
+      if (error) throw error;
+      setTemplates(data || []);
+    } catch (err) {
+      console.error('Error fetching templates:', err);
+    }
+  };
+
+  const createPage = async () => {
+    if (!newPage.title || !newPage.slug) return;
+
+    setCreating(true);
+    try {
+      // Get template content if selected
+      let templateContent = { html: '', css: '', components: null, styles: null };
+      if (newPage.template_id) {
+        const { data: template } = await supabase
+          .from('page_templates')
+          .select('html, css, components, styles')
+          .eq('id', newPage.template_id)
+          .single();
+        if (template) {
+          templateContent = template;
+        }
+      }
+
+      const { data, error } = await supabase
+        .from('pages')
+        .insert({
+          title: newPage.title,
+          slug: newPage.slug.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
+          description: newPage.description,
+          html: templateContent.html,
+          css: templateContent.css,
+          components: templateContent.components,
+          styles: templateContent.styles,
+          status: 'draft'
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setPages([data, ...pages]);
+      setShowCreateModal(false);
+      setNewPage({ title: '', slug: '', description: '', template_id: '' });
+
+      // Redirect to editor
+      window.location.href = `/admin/pages/${data.id}/edit`;
+    } catch (err: any) {
+      console.error('Error creating page:', err);
+      alert(err.message || 'Failed to create page');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const deletePage = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this page?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('pages')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      setPages(pages.filter(p => p.id !== id));
+    } catch (err) {
+      console.error('Error deleting page:', err);
+    }
+  };
+
+  const togglePublish = async (page: any) => {
+    const newStatus = page.status === 'published' ? 'draft' : 'published';
+    try {
+      const { error } = await supabase
+        .from('pages')
+        .update({ status: newStatus, published_at: newStatus === 'published' ? new Date().toISOString() : null })
+        .eq('id', page.id);
+
+      if (error) throw error;
+      setPages(pages.map(p => p.id === page.id ? { ...p, status: newStatus } : p));
+    } catch (err) {
+      console.error('Error updating page:', err);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <Card className="p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Content Pages</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Create and manage custom pages with the drag-and-drop page builder</p>
+          </div>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+          >
+            <Plus className="w-4 h-4" />
+            Create New Page
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+          </div>
+        ) : pages.length === 0 ? (
+          <div className="text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-lg">
+            <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+            <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No pages yet</h4>
+            <p className="text-gray-500 dark:text-gray-400 mb-4">Create your first page to get started</p>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+            >
+              <Plus className="w-4 h-4" />
+              Create Page
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {pages.map((page) => (
+              <div key={page.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg flex items-center justify-center">
+                    <FileText className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-gray-900 dark:text-white">{page.title}</h4>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">/p/{page.slug}</p>
+                  </div>
+                  <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${
+                    page.status === 'published'
+                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                      : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                  }`}>
+                    {page.status}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {page.status === 'published' && (
+                    <a
+                      href={`/p/${page.slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                      title="View page"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </a>
+                  )}
+                  <button
+                    onClick={() => togglePublish(page)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-lg ${
+                      page.status === 'published'
+                        ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                        : 'bg-green-100 text-green-700 hover:bg-green-200'
+                    }`}
+                  >
+                    {page.status === 'published' ? 'Unpublish' : 'Publish'}
+                  </button>
+                  <a
+                    href={`/admin/pages/${page.id}/edit`}
+                    className="px-3 py-1.5 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200"
+                  >
+                    Edit
+                  </a>
+                  <button
+                    onClick={() => deletePage(page.id)}
+                    className="p-2 text-red-500 hover:text-red-700"
+                    title="Delete page"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Create Page Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-lg w-full mx-4">
+            <div className="p-6 border-b dark:border-gray-700">
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white">Create New Page</h3>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Page Title *</label>
+                <input
+                  type="text"
+                  value={newPage.title}
+                  onChange={(e) => {
+                    setNewPage({
+                      ...newPage,
+                      title: e.target.value,
+                      slug: e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+                    });
+                  }}
+                  placeholder="About Us"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">URL Slug *</label>
+                <div className="flex items-center">
+                  <span className="px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-r-0 border-gray-300 dark:border-gray-600 rounded-l-lg text-gray-500 text-sm">/p/</span>
+                  <input
+                    type="text"
+                    value={newPage.slug}
+                    onChange={(e) => setNewPage({ ...newPage, slug: e.target.value })}
+                    placeholder="about-us"
+                    className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-r-lg bg-white dark:bg-gray-700"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+                <textarea
+                  rows={2}
+                  value={newPage.description}
+                  onChange={(e) => setNewPage({ ...newPage, description: e.target.value })}
+                  placeholder="Brief description of the page"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Template</label>
+                <select
+                  value={newPage.template_id}
+                  onChange={(e) => setNewPage({ ...newPage, template_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
+                >
+                  <option value="">Blank Page</option>
+                  {templates.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name} - {t.description}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="p-6 border-t dark:border-gray-700 flex justify-end gap-3">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createPage}
+                disabled={!newPage.title || !newPage.slug || creating}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+              >
+                {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create & Edit'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
