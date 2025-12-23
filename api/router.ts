@@ -361,6 +361,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleKycPhoneInitiate(req, res);
     } else if (path === 'kyc/verification/phone/verify' || path === 'kyc/verification/phone/verify/') {
       return await handleKycPhoneVerify(req, res);
+    // ========== PAYMENT INTENTS ENDPOINTS ==========
+    } else if (path === 'v1/payment-intents' || path === 'v1/payment-intents/') {
+      return await handlePaymentIntents(req, res);
+    } else if (path.match(/^v1\/payment-intents\/[^/]+$/)) {
+      const intentId = path.split('/')[2];
+      return await handlePaymentIntentById(req, res, intentId);
+    } else if (path.match(/^v1\/payment-intents\/[^/]+\/confirm$/)) {
+      const intentId = path.split('/')[2];
+      return await handlePaymentIntentConfirm(req, res, intentId);
+    } else if (path.match(/^v1\/payment-intents\/[^/]+\/capture$/)) {
+      const intentId = path.split('/')[2];
+      return await handlePaymentIntentCapture(req, res, intentId);
+    } else if (path.match(/^v1\/payment-intents\/[^/]+\/cancel$/)) {
+      const intentId = path.split('/')[2];
+      return await handlePaymentIntentCancel(req, res, intentId);
+    } else if (path.match(/^v1\/payment-intents\/[^/]+\/qr$/)) {
+      const intentId = path.split('/')[2];
+      return await handlePaymentIntentQr(req, res, intentId);
     } else {
       return res.status(404).json({ error: 'Not found', path });
     }
@@ -10967,5 +10985,482 @@ async function handleKycSierraLeoneVerification(req: VercelRequest, res: VercelR
   } catch (error: any) {
     console.error('[KYC] Error processing Sierra Leone verification:', error);
     return res.status(500).json({ error: error.message || 'Failed to process verification' });
+  }
+}
+
+// ============================================================================
+// PAYMENT INTENTS HANDLERS
+// ============================================================================
+
+/**
+ * Validate API key and get merchant
+ */
+async function validateApiKey(req: VercelRequest): Promise<{ merchantId: string; mode: 'live' | 'test' } | null> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const apiKey = authHeader.substring(7);
+  const isLiveKey = apiKey.startsWith('pk_live_') || apiKey.startsWith('sk_live_');
+  const isTestKey = apiKey.startsWith('pk_test_') || apiKey.startsWith('sk_test_');
+
+  if (!isLiveKey && !isTestKey) {
+    return null;
+  }
+
+  const mode = isLiveKey ? 'live' : 'test';
+
+  // Look up the API key in the database
+  const { data: keyData, error } = await supabase
+    .from('api_keys')
+    .select('business_id, is_active')
+    .eq('key_value', apiKey)
+    .single();
+
+  if (error || !keyData || !keyData.is_active) {
+    return null;
+  }
+
+  return { merchantId: keyData.business_id, mode };
+}
+
+/**
+ * Create Payment Intent - POST /v1/payment-intents
+ */
+async function handlePaymentIntents(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const auth = await validateApiKey(req);
+    if (!auth) {
+      return res.status(401).json({ error: 'Invalid API key' });
+    }
+
+    const { amount, currency, description, metadata, capture_method, payment_method_types } = req.body;
+
+    if (!amount || typeof amount !== 'number' || amount <= 0) {
+      return res.status(400).json({ error: 'amount is required and must be a positive number' });
+    }
+
+    if (!currency || typeof currency !== 'string') {
+      return res.status(400).json({ error: 'currency is required' });
+    }
+
+    const intentId = `pi_${randomUUID().replace(/-/g, '')}`;
+    const clientSecret = `${intentId}_secret_${randomUUID().replace(/-/g, '').substring(0, 24)}`;
+
+    const { data: intent, error } = await supabase
+      .from('payment_intents')
+      .insert({
+        id: intentId,
+        merchant_id: auth.merchantId,
+        amount,
+        currency: currency.toUpperCase(),
+        status: 'requires_payment_method',
+        client_secret: clientSecret,
+        description: description || null,
+        metadata: metadata || {},
+        capture_method: capture_method || 'automatic',
+        payment_method_types: payment_method_types || ['wallet', 'card', 'mobile_money'],
+        mode: auth.mode,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[PaymentIntents] Create error:', error);
+      return res.status(500).json({ error: 'Failed to create payment intent' });
+    }
+
+    return res.status(201).json({
+      id: intent.id,
+      object: 'payment_intent',
+      amount: intent.amount,
+      currency: intent.currency,
+      status: intent.status,
+      client_secret: intent.client_secret,
+      description: intent.description,
+      metadata: intent.metadata,
+      capture_method: intent.capture_method,
+      payment_method_types: intent.payment_method_types,
+      created: Math.floor(new Date(intent.created_at).getTime() / 1000),
+      livemode: auth.mode === 'live',
+    });
+  } catch (error: any) {
+    console.error('[PaymentIntents] Error:', error);
+    return res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+}
+
+/**
+ * Get Payment Intent - GET /v1/payment-intents/:id
+ */
+async function handlePaymentIntentById(req: VercelRequest, res: VercelResponse, intentId: string) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const auth = await validateApiKey(req);
+    if (!auth) {
+      return res.status(401).json({ error: 'Invalid API key' });
+    }
+
+    const { data: intent, error } = await supabase
+      .from('payment_intents')
+      .select('*')
+      .eq('id', intentId)
+      .eq('merchant_id', auth.merchantId)
+      .single();
+
+    if (error || !intent) {
+      return res.status(404).json({ error: 'Payment intent not found' });
+    }
+
+    return res.status(200).json({
+      id: intent.id,
+      object: 'payment_intent',
+      amount: intent.amount,
+      currency: intent.currency,
+      status: intent.status,
+      client_secret: intent.client_secret,
+      description: intent.description,
+      metadata: intent.metadata,
+      capture_method: intent.capture_method,
+      payment_method_types: intent.payment_method_types,
+      payment_method: intent.payment_method,
+      created: Math.floor(new Date(intent.created_at).getTime() / 1000),
+      livemode: intent.mode === 'live',
+    });
+  } catch (error: any) {
+    console.error('[PaymentIntents] Get error:', error);
+    return res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+}
+
+/**
+ * Confirm Payment Intent - POST /v1/payment-intents/:id/confirm
+ */
+async function handlePaymentIntentConfirm(req: VercelRequest, res: VercelResponse, intentId: string) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const { payment_method, payer_wallet_id } = req.body;
+
+    // Get the intent
+    const { data: intent, error: fetchError } = await supabase
+      .from('payment_intents')
+      .select('*')
+      .eq('id', intentId)
+      .single();
+
+    if (fetchError || !intent) {
+      return res.status(404).json({ error: 'Payment intent not found' });
+    }
+
+    if (intent.status !== 'requires_payment_method' && intent.status !== 'requires_confirmation') {
+      return res.status(400).json({ error: `Cannot confirm payment intent in status: ${intent.status}` });
+    }
+
+    // For wallet payments, we need the payer's wallet
+    if (payment_method === 'wallet' && payer_wallet_id) {
+      // Get payer wallet
+      const { data: payerWallet, error: walletError } = await supabase
+        .from('wallets')
+        .select('id, user_id, balance, currency')
+        .eq('id', payer_wallet_id)
+        .single();
+
+      if (walletError || !payerWallet) {
+        return res.status(404).json({ error: 'Payer wallet not found' });
+      }
+
+      if (payerWallet.balance < intent.amount) {
+        return res.status(400).json({ error: 'Insufficient funds' });
+      }
+
+      // Get merchant's primary wallet
+      const { data: merchantWallet, error: merchantWalletError } = await supabase
+        .from('wallets')
+        .select('id, user_id, balance')
+        .eq('business_id', intent.merchant_id)
+        .eq('wallet_type', 'primary')
+        .single();
+
+      if (merchantWalletError || !merchantWallet) {
+        return res.status(404).json({ error: 'Merchant wallet not found' });
+      }
+
+      // Perform the transfer
+      const { error: debitError } = await supabase
+        .from('wallets')
+        .update({ balance: payerWallet.balance - intent.amount })
+        .eq('id', payerWallet.id);
+
+      if (debitError) {
+        return res.status(500).json({ error: 'Failed to debit payer wallet' });
+      }
+
+      const { error: creditError } = await supabase
+        .from('wallets')
+        .update({ balance: merchantWallet.balance + intent.amount })
+        .eq('id', merchantWallet.id);
+
+      if (creditError) {
+        // Rollback debit
+        await supabase
+          .from('wallets')
+          .update({ balance: payerWallet.balance })
+          .eq('id', payerWallet.id);
+        return res.status(500).json({ error: 'Failed to credit merchant wallet' });
+      }
+
+      // Create transaction records
+      const transactionId = randomUUID();
+      await supabase.from('transactions').insert([
+        {
+          id: transactionId,
+          wallet_id: payerWallet.id,
+          user_id: payerWallet.user_id,
+          type: 'payment',
+          amount: -intent.amount,
+          currency: intent.currency,
+          status: 'completed',
+          description: intent.description || 'Payment Intent',
+          reference: intentId,
+        },
+        {
+          id: randomUUID(),
+          wallet_id: merchantWallet.id,
+          user_id: merchantWallet.user_id,
+          type: 'payment',
+          amount: intent.amount,
+          currency: intent.currency,
+          status: 'completed',
+          description: intent.description || 'Payment Intent',
+          reference: intentId,
+        },
+      ]);
+
+      // Update intent status
+      const { data: updatedIntent, error: updateError } = await supabase
+        .from('payment_intents')
+        .update({
+          status: 'succeeded',
+          payment_method: 'wallet',
+          confirmed_at: new Date().toISOString(),
+        })
+        .eq('id', intentId)
+        .select()
+        .single();
+
+      if (updateError) {
+        return res.status(500).json({ error: 'Failed to update payment intent' });
+      }
+
+      return res.status(200).json({
+        id: updatedIntent.id,
+        object: 'payment_intent',
+        amount: updatedIntent.amount,
+        currency: updatedIntent.currency,
+        status: updatedIntent.status,
+        payment_method: updatedIntent.payment_method,
+        created: Math.floor(new Date(updatedIntent.created_at).getTime() / 1000),
+        livemode: updatedIntent.mode === 'live',
+      });
+    }
+
+    // Update intent to requires_confirmation or processing
+    const { data: updatedIntent, error: updateError } = await supabase
+      .from('payment_intents')
+      .update({
+        status: 'requires_confirmation',
+        payment_method: payment_method || null,
+      })
+      .eq('id', intentId)
+      .select()
+      .single();
+
+    if (updateError) {
+      return res.status(500).json({ error: 'Failed to update payment intent' });
+    }
+
+    return res.status(200).json({
+      id: updatedIntent.id,
+      object: 'payment_intent',
+      amount: updatedIntent.amount,
+      currency: updatedIntent.currency,
+      status: updatedIntent.status,
+      payment_method: updatedIntent.payment_method,
+      created: Math.floor(new Date(updatedIntent.created_at).getTime() / 1000),
+      livemode: updatedIntent.mode === 'live',
+    });
+  } catch (error: any) {
+    console.error('[PaymentIntents] Confirm error:', error);
+    return res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+}
+
+/**
+ * Capture Payment Intent - POST /v1/payment-intents/:id/capture
+ */
+async function handlePaymentIntentCapture(req: VercelRequest, res: VercelResponse, intentId: string) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const auth = await validateApiKey(req);
+    if (!auth) {
+      return res.status(401).json({ error: 'Invalid API key' });
+    }
+
+    const { data: intent, error: fetchError } = await supabase
+      .from('payment_intents')
+      .select('*')
+      .eq('id', intentId)
+      .eq('merchant_id', auth.merchantId)
+      .single();
+
+    if (fetchError || !intent) {
+      return res.status(404).json({ error: 'Payment intent not found' });
+    }
+
+    if (intent.status !== 'requires_capture') {
+      return res.status(400).json({ error: `Cannot capture payment intent in status: ${intent.status}` });
+    }
+
+    const { data: updatedIntent, error: updateError } = await supabase
+      .from('payment_intents')
+      .update({
+        status: 'succeeded',
+        captured_at: new Date().toISOString(),
+      })
+      .eq('id', intentId)
+      .select()
+      .single();
+
+    if (updateError) {
+      return res.status(500).json({ error: 'Failed to capture payment intent' });
+    }
+
+    return res.status(200).json({
+      id: updatedIntent.id,
+      object: 'payment_intent',
+      amount: updatedIntent.amount,
+      currency: updatedIntent.currency,
+      status: updatedIntent.status,
+      created: Math.floor(new Date(updatedIntent.created_at).getTime() / 1000),
+      livemode: updatedIntent.mode === 'live',
+    });
+  } catch (error: any) {
+    console.error('[PaymentIntents] Capture error:', error);
+    return res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+}
+
+/**
+ * Cancel Payment Intent - POST /v1/payment-intents/:id/cancel
+ */
+async function handlePaymentIntentCancel(req: VercelRequest, res: VercelResponse, intentId: string) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const auth = await validateApiKey(req);
+    if (!auth) {
+      return res.status(401).json({ error: 'Invalid API key' });
+    }
+
+    const { data: intent, error: fetchError } = await supabase
+      .from('payment_intents')
+      .select('*')
+      .eq('id', intentId)
+      .eq('merchant_id', auth.merchantId)
+      .single();
+
+    if (fetchError || !intent) {
+      return res.status(404).json({ error: 'Payment intent not found' });
+    }
+
+    if (intent.status === 'succeeded' || intent.status === 'canceled') {
+      return res.status(400).json({ error: `Cannot cancel payment intent in status: ${intent.status}` });
+    }
+
+    const { data: updatedIntent, error: updateError } = await supabase
+      .from('payment_intents')
+      .update({
+        status: 'canceled',
+        canceled_at: new Date().toISOString(),
+      })
+      .eq('id', intentId)
+      .select()
+      .single();
+
+    if (updateError) {
+      return res.status(500).json({ error: 'Failed to cancel payment intent' });
+    }
+
+    return res.status(200).json({
+      id: updatedIntent.id,
+      object: 'payment_intent',
+      amount: updatedIntent.amount,
+      currency: updatedIntent.currency,
+      status: updatedIntent.status,
+      created: Math.floor(new Date(updatedIntent.created_at).getTime() / 1000),
+      livemode: updatedIntent.mode === 'live',
+    });
+  } catch (error: any) {
+    console.error('[PaymentIntents] Cancel error:', error);
+    return res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+}
+
+/**
+ * Get QR Code for Payment Intent - GET /v1/payment-intents/:id/qr
+ */
+async function handlePaymentIntentQr(req: VercelRequest, res: VercelResponse, intentId: string) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const auth = await validateApiKey(req);
+    if (!auth) {
+      return res.status(401).json({ error: 'Invalid API key' });
+    }
+
+    const { data: intent, error } = await supabase
+      .from('payment_intents')
+      .select('*')
+      .eq('id', intentId)
+      .eq('merchant_id', auth.merchantId)
+      .single();
+
+    if (error || !intent) {
+      return res.status(404).json({ error: 'Payment intent not found' });
+    }
+
+    // Generate payment URL
+    const baseUrl = process.env.APP_URL || 'https://peeap.com';
+    const paymentUrl = `${baseUrl}/i/${intentId}`;
+
+    return res.status(200).json({
+      id: intent.id,
+      object: 'payment_intent_qr',
+      payment_url: paymentUrl,
+      amount: intent.amount,
+      currency: intent.currency,
+      status: intent.status,
+    });
+  } catch (error: any) {
+    console.error('[PaymentIntents] QR error:', error);
+    return res.status(500).json({ error: error.message || 'Internal server error' });
   }
 }
