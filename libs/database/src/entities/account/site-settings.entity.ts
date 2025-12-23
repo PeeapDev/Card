@@ -235,6 +235,10 @@ export class SiteSettings {
   @Column({ name: 'custom_body_scripts', type: 'text', nullable: true })
   customBodyScripts: string;
 
+  // === SESSION SETTINGS ===
+  @Column({ name: 'session_timeout_minutes', type: 'integer', default: 0 })
+  sessionTimeoutMinutes: number; // 0 = disabled, otherwise timeout in minutes
+
   // Timestamps
   @CreateDateColumn({ name: 'created_at', type: 'timestamp with time zone' })
   createdAt: Date;

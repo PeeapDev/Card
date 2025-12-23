@@ -45,6 +45,7 @@ import {
   QrCode,
   Shield,
   TrendingUp,
+  Clock,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
@@ -173,6 +174,9 @@ interface SiteSettings {
   googleAnalyticsId: string;
   customHeadScripts: string;
   customBodyScripts: string;
+
+  // Session
+  sessionTimeoutMinutes: number;
 }
 
 const DEFAULT_SETTINGS: SiteSettings = {
@@ -262,6 +266,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   googleAnalyticsId: '',
   customHeadScripts: '',
   customBodyScripts: '',
+  sessionTimeoutMinutes: 0,
 };
 
 type TabType = 'general' | 'theme' | 'landing' | 'menu' | 'seo' | 'advanced';
@@ -397,6 +402,7 @@ export function SiteSettingsPage() {
     googleAnalyticsId: data.google_analytics_id || '',
     customHeadScripts: data.custom_head_scripts || '',
     customBodyScripts: data.custom_body_scripts || '',
+    sessionTimeoutMinutes: data.session_timeout_minutes ?? 0,
   });
 
   const mapStateToDb = (state: SiteSettings) => ({
@@ -458,6 +464,7 @@ export function SiteSettingsPage() {
     google_analytics_id: state.googleAnalyticsId,
     custom_head_scripts: state.customHeadScripts,
     custom_body_scripts: state.customBodyScripts,
+    session_timeout_minutes: state.sessionTimeoutMinutes,
   });
 
   const handleSave = async () => {
@@ -1686,8 +1693,75 @@ function SeoSettings({ settings, setSettings }: { settings: SiteSettings; setSet
 
 // Advanced Settings Tab
 function AdvancedSettings({ settings, setSettings }: { settings: SiteSettings; setSettings: (s: SiteSettings) => void }) {
+  const timeoutPresets = [
+    { value: 0, label: 'Disabled' },
+    { value: 5, label: '5 minutes' },
+    { value: 10, label: '10 minutes' },
+    { value: 15, label: '15 minutes' },
+    { value: 30, label: '30 minutes' },
+    { value: 60, label: '1 hour' },
+    { value: 120, label: '2 hours' },
+    { value: 480, label: '8 hours' },
+    { value: 1440, label: '24 hours' },
+  ];
+
   return (
     <div className="space-y-6">
+      {/* Session Timeout Settings */}
+      <Card className="p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Clock className="w-5 h-5 text-primary-500" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Session Timeout</h3>
+        </div>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+          Automatically log out all users (including admins) after a period of inactivity. This applies to everyone in the system.
+        </p>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Auto-logout after inactivity
+            </label>
+            <div className="flex gap-3 items-center">
+              <select
+                value={settings.sessionTimeoutMinutes}
+                onChange={(e) => setSettings({ ...settings, sessionTimeoutMinutes: parseInt(e.target.value) })}
+                className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              >
+                {timeoutPresets.map((preset) => (
+                  <option key={preset.value} value={preset.value}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+              <span className="text-gray-500 dark:text-gray-400">or</span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  max="10080"
+                  value={settings.sessionTimeoutMinutes}
+                  onChange={(e) => setSettings({ ...settings, sessionTimeoutMinutes: Math.max(0, parseInt(e.target.value) || 0) })}
+                  className="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  placeholder="0"
+                />
+                <span className="text-sm text-gray-600 dark:text-gray-400">minutes</span>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              {settings.sessionTimeoutMinutes === 0
+                ? 'Session timeout is disabled. Users will not be automatically logged out.'
+                : `Users will be logged out after ${settings.sessionTimeoutMinutes} minute${settings.sessionTimeoutMinutes !== 1 ? 's' : ''} of inactivity.`}
+            </p>
+          </div>
+
+          {settings.sessionTimeoutMinutes > 0 && settings.sessionTimeoutMinutes < 5 && (
+            <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 rounded-lg text-sm">
+              Warning: Very short timeout periods may frustrate users. Consider using at least 5 minutes.
+            </div>
+          )}
+        </div>
+      </Card>
+
       <Card className="p-6">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Maintenance Mode</h3>
         <div className="space-y-4">
