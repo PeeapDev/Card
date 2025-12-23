@@ -66,10 +66,10 @@ function BusinessesList() {
 
   const getApprovalBadge = (status: string) => {
     const badges: Record<string, { color: string; icon: React.ReactNode; label: string }> = {
-      PENDING: { color: 'bg-yellow-100 text-yellow-700', icon: <Clock className="w-3 h-3" />, label: 'Pending Approval' },
-      APPROVED: { color: 'bg-green-100 text-green-700', icon: <CheckCircle className="w-3 h-3" />, label: 'Approved' },
-      REJECTED: { color: 'bg-red-100 text-red-700', icon: <X className="w-3 h-3" />, label: 'Rejected' },
-      SUSPENDED: { color: 'bg-gray-100 text-gray-700', icon: <AlertTriangle className="w-3 h-3" />, label: 'Suspended' },
+      PENDING: { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400', icon: <Clock className="w-3 h-3" />, label: 'Pending Approval' },
+      APPROVED: { color: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400', icon: <CheckCircle className="w-3 h-3" />, label: 'Approved' },
+      REJECTED: { color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400', icon: <X className="w-3 h-3" />, label: 'Rejected' },
+      SUSPENDED: { color: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300', icon: <AlertTriangle className="w-3 h-3" />, label: 'Suspended' },
     };
     const badge = badges[status] || badges.PENDING;
     return (
@@ -93,8 +93,8 @@ function BusinessesList() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">My Businesses</h2>
-          <p className="text-sm text-gray-500">Create and manage your business shops with their own API keys</p>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">My Businesses</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Create and manage your business shops with their own API keys</p>
         </div>
         <button
           onClick={() => navigate('/merchant/developer/create-business')}
@@ -108,9 +108,9 @@ function BusinessesList() {
       {/* Businesses Grid */}
       {businesses.length === 0 ? (
         <Card className="p-8 text-center">
-          <Store className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No businesses yet</h3>
-          <p className="text-gray-500 mb-4">Create your first business to get API keys and start accepting payments.</p>
+          <Store className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No businesses yet</h3>
+          <p className="text-gray-500 dark:text-gray-400 mb-4">Create your first business to get API keys and start accepting payments.</p>
           <button
             onClick={() => navigate('/merchant/developer/create-business')}
             className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 inline-flex items-center gap-2"
@@ -136,13 +136,13 @@ function BusinessesList() {
                       className="w-10 h-10 rounded-lg object-cover"
                     />
                   ) : (
-                    <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
-                      <Store className="w-5 h-5 text-primary-600" />
+                    <div className="w-10 h-10 bg-primary-100 dark:bg-primary-900/30 rounded-lg flex items-center justify-center">
+                      <Store className="w-5 h-5 text-primary-600 dark:text-primary-400" />
                     </div>
                   )}
                   <div>
-                    <h3 className="font-medium text-gray-900">{business.name}</h3>
-                    <p className="text-xs text-gray-500">{business.slug}</p>
+                    <h3 className="font-medium text-gray-900 dark:text-white">{business.name}</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{business.slug}</p>
                   </div>
                 </div>
                 <ChevronRight className="w-5 h-5 text-gray-400" />
@@ -150,25 +150,25 @@ function BusinessesList() {
 
               <div className="space-y-2 mb-3">
                 {business.business_category && (
-                  <p className="text-sm text-gray-600">{business.business_category.name}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">{business.business_category.name}</p>
                 )}
                 {business.description && (
-                  <p className="text-sm text-gray-500 line-clamp-2">{business.description}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2">{business.description}</p>
                 )}
               </div>
 
-              <div className="flex items-center justify-between pt-3 border-t">
+              <div className="flex items-center justify-between pt-3 border-t border-gray-200 dark:border-gray-700">
                 <div className="flex items-center gap-2">
                   {getApprovalBadge(business.approval_status)}
                 </div>
                 <div className="flex items-center gap-1">
                   {business.is_live_mode ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
                       <ToggleRight className="w-3 h-3" />
                       Live
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400">
                       <ToggleLeft className="w-3 h-3" />
                       Test
                     </span>
@@ -177,8 +177,8 @@ function BusinessesList() {
               </div>
 
               {business.approval_status === 'PENDING' && (
-                <div className="mt-3 p-2 bg-yellow-50 rounded-lg">
-                  <p className="text-xs text-yellow-700">
+                <div className="mt-3 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+                  <p className="text-xs text-yellow-700 dark:text-yellow-400">
                     {(business.trial_live_transactions_used || 0) < (business.trial_live_transaction_limit || 2)
                       ? `${(business.trial_live_transaction_limit || 2) - (business.trial_live_transactions_used || 0)} trial live transactions remaining`
                       : 'Awaiting admin approval for unlimited live access'}
@@ -260,10 +260,10 @@ function BusinessDetail() {
     return (
       <div className="text-center py-12">
         <AlertTriangle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-gray-900">Business not found</h3>
+        <h3 className="text-lg font-medium text-gray-900 dark:text-white">Business not found</h3>
         <button
           onClick={() => navigate('/merchant/developer')}
-          className="mt-4 text-primary-600 hover:text-primary-700"
+          className="mt-4 text-primary-600 dark:text-primary-400 hover:text-primary-700"
         >
           Back to businesses
         </button>
@@ -1739,7 +1739,7 @@ export async function POST(req: NextRequest) {
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate('/merchant/developer')}
-            className="p-2 hover:bg-gray-100 rounded-lg"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
           >
             <ChevronRight className="w-5 h-5 text-gray-400 rotate-180" />
           </button>
@@ -1750,26 +1750,26 @@ export async function POST(req: NextRequest) {
               className="w-12 h-12 rounded-lg object-cover"
             />
           ) : (
-            <div className="w-12 h-12 bg-primary-100 rounded-lg flex items-center justify-center">
-              <Store className="w-6 h-6 text-primary-600" />
+            <div className="w-12 h-12 bg-primary-100 dark:bg-primary-900/30 rounded-lg flex items-center justify-center">
+              <Store className="w-6 h-6 text-primary-600 dark:text-primary-400" />
             </div>
           )}
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">{business.name}</h2>
-            <p className="text-sm text-gray-500">{business.slug}</p>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">{business.name}</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{business.slug}</p>
           </div>
         </div>
 
         {/* Mode Toggle */}
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 p-1 bg-gray-100 rounded-lg">
+          <div className="flex items-center gap-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg">
             <button
               onClick={() => !business.is_live_mode ? null : handleToggleMode()}
               disabled={togglingMode}
               className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                 !business.is_live_mode
-                  ? 'bg-white shadow text-orange-700'
-                  : 'text-gray-600 hover:text-gray-900'
+                  ? 'bg-white dark:bg-gray-700 shadow text-orange-700 dark:text-orange-400'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
               }`}
             >
               Test Mode
@@ -1779,8 +1779,8 @@ export async function POST(req: NextRequest) {
               disabled={togglingMode || canSwitchToLive() === false}
               className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                 business.is_live_mode
-                  ? 'bg-white shadow text-green-700'
-                  : 'text-gray-600 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed'
+                  ? 'bg-white dark:bg-gray-700 shadow text-green-700 dark:text-green-400'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white disabled:opacity-50 disabled:cursor-not-allowed'
               }`}
             >
               Live Mode
@@ -1793,30 +1793,30 @@ export async function POST(req: NextRequest) {
       </div>
 
       {modeError && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+        <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400">
           {modeError}
         </div>
       )}
 
       {/* Approval Status Banner */}
       {business.approval_status === 'PENDING' && (
-        <Card className="p-4 bg-yellow-50 border-yellow-200">
+        <Card className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800">
           <div className="flex items-start gap-3">
-            <Clock className="w-5 h-5 text-yellow-600 mt-0.5" />
+            <Clock className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mt-0.5" />
             <div>
-              <h3 className="font-medium text-yellow-900">Pending Approval</h3>
-              <p className="text-sm text-yellow-700 mt-1">
+              <h3 className="font-medium text-yellow-900 dark:text-yellow-300">Pending Approval</h3>
+              <p className="text-sm text-yellow-700 dark:text-yellow-400 mt-1">
                 You can process unlimited test transactions and {getRemainingTrialTransactions()} trial live transactions.
                 After using your trial live transactions, an admin will review your business for full live access.
               </p>
               <div className="mt-3 grid grid-cols-2 gap-4 text-sm">
-                <div className="p-2 bg-white rounded-lg">
-                  <p className="text-gray-500">Test Transactions</p>
-                  <p className="font-semibold text-green-600">Unlimited</p>
+                <div className="p-2 bg-white dark:bg-gray-800 rounded-lg">
+                  <p className="text-gray-500 dark:text-gray-400">Test Transactions</p>
+                  <p className="font-semibold text-green-600 dark:text-green-400">Unlimited</p>
                 </div>
-                <div className="p-2 bg-white rounded-lg">
-                  <p className="text-gray-500">Trial Live Transactions</p>
-                  <p className="font-semibold text-orange-600">
+                <div className="p-2 bg-white dark:bg-gray-800 rounded-lg">
+                  <p className="text-gray-500 dark:text-gray-400">Trial Live Transactions</p>
+                  <p className="font-semibold text-orange-600 dark:text-orange-400">
                     {(business.trial_live_transactions_used || 0)}/{(business.trial_live_transaction_limit || 2)} used
                   </p>
                 </div>
@@ -1827,12 +1827,12 @@ export async function POST(req: NextRequest) {
       )}
 
       {business.approval_status === 'REJECTED' && (
-        <Card className="p-4 bg-red-50 border-red-200">
+        <Card className="p-4 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
           <div className="flex items-start gap-3">
-            <X className="w-5 h-5 text-red-600 mt-0.5" />
+            <X className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5" />
             <div>
-              <h3 className="font-medium text-red-900">Application Rejected</h3>
-              <p className="text-sm text-red-700 mt-1">
+              <h3 className="font-medium text-red-900 dark:text-red-300">Application Rejected</h3>
+              <p className="text-sm text-red-700 dark:text-red-400 mt-1">
                 {business.approval_notes || 'Your business application was not approved. Please contact support.'}
               </p>
             </div>
@@ -1842,16 +1842,16 @@ export async function POST(req: NextRequest) {
 
       {/* Business Details - Now at the top */}
       <Card className="p-6">
-        <h3 className="font-medium text-gray-900 mb-4">Business Details</h3>
+        <h3 className="font-medium text-gray-900 dark:text-white mb-4">Business Details</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {business.email && (
-            <div className="flex items-center gap-2 text-sm">
+            <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
               <Mail className="w-4 h-4 text-gray-400" />
               <span>{business.email}</span>
             </div>
           )}
           {business.phone && (
-            <div className="flex items-center gap-2 text-sm">
+            <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
               <Phone className="w-4 h-4 text-gray-400" />
               <span>{business.phone}</span>
             </div>
@@ -1859,27 +1859,27 @@ export async function POST(req: NextRequest) {
           {business.website_url && (
             <div className="flex items-center gap-2 text-sm">
               <Globe className="w-4 h-4 text-gray-400" />
-              <a href={business.website_url} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline">
+              <a href={business.website_url} target="_blank" rel="noopener noreferrer" className="text-primary-600 dark:text-primary-400 hover:underline">
                 {business.website_url}
               </a>
             </div>
           )}
           {(business.address || business.city) && (
-            <div className="flex items-center gap-2 text-sm">
+            <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
               <MapPin className="w-4 h-4 text-gray-400" />
               <span>{[business.address, business.city, business.country].filter(Boolean).join(', ')}</span>
             </div>
           )}
           {business.business_category && (
-            <div className="flex items-center gap-2 text-sm">
+            <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
               <Building2 className="w-4 h-4 text-gray-400" />
               <span>{business.business_category.name}</span>
             </div>
           )}
         </div>
         {business.description && (
-          <div className="mt-4 pt-4 border-t">
-            <p className="text-sm text-gray-600">{business.description}</p>
+          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <p className="text-sm text-gray-600 dark:text-gray-400">{business.description}</p>
           </div>
         )}
       </Card>
@@ -1888,34 +1888,34 @@ export async function POST(req: NextRequest) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="p-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <Activity className="w-5 h-5 text-green-600" />
+            <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+              <Activity className="w-5 h-5 text-green-600 dark:text-green-400" />
             </div>
             <div>
-              <p className="text-sm text-gray-500">Status</p>
-              <p className="font-medium text-gray-900">{business.status}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Status</p>
+              <p className="font-medium text-gray-900 dark:text-white">{business.status}</p>
             </div>
           </div>
         </Card>
         <Card className="p-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <CheckCircle className="w-5 h-5 text-blue-600" />
+            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+              <CheckCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <p className="text-sm text-gray-500">Approval</p>
-              <p className="font-medium text-gray-900">{business.approval_status}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Approval</p>
+              <p className="font-medium text-gray-900 dark:text-white">{business.approval_status}</p>
             </div>
           </div>
         </Card>
         <Card className="p-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <Webhook className="w-5 h-5 text-purple-600" />
+            <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+              <Webhook className="w-5 h-5 text-purple-600 dark:text-purple-400" />
             </div>
             <div>
-              <p className="text-sm text-gray-500">Webhook</p>
-              <p className="font-medium text-gray-900">{business.webhook_url ? 'Configured' : 'Not Set'}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Webhook</p>
+              <p className="font-medium text-gray-900 dark:text-white">{business.webhook_url ? 'Configured' : 'Not Set'}</p>
             </div>
           </div>
         </Card>
@@ -1925,45 +1925,45 @@ export async function POST(req: NextRequest) {
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="font-medium text-gray-900">Enabled Features</h3>
-            <p className="text-sm text-gray-500">Additional payment capabilities for your business</p>
+            <h3 className="font-medium text-gray-900 dark:text-white">Enabled Features</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Additional payment capabilities for your business</p>
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Subscriptions Feature */}
           <div className={`p-4 rounded-lg border-2 ${
             business.enabled_features?.includes('subscriptions')
-              ? 'border-green-200 bg-green-50'
-              : 'border-gray-200 bg-gray-50'
+              ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20'
+              : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800'
           }`}>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <div className={`p-2 rounded-lg ${
                   business.enabled_features?.includes('subscriptions')
-                    ? 'bg-green-100'
-                    : 'bg-gray-100'
+                    ? 'bg-green-100 dark:bg-green-900/30'
+                    : 'bg-gray-100 dark:bg-gray-700'
                 }`}>
                   <Repeat className={`w-5 h-5 ${
                     business.enabled_features?.includes('subscriptions')
-                      ? 'text-green-600'
+                      ? 'text-green-600 dark:text-green-400'
                       : 'text-gray-400'
                   }`} />
                 </div>
-                <span className="font-medium text-gray-900">Subscriptions</span>
+                <span className="font-medium text-gray-900 dark:text-white">Subscriptions</span>
               </div>
               {business.enabled_features?.includes('subscriptions') ? (
-                <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">Active</span>
+                <span className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium rounded-full">Active</span>
               ) : (
-                <span className="px-2 py-1 bg-gray-100 text-gray-500 text-xs font-medium rounded-full">Inactive</span>
+                <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-xs font-medium rounded-full">Inactive</span>
               )}
             </div>
-            <p className="text-sm text-gray-500 mb-3">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
               Create recurring billing plans and auto-charge customers
             </p>
             {business.enabled_features?.includes('subscriptions') ? (
               <a
                 href="/merchant/subscriptions"
-                className="text-sm text-green-600 hover:text-green-700 font-medium"
+                className="text-sm text-green-600 dark:text-green-400 hover:text-green-700 font-medium"
               >
                 Manage Plans →
               </a>
@@ -1975,27 +1975,27 @@ export async function POST(req: NextRequest) {
           {/* Payment Links Feature */}
           <div className={`p-4 rounded-lg border-2 ${
             business.enabled_features?.includes('payment_links')
-              ? 'border-green-200 bg-green-50'
-              : 'border-gray-200 bg-gray-50'
+              ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20'
+              : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800'
           }`}>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <div className={`p-2 rounded-lg ${
                   business.enabled_features?.includes('payment_links')
-                    ? 'bg-green-100'
-                    : 'bg-gray-100'
+                    ? 'bg-green-100 dark:bg-green-900/30'
+                    : 'bg-gray-100 dark:bg-gray-700'
                 }`}>
                   <Link2 className={`w-5 h-5 ${
                     business.enabled_features?.includes('payment_links')
-                      ? 'text-green-600'
+                      ? 'text-green-600 dark:text-green-400'
                       : 'text-gray-400'
                   }`} />
                 </div>
-                <span className="font-medium text-gray-900">Payment Links</span>
+                <span className="font-medium text-gray-900 dark:text-white">Payment Links</span>
               </div>
-              <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">Active</span>
+              <span className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium rounded-full">Active</span>
             </div>
-            <p className="text-sm text-gray-500 mb-3">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
               Create shareable links to collect payments
             </p>
             <span className="text-sm text-gray-400">Included by default</span>
@@ -2004,31 +2004,31 @@ export async function POST(req: NextRequest) {
           {/* Invoices Feature */}
           <div className={`p-4 rounded-lg border-2 ${
             business.enabled_features?.includes('invoices')
-              ? 'border-green-200 bg-green-50'
-              : 'border-gray-200 bg-gray-50'
+              ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20'
+              : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800'
           }`}>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <div className={`p-2 rounded-lg ${
                   business.enabled_features?.includes('invoices')
-                    ? 'bg-green-100'
-                    : 'bg-gray-100'
+                    ? 'bg-green-100 dark:bg-green-900/30'
+                    : 'bg-gray-100 dark:bg-gray-700'
                 }`}>
                   <FileText className={`w-5 h-5 ${
                     business.enabled_features?.includes('invoices')
-                      ? 'text-green-600'
+                      ? 'text-green-600 dark:text-green-400'
                       : 'text-gray-400'
                   }`} />
                 </div>
-                <span className="font-medium text-gray-900">Invoices</span>
+                <span className="font-medium text-gray-900 dark:text-white">Invoices</span>
               </div>
               {business.enabled_features?.includes('invoices') ? (
-                <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">Active</span>
+                <span className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium rounded-full">Active</span>
               ) : (
-                <span className="px-2 py-1 bg-gray-100 text-gray-500 text-xs font-medium rounded-full">Coming Soon</span>
+                <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-xs font-medium rounded-full">Coming Soon</span>
               )}
             </div>
-            <p className="text-sm text-gray-500 mb-3">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
               Send professional invoices with payment tracking
             </p>
             <span className="text-xs text-gray-400">Coming soon</span>
@@ -2037,111 +2037,111 @@ export async function POST(req: NextRequest) {
       </Card>
 
       {/* Integration Section Header */}
-      <div className="border-t pt-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-1">Integration</h3>
-        <p className="text-sm text-gray-500">Add payment capabilities to your website or application</p>
+      <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Integration</h3>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Add payment capabilities to your website or application</p>
       </div>
 
       {/* Complete SDK Documentation with Tabs */}
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <ExternalLink className="w-5 h-5 text-gray-600" />
-            <h3 className="font-medium text-gray-900">Peeap Payment SDK</h3>
+            <ExternalLink className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+            <h3 className="font-medium text-gray-900 dark:text-white">Peeap Payment SDK</h3>
           </div>
           <div className="flex items-center gap-2">
-            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded">AI-Ready</span>
-            <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded">v2.3.0</span>
+            <span className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium rounded">AI-Ready</span>
+            <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs font-medium rounded">v2.3.0</span>
           </div>
         </div>
 
         {/* Integration Type Tabs */}
-        <div className="flex flex-wrap gap-2 mb-4 p-1 bg-gray-100 rounded-lg">
+        <div className="flex flex-wrap gap-2 mb-4 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg">
           <button
             onClick={() => setIntegrationTab('standard')}
             className={`flex-1 min-w-[120px] px-4 py-2.5 rounded-md text-sm font-medium transition-all ${
               integrationTab === 'standard'
-                ? 'bg-white shadow text-primary-700 ring-1 ring-primary-200'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                ? 'bg-white dark:bg-gray-700 shadow text-primary-700 dark:text-primary-400 ring-1 ring-primary-200 dark:ring-primary-800'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700'
             }`}
           >
             <div className="flex items-center justify-center gap-2">
               <Globe className="w-4 h-4" />
               <span>Standard SDK</span>
             </div>
-            <p className="text-xs text-gray-500 mt-0.5 hidden sm:block">Most websites</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 hidden sm:block">Most websites</p>
           </button>
           <button
             onClick={() => setIntegrationTab('v0')}
             className={`flex-1 min-w-[120px] px-4 py-2.5 rounded-md text-sm font-medium transition-all ${
               integrationTab === 'v0'
-                ? 'bg-white shadow text-orange-700 ring-1 ring-orange-200'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                ? 'bg-white dark:bg-gray-700 shadow text-orange-700 dark:text-orange-400 ring-1 ring-orange-200 dark:ring-orange-800'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700'
             }`}
           >
             <div className="flex items-center justify-center gap-2">
               <AlertTriangle className="w-4 h-4" />
               <span>v0 / Restricted</span>
             </div>
-            <p className="text-xs text-gray-500 mt-0.5 hidden sm:block">v0.dev, sandboxes</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 hidden sm:block">v0.dev, sandboxes</p>
           </button>
           <button
             onClick={() => setIntegrationTab('server')}
             className={`flex-1 min-w-[120px] px-4 py-2.5 rounded-md text-sm font-medium transition-all ${
               integrationTab === 'server'
-                ? 'bg-white shadow text-blue-700 ring-1 ring-blue-200'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                ? 'bg-white dark:bg-gray-700 shadow text-blue-700 dark:text-blue-400 ring-1 ring-blue-200 dark:ring-blue-800'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700'
             }`}
           >
             <div className="flex items-center justify-center gap-2">
               <Settings className="w-4 h-4" />
               <span>Server-Side</span>
             </div>
-            <p className="text-xs text-gray-500 mt-0.5 hidden sm:block">Node, Python, PHP</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 hidden sm:block">Node, Python, PHP</p>
           </button>
           <button
             onClick={() => setIntegrationTab('subscriptions')}
             className={`flex-1 min-w-[120px] px-4 py-2.5 rounded-md text-sm font-medium transition-all ${
               integrationTab === 'subscriptions'
-                ? 'bg-white shadow text-green-700 ring-1 ring-green-200'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                ? 'bg-white dark:bg-gray-700 shadow text-green-700 dark:text-green-400 ring-1 ring-green-200 dark:ring-green-800'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700'
             }`}
           >
             <div className="flex items-center justify-center gap-2">
               <Repeat className="w-4 h-4" />
               <span>Subscriptions</span>
             </div>
-            <p className="text-xs text-gray-500 mt-0.5 hidden sm:block">Recurring billing</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 hidden sm:block">Recurring billing</p>
           </button>
           <button
             onClick={() => setIntegrationTab('payment_intents')}
             className={`flex-1 min-w-[120px] px-4 py-2.5 rounded-md text-sm font-medium transition-all ${
               integrationTab === 'payment_intents'
-                ? 'bg-white shadow text-purple-700 ring-1 ring-purple-200'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                ? 'bg-white dark:bg-gray-700 shadow text-purple-700 dark:text-purple-400 ring-1 ring-purple-200 dark:ring-purple-800'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700'
             }`}
           >
             <div className="flex items-center justify-center gap-2">
               <Activity className="w-4 h-4" />
               <span>Payment Intents</span>
             </div>
-            <p className="text-xs text-gray-500 mt-0.5 hidden sm:block">NFC, QR, Terminals</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 hidden sm:block">NFC, QR, Terminals</p>
           </button>
         </div>
 
         {/* Tab Description */}
         <div className="mb-4">
           {integrationTab === 'standard' && (
-            <div className="p-3 bg-primary-50 border border-primary-100 rounded-lg">
-              <p className="text-sm text-primary-800">
+            <div className="p-3 bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-800 rounded-lg">
+              <p className="text-sm text-primary-800 dark:text-primary-300">
                 <strong>Standard SDK</strong> - Best for most websites, React, Vue, Next.js, and AI platforms like
                 <strong> Lovable</strong>, <strong>Bolt</strong>, and others. Uses hosted checkout with redirect flow.
               </p>
             </div>
           )}
           {integrationTab === 'v0' && (
-            <div className="p-3 bg-orange-50 border border-orange-100 rounded-lg">
-              <p className="text-sm text-orange-800">
+            <div className="p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-800 rounded-lg">
+              <p className="text-sm text-orange-800 dark:text-orange-300">
                 <strong>V0 / Restricted Environment SDK</strong> - Specifically designed for <strong>v0.dev</strong>,
                 Vercel previews, CodeSandbox, StackBlitz, and any environment with strict CSP policies.
                 Uses pure redirect flow with no iframes or popups.
@@ -2149,20 +2149,20 @@ export async function POST(req: NextRequest) {
             </div>
           )}
           {integrationTab === 'server' && (
-            <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
-              <p className="text-sm text-blue-800">
+            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg">
+              <p className="text-sm text-blue-800 dark:text-blue-300">
                 <strong>Server-Side Integration</strong> - For backend-first architectures using Node.js, Python, PHP,
                 Ruby, or Go. Includes webhook verification and secure API patterns.
               </p>
             </div>
           )}
           {integrationTab === 'subscriptions' && (
-            <div className="p-3 bg-green-50 border border-green-100 rounded-lg">
-              <p className="text-sm text-green-800">
+            <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800 rounded-lg">
+              <p className="text-sm text-green-800 dark:text-green-300">
                 <strong>Subscription Billing API</strong> - Create recurring billing plans, collect payment methods with
                 consent, and auto-charge customers on renewal. Supports Cards, Mobile Money, and Peeap Wallet.
                 {!business.enabled_features?.includes('subscriptions') && (
-                  <span className="block mt-1 text-yellow-700">
+                  <span className="block mt-1 text-yellow-700 dark:text-yellow-400">
                     Note: Contact admin to enable subscriptions for your business.
                   </span>
                 )}
@@ -2170,8 +2170,8 @@ export async function POST(req: NextRequest) {
             </div>
           )}
           {integrationTab === 'payment_intents' && (
-            <div className="p-3 bg-purple-50 border border-purple-100 rounded-lg">
-              <p className="text-sm text-purple-800">
+            <div className="p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800 rounded-lg">
+              <p className="text-sm text-purple-800 dark:text-purple-300">
                 <strong>Payment Intents API</strong> - Channel-agnostic payment collection for <strong>NFC/Tap-to-Pay</strong>,
                 <strong> QR codes</strong>, <strong>Cards</strong>, and <strong>Wallets</strong>. Perfect for bus terminals,
                 POS devices, fleet management, and custom checkout flows without redirects. Create intent → confirm with any payment method.
@@ -2182,25 +2182,25 @@ export async function POST(req: NextRequest) {
 
         {/* Quick highlights */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          <div className="p-3 bg-gray-50 rounded-lg text-center">
-            <p className="text-xs text-gray-500">Currencies</p>
-            <p className="font-semibold text-gray-900">6+</p>
+          <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg text-center">
+            <p className="text-xs text-gray-500 dark:text-gray-400">Currencies</p>
+            <p className="font-semibold text-gray-900 dark:text-white">6+</p>
           </div>
-          <div className="p-3 bg-gray-50 rounded-lg text-center">
-            <p className="text-xs text-gray-500">Payment Methods</p>
-            <p className="font-semibold text-gray-900">5</p>
+          <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg text-center">
+            <p className="text-xs text-gray-500 dark:text-gray-400">Payment Methods</p>
+            <p className="font-semibold text-gray-900 dark:text-white">5</p>
           </div>
-          <div className="p-3 bg-gray-50 rounded-lg text-center">
-            <p className="text-xs text-gray-500">
+          <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg text-center">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
               {integrationTab === 'v0' ? 'Environment' : 'Frameworks'}
             </p>
-            <p className="font-semibold text-gray-900">
+            <p className="font-semibold text-gray-900 dark:text-white">
               {integrationTab === 'v0' ? 'Sandboxed' : 'All'}
             </p>
           </div>
-          <div className="p-3 bg-gray-50 rounded-lg text-center">
-            <p className="text-xs text-gray-500">Setup Time</p>
-            <p className="font-semibold text-gray-900">2 min</p>
+          <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg text-center">
+            <p className="text-xs text-gray-500 dark:text-gray-400">Setup Time</p>
+            <p className="font-semibold text-gray-900 dark:text-white">2 min</p>
           </div>
         </div>
 
@@ -2226,8 +2226,8 @@ export async function POST(req: NextRequest) {
           </button>
         </div>
 
-        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <p className="text-sm text-yellow-800">
+        <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+          <p className="text-sm text-yellow-800 dark:text-yellow-300">
             {integrationTab === 'v0' ? (
               <>
                 <strong>Using v0.dev?</strong> Copy this code and paste it directly into your v0 project.
@@ -2247,69 +2247,69 @@ export async function POST(req: NextRequest) {
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Key className="w-5 h-5 text-gray-600" />
-            <h3 className="font-medium text-gray-900">
+            <Key className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+            <h3 className="font-medium text-gray-900 dark:text-white">
               {business.is_live_mode ? 'Live' : 'Test'} API Keys
             </h3>
           </div>
           <button
             onClick={() => setShowSecretKeys(!showSecretKeys)}
-            className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1"
+            className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 flex items-center gap-1"
           >
             {showSecretKeys ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             {showSecretKeys ? 'Hide' : 'Show'} Secret Keys
           </button>
         </div>
-        <p className="text-sm text-gray-600 mb-4">
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
           Use these keys for custom API integrations. For most use cases, we recommend using the embeddable scripts above.
         </p>
 
         <div className="space-y-4">
           {/* Public Key */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Publishable Key
             </label>
             <div className="flex items-center gap-2">
-              <code className="flex-1 px-3 py-2 bg-gray-100 rounded-lg text-sm font-mono overflow-x-auto">
+              <code className="flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-700 dark:text-gray-300 rounded-lg text-sm font-mono overflow-x-auto">
                 {activeKeys.public}
               </code>
               <button
                 onClick={() => copyToClipboard(activeKeys.public, 'public')}
-                className="p-2 hover:bg-gray-100 rounded-lg"
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
               >
                 {copiedKey === 'public' ? (
-                  <Check className="w-4 h-4 text-green-600" />
+                  <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
                 ) : (
-                  <Copy className="w-4 h-4 text-gray-500" />
+                  <Copy className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                 )}
               </button>
             </div>
-            <p className="text-xs text-gray-500 mt-1">Safe to use in frontend code</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Safe to use in frontend code</p>
           </div>
 
           {/* Secret Key */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Secret Key
             </label>
             <div className="flex items-center gap-2">
-              <code className="flex-1 px-3 py-2 bg-gray-100 rounded-lg text-sm font-mono">
+              <code className="flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-700 dark:text-gray-300 rounded-lg text-sm font-mono">
                 {showSecretKeys ? activeKeys.secret : '••••••••••••••••••••••••••••••••'}
               </code>
               <button
                 onClick={() => copyToClipboard(activeKeys.secret, 'secret')}
-                className="p-2 hover:bg-gray-100 rounded-lg"
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
                 disabled={!showSecretKeys}
               >
                 {copiedKey === 'secret' ? (
-                  <Check className="w-4 h-4 text-green-600" />
+                  <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
                 ) : (
-                  <Copy className="w-4 h-4 text-gray-500" />
+                  <Copy className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                 )}
               </button>
             </div>
-            <p className="text-xs text-gray-500 mt-1">Keep this secret! Only use in server-side code</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Keep this secret! Only use in server-side code</p>
           </div>
         </div>
       </Card>
@@ -2318,30 +2318,30 @@ export async function POST(req: NextRequest) {
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Webhook className="w-5 h-5 text-gray-600" />
-            <h3 className="font-medium text-gray-900">Webhook Configuration</h3>
+            <Webhook className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+            <h3 className="font-medium text-gray-900 dark:text-white">Webhook Configuration</h3>
           </div>
-          <button className="text-sm text-primary-600 hover:text-primary-700">
+          <button className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300">
             Configure
           </button>
         </div>
         {business.webhook_url ? (
           <div className="space-y-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Endpoint URL</label>
-              <code className="block px-3 py-2 bg-gray-100 rounded-lg text-sm font-mono">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Endpoint URL</label>
+              <code className="block px-3 py-2 bg-gray-100 dark:bg-gray-700 dark:text-gray-300 rounded-lg text-sm font-mono">
                 {business.webhook_url}
               </code>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Signing Secret</label>
-              <code className="block px-3 py-2 bg-gray-100 rounded-lg text-sm font-mono">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Signing Secret</label>
+              <code className="block px-3 py-2 bg-gray-100 dark:bg-gray-700 dark:text-gray-300 rounded-lg text-sm font-mono">
                 {showSecretKeys ? business.webhook_secret : '••••••••••••••••••••••••••••••••'}
               </code>
             </div>
           </div>
         ) : (
-          <p className="text-sm text-gray-500">No webhook configured. Set up a webhook to receive real-time payment notifications.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">No webhook configured. Set up a webhook to receive real-time payment notifications.</p>
         )}
       </Card>
     </div>
@@ -2358,8 +2358,8 @@ export function MerchantDeveloperPage() {
     >
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Developer Dashboard</h1>
-          <p className="text-gray-500">Create businesses and manage your API integration</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Developer Dashboard</h1>
+          <p className="text-gray-500 dark:text-gray-400">Create businesses and manage your API integration</p>
         </div>
         <Routes>
           <Route index element={<BusinessesList />} />
