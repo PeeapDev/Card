@@ -1525,10 +1525,136 @@ function LandingPageSettings({ settings, setSettings }: { settings: SiteSettings
 
 // Menu Settings Tab
 function MenuSettings({ settings, setSettings }: { settings: SiteSettings; setSettings: (s: SiteSettings) => void }) {
+  const [pages, setPages] = useState<Array<{ id: string; title: string; slug: string; status: string }>>([]);
+  const [loadingPages, setLoadingPages] = useState(true);
+
+  useEffect(() => {
+    fetchPages();
+  }, []);
+
+  const fetchPages = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('pages')
+        .select('id, title, slug, status')
+        .order('title');
+
+      if (error) throw error;
+      setPages(data || []);
+    } catch (err) {
+      console.error('Error fetching pages:', err);
+    } finally {
+      setLoadingPages(false);
+    }
+  };
+
+  const addPageToNav = (page: { title: string; slug: string }) => {
+    const exists = settings.navLinks.some(link => link.href === `/p/${page.slug}`);
+    if (!exists) {
+      setSettings({
+        ...settings,
+        navLinks: [...settings.navLinks, { label: page.title, href: `/p/${page.slug}` }]
+      });
+    }
+  };
+
+  const addPageToFooter = (page: { title: string; slug: string }, sectionIndex: number) => {
+    const newFooterLinks = [...settings.footerLinks];
+    const exists = newFooterLinks[sectionIndex]?.links.some(link => link.href === `/p/${page.slug}`);
+    if (!exists && newFooterLinks[sectionIndex]) {
+      newFooterLinks[sectionIndex].links.push({ name: page.title, href: `/p/${page.slug}` });
+      setSettings({ ...settings, footerLinks: newFooterLinks });
+    }
+  };
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="space-y-6">
+      {/* Content Pages Section */}
       <Card className="p-6">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Navigation Links</h3>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Content Pages</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Add your custom pages to navigation menus</p>
+          </div>
+          <a
+            href="/admin/pages"
+            className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Create New Page
+          </a>
+        </div>
+
+        {loadingPages ? (
+          <div className="flex items-center justify-center py-8">
+            <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+          </div>
+        ) : pages.length === 0 ? (
+          <div className="text-center py-8 bg-gray-50 dark:bg-gray-800 rounded-lg">
+            <FileText className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+            <p className="text-gray-600 dark:text-gray-400 mb-2">No pages created yet</p>
+            <a href="/admin/pages" className="text-primary-600 hover:text-primary-700 text-sm font-medium">
+              Create your first page →
+            </a>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {pages.map((page) => (
+              <div key={page.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <FileText className="w-5 h-5 text-gray-400" />
+                  <div>
+                    <p className="font-medium text-gray-900 dark:text-white">{page.title}</p>
+                    <p className="text-xs text-gray-500">/p/{page.slug}</p>
+                  </div>
+                  <span className={`px-2 py-0.5 text-xs rounded-full ${
+                    page.status === 'published'
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-yellow-100 text-yellow-700'
+                  }`}>
+                    {page.status}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => addPageToNav(page)}
+                    disabled={settings.navLinks.some(link => link.href === `/p/${page.slug}`)}
+                    className="px-3 py-1.5 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    + Header
+                  </button>
+                  <div className="relative group">
+                    <button className="px-3 py-1.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200">
+                      + Footer ▾
+                    </button>
+                    <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+                      {settings.footerLinks.map((section, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => addPageToFooter(page, idx)}
+                          className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 first:rounded-t-lg last:rounded-b-lg"
+                        >
+                          {section.title}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <a
+                    href={`/admin/pages/${page.id}/edit`}
+                    className="px-3 py-1.5 text-xs font-medium bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                  >
+                    Edit
+                  </a>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Header Navigation</h3>
         <div className="space-y-4">
           {settings.navLinks.map((link, index) => (
             <div key={index} className="flex gap-2 items-center">
@@ -1608,6 +1734,7 @@ function MenuSettings({ settings, setSettings }: { settings: SiteSettings; setSe
           </div>
         </div>
       </Card>
+    </div>
     </div>
   );
 }
