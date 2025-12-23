@@ -1331,14 +1331,14 @@ export async function POST(req: NextRequest) {
     const { amount, description, reference } = await req.json();
 
     // Create payment intent
-    const response = await fetch('${apiUrl}/v1/payment-intents', {
+    const response = await fetch('${apiUrl}/api/v1/payment-intents', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-API-Key': PEEAP_SECRET_KEY
+        'Authorization': \`Bearer \${PEEAP_SECRET_KEY}\`
       },
       body: JSON.stringify({
-        amount: amount,           // Amount in cents (5000 = Le 50.00)
+        amount: amount,           // Amount in Leones (50 = Le 50)
         currency: 'SLE',
         description: description || 'Payment',
         payment_methods: ['qr', 'wallet', 'card'],
@@ -1358,7 +1358,7 @@ export async function POST(req: NextRequest) {
       id: intent.id,
       amount: intent.amount,
       currency: intent.currency,
-      qr_code_url: \`${apiUrl}/v1/payment-intents/\${intent.id}/qr\`,
+      qr_code_url: \`${apiUrl}/api/v1/payment-intents/\${intent.id}/qr\`,
       pay_url: \`${payUrl}/i/\${intent.id}\`,
       status: intent.status,
       expires_at: intent.expires_at
@@ -1387,8 +1387,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const response = await fetch(\`${apiUrl}/v1/payment-intents/\${intentId}\`, {
-      headers: { 'X-API-Key': PEEAP_SECRET_KEY }
+    const response = await fetch(\`${apiUrl}/api/v1/payment-intents/\${intentId}\`, {
+      headers: { 'Authorization': \`Bearer \${PEEAP_SECRET_KEY}\` }
     });
 
     const intent = await response.json();

@@ -143,7 +143,7 @@ export function PaymentIntentPage() {
     }
 
     try {
-      const response = await fetch(`${API_URL}/v1/payment-intents/${intentId}`);
+      const response = await fetch(`${API_URL}/api/v1/payment-intents/${intentId}`);
 
       if (!response.ok) {
         throw new Error('Payment not found');
@@ -236,18 +236,14 @@ export function PaymentIntentPage() {
     setError(null);
 
     try {
-      const response = await fetch(`${API_URL}/v1/payment-intents/${intent.id}/confirm`, {
+      const response = await fetch(`${API_URL}/api/v1/payment-intents/${intent.id}/confirm`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Client-Secret': intent.external_id,
         },
         body: JSON.stringify({
-          payment_method_type: 'wallet',
-          wallet: {
-            wallet_id: wallet.id,
-            pin: walletPin || undefined,
-          },
+          payment_method: 'wallet',
+          payer_wallet_id: wallet.id,
         }),
       });
 
@@ -288,13 +284,13 @@ export function PaymentIntentPage() {
     try {
       const [expMonth, expYear] = cardExpiry.split('/').map(s => parseInt(s.trim()));
 
-      const response = await fetch(`${API_URL}/v1/payment-intents/${intent.id}/confirm`, {
+      const response = await fetch(`${API_URL}/api/v1/payment-intents/${intent.id}/confirm`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          payment_method_type: 'card',
+          payment_method: 'card',
           card: {
             number: cardNumber.replace(/\s/g, ''),
             exp_month: expMonth,

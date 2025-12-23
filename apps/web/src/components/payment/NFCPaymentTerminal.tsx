@@ -259,11 +259,11 @@ export function NFCPaymentTerminal({
     setError(null);
 
     try {
-      const response = await fetch(`${API_URL}/v1/payment-intents`, {
+      const response = await fetch(`${API_URL}/api/v1/payment-intents`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-API-Key': apiKey,
+          'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
           amount,
@@ -304,9 +304,9 @@ export function NFCPaymentTerminal({
 
     const poll = async () => {
       try {
-        const response = await fetch(`${API_URL}/v1/payment-intents/${intentId}`, {
+        const response = await fetch(`${API_URL}/api/v1/payment-intents/${intentId}`, {
           headers: {
-            'X-API-Key': apiKey,
+            'Authorization': `Bearer ${apiKey}`,
           },
         });
 
@@ -435,11 +435,11 @@ export function NFCPaymentTerminal({
     setStatus('processing');
 
     try {
-      const response = await fetch(`${API_URL}/v1/payment-intents/${paymentIntent.id}/confirm`, {
+      const response = await fetch(`${API_URL}/api/v1/payment-intents/${paymentIntent.id}/confirm`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Client-Secret': paymentIntent.client_secret,
+          'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
           payment_method_type: 'nfc',
@@ -478,11 +478,11 @@ export function NFCPaymentTerminal({
     if (!paymentIntent) return;
 
     try {
-      await fetch(`${API_URL}/v1/payment-intents/${paymentIntent.id}/cancel`, {
+      await fetch(`${API_URL}/api/v1/payment-intents/${paymentIntent.id}/cancel`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-API-Key': apiKey,
+          'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify({ reason: 'requested_by_merchant' }),
       });
