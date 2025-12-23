@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseAdmin } from '@/lib/supabase';
 import { currencyService, Currency } from '@/services/currency.service';
 
 interface UserData {
@@ -248,12 +248,16 @@ export function UserDetailPage() {
     if (!user) return;
 
     const newStatus = user.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
-    const { error } = await supabase
+    // Use supabaseAdmin to bypass RLS since admin is editing another user
+    const { error } = await supabaseAdmin
       .from('users')
       .update({ status: newStatus })
       .eq('id', user.id);
 
-    if (!error) {
+    if (error) {
+      console.error('Error updating user status:', error);
+      alert('Failed to update user status. Please try again.');
+    } else {
       setUser({ ...user, status: newStatus });
     }
   };
@@ -308,7 +312,8 @@ export function UserDetailPage() {
     if (!user) return;
     setSaving(true);
 
-    const { error } = await supabase
+    // Use supabaseAdmin to bypass RLS since admin is editing another user
+    const { error } = await supabaseAdmin
       .from('users')
       .update({
         first_name: editForm.first_name,
@@ -318,7 +323,10 @@ export function UserDetailPage() {
       })
       .eq('id', user.id);
 
-    if (!error) {
+    if (error) {
+      console.error('Error updating user:', error);
+      alert('Failed to update user. Please try again.');
+    } else {
       setUser({
         ...user,
         first_name: editForm.first_name,
@@ -337,8 +345,8 @@ export function UserDetailPage() {
     setKycProcessing(true);
 
     try {
-      // Update KYC application status
-      await supabase
+      // Update KYC application status - use supabaseAdmin to bypass RLS
+      await supabaseAdmin
         .from('kyc_applications')
         .update({
           status: 'APPROVED',
@@ -347,7 +355,7 @@ export function UserDetailPage() {
         .eq('id', kycApplication.id);
 
       // Update user's KYC status
-      await supabase
+      await supabaseAdmin
         .from('users')
         .update({
           kyc_status: 'approved',
@@ -360,7 +368,7 @@ export function UserDetailPage() {
       setUser({ ...user, kyc_status: 'approved', kyc_tier: 2 });
 
       // Optionally create a notification for the user
-      await supabase.from('user_notifications').insert({
+      await supabaseAdmin.from('user_notifications').insert({
         user_id: user.id,
         title: 'Identity Verified',
         message: 'Congratulations! Your identity has been verified. You now have full access to all features.',
@@ -369,6 +377,7 @@ export function UserDetailPage() {
       });
     } catch (error) {
       console.error('Error approving KYC:', error);
+      alert('Failed to approve KYC. Please try again.');
     } finally {
       setKycProcessing(false);
     }
@@ -380,8 +389,8 @@ export function UserDetailPage() {
     setKycProcessing(true);
 
     try {
-      // Update KYC application status
-      await supabase
+      // Update KYC application status - use supabaseAdmin to bypass RLS
+      await supabaseAdmin
         .from('kyc_applications')
         .update({
           status: 'REJECTED',
@@ -391,7 +400,7 @@ export function UserDetailPage() {
         .eq('id', kycApplication.id);
 
       // Update user's KYC status
-      await supabase
+      await supabaseAdmin
         .from('users')
         .update({
           kyc_status: 'rejected',
@@ -405,7 +414,7 @@ export function UserDetailPage() {
       setRejectReason('');
 
       // Create a notification for the user
-      await supabase.from('user_notifications').insert({
+      await supabaseAdmin.from('user_notifications').insert({
         user_id: user.id,
         title: 'Verification Requires Attention',
         message: `Your identity verification could not be completed. Reason: ${rejectReason}. Please try again or contact support.`,
@@ -414,6 +423,7 @@ export function UserDetailPage() {
       });
     } catch (error) {
       console.error('Error rejecting KYC:', error);
+      alert('Failed to reject KYC. Please try again.');
     } finally {
       setKycProcessing(false);
     }
@@ -425,7 +435,8 @@ export function UserDetailPage() {
     setSendingNotification(true);
 
     try {
-      const { error } = await supabase.from('user_notifications').insert({
+      // Use supabaseAdmin to bypass RLS when sending notifications to other users
+      const { error } = await supabaseAdmin.from('user_notifications').insert({
         user_id: user.id,
         title: notificationForm.title,
         message: notificationForm.message,
@@ -433,12 +444,17 @@ export function UserDetailPage() {
         read: false,
       });
 
-      if (!error) {
+      if (error) {
+        console.error('Error sending notification:', error);
+        alert('Failed to send notification. Please try again.');
+      } else {
         setShowNotificationModal(false);
         setNotificationForm({ title: '', message: '', type: 'info' });
+        alert('Notification sent successfully!');
       }
     } catch (err) {
       console.error('Error sending notification:', err);
+      alert('Failed to send notification. Please try again.');
     } finally {
       setSendingNotification(false);
     }
@@ -449,41 +465,50 @@ export function UserDetailPage() {
     if (!file || !user) return;
 
     setUploadingPhoto(true);
+    setAvatarLoadError(false);
 
     try {
-      // Upload to Supabase Storage
+      // Upload to Supabase Storage using admin client to bypass RLS
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}_${Date.now()}.${fileExt}`;
       const filePath = `profile-pictures/${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabaseAdmin.storage
         .from('avatars')
-        .upload(filePath, file);
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true
+        });
+
+      let profilePictureUrl: string;
 
       if (uploadError) {
-        // If bucket doesn't exist, just save a placeholder URL
-        const placeholderUrl = `https://ui-avatars.com/api/?name=${user.first_name}+${user.last_name}&background=random`;
-        await supabase
-          .from('users')
-          .update({ profile_picture: placeholderUrl })
-          .eq('id', user.id);
-        setUser({ ...user, profile_picture: placeholderUrl });
+        console.log('Storage upload error (using fallback):', uploadError.message);
+        // If bucket doesn't exist or upload fails, use a placeholder URL
+        profilePictureUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.first_name || '')}+${encodeURIComponent(user.last_name || '')}&background=random&size=256`;
       } else {
         // Get public URL
-        const { data: { publicUrl } } = supabase.storage
+        const { data: { publicUrl } } = supabaseAdmin.storage
           .from('avatars')
           .getPublicUrl(filePath);
+        profilePictureUrl = publicUrl;
+      }
 
-        // Update user profile
-        await supabase
-          .from('users')
-          .update({ profile_picture: publicUrl })
-          .eq('id', user.id);
+      // Update user profile using admin client to bypass RLS
+      const { error: updateError } = await supabaseAdmin
+        .from('users')
+        .update({ profile_picture: profilePictureUrl })
+        .eq('id', user.id);
 
-        setUser({ ...user, profile_picture: publicUrl });
+      if (updateError) {
+        console.error('Error updating user profile picture:', updateError);
+        alert('Failed to update profile picture. Please try again.');
+      } else {
+        setUser({ ...user, profile_picture: profilePictureUrl });
       }
     } catch (err) {
       console.error('Photo upload error:', err);
+      alert('Failed to upload photo. Please try again.');
     } finally {
       setUploadingPhoto(false);
     }

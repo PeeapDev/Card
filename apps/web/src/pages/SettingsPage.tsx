@@ -128,12 +128,34 @@ export function SettingsPage() {
 
   // Handle Cash Box toggle
   const handleCashBoxToggle = async () => {
-    if (isAppEnabled('cashbox')) {
-      // Disabling - just toggle off
-      await toggleApp('cashbox');
-    } else {
-      // Enabling - redirect to setup wizard
-      navigate('/cashbox/setup');
+    try {
+      if (isAppEnabled('cashbox')) {
+        // Disabling - just toggle off
+        await toggleApp('cashbox');
+        setMessage({ type: 'success', text: 'Cash Box disabled' });
+        setTimeout(() => setMessage(null), 3000);
+      } else {
+        // Enabling - redirect to setup wizard
+        navigate('/cashbox/setup');
+      }
+    } catch (error: any) {
+      console.error('Error toggling Cash Box:', error);
+      setMessage({ type: 'error', text: error.message || 'Failed to update Cash Box. Please try again.' });
+    }
+  };
+
+  // Handle Events toggle
+  const handleEventsToggle = async () => {
+    try {
+      await toggleApp('events');
+      setMessage({
+        type: 'success',
+        text: enabledApps.events ? 'Events app disabled' : 'Events app enabled!'
+      });
+      setTimeout(() => setMessage(null), 3000);
+    } catch (error: any) {
+      console.error('Error toggling Events:', error);
+      setMessage({ type: 'error', text: error.message || 'Failed to update Events app. Please try again.' });
     }
   };
 
@@ -288,7 +310,7 @@ export function SettingsPage() {
                     </div>
                   </div>
                   <button
-                    onClick={() => toggleApp('events')}
+                    onClick={handleEventsToggle}
                     disabled={appsLoading}
                     className="flex items-center gap-2"
                   >

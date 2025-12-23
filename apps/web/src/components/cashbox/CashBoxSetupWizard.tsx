@@ -226,6 +226,7 @@ export function CashBoxSetupWizard() {
   const [confirmPinCode, setConfirmPinCode] = useState<string>('');
   const [showPin, setShowPin] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
+  const [setupError, setSetupError] = useState<string | null>(null);
 
   // Set default wallet when wallets load
   useEffect(() => {
@@ -294,6 +295,7 @@ export function CashBoxSetupWizard() {
 
   const handleComplete = async () => {
     setIsCompleting(true);
+    setSetupError(null);
     try {
       // Simple hash for PIN (in production, use proper hashing)
       const pinHash = pinLockEnabled && pinCode ? btoa(pinCode) : null;
@@ -309,10 +311,15 @@ export function CashBoxSetupWizard() {
 
       await completeCashBoxSetup(setupData);
 
-      // Trigger confetti
+      // Trigger confetti and navigate
       triggerConfetti();
-    } catch (error) {
+      // Navigate to Cash Box after a short delay
+      setTimeout(() => {
+        navigate('/pots');
+      }, 2000);
+    } catch (error: any) {
       console.error('Error completing setup:', error);
+      setSetupError(error.message || 'Failed to save settings. Please try again.');
     } finally {
       setIsCompleting(false);
     }
@@ -715,6 +722,20 @@ export function CashBoxSetupWizard() {
                     </div>
                   </div>
                 </div>
+
+                {/* Error Message */}
+                {setupError && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mt-4 p-4 bg-red-50 border border-red-200 rounded-xl"
+                  >
+                    <p className="text-sm text-red-700 font-medium">{setupError}</p>
+                    <p className="text-xs text-red-600 mt-1">
+                      Please check your connection and try again. If the problem persists, contact support.
+                    </p>
+                  </motion.div>
+                )}
 
                 {/* Complete and Go to Cash Box */}
                 <div className="mt-8 space-y-3">
