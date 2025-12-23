@@ -26,6 +26,7 @@ import {
   CreditCard,
   Repeat,
   Calendar,
+  Nfc,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useDeveloperMode } from '@/context/DeveloperModeContext';
@@ -67,6 +68,7 @@ interface NavItem {
 // Base nav items (always available)
 const baseNavItems: NavItem[] = [
   { id: 'dashboard', path: '/merchant', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'terminal', path: '/merchant/terminal', label: 'Payment Terminal', icon: Nfc },
   { id: 'driver-wallet', path: '/merchant/driver-wallet', label: 'Driver Wallet', icon: Wallet },
   { id: 'businesses', path: '/merchant/businesses', label: 'My Businesses', icon: Building2 },
   { id: 'transactions', path: '/merchant/transactions', label: 'Transactions', icon: ArrowLeftRight },

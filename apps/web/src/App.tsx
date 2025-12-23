@@ -135,6 +135,7 @@ import { MerchantUpgradePage } from '@/pages/merchant/MerchantUpgradePage';
 import { MerchantSubscriptionPage } from '@/pages/merchant/MerchantSubscriptionPage';
 import { CollectPaymentPage } from '@/pages/merchant/CollectPaymentPage';
 import { DriverWalletPage } from '@/pages/merchant/DriverWalletPage';
+import { MerchantPaymentTerminalPage } from '@/pages/merchant/MerchantPaymentTerminalPage';
 import { MerchantBusinessDetailPage } from '@/pages/merchant/BusinessDetailPage';
 import { MerchantBusinessTransactionsPage } from '@/pages/merchant/BusinessTransactionsPage';
 import { MerchantBusinessDisputesPage } from '@/pages/merchant/BusinessDisputesPage';
@@ -560,6 +561,14 @@ function App() {
               />
               <Route
                 path="/admin/accounts"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <AccountsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/admin/wallets"
                 element={
                   <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
                     <AccountsPage />
@@ -1400,6 +1409,7 @@ function App() {
                   {/* Admin Routes */}
                   <Route path="/admin" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><AdminDashboard /></RoleBasedRoute>} />
                   <Route path="/admin/accounts" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><AccountsPage /></RoleBasedRoute>} />
+                  <Route path="/admin/wallets" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><AccountsPage /></RoleBasedRoute>} />
                   <Route path="/admin/customers" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><CustomersPage /></RoleBasedRoute>} />
                   <Route path="/admin/cards" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><AdminCardsPage /></RoleBasedRoute>} />
                   <Route path="/admin/card-programs" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><CardProgramsPage /></RoleBasedRoute>} />
@@ -1475,6 +1485,7 @@ function App() {
                   <Route path="/merchant/businesses" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantBusinessesPage /></RoleBasedRoute>} />
                   <Route path="/merchant/collect-payment" element={<RoleBasedRoute allowedRoles={['merchant']}><CollectPaymentPage /></RoleBasedRoute>} />
                   <Route path="/merchant/driver-wallet" element={<RoleBasedRoute allowedRoles={['merchant']}><DriverWalletPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/terminal" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantPaymentTerminalPage /></RoleBasedRoute>} />
                   <Route path="/merchant/upgrade" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantUpgradePage /></RoleBasedRoute>} />
                   <Route path="/merchant/subscription" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantSubscriptionPage /></RoleBasedRoute>} />
                   <Route path="/merchant/businesses/:businessId" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantBusinessDetailPage /></RoleBasedRoute>} />
