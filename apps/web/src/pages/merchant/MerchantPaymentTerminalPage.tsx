@@ -53,14 +53,14 @@ const CURRENCIES = [
   { code: 'GBP', symbol: '£', name: 'British Pound' },
 ];
 
-// Default quick amounts (can be overridden by business settings)
+// Default quick amounts for SLE (in Leones - no cents)
 const DEFAULT_QUICK_AMOUNTS = [
-  { value: 1000, label: 'Le 10' },
-  { value: 2000, label: 'Le 20' },
-  { value: 5000, label: 'Le 50' },
-  { value: 10000, label: 'Le 100' },
-  { value: 20000, label: 'Le 200' },
-  { value: 50000, label: 'Le 500' },
+  { value: 10, label: 'Le 10' },
+  { value: 20, label: 'Le 20' },
+  { value: 50, label: 'Le 50' },
+  { value: 100, label: 'Le 100' },
+  { value: 200, label: 'Le 200' },
+  { value: 500, label: 'Le 500' },
 ];
 
 interface Business {
@@ -170,26 +170,55 @@ export function MerchantPaymentTerminalPage() {
     return DEFAULT_QUICK_AMOUNTS;
   }, [selectedBusiness, currency]);
 
+  // Currency configuration (decimal places for each currency)
+  const currencyConfig: Record<string, { symbol: string; decimals: number }> = {
+    SLE: { symbol: 'Le', decimals: 0 },  // New Leone - no cents
+    USD: { symbol: '$', decimals: 2 },
+    EUR: { symbol: '€', decimals: 2 },
+    GBP: { symbol: '£', decimals: 2 },
+  };
+
+  // Get current currency config
+  const currentCurrencyConfig = currencyConfig[currency] || { symbol: currency, decimals: 2 };
+
   // Handle amount input
   const handleAmountChange = (value: string) => {
-    // Only allow numbers and one decimal point
-    const cleaned = value.replace(/[^0-9.]/g, '');
-    const parts = cleaned.split('.');
-    if (parts.length > 2) return;
-    if (parts[1] && parts[1].length > 2) return;
-    setAmount(cleaned);
+    if (currentCurrencyConfig.decimals === 0) {
+      // SLE: only allow whole numbers
+      const cleaned = value.replace(/[^0-9]/g, '');
+      setAmount(cleaned);
+    } else {
+      // USD/EUR/GBP: allow decimals
+      const cleaned = value.replace(/[^0-9.]/g, '');
+      const parts = cleaned.split('.');
+      if (parts.length > 2) return;
+      if (parts[1] && parts[1].length > 2) return;
+      setAmount(cleaned);
+    }
   };
 
-  // Handle quick amount
+  // Handle quick amount - values are stored in base units
   const handleQuickAmount = (value: number) => {
-    setAmount((value / 100).toFixed(2));
+    if (currentCurrencyConfig.decimals === 0) {
+      // SLE: value is already in Leones
+      setAmount(value.toString());
+    } else {
+      // USD/EUR/GBP: value is in cents, convert to dollars
+      setAmount((value / 100).toFixed(2));
+    }
   };
 
-  // Get amount in cents
-  const getAmountInCents = () => {
+  // Get amount for API - returns amount in appropriate unit for currency
+  const getAmount = () => {
     const num = parseFloat(amount);
     if (isNaN(num)) return 0;
-    return Math.round(num * 100);
+    if (currentCurrencyConfig.decimals === 0) {
+      // SLE: amount is already in Leones
+      return Math.round(num);
+    } else {
+      // USD/EUR/GBP: convert to cents
+      return Math.round(num * 100);
+    }
   };
 
   // Get API key based on mode
@@ -202,7 +231,7 @@ export function MerchantPaymentTerminalPage() {
 
   // Start payment
   const startPayment = () => {
-    if (getAmountInCents() <= 0) return;
+    if (getAmount() <= 0) return;
     setShowTerminal(true);
   };
 
@@ -229,13 +258,19 @@ export function MerchantPaymentTerminalPage() {
     setShowTerminal(false);
   };
 
-  // Format currency
-  const formatCurrency = (cents: number, curr: string = 'SLE') => {
-    const currencyInfo = CURRENCIES.find(c => c.code === curr) || CURRENCIES[0];
-    return `${currencyInfo.symbol} ${(cents / 100).toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
+  // Format currency - SLE uses whole Leones, others use cents
+  const formatCurrency = (amount: number, curr: string = 'SLE') => {
+    const config = currencyConfig[curr] || { symbol: curr, decimals: 2 };
+    if (config.decimals === 0) {
+      // SLE: amount is in Leones
+      return `${config.symbol} ${amount.toLocaleString()}`;
+    } else {
+      // USD/EUR/GBP: amount is in cents
+      return `${config.symbol} ${(amount / 100).toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`;
+    }
   };
 
   // Loading state
@@ -363,7 +398,7 @@ export function MerchantPaymentTerminalPage() {
                   </div>
                   <div className="text-right">
                     <p className="text-2xl font-bold text-purple-600">
-                      {formatCurrency(getAmountInCents(), currency)}
+                      {formatCurrency(getAmount(), currency)}
                     </p>
                   </div>
                 </div>
@@ -392,7 +427,7 @@ export function MerchantPaymentTerminalPage() {
               {integrationMode !== 'manual' && !editingAmount ? (
                 <div className="text-center py-4 mb-4 bg-gray-50 rounded-xl">
                   <p className="text-4xl font-bold text-gray-900">
-                    {formatCurrency(getAmountInCents(), currency)}
+                    {formatCurrency(getAmount(), currency)}
                   </p>
                   {description && (
                     <p className="text-sm text-gray-500 mt-1">{description}</p>
@@ -467,7 +502,7 @@ export function MerchantPaymentTerminalPage() {
               {/* Start Button */}
               <button
                 onClick={startPayment}
-                disabled={getAmountInCents() <= 0}
+                disabled={getAmount() <= 0}
                 className="w-full py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-bold text-lg flex items-center justify-center gap-3 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
                 <CreditCard className="w-6 h-6" />
@@ -546,7 +581,7 @@ export function MerchantPaymentTerminalPage() {
             {/* NFC Payment Terminal */}
             {selectedBusiness && (
               <NFCPaymentTerminal
-                amount={getAmountInCents()}
+                amount={getAmount()}
                 currency={currency}
                 merchantId={selectedBusiness.id}
                 merchantName={selectedBusiness.name}

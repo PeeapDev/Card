@@ -233,16 +233,24 @@ export function NFCPaymentTerminal({
     };
   }, []);
 
-  // Format currency
+  // Currency configuration (decimal places for each currency)
+  const currencyConfig: Record<string, { symbol: string; decimals: number }> = {
+    SLE: { symbol: 'Le', decimals: 0 },  // New Leone - no cents
+    USD: { symbol: '$', decimals: 2 },
+    EUR: { symbol: '€', decimals: 2 },
+    GBP: { symbol: '£', decimals: 2 },
+  };
+
+  // Format currency - SLE uses whole numbers, others use cents
   const formatCurrency = (amt: number) => {
-    const symbols: Record<string, string> = {
-      SLE: 'Le',
-      USD: '$',
-      EUR: '€',
-      GBP: '£',
-    };
-    const symbol = symbols[currency] || currency;
-    return `${symbol} ${(amt / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+    const config = currencyConfig[currency] || { symbol: currency, decimals: 2 };
+    if (config.decimals === 0) {
+      // SLE: amount is already in Leones
+      return `${config.symbol} ${amt.toLocaleString()}`;
+    } else {
+      // USD/EUR/GBP: amount is in cents, convert to dollars
+      return `${config.symbol} ${(amt / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+    }
   };
 
   // Create payment intent
