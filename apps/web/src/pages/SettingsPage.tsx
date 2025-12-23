@@ -26,11 +26,13 @@ import {
   ToggleLeft,
   ToggleRight,
   Sparkles,
+  Palette,
 } from 'lucide-react';
 import { MotionCard } from '@/components/ui/Card';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { BankAccountsSection } from '@/components/profile/BankAccountsSection';
 import { NotificationSettings } from '@/components/settings/NotificationSettings';
+import { ThemeColorSelector } from '@/components/settings/ThemeColorSelector';
 import { useAuth } from '@/context/AuthContext';
 import { useUserApps } from '@/context/UserAppsContext';
 import { supabase } from '@/lib/supabase';
@@ -426,6 +428,23 @@ export function SettingsPage() {
             </div>
 
             <NotificationSettings />
+          </MotionCard>
+        </motion.div>
+
+        {/* Theme Color Section */}
+        <motion.div variants={itemVariants}>
+          <MotionCard className="p-6" glowEffect>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-pink-100 dark:bg-pink-900/30 rounded-lg">
+                <Palette className="w-5 h-5 text-pink-600 dark:text-pink-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-white">Color Theme</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Choose your preferred color theme for cards and UI elements</p>
+              </div>
+            </div>
+
+            <ThemeColorSelector type="user" />
           </MotionCard>
         </motion.div>
       </motion.div>

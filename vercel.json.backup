@@ -1,26 +1,24 @@
 {
   "version": 2,
-  "name": "peeap-merchant",
-  "buildCommand": "cd apps/web && npm install && npm run build",
-  "outputDirectory": "apps/web/dist",
-  "installCommand": "npm install",
   "framework": "vite",
-  "routes": [
-    {
-      "src": "/admin/(.*)",
-      "dest": "/index.html"
-    },
-    {
-      "src": "/merchant/(.*)",
-      "dest": "/index.html"
-    },
-    {
-      "src": "/dashboard/(.*)",
-      "dest": "/index.html"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
+  "buildCommand": "cd apps/web && npm install --legacy-peer-deps && npm run build",
+  "outputDirectory": "apps/web/dist",
+  "installCommand": "echo 'skipping root install'",
+  "git": {
+    "deploymentEnabled": {
+      "main": true
     }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/keepalive",
+      "schedule": "0 8 * * *"
+    }
+  ],
+  "rewrites": [
+    { "source": "/api/router/(.*)", "destination": "/api/router" },
+    { "source": "/api/(.*)", "destination": "/api/router" },
+    { "source": "/(.*)", "destination": "/api/router", "has": [{ "type": "host", "value": "api.peeap.com" }] },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

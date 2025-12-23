@@ -179,7 +179,7 @@ export function MainLayout({ children }: MainLayoutProps) {
       {/* Sidebar */}
       <aside
         className={clsx(
-          'fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-300 ease-in-out lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-900/80 dark:backdrop-blur-xl border-r border-gray-200 dark:border-gray-700/50 transform transition-transform duration-300 ease-in-out lg:translate-x-0',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         )}
         aria-label="Main navigation"
@@ -187,7 +187,7 @@ export function MainLayout({ children }: MainLayoutProps) {
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 dark:border-gray-700/50">
             <Link to="/dashboard" className="text-xl font-bold text-primary-600 dark:text-primary-400">
               PaymentSystem
             </Link>
@@ -230,7 +230,7 @@ export function MainLayout({ children }: MainLayoutProps) {
       {/* Main content */}
       <div className="lg:pl-64">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700" role="banner">
+        <header className="sticky top-0 z-30 h-16 bg-white dark:bg-gray-900/80 dark:backdrop-blur-xl border-b border-gray-200 dark:border-gray-700/50" role="banner">
           <div className="flex items-center justify-between h-full px-4 lg:px-8">
             {/* Left side - Menu button (mobile only) */}
             <div className="flex items-center">
@@ -301,9 +301,9 @@ export function MainLayout({ children }: MainLayoutProps) {
 
                 {/* Dropdown Menu */}
                 {userMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-2 z-50">
+                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-900/90 dark:backdrop-blur-xl rounded-xl shadow-lg border border-gray-200 dark:border-gray-700/50 py-2 z-50">
                     {/* User Info */}
-                    <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+                    <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700/50">
                       <p className="text-sm font-medium text-gray-900 dark:text-white">
                         {user?.firstName} {user?.lastName}
                       </p>
@@ -333,7 +333,7 @@ export function MainLayout({ children }: MainLayoutProps) {
                     </div>
 
                     {/* Logout */}
-                    <div className="border-t border-gray-100 dark:border-gray-700 pt-1">
+                    <div className="border-t border-gray-100 dark:border-gray-700/50 pt-1">
                       <button
                         onClick={() => {
                           setUserMenuOpen(false);

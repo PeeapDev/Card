@@ -801,7 +801,7 @@ export function AdminDashboard() {
               transition={{ staggerChildren: 0.1 }}
             >
               {/* Total Volume */}
-              <Link to="/admin/wallets">
+              <Link to="/admin/accounts">
                 <MotionCard className="p-5 bg-gradient-to-br from-indigo-500 to-indigo-600 text-white hover:from-indigo-600 hover:to-indigo-700 transition-all cursor-pointer" delay={0}>
                   <div className="flex items-center justify-between">
                     <div className="p-2 bg-white/20 rounded-lg">

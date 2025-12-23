@@ -9,6 +9,7 @@ import { AppsProvider } from '@/context/AppsContext';
 import { UserAppsProvider } from '@/context/UserAppsContext';
 import { NotificationProvider } from '@/context/NotificationContext';
 import { ThemeProvider } from '@/context/ThemeContext';
+import { ThemeColorProvider } from '@/context/ThemeColorContext';
 import { NotificationWrapper } from '@/components/ui/NotificationWrapper';
 import { AnalyticsTracker } from '@/components/AnalyticsTracker';
 import { InactivityTracker } from '@/components/InactivityTracker';
@@ -196,6 +197,7 @@ function App() {
         <ThemeProvider>
           <BrowserRouter>
             <AuthProvider>
+              <ThemeColorProvider>
               <InactivityTracker>
               <NFCProvider>
               <NotificationProvider>
@@ -1553,6 +1555,7 @@ function App() {
               </NotificationProvider>
               </NFCProvider>
               </InactivityTracker>
+              </ThemeColorProvider>
             </AuthProvider>
           </BrowserRouter>
         </ThemeProvider>

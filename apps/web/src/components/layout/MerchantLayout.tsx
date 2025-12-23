@@ -317,13 +317,13 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
       {/* Sidebar */}
       <aside
         className={clsx(
-          'fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-300 ease-in-out lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-900/80 dark:backdrop-blur-xl border-r border-gray-200 dark:border-gray-700/50 transform transition-transform duration-300 ease-in-out lg:translate-x-0',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 dark:border-gray-700/50">
             <Link to="/merchant" className="flex items-center gap-2">
               <Store className="w-8 h-8 text-green-600 dark:text-green-400" />
               <span className="text-xl font-bold text-gray-900 dark:text-white">Merchant</span>
@@ -391,7 +391,7 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
 
             {/* Developer Mode Link */}
             {isDeveloperMode && (
-              <div className="pt-4 mt-4 border-t border-gray-200 dark:border-gray-700">
+              <div className="pt-4 mt-4 border-t border-gray-200 dark:border-gray-700/50">
                 <Link
                   to="/merchant/developer"
                   className="flex items-center justify-between px-4 py-3 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
@@ -407,7 +407,7 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
           </nav>
 
           {/* Help section */}
-          <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700">
+          <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700/50">
             <Link
               to="/merchant/support"
               className={clsx(
@@ -423,7 +423,7 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
           </div>
 
           {/* User section */}
-          <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="p-4 border-t border-gray-200 dark:border-gray-700/50">
             <div className="flex items-center mb-4">
               <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
                 <Store className="w-5 h-5 text-green-600 dark:text-green-400" />
@@ -449,7 +449,7 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
       {/* Main content */}
       <div className="lg:pl-64">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <header className="sticky top-0 z-30 h-16 bg-white dark:bg-gray-900/80 dark:backdrop-blur-xl border-b border-gray-200 dark:border-gray-700/50">
           <div className="flex items-center justify-between h-full px-4 lg:px-8">
             <button
               className="lg:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"

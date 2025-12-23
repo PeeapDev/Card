@@ -24,6 +24,7 @@ import {
   Wifi,
   Puzzle,
   Calendar,
+  Palette,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
@@ -32,6 +33,7 @@ import { useApps } from '@/context/AppsContext';
 import { Button } from '@/components/ui';
 import { NotificationSettings } from '@/components/settings/NotificationSettings';
 import { NFCAgentSettings } from '@/components/settings/NFCAgentSettings';
+import { ThemeColorSelector } from '@/components/settings/ThemeColorSelector';
 
 export function MerchantSettingsPage() {
   const { isDeveloperMode, toggleDeveloperMode } = useDeveloperMode();
@@ -70,6 +72,7 @@ export function MerchantSettingsPage() {
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'security', label: 'Security', icon: Shield },
     { id: 'apps', label: 'Apps', icon: Boxes },
+    { id: 'theme', label: 'Color Theme', icon: Palette },
     { id: 'nfc', label: 'NFC Reader', icon: Puzzle },
     { id: 'developer', label: 'Developer Mode', icon: Code2 },
   ];
@@ -489,6 +492,24 @@ export function MerchantSettingsPage() {
                   </Card>
                 )}
               </div>
+            )}
+
+            {activeTab === 'theme' && (
+              <Card className="p-6">
+                <div className="flex items-start gap-4 mb-6">
+                  <div className="p-3 bg-pink-100 dark:bg-pink-900/30 rounded-lg">
+                    <Palette className="w-6 h-6 text-pink-600 dark:text-pink-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Color Theme</h2>
+                    <p className="text-gray-500 dark:text-gray-400">
+                      Choose your preferred color theme for cards and UI elements in your merchant dashboard.
+                    </p>
+                  </div>
+                </div>
+
+                <ThemeColorSelector type="merchant" />
+              </Card>
             )}
 
             {activeTab === 'nfc' && (

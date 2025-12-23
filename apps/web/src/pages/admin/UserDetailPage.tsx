@@ -150,6 +150,13 @@ export function UserDetailPage() {
   const [kycProcessing, setKycProcessing] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
+  const [notificationForm, setNotificationForm] = useState({
+    title: '',
+    message: '',
+    type: 'info' as 'info' | 'success' | 'warning' | 'error',
+  });
+  const [sendingNotification, setSendingNotification] = useState(false);
 
   // Currency state
   const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
@@ -412,6 +419,31 @@ export function UserDetailPage() {
     }
   };
 
+  // Handle sending notification to user
+  const handleSendNotification = async () => {
+    if (!user || !notificationForm.title.trim() || !notificationForm.message.trim()) return;
+    setSendingNotification(true);
+
+    try {
+      const { error } = await supabase.from('user_notifications').insert({
+        user_id: user.id,
+        title: notificationForm.title,
+        message: notificationForm.message,
+        type: notificationForm.type,
+        read: false,
+      });
+
+      if (!error) {
+        setShowNotificationModal(false);
+        setNotificationForm({ title: '', message: '', type: 'info' });
+      }
+    } catch (err) {
+      console.error('Error sending notification:', err);
+    } finally {
+      setSendingNotification(false);
+    }
+  };
+
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
@@ -491,20 +523,20 @@ export function UserDetailPage() {
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate('/admin/users')}
-            className="p-2 hover:bg-gray-100 rounded-lg"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
           </button>
           <div className="flex-1">
-            <h1 className="text-2xl font-bold text-gray-900">User Details</h1>
-            <p className="text-gray-500">Manage user account and view activity</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">User Details</h1>
+            <p className="text-gray-500 dark:text-gray-400">Manage user account and view activity</p>
           </div>
           <button
             onClick={fetchUserData}
-            className="p-2 hover:bg-gray-100 rounded-lg"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
             title="Refresh"
           >
-            <RefreshCw className="w-5 h-5" />
+            <RefreshCw className="w-5 h-5 text-gray-600 dark:text-gray-400" />
           </button>
         </div>
 
@@ -548,36 +580,36 @@ export function UserDetailPage() {
             {/* User Info */}
             <div className="flex-1 space-y-4">
               <div className="flex flex-wrap items-center gap-3">
-                <h2 className="text-2xl font-bold text-gray-900">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
                   {user.first_name} {user.last_name}
                 </h2>
                 {user.username && (
-                  <span className="text-lg text-primary-600">@{user.username}</span>
+                  <span className="text-lg text-primary-600 dark:text-primary-400">@{user.username}</span>
                 )}
                 {getStatusBadge(user.status)}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div className="flex items-center gap-2 text-gray-600">
+                <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
                   <Phone className="w-4 h-4" />
                   <span>{user.phone || 'No phone'}</span>
                   {user.phone_verified && <CheckCircle className="w-4 h-4 text-green-500" />}
                 </div>
-                <div className="flex items-center gap-2 text-gray-600">
+                <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
                   <Mail className="w-4 h-4" />
                   <span>{user.email || 'No email'}</span>
                   {user.email_verified && <CheckCircle className="w-4 h-4 text-green-500" />}
                 </div>
-                <div className="flex items-center gap-2 text-gray-600">
+                <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
                   <Calendar className="w-4 h-4" />
                   <span>Joined {new Date(user.created_at).toLocaleDateString()}</span>
                 </div>
-                <div className="flex items-center gap-2 text-gray-600">
+                <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
                   <Shield className="w-4 h-4" />
                   <span className="capitalize">{user.roles || 'user'}</span>
                 </div>
                 {user.last_login_at && (
-                  <div className="flex items-center gap-2 text-gray-600">
+                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
                     <Clock className="w-4 h-4" />
                     <span>Last login: {new Date(user.last_login_at).toLocaleString()}</span>
                   </div>
@@ -585,7 +617,7 @@ export function UserDetailPage() {
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-500">KYC Status:</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">KYC Status:</span>
                 {getKycBadge(user.kyc_status, user.kyc_tier)}
               </div>
             </div>
@@ -614,12 +646,15 @@ export function UserDetailPage() {
               </button>
               <button
                 onClick={openEditModal}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium flex items-center gap-2 hover:bg-gray-200"
+                className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg font-medium flex items-center gap-2 hover:bg-gray-200 dark:hover:bg-gray-600"
               >
                 <Edit className="w-4 h-4" />
                 Edit User
               </button>
-              <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium flex items-center gap-2 hover:bg-gray-200">
+              <button
+                onClick={() => setShowNotificationModal(true)}
+                className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg font-medium flex items-center gap-2 hover:bg-gray-200 dark:hover:bg-gray-600"
+              >
                 <Bell className="w-4 h-4" />
                 Send Notification
               </button>
@@ -646,11 +681,11 @@ export function UserDetailPage() {
           <Card className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-500 text-sm">Active Wallets</p>
-                <p className="text-3xl font-bold mt-1 text-gray-900">{wallets.length}</p>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">Active Wallets</p>
+                <p className="text-3xl font-bold mt-1 text-gray-900 dark:text-white">{wallets.length}</p>
               </div>
-              <div className="p-3 bg-blue-100 rounded-xl">
-                <Wallet className="w-8 h-8 text-blue-600" />
+              <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
+                <Wallet className="w-8 h-8 text-blue-600 dark:text-blue-400" />
               </div>
             </div>
           </Card>
@@ -658,18 +693,18 @@ export function UserDetailPage() {
           <Card className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-500 text-sm">Active Cards</p>
-                <p className="text-3xl font-bold mt-1 text-gray-900">{cards.length}</p>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">Active Cards</p>
+                <p className="text-3xl font-bold mt-1 text-gray-900 dark:text-white">{cards.length}</p>
               </div>
-              <div className="p-3 bg-purple-100 rounded-xl">
-                <CreditCard className="w-8 h-8 text-purple-600" />
+              <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-xl">
+                <CreditCard className="w-8 h-8 text-purple-600 dark:text-purple-400" />
               </div>
             </div>
           </Card>
         </div>
 
         {/* Tabs */}
-        <div className="border-b border-gray-200">
+        <div className="border-b border-gray-200 dark:border-gray-700">
           <nav className="flex gap-8">
             {[
               { id: 'overview', label: 'Overview', icon: User },
@@ -682,8 +717,8 @@ export function UserDetailPage() {
                 onClick={() => setActiveTab(tab.id as any)}
                 className={`flex items-center gap-2 py-4 border-b-2 font-medium text-sm transition-colors ${
                   activeTab === tab.id
-                    ? 'border-primary-600 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                    ? 'border-primary-600 text-primary-600 dark:text-primary-400'
+                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                 }`}
               >
                 <tab.icon className="w-4 h-4" />
@@ -698,13 +733,13 @@ export function UserDetailPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Recent Transactions */}
             <Card className="p-6">
-              <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <DollarSign className="w-5 h-5" />
                 Recent Transactions
               </h3>
               {transactions.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <DollarSign className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  <DollarSign className="w-10 h-10 mx-auto mb-2 text-gray-300 dark:text-gray-600" />
                   No transactions yet
                 </div>
               ) : (
@@ -712,27 +747,27 @@ export function UserDetailPage() {
                   {transactions.slice(0, 5).map((tx) => (
                     <div
                       key={tx.id}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                      className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
                     >
                       <div className="flex items-center gap-3">
                         <div className={`p-2 rounded-full ${
-                          tx.amount >= 0 ? 'bg-green-100' : 'bg-red-100'
+                          tx.amount >= 0 ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
                         }`}>
                           {tx.amount >= 0 ? (
-                            <ArrowDownLeft className="w-4 h-4 text-green-600" />
+                            <ArrowDownLeft className="w-4 h-4 text-green-600 dark:text-green-400" />
                           ) : (
-                            <ArrowUpRight className="w-4 h-4 text-red-600" />
+                            <ArrowUpRight className="w-4 h-4 text-red-600 dark:text-red-400" />
                           )}
                         </div>
                         <div>
-                          <p className="font-medium text-sm">{tx.description || tx.type}</p>
-                          <p className="text-xs text-gray-500">
+                          <p className="font-medium text-sm text-gray-900 dark:text-white">{tx.description || tx.type}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
                             {new Date(tx.created_at).toLocaleString()}
                           </p>
                         </div>
                       </div>
                       <p className={`font-semibold ${
-                        tx.amount >= 0 ? 'text-green-600' : 'text-red-600'
+                        tx.amount >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                       }`}>
                         {tx.amount >= 0 ? '+' : ''}{tx.amount?.toFixed(2)} {tx.currency}
                       </p>
@@ -744,13 +779,13 @@ export function UserDetailPage() {
 
             {/* Wallets */}
             <Card className="p-6">
-              <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <Wallet className="w-5 h-5" />
                 Wallets
               </h3>
               {wallets.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <Wallet className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  <Wallet className="w-10 h-10 mx-auto mb-2 text-gray-300 dark:text-gray-600" />
                   No wallets found
                 </div>
               ) : (
@@ -758,20 +793,20 @@ export function UserDetailPage() {
                   {wallets.map((wallet) => (
                     <div
                       key={wallet.id}
-                      className="p-4 border border-gray-200 rounded-lg"
+                      className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg"
                     >
                       <div className="flex items-center justify-between mb-2">
-                        <span className="font-medium capitalize">{wallet.wallet_type} Wallet</span>
+                        <span className="font-medium capitalize text-gray-900 dark:text-white">{wallet.wallet_type} Wallet</span>
                         <span className={`px-2 py-1 rounded-full text-xs ${
-                          wallet.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                          wallet.status === 'ACTIVE' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
                         }`}>
                           {wallet.status}
                         </span>
                       </div>
-                      <p className="text-2xl font-bold text-gray-900">
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white">
                         {formatCurrency(wallet.balance || 0)}
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         Daily Limit: {currencySymbol}{wallet.daily_limit?.toLocaleString()} | Monthly: {currencySymbol}{wallet.monthly_limit?.toLocaleString()}
                       </p>
                     </div>
@@ -784,60 +819,60 @@ export function UserDetailPage() {
 
         {activeTab === 'transactions' && (
           <Card className="overflow-hidden">
-            <div className="p-4 border-b border-gray-200">
-              <h3 className="font-semibold text-gray-900">All Transactions</h3>
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="font-semibold text-gray-900 dark:text-white">All Transactions</h3>
             </div>
             {transactions.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">
-                <DollarSign className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+              <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                <DollarSign className="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
                 No transactions found
               </div>
             ) : (
               <table className="w-full">
-                <thead className="bg-gray-50">
+                <thead className="bg-gray-50 dark:bg-gray-800">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Type</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Description</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Amount</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Date</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                   {transactions.map((tx) => (
-                    <tr key={tx.id} className="hover:bg-gray-50">
+                    <tr key={tx.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <div className={`p-1.5 rounded-full ${
-                            tx.amount >= 0 ? 'bg-green-100' : 'bg-red-100'
+                            tx.amount >= 0 ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
                           }`}>
                             {tx.amount >= 0 ? (
-                              <ArrowDownLeft className="w-3 h-3 text-green-600" />
+                              <ArrowDownLeft className="w-3 h-3 text-green-600 dark:text-green-400" />
                             ) : (
-                              <ArrowUpRight className="w-3 h-3 text-red-600" />
+                              <ArrowUpRight className="w-3 h-3 text-red-600 dark:text-red-400" />
                             )}
                           </div>
-                          <span className="font-medium">{tx.type}</span>
+                          <span className="font-medium text-gray-900 dark:text-white">{tx.type}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-gray-600">{tx.description || '-'}</td>
+                      <td className="px-6 py-4 text-gray-600 dark:text-gray-300">{tx.description || '-'}</td>
                       <td className="px-6 py-4">
                         <span className={`font-semibold ${
-                          tx.amount >= 0 ? 'text-green-600' : 'text-red-600'
+                          tx.amount >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                         }`}>
                           {tx.amount >= 0 ? '+' : ''}{tx.amount?.toFixed(2)} {tx.currency}
                         </span>
                       </td>
                       <td className="px-6 py-4">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          tx.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
-                          tx.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-red-100 text-red-700'
+                          tx.status === 'COMPLETED' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
+                          tx.status === 'PENDING' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400' :
+                          'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
                         }`}>
                           {tx.status}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-gray-500 text-sm">
+                      <td className="px-6 py-4 text-gray-500 dark:text-gray-400 text-sm">
                         {new Date(tx.created_at).toLocaleString()}
                       </td>
                     </tr>
@@ -852,13 +887,13 @@ export function UserDetailPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Cards */}
             <Card className="p-6">
-              <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <CreditCard className="w-5 h-5" />
                 Cards
               </h3>
               {cards.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <CreditCard className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  <CreditCard className="w-10 h-10 mx-auto mb-2 text-gray-300 dark:text-gray-600" />
                   No cards issued
                   <button className="block mx-auto mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm">
                     Issue New Card
@@ -894,35 +929,35 @@ export function UserDetailPage() {
 
             {/* Wallets Detail */}
             <Card className="p-6">
-              <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <Wallet className="w-5 h-5" />
                 Wallet Details
               </h3>
               {wallets.map((wallet) => (
-                <div key={wallet.id} className="p-4 border border-gray-200 rounded-lg mb-3">
+                <div key={wallet.id} className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg mb-3">
                   <div className="flex justify-between items-center mb-3">
                     <div>
-                      <p className="font-medium capitalize">{wallet.wallet_type} Wallet</p>
-                      <p className="text-xs text-gray-500">{wallet.external_id}</p>
+                      <p className="font-medium capitalize text-gray-900 dark:text-white">{wallet.wallet_type} Wallet</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{wallet.external_id}</p>
                     </div>
                     <span className={`px-2 py-1 rounded-full text-xs ${
-                      wallet.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                      wallet.status === 'ACTIVE' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
                     }`}>
                       {wallet.status}
                     </span>
                   </div>
-                  <p className="text-3xl font-bold text-gray-900 mb-3">
+                  <p className="text-3xl font-bold text-gray-900 dark:text-white mb-3">
                     {formatCurrency(wallet.balance || 0)}
-                    <span className="text-sm text-gray-500 ml-2">{wallet.currency}</span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400 ml-2">{wallet.currency}</span>
                   </p>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
-                      <p className="text-gray-500">Daily Limit</p>
-                      <p className="font-medium">{currencySymbol}{wallet.daily_limit?.toLocaleString()}</p>
+                      <p className="text-gray-500 dark:text-gray-400">Daily Limit</p>
+                      <p className="font-medium text-gray-900 dark:text-white">{currencySymbol}{wallet.daily_limit?.toLocaleString()}</p>
                     </div>
                     <div>
-                      <p className="text-gray-500">Monthly Limit</p>
-                      <p className="font-medium">{currencySymbol}{wallet.monthly_limit?.toLocaleString()}</p>
+                      <p className="text-gray-500 dark:text-gray-400">Monthly Limit</p>
+                      <p className="font-medium text-gray-900 dark:text-white">{currencySymbol}{wallet.monthly_limit?.toLocaleString()}</p>
                     </div>
                   </div>
                 </div>
@@ -937,27 +972,27 @@ export function UserDetailPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* KYC Status */}
               <Card className="p-6">
-                <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                   <Shield className="w-5 h-5" />
                   KYC Verification
                 </h3>
                 <div className="space-y-4">
-                  <div className="p-4 bg-gray-50 rounded-lg">
+                  <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-gray-600">Status</span>
+                      <span className="text-gray-600 dark:text-gray-300">Status</span>
                       {getKycBadge(user.kyc_status, user.kyc_tier)}
                     </div>
                   </div>
 
-                  <div className="p-4 bg-gray-50 rounded-lg">
-                    <p className="text-gray-600 mb-1">Verification Tier</p>
-                    <p className="font-semibold text-lg">Tier {user.kyc_tier}</p>
+                  <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                    <p className="text-gray-600 dark:text-gray-300 mb-1">Verification Tier</p>
+                    <p className="font-semibold text-lg text-gray-900 dark:text-white">Tier {user.kyc_tier}</p>
                     <div className="mt-2 flex gap-1">
                       {[1, 2, 3].map((tier) => (
                         <div
                           key={tier}
                           className={`flex-1 h-2 rounded-full ${
-                            tier <= user.kyc_tier ? 'bg-primary-600' : 'bg-gray-200'
+                            tier <= user.kyc_tier ? 'bg-primary-600' : 'bg-gray-200 dark:bg-gray-600'
                           }`}
                         />
                       ))}
@@ -965,10 +1000,10 @@ export function UserDetailPage() {
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="p-4 bg-gray-50 rounded-lg">
-                      <p className="text-gray-600 mb-1">Email</p>
+                    <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                      <p className="text-gray-600 dark:text-gray-300 mb-1">Email</p>
                       <p className={`font-semibold flex items-center gap-1 ${
-                        user.email_verified ? 'text-green-600' : 'text-red-600'
+                        user.email_verified ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                       }`}>
                         {user.email_verified ? (
                           <><CheckCircle className="w-4 h-4" /> Verified</>
@@ -977,10 +1012,10 @@ export function UserDetailPage() {
                         )}
                       </p>
                     </div>
-                    <div className="p-4 bg-gray-50 rounded-lg">
-                      <p className="text-gray-600 mb-1">Phone</p>
+                    <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                      <p className="text-gray-600 dark:text-gray-300 mb-1">Phone</p>
                       <p className={`font-semibold flex items-center gap-1 ${
-                        user.phone_verified || kycApplication?.verification_result?.slVerification?.phoneVerified ? 'text-green-600' : 'text-red-600'
+                        user.phone_verified || kycApplication?.verification_result?.slVerification?.phoneVerified ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                       }`}>
                         {user.phone_verified || kycApplication?.verification_result?.slVerification?.phoneVerified ? (
                           <><CheckCircle className="w-4 h-4" /> Verified</>
@@ -995,13 +1030,13 @@ export function UserDetailPage() {
 
               {/* Selfie Image */}
               <Card className="p-6">
-                <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                   <Camera className="w-5 h-5" />
                   Selfie Photo
                 </h3>
                 {kycApplication?.verification_result?.selfieImage ? (
                   <div className="space-y-3">
-                    <div className="relative w-full aspect-square bg-gray-100 rounded-xl overflow-hidden">
+                    <div className="relative w-full aspect-square bg-gray-100 dark:bg-gray-700 rounded-xl overflow-hidden">
                       <img
                         src={`data:${kycApplication.verification_result.selfieImageMimeType || 'image/jpeg'};base64,${kycApplication.verification_result.selfieImage}`}
                         alt="User Selfie"
@@ -1009,20 +1044,20 @@ export function UserDetailPage() {
                       />
                     </div>
                     {kycApplication.verification_result.selfieCapturedAt && (
-                      <p className="text-xs text-gray-500 text-center">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
                         Captured: {new Date(kycApplication.verification_result.selfieCapturedAt).toLocaleString()}
                       </p>
                     )}
                     <div className={`p-2 rounded-lg text-center text-sm font-medium ${
                       kycApplication.verification_result.faceMatch
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-yellow-100 text-yellow-700'
+                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                        : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
                     }`}>
                       {kycApplication.verification_result.faceMatch ? 'Face Captured' : 'Pending Review'}
                     </div>
                   </div>
                 ) : (
-                  <div className="w-full aspect-square bg-gray-100 rounded-xl flex items-center justify-center">
+                  <div className="w-full aspect-square bg-gray-100 dark:bg-gray-700 rounded-xl flex items-center justify-center">
                     <div className="text-center text-gray-400">
                       <Camera className="w-12 h-12 mx-auto mb-2" />
                       <p className="text-sm">No selfie uploaded</p>
@@ -1033,13 +1068,13 @@ export function UserDetailPage() {
 
               {/* ID Card Image */}
               <Card className="p-6">
-                <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                   <FileText className="w-5 h-5" />
                   ID Document
                 </h3>
                 {kycApplication?.verification_result?.idCardImage ? (
                   <div className="space-y-3">
-                    <div className="relative w-full aspect-[1.5] bg-gray-100 rounded-xl overflow-hidden">
+                    <div className="relative w-full aspect-[1.5] bg-gray-100 dark:bg-gray-700 rounded-xl overflow-hidden">
                       <img
                         src={`data:${kycApplication.verification_result.idCardImageMimeType || 'image/jpeg'};base64,${kycApplication.verification_result.idCardImage}`}
                         alt="ID Card"
@@ -1047,20 +1082,20 @@ export function UserDetailPage() {
                       />
                     </div>
                     {kycApplication.verification_result.idCardCapturedAt && (
-                      <p className="text-xs text-gray-500 text-center">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
                         Captured: {new Date(kycApplication.verification_result.idCardCapturedAt).toLocaleString()}
                       </p>
                     )}
                     <div className={`p-2 rounded-lg text-center text-sm font-medium ${
                       kycApplication.verification_result.documentCheck
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-yellow-100 text-yellow-700'
+                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                        : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
                     }`}>
                       {kycApplication.verification_result.documentCheck ? 'Document Verified' : 'Pending Review'}
                     </div>
                   </div>
                 ) : (
-                  <div className="w-full aspect-[1.5] bg-gray-100 rounded-xl flex items-center justify-center">
+                  <div className="w-full aspect-[1.5] bg-gray-100 dark:bg-gray-700 rounded-xl flex items-center justify-center">
                     <div className="text-center text-gray-400">
                       <FileText className="w-12 h-12 mx-auto mb-2" />
                       <p className="text-sm">No ID uploaded</p>
@@ -1075,45 +1110,45 @@ export function UserDetailPage() {
               {/* SL Verification Details */}
               {kycApplication?.verification_result?.slVerification && (
                 <Card className="p-6">
-                  <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                     <Shield className="w-5 h-5" />
                     Sierra Leone ID Verification
                   </h3>
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="p-3 bg-gray-50 rounded-lg">
-                        <p className="text-xs text-gray-500 mb-1">NIN</p>
-                        <p className="font-mono font-semibold text-sm">
+                      <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">NIN</p>
+                        <p className="font-mono font-semibold text-sm text-gray-900 dark:text-white">
                           {kycApplication.verification_result.slVerification.nin || 'Not extracted'}
                         </p>
                       </div>
-                      <div className="p-3 bg-gray-50 rounded-lg">
-                        <p className="text-xs text-gray-500 mb-1">Phone Number</p>
-                        <p className="font-mono font-semibold text-sm">
+                      <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Phone Number</p>
+                        <p className="font-mono font-semibold text-sm text-gray-900 dark:text-white">
                           {kycApplication.verification_result.slVerification.phoneNumber || 'Not provided'}
                         </p>
                       </div>
                     </div>
 
-                    <div className="p-3 bg-gray-50 rounded-lg">
-                      <p className="text-xs text-gray-500 mb-1">ID Card Name</p>
-                      <p className="font-semibold">
+                    <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">ID Card Name</p>
+                      <p className="font-semibold text-gray-900 dark:text-white">
                         {kycApplication.verification_result.slVerification.idCardName || 'Not extracted'}
                       </p>
                     </div>
 
-                    <div className="p-3 bg-gray-50 rounded-lg">
-                      <p className="text-xs text-gray-500 mb-1">SIM Registered Name</p>
-                      <p className="font-semibold">
+                    <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">SIM Registered Name</p>
+                      <p className="font-semibold text-gray-900 dark:text-white">
                         {kycApplication.verification_result.slVerification.simRegisteredName || 'Not available'}
                       </p>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="p-3 bg-gray-50 rounded-lg">
-                        <p className="text-xs text-gray-500 mb-1">Name Match Score</p>
+                      <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Name Match Score</p>
                         <div className="flex items-center gap-2">
-                          <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-600 rounded-full overflow-hidden">
                             <div
                               className={`h-full rounded-full ${
                                 (kycApplication.verification_result.slVerification.nameMatchScore || 0) >= 70
@@ -1125,17 +1160,17 @@ export function UserDetailPage() {
                               style={{ width: `${kycApplication.verification_result.slVerification.nameMatchScore || 0}%` }}
                             />
                           </div>
-                          <span className="font-semibold text-sm">
+                          <span className="font-semibold text-sm text-gray-900 dark:text-white">
                             {kycApplication.verification_result.slVerification.nameMatchScore || 0}%
                           </span>
                         </div>
                       </div>
-                      <div className="p-3 bg-gray-50 rounded-lg">
-                        <p className="text-xs text-gray-500 mb-1">Phone Verified</p>
+                      <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Phone Verified</p>
                         <p className={`font-semibold flex items-center gap-1 ${
                           kycApplication.verification_result.slVerification.phoneVerified
-                            ? 'text-green-600'
-                            : 'text-red-600'
+                            ? 'text-green-600 dark:text-green-400'
+                            : 'text-red-600 dark:text-red-400'
                         }`}>
                           {kycApplication.verification_result.slVerification.phoneVerified ? (
                             <><CheckCircle className="w-4 h-4" /> Yes</>
@@ -1213,47 +1248,47 @@ export function UserDetailPage() {
 
               {/* Personal Details */}
               <Card className="p-6">
-                <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                   <User className="w-5 h-5" />
                   Personal Details
                 </h3>
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-sm text-gray-500">First Name</p>
-                      <p className="font-medium">{user.first_name}</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">First Name</p>
+                      <p className="font-medium text-gray-900 dark:text-white">{user.first_name}</p>
                     </div>
                     <div>
-                      <p className="text-sm text-gray-500">Last Name</p>
-                      <p className="font-medium">{user.last_name}</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Last Name</p>
+                      <p className="font-medium text-gray-900 dark:text-white">{user.last_name}</p>
                     </div>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">Email</p>
-                    <p className="font-medium">{user.email || 'Not provided'}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Email</p>
+                    <p className="font-medium text-gray-900 dark:text-white">{user.email || 'Not provided'}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">Phone</p>
-                    <p className="font-medium">{user.phone || 'Not provided'}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Phone</p>
+                    <p className="font-medium text-gray-900 dark:text-white">{user.phone || 'Not provided'}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">Date of Birth</p>
-                    <p className="font-medium">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Date of Birth</p>
+                    <p className="font-medium text-gray-900 dark:text-white">
                       {kycApplication?.verification_result?.extractedData?.dateOfBirth || user.date_of_birth || 'Not provided'}
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">Address</p>
-                    <p className="font-medium">{user.address || 'Not provided'}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Address</p>
+                    <p className="font-medium text-gray-900 dark:text-white">{user.address || 'Not provided'}</p>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-sm text-gray-500">City</p>
-                      <p className="font-medium">{user.city || 'Not provided'}</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">City</p>
+                      <p className="font-medium text-gray-900 dark:text-white">{user.city || 'Not provided'}</p>
                     </div>
                     <div>
-                      <p className="text-sm text-gray-500">Country</p>
-                      <p className="font-medium">{user.country || 'Not provided'}</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Country</p>
+                      <p className="font-medium text-gray-900 dark:text-white">{user.country || 'Not provided'}</p>
                     </div>
                   </div>
                 </div>
@@ -1265,57 +1300,57 @@ export function UserDetailPage() {
         {/* Edit User Modal */}
         {showEditModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-              <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900">Edit User</h2>
-                <button onClick={() => setShowEditModal(false)} className="p-1 hover:bg-gray-100 rounded">
-                  <X className="w-5 h-5" />
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md">
+              <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Edit User</h2>
+                <button onClick={() => setShowEditModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
+                  <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                 </button>
               </div>
               <div className="p-6 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">First Name</label>
                     <input
                       type="text"
                       value={editForm.first_name}
                       onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Last Name</label>
                     <input
                       type="text"
                       value={editForm.last_name}
                       onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone</label>
                   <input
                     type="text"
                     value={editForm.phone}
                     onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
                   <input
                     type="email"
                     value={editForm.email}
                     onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   />
                 </div>
               </div>
-              <div className="p-6 border-t border-gray-200 flex gap-3">
+              <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3">
                 <button
                   onClick={() => setShowEditModal(false)}
-                  className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200"
+                  className="flex-1 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-200 dark:hover:bg-gray-600"
                 >
                   Cancel
                 </button>
@@ -1401,6 +1436,101 @@ export function UserDetailPage() {
                     <>
                       <XCircle className="w-4 h-4" />
                       Reject Verification
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Send Notification Modal */}
+        {showNotificationModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md">
+              <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Send Notification</h2>
+                <button onClick={() => setShowNotificationModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
+                  <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                <div className="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <Bell className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  <div>
+                    <p className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                      Sending to: {user?.first_name} {user?.last_name}
+                    </p>
+                    <p className="text-xs text-blue-600 dark:text-blue-400">{user?.email || user?.phone}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Notification Type
+                  </label>
+                  <select
+                    value={notificationForm.type}
+                    onChange={(e) => setNotificationForm({ ...notificationForm, type: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  >
+                    <option value="info">Information</option>
+                    <option value="success">Success</option>
+                    <option value="warning">Warning</option>
+                    <option value="error">Alert</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Title
+                  </label>
+                  <input
+                    type="text"
+                    value={notificationForm.title}
+                    onChange={(e) => setNotificationForm({ ...notificationForm, title: e.target.value })}
+                    placeholder="e.g., Account Update"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Message
+                  </label>
+                  <textarea
+                    value={notificationForm.message}
+                    onChange={(e) => setNotificationForm({ ...notificationForm, message: e.target.value })}
+                    placeholder="Enter your message to the user..."
+                    rows={4}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  />
+                </div>
+              </div>
+              <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowNotificationModal(false);
+                    setNotificationForm({ title: '', message: '', type: 'info' });
+                  }}
+                  className="flex-1 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-200 dark:hover:bg-gray-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSendNotification}
+                  disabled={sendingNotification || !notificationForm.title.trim() || !notificationForm.message.trim()}
+                  className="flex-1 py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:bg-primary-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {sendingNotification ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Bell className="w-4 h-4" />
+                      Send Notification
                     </>
                   )}
                 </button>

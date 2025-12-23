@@ -1,24 +1,21 @@
 {
   "version": 2,
-  "framework": "vite",
-  "buildCommand": "cd apps/web && npm install --legacy-peer-deps && npm run build",
-  "outputDirectory": "apps/web/dist",
-  "installCommand": "echo 'skipping root install'",
-  "git": {
-    "deploymentEnabled": {
-      "main": true
+  "functions": {
+    "api/router.ts": {
+      "memory": 1024,
+      "maxDuration": 30
     }
   },
-  "crons": [
-    {
-      "path": "/api/cron/keepalive",
-      "schedule": "0 8 * * *"
-    }
-  ],
   "rewrites": [
-    { "source": "/api/router/(.*)", "destination": "/api/router" },
-    { "source": "/api/(.*)", "destination": "/api/router" },
-    { "source": "/(.*)", "destination": "/api/router", "has": [{ "type": "host", "value": "api.peeap.com" }] },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/", "destination": "/api/router" },
+    { "source": "/(.*)", "destination": "/api/router" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" }
+      ]
+    }
   ]
 }

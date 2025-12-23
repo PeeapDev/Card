@@ -165,14 +165,14 @@ export function MerchantUpgradePage() {
       <div className="max-w-6xl mx-auto space-y-8">
         {/* Header */}
         <div className="text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-100 to-orange-100 text-amber-700 rounded-full text-sm font-medium mb-4">
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-100 to-orange-100 dark:from-amber-900/30 dark:to-orange-900/30 text-amber-700 dark:text-amber-400 rounded-full text-sm font-medium mb-4">
             <Sparkles className="w-4 h-4" />
             Upgrade to PeeAP Plus
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-3">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-3">
             Unlock Powerful Business Tools
           </h1>
-          <p className="text-gray-600 max-w-2xl mx-auto">
+          <p className="text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
             Invoicing, recurring payments, employee cards, and more. Choose the plan that fits your business.
           </p>
         </div>
@@ -184,8 +184,8 @@ export function MerchantUpgradePage() {
               key={plan.id}
               className={`relative p-6 transition-all ${
                 plan.popular
-                  ? 'border-2 border-amber-400 shadow-xl scale-105 z-10'
-                  : 'border border-gray-200 hover:border-gray-300 hover:shadow-lg'
+                  ? 'border-2 border-amber-400 dark:border-amber-600 shadow-xl scale-105 z-10'
+                  : 'border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-lg'
               }`}
             >
               {plan.popular && (
@@ -200,8 +200,8 @@ export function MerchantUpgradePage() {
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                   <span className={`px-3 py-1 text-xs font-bold rounded-full ${
                     plan.id === 'basic'
-                      ? 'bg-gray-100 text-gray-600'
-                      : 'bg-purple-100 text-purple-700'
+                      ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                      : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400'
                   }`}>
                     {plan.highlight}
                   </span>
@@ -209,18 +209,18 @@ export function MerchantUpgradePage() {
               )}
 
               <div className="text-center mb-6 pt-2">
-                <h3 className="text-xl font-bold text-gray-900 mb-2">{plan.name}</h3>
-                <p className="text-sm text-gray-500 mb-4">{plan.description}</p>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{plan.name}</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{plan.description}</p>
                 <div className="flex items-baseline justify-center gap-1">
                   {plan.price === 0 ? (
-                    <span className="text-4xl font-bold text-gray-900">Free</span>
+                    <span className="text-4xl font-bold text-gray-900 dark:text-white">Free</span>
                   ) : (
                     <>
-                      <span className="text-sm text-gray-500">{plan.currency}</span>
-                      <span className="text-4xl font-bold text-gray-900">
+                      <span className="text-sm text-gray-500 dark:text-gray-400">{plan.currency}</span>
+                      <span className="text-4xl font-bold text-gray-900 dark:text-white">
                         {formatPrice(plan.price)}
                       </span>
-                      <span className="text-gray-500">/{plan.period}</span>
+                      <span className="text-gray-500 dark:text-gray-400">/{plan.period}</span>
                     </>
                   )}
                 </div>
@@ -235,7 +235,7 @@ export function MerchantUpgradePage() {
                     }`}>
                       {getFeatureIcon(feature)}
                     </span>
-                    <span className="text-sm text-gray-600">{feature}</span>
+                    <span className="text-sm text-gray-600 dark:text-gray-300">{feature}</span>
                   </li>
                 ))}
               </ul>
@@ -248,8 +248,8 @@ export function MerchantUpgradePage() {
                   plan.popular
                     ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 shadow-lg hover:shadow-xl'
                     : plan.id === 'basic'
-                    ? 'bg-gray-100 text-gray-500 cursor-default'
-                    : 'bg-gray-900 text-white hover:bg-gray-800'
+                    ? 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-default'
+                    : 'bg-gray-900 dark:bg-gray-700 text-white hover:bg-gray-800 dark:hover:bg-gray-600'
                 }`}
               >
                 {processing && selectedPlan === plan.id ? (
@@ -268,7 +268,7 @@ export function MerchantUpgradePage() {
               </button>
 
               {plan.redirectToPlus && (
-                <p className="text-xs text-center text-gray-400 mt-2">
+                <p className="text-xs text-center text-gray-400 dark:text-gray-500 mt-2">
                   You'll be redirected to plus.peeap.com
                 </p>
               )}
@@ -279,63 +279,63 @@ export function MerchantUpgradePage() {
         {/* Feature Highlights */}
         <div className="grid md:grid-cols-2 gap-6">
           {/* Business Tier Features */}
-          <Card className="p-6 bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200">
+          <Card className="p-6 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border-amber-200 dark:border-amber-800">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center">
                 <FileText className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h3 className="font-bold text-gray-900">Business Features</h3>
-                <p className="text-sm text-gray-600">NLE 150/month</p>
+                <h3 className="font-bold text-gray-900 dark:text-white">Business Features</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">NLE 150/month</p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-amber-600" />
-                <span className="text-sm">Invoice Generator</span>
+                <FileText className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                <span className="text-sm text-gray-700 dark:text-gray-300">Invoice Generator</span>
               </div>
               <div className="flex items-center gap-2">
-                <RefreshCw className="w-4 h-4 text-amber-600" />
-                <span className="text-sm">Recurring Payments</span>
+                <RefreshCw className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                <span className="text-sm text-gray-700 dark:text-gray-300">Recurring Payments</span>
               </div>
               <div className="flex items-center gap-2">
-                <Code2 className="w-4 h-4 text-amber-600" />
-                <span className="text-sm">API Access</span>
+                <Code2 className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                <span className="text-sm text-gray-700 dark:text-gray-300">API Access</span>
               </div>
               <div className="flex items-center gap-2">
-                <Zap className="w-4 h-4 text-amber-600" />
-                <span className="text-sm">Webhooks</span>
+                <Zap className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                <span className="text-sm text-gray-700 dark:text-gray-300">Webhooks</span>
               </div>
             </div>
           </Card>
 
           {/* Business++ Features */}
-          <Card className="p-6 bg-gradient-to-br from-purple-50 to-indigo-50 border-purple-200">
+          <Card className="p-6 bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 border-purple-200 dark:border-purple-800">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 bg-purple-600 rounded-xl flex items-center justify-center">
                 <CreditCard className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h3 className="font-bold text-gray-900">Business++ (Corporate)</h3>
-                <p className="text-sm text-gray-600">NLE 500/month</p>
+                <h3 className="font-bold text-gray-900 dark:text-white">Business++ (Corporate)</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">NLE 500/month</p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="flex items-center gap-2">
-                <CreditCard className="w-4 h-4 text-purple-600" />
-                <span className="text-sm">Employee Cards</span>
+                <CreditCard className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                <span className="text-sm text-gray-700 dark:text-gray-300">Employee Cards</span>
               </div>
               <div className="flex items-center gap-2">
-                <Shield className="w-4 h-4 text-purple-600" />
-                <span className="text-sm">Spending Controls</span>
+                <Shield className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                <span className="text-sm text-gray-700 dark:text-gray-300">Spending Controls</span>
               </div>
               <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-purple-600" />
-                <span className="text-sm">Team Access</span>
+                <Users className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                <span className="text-sm text-gray-700 dark:text-gray-300">Team Access</span>
               </div>
               <div className="flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-purple-600" />
-                <span className="text-sm">Expense Reports</span>
+                <BarChart3 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                <span className="text-sm text-gray-700 dark:text-gray-300">Expense Reports</span>
               </div>
             </div>
           </Card>
@@ -343,29 +343,29 @@ export function MerchantUpgradePage() {
 
         {/* FAQ */}
         <Card className="p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-6">Frequently Asked Questions</h2>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6">Frequently Asked Questions</h2>
           <div className="grid md:grid-cols-2 gap-6">
             <div>
-              <h3 className="font-medium text-gray-900 mb-1">What is PeeAP Plus?</h3>
-              <p className="text-sm text-gray-600">
+              <h3 className="font-medium text-gray-900 dark:text-white mb-1">What is PeeAP Plus?</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
                 PeeAP Plus is our premium business platform at plus.peeap.com with advanced tools like invoicing, subscriptions, and employee cards.
               </p>
             </div>
             <div>
-              <h3 className="font-medium text-gray-900 mb-1">Can I use my existing account?</h3>
-              <p className="text-sm text-gray-600">
+              <h3 className="font-medium text-gray-900 dark:text-white mb-1">Can I use my existing account?</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
                 Yes! Your existing PeeAP merchant account works on Plus. Just upgrade and you'll have access to all new features.
               </p>
             </div>
             <div>
-              <h3 className="font-medium text-gray-900 mb-1">Can I downgrade later?</h3>
-              <p className="text-sm text-gray-600">
+              <h3 className="font-medium text-gray-900 dark:text-white mb-1">Can I downgrade later?</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
                 Yes, you can downgrade anytime. Premium features will become read-only until you upgrade again.
               </p>
             </div>
             <div>
-              <h3 className="font-medium text-gray-900 mb-1">What payment methods are accepted?</h3>
-              <p className="text-sm text-gray-600">
+              <h3 className="font-medium text-gray-900 dark:text-white mb-1">What payment methods are accepted?</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
                 Mobile Money (Orange Money, Afrimoney), bank transfers, and PeeAP wallet balance.
               </p>
             </div>
@@ -374,10 +374,10 @@ export function MerchantUpgradePage() {
 
         {/* Contact */}
         <div className="text-center py-8">
-          <p className="text-gray-600 mb-2">Need a custom enterprise plan?</p>
+          <p className="text-gray-600 dark:text-gray-400 mb-2">Need a custom enterprise plan?</p>
           <a
             href="mailto:enterprise@peeap.com"
-            className="text-amber-600 hover:text-amber-700 font-medium"
+            className="text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 font-medium"
           >
             Contact our sales team →
           </a>
