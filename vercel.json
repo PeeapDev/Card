@@ -15,21 +15,9 @@
       "schedule": "0 8 * * *"
     }
   ],
-  "routes": [
-    {
-      "src": "/api/router/(.*)",
-      "dest": "/api/router"
-    },
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/router"
-    },
-    {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
-    }
+  "rewrites": [
+    { "source": "/api/router/(.*)", "destination": "/api/router" },
+    { "source": "/api/(.*)", "destination": "/api/router" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
