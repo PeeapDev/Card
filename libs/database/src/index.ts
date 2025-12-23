@@ -9,6 +9,7 @@ export * from './entities/account/account.entity';
 export * from './entities/account/ledger-entry.entity';
 export * from './entities/account/journal-entry.entity';
 export * from './entities/account/payment-settings.entity';
+export * from './entities/account/site-settings.entity';
 
 // Card Entities
 export * from './entities/card/card.entity';
@@ -49,6 +50,9 @@ export * from './entities/compliance/aml-risk-profile.entity';
 export * from './entities/compliance/aml-sar.entity';
 export * from './entities/compliance/aml-screening-result.entity';
 export * from './entities/compliance/aml-watchlist.entity';
+
+// Content Entities
+export * from './entities/content/page.entity';
 
 // Enums
 export * from './enums/transaction-state.enum';

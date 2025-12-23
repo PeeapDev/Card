@@ -31,6 +31,51 @@ interface FeeConfig {
   max_fee: number | null;
 }
 
+interface SiteSettings {
+  site_name: string;
+  site_tagline: string;
+  primary_color: string;
+  secondary_color: string;
+  accent_color: string;
+  hero_badge_text: string;
+  hero_title: string;
+  hero_title_highlight: string;
+  hero_subtitle: string;
+  hero_cta_primary_text: string;
+  hero_cta_primary_link: string;
+  hero_cta_secondary_text: string;
+  hero_cta_secondary_link: string;
+  features_title: string;
+  features_title_highlight: string;
+  features_subtitle: string;
+  features_list: Array<{ icon: string; title: string; description: string; gradient: string }>;
+  payment_methods: Array<{ name: string; providers: string[]; icon: string; color: string; enabled: boolean }>;
+  pricing_title: string;
+  pricing_title_highlight: string;
+  pricing_subtitle: string;
+  pricing_tiers: Array<{ name: string; description: string; fee: string; features: string[]; cta: string; ctaLink: string; highlighted: boolean }>;
+  stats: Array<{ value: number; prefix?: string; suffix: string; label: string }>;
+  cta_title: string;
+  cta_title_highlight: string;
+  cta_subtitle: string;
+  cta_button_text: string;
+  cta_button_link: string;
+  footer_description: string;
+  footer_links: Array<{ title: string; links: Array<{ name: string; href: string }> }>;
+  footer_copyright: string;
+  nav_links: Array<{ label: string; href: string; isExternal?: boolean }>;
+  show_sign_in: boolean;
+  show_get_started: boolean;
+  integration_title: string;
+  integration_title_highlight: string;
+  integration_subtitle: string;
+  integration_features: string[];
+  maintenance_mode: boolean;
+  maintenance_message: string;
+}
+
+const SITE_SETTINGS_ID = '00000000-0000-0000-0000-000000000002';
+
 // Animation variants
 const fadeInUp = {
   hidden: { opacity: 0, y: 30 },
@@ -113,9 +158,42 @@ function AnimatedCounter({ value, suffix = '', prefix = '' }: { value: number; s
   );
 }
 
+// Default values for site settings
+const DEFAULT_SITE_SETTINGS: Partial<SiteSettings> = {
+  site_name: 'Peeap',
+  site_tagline: "Sierra Leone's #1 Payment Gateway",
+  hero_badge_text: "Sierra Leone's #1 Payment Gateway",
+  hero_title: 'Accept Payments',
+  hero_title_highlight: 'Anywhere',
+  hero_subtitle: 'Peeap makes it easy for businesses in Sierra Leone to accept Mobile Money, Card payments, and QR codes. Get started in minutes with our simple SDK integration.',
+  hero_cta_primary_text: 'Create Merchant Account',
+  hero_cta_primary_link: '/register',
+  hero_cta_secondary_text: 'Watch Demo',
+  hero_cta_secondary_link: '/register?type=agent',
+  features_title: 'Everything You Need to',
+  features_title_highlight: 'Accept Payments',
+  features_subtitle: "A complete payment solution designed for Sierra Leone's businesses.",
+  pricing_title: 'Simple, Transparent',
+  pricing_title_highlight: 'Pricing',
+  pricing_subtitle: 'Pay only for what you use. No monthly fees, no setup costs.',
+  cta_title: 'Ready to Start',
+  cta_title_highlight: 'Accepting Payments?',
+  cta_subtitle: 'Create your merchant account today. No setup fees, no monthly minimums. Start accepting payments in minutes.',
+  cta_button_text: 'Create Free Account',
+  cta_button_link: '/register',
+  footer_description: "Sierra Leone's leading payment gateway. Accept Mobile Money, Cards, and QR payments with ease.",
+  footer_copyright: '2025 Peeap. All rights reserved.',
+  integration_title: 'Integrate in',
+  integration_title_highlight: 'Minutes',
+  integration_subtitle: 'Add Peeap to your website with just a few lines of code. Works with any platform.',
+  show_sign_in: true,
+  show_get_started: true,
+};
+
 export function LandingPage() {
   const [amount, setAmount] = useState<number>(50); // New Leone (SLE) after redenomination
   const [fees, setFees] = useState<FeeConfig[]>([]);
+  const [siteSettings, setSiteSettings] = useState<Partial<SiteSettings>>(DEFAULT_SITE_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [isScrolled, setIsScrolled] = useState(false);
 
@@ -130,7 +208,7 @@ export function LandingPage() {
   const heroY = useTransform(scrollYProgress, [0, 0.5], [0, 50]);
 
   useEffect(() => {
-    fetchFees();
+    fetchData();
 
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 50);
@@ -139,18 +217,23 @@ export function LandingPage() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const fetchFees = async () => {
+  const fetchData = async () => {
     try {
-      const { data, error } = await supabase
-        .from('fee_configs')
-        .select('*')
-        .eq('is_active', true);
+      // Fetch fees and site settings in parallel
+      const [feesResponse, settingsResponse] = await Promise.all([
+        supabase.from('fee_configs').select('*').eq('is_active', true),
+        supabase.from('site_settings').select('*').eq('id', SITE_SETTINGS_ID).single()
+      ]);
 
-      if (!error && data) {
-        setFees(data);
+      if (!feesResponse.error && feesResponse.data) {
+        setFees(feesResponse.data);
+      }
+
+      if (!settingsResponse.error && settingsResponse.data) {
+        setSiteSettings({ ...DEFAULT_SITE_SETTINGS, ...settingsResponse.data });
       }
     } catch (err) {
-      console.error('Error fetching fees:', err);
+      console.error('Error fetching data:', err);
     } finally {
       setLoading(false);
     }
@@ -320,7 +403,7 @@ export function LandingPage() {
               whileTap={{ scale: 0.95 }}
             >
               <span className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                Peeap
+                {siteSettings.site_name || 'Peeap'}
               </span>
               <motion.span
                 initial={{ opacity: 0, x: -10 }}
@@ -424,7 +507,7 @@ export function LandingPage() {
                 <Sparkles className="w-4 h-4 text-indigo-600 mr-2" />
               </motion.div>
               <span className="text-sm font-medium bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                Sierra Leone's #1 Payment Gateway
+                {siteSettings.hero_badge_text || "Sierra Leone's #1 Payment Gateway"}
               </span>
             </motion.div>
 
@@ -435,10 +518,10 @@ export function LandingPage() {
               transition={{ duration: 0.8, delay: 0.2 }}
               className="text-5xl md:text-7xl font-bold text-gray-900 mb-6 leading-tight"
             >
-              Accept Payments{' '}
+              {siteSettings.hero_title || 'Accept Payments'}{' '}
               <span className="relative">
                 <span className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
-                  Anywhere
+                  {siteSettings.hero_title_highlight || 'Anywhere'}
                 </span>
                 <motion.svg
                   initial={{ pathLength: 0 }}

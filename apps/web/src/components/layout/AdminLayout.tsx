@@ -41,6 +41,8 @@ import {
   Fuel,
   BarChart3,
   ExternalLink,
+  Globe,
+  FileText,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { AdminNotificationBell } from '@/components/ui/AdminNotificationBell';
@@ -119,9 +121,16 @@ const navSections: NavSection[] = [
     ],
   },
   {
+    title: 'Content',
+    items: [
+      { path: '/admin/pages', label: 'Pages', icon: FileText, badge: 'New', badgeColor: 'primary' },
+    ],
+  },
+  {
     title: 'Settings',
     items: [
-      { path: '/admin/modules', label: 'Modules', icon: Puzzle, badge: 'New', badgeColor: 'primary' },
+      { path: '/admin/site-settings', label: 'Site Settings', icon: Globe, badge: 'New', badgeColor: 'primary' },
+      { path: '/admin/modules', label: 'Modules', icon: Puzzle },
       { path: '/admin/roles', label: 'Role Management', icon: UserCog },
       { path: '/admin/payment-settings', label: 'Payment Settings', icon: Settings },
       { path: '/admin/smtp-settings', label: 'SMTP / Email', icon: Mail },

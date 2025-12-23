@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Analytics } from '@vercel/analytics/react';
+import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider } from '@/context/AuthContext';
 import { NFCProvider } from '@/hooks/useNFC';
 import { DeveloperModeProvider } from '@/context/DeveloperModeContext';
@@ -91,6 +92,10 @@ import SsoSettingsPage from '@/pages/admin/SsoSettingsPage';
 import { WebsiteAnalyticsPage } from '@/pages/admin/WebsiteAnalyticsPage';
 import { ExchangeRatesPage } from '@/pages/admin/ExchangeRatesPage';
 import { AdminVirtualCardsPage } from '@/pages/admin/AdminVirtualCardsPage';
+import { SiteSettingsPage } from '@/pages/admin/SiteSettingsPage';
+import { PagesManagementPage } from '@/pages/admin/PagesManagementPage';
+import { PageEditorPage } from '@/pages/admin/PageEditorPage';
+import { DynamicPage } from '@/pages/DynamicPage';
 import { VirtualCardsPage } from '@/pages/VirtualCardsPage';
 import { PaymentCheckoutPage } from '@/pages/PaymentCheckoutPage';
 import { PayPage } from '@/pages/PayPage';
@@ -183,6 +188,7 @@ function App() {
 
   return (
     <ErrorBoundary>
+      <HelmetProvider>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
           <BrowserRouter>
@@ -257,6 +263,9 @@ function App() {
                   <Route path="/auth/sso" element={<SsoPage />} />
                   <Route path="/auth/authorize" element={<OAuthAuthorizePage />} />
                   <Route path="/docs" element={<ApiDocsPage />} />
+
+                  {/* Dynamic Pages - Public pages created with page builder */}
+                  <Route path="/p/:slug" element={<DynamicPage />} />
 
                   {/* Payment Checkout Routes (Public - for QR scans) */}
                   <Route path="/scan-pay/:sessionId" element={<ScanPayPage />} />
@@ -816,6 +825,23 @@ function App() {
                   </RoleBasedRoute>
                 }
               />
+              {/* Pages Management Routes */}
+              <Route
+                path="/admin/pages"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <PagesManagementPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/admin/pages/:pageId/edit"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <PageEditorPage />
+                  </RoleBasedRoute>
+                }
+              />
               {/* Transport Routes */}
               <Route
                 path="/admin/drivers"
@@ -1304,6 +1330,9 @@ function App() {
                   <Route path="/auth/authorize" element={<OAuthAuthorizePage />} />
                   <Route path="/docs" element={<ApiDocsPage />} />
 
+                  {/* Dynamic Pages - Public pages created with page builder */}
+                  <Route path="/p/:slug" element={<DynamicPage />} />
+
                   {/* Payment Checkout Routes (NFC/QR) */}
                   <Route path="/t/:token" element={<PaymentCheckoutPage />} />
                   <Route path="/pay/:token" element={<PaymentCheckoutPage />} />
@@ -1391,9 +1420,13 @@ function App() {
                   <Route path="/admin/notifications" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><AdminNotificationsPage /></RoleBasedRoute>} />
                   <Route path="/admin/smtp-settings" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><SmtpSettingsPage /></RoleBasedRoute>} />
                   <Route path="/admin/push-notifications" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><PushNotificationsPage /></RoleBasedRoute>} />
+                  <Route path="/admin/site-settings" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><SiteSettingsPage /></RoleBasedRoute>} />
                   <Route path="/admin/settings/sso" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><SsoSettingsPage /></RoleBasedRoute>} />
                   <Route path="/admin/analytics" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><WebsiteAnalyticsPage /></RoleBasedRoute>} />
                   <Route path="/admin/exchange-rates" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><ExchangeRatesPage /></RoleBasedRoute>} />
+                  {/* Pages Management Routes */}
+                  <Route path="/admin/pages" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><PagesManagementPage /></RoleBasedRoute>} />
+                  <Route path="/admin/pages/:pageId/edit" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><PageEditorPage /></RoleBasedRoute>} />
                   {/* Transport Routes */}
                   <Route path="/admin/drivers" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><DriversPage /></RoleBasedRoute>} />
                   <Route path="/admin/fuel-stations" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><FuelStationsPage /></RoleBasedRoute>} />
@@ -1498,6 +1531,7 @@ function App() {
           </BrowserRouter>
         </ThemeProvider>
       </QueryClientProvider>
+      </HelmetProvider>
     </ErrorBoundary>
   );
 }
