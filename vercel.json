@@ -18,7 +18,7 @@
   "rewrites": [
     { "source": "/api/router/(.*)", "destination": "/api/router" },
     { "source": "/api/(.*)", "destination": "/api/router" },
-    { "source": "/:path*", "destination": "/api/router/:path*", "has": [{ "type": "host", "value": "api.peeap.com" }] },
+    { "source": "/(.*)", "destination": "/api/router", "has": [{ "type": "host", "value": "api.peeap.com" }] },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
