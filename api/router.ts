@@ -11061,13 +11061,14 @@ async function handlePaymentIntents(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'currency is required' });
     }
 
-    const intentId = `pi_${randomUUID().replace(/-/g, '')}`;
-    const clientSecret = `${intentId}_secret_${randomUUID().replace(/-/g, '').substring(0, 24)}`;
+    const externalId = `pi_${randomUUID().replace(/-/g, '')}`;
+    const clientSecret = `${externalId}_secret_${randomUUID().replace(/-/g, '').substring(0, 24)}`;
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
 
     const { data: intent, error } = await supabase
       .from('payment_intents')
       .insert({
-        id: intentId,
+        external_id: externalId,
         merchant_id: auth.merchantId,
         amount,
         currency: currency.toUpperCase(),
@@ -11076,8 +11077,9 @@ async function handlePaymentIntents(req: VercelRequest, res: VercelResponse) {
         description: description || null,
         metadata: metadata || {},
         capture_method: capture_method || 'automatic',
-        payment_method_types: payment_method_types || ['wallet', 'card', 'mobile_money'],
-        mode: auth.mode,
+        payment_methods_allowed: payment_method_types || ['wallet', 'card', 'qr', 'nfc'],
+        expires_at: expiresAt.toISOString(),
+        qr_code_url: `https://my.peeap.com/i/${externalId}`,
       })
       .select()
       .single();
@@ -11088,7 +11090,7 @@ async function handlePaymentIntents(req: VercelRequest, res: VercelResponse) {
     }
 
     return res.status(201).json({
-      id: intent.id,
+      id: intent.external_id,
       object: 'payment_intent',
       amount: intent.amount,
       currency: intent.currency,
@@ -11097,7 +11099,9 @@ async function handlePaymentIntents(req: VercelRequest, res: VercelResponse) {
       description: intent.description,
       metadata: intent.metadata,
       capture_method: intent.capture_method,
-      payment_method_types: intent.payment_method_types,
+      payment_method_types: intent.payment_methods_allowed,
+      qr_code_url: intent.qr_code_url,
+      expires_at: Math.floor(new Date(intent.expires_at).getTime() / 1000),
       created: Math.floor(new Date(intent.created_at).getTime() / 1000),
       livemode: auth.mode === 'live',
     });
@@ -11124,7 +11128,7 @@ async function handlePaymentIntentById(req: VercelRequest, res: VercelResponse, 
     const { data: intent, error } = await supabase
       .from('payment_intents')
       .select('*')
-      .eq('id', intentId)
+      .eq('external_id', intentId)
       .eq('merchant_id', auth.merchantId)
       .single();
 
@@ -11133,7 +11137,7 @@ async function handlePaymentIntentById(req: VercelRequest, res: VercelResponse, 
     }
 
     return res.status(200).json({
-      id: intent.id,
+      id: intent.external_id,
       object: 'payment_intent',
       amount: intent.amount,
       currency: intent.currency,
@@ -11142,10 +11146,12 @@ async function handlePaymentIntentById(req: VercelRequest, res: VercelResponse, 
       description: intent.description,
       metadata: intent.metadata,
       capture_method: intent.capture_method,
-      payment_method_types: intent.payment_method_types,
-      payment_method: intent.payment_method,
+      payment_method_types: intent.payment_methods_allowed,
+      payment_method: intent.payment_method_type,
+      qr_code_url: intent.qr_code_url,
+      expires_at: Math.floor(new Date(intent.expires_at).getTime() / 1000),
       created: Math.floor(new Date(intent.created_at).getTime() / 1000),
-      livemode: intent.mode === 'live',
+      livemode: true,
     });
   } catch (error: any) {
     console.error('[PaymentIntents] Get error:', error);
@@ -11168,7 +11174,7 @@ async function handlePaymentIntentConfirm(req: VercelRequest, res: VercelRespons
     const { data: intent, error: fetchError } = await supabase
       .from('payment_intents')
       .select('*')
-      .eq('id', intentId)
+      .eq('external_id', intentId)
       .single();
 
     if (fetchError || !intent) {
@@ -11264,10 +11270,12 @@ async function handlePaymentIntentConfirm(req: VercelRequest, res: VercelRespons
         .from('payment_intents')
         .update({
           status: 'succeeded',
-          payment_method: 'wallet',
+          payment_method_type: 'wallet',
           confirmed_at: new Date().toISOString(),
+          succeeded_at: new Date().toISOString(),
+          transaction_id: transactionId,
         })
-        .eq('id', intentId)
+        .eq('external_id', intentId)
         .select()
         .single();
 
@@ -11276,14 +11284,14 @@ async function handlePaymentIntentConfirm(req: VercelRequest, res: VercelRespons
       }
 
       return res.status(200).json({
-        id: updatedIntent.id,
+        id: updatedIntent.external_id,
         object: 'payment_intent',
         amount: updatedIntent.amount,
         currency: updatedIntent.currency,
         status: updatedIntent.status,
-        payment_method: updatedIntent.payment_method,
+        payment_method: updatedIntent.payment_method_type,
         created: Math.floor(new Date(updatedIntent.created_at).getTime() / 1000),
-        livemode: updatedIntent.mode === 'live',
+        livemode: true,
       });
     }
 
@@ -11292,9 +11300,9 @@ async function handlePaymentIntentConfirm(req: VercelRequest, res: VercelRespons
       .from('payment_intents')
       .update({
         status: 'requires_confirmation',
-        payment_method: payment_method || null,
+        payment_method_type: payment_method || null,
       })
-      .eq('id', intentId)
+      .eq('external_id', intentId)
       .select()
       .single();
 
@@ -11303,14 +11311,14 @@ async function handlePaymentIntentConfirm(req: VercelRequest, res: VercelRespons
     }
 
     return res.status(200).json({
-      id: updatedIntent.id,
+      id: updatedIntent.external_id,
       object: 'payment_intent',
       amount: updatedIntent.amount,
       currency: updatedIntent.currency,
       status: updatedIntent.status,
-      payment_method: updatedIntent.payment_method,
+      payment_method: updatedIntent.payment_method_type,
       created: Math.floor(new Date(updatedIntent.created_at).getTime() / 1000),
-      livemode: updatedIntent.mode === 'live',
+      livemode: true,
     });
   } catch (error: any) {
     console.error('[PaymentIntents] Confirm error:', error);
@@ -11335,7 +11343,7 @@ async function handlePaymentIntentCapture(req: VercelRequest, res: VercelRespons
     const { data: intent, error: fetchError } = await supabase
       .from('payment_intents')
       .select('*')
-      .eq('id', intentId)
+      .eq('external_id', intentId)
       .eq('merchant_id', auth.merchantId)
       .single();
 
@@ -11353,7 +11361,7 @@ async function handlePaymentIntentCapture(req: VercelRequest, res: VercelRespons
         status: 'succeeded',
         captured_at: new Date().toISOString(),
       })
-      .eq('id', intentId)
+      .eq('external_id', intentId)
       .select()
       .single();
 
@@ -11362,13 +11370,13 @@ async function handlePaymentIntentCapture(req: VercelRequest, res: VercelRespons
     }
 
     return res.status(200).json({
-      id: updatedIntent.id,
+      id: updatedIntent.external_id,
       object: 'payment_intent',
       amount: updatedIntent.amount,
       currency: updatedIntent.currency,
       status: updatedIntent.status,
       created: Math.floor(new Date(updatedIntent.created_at).getTime() / 1000),
-      livemode: updatedIntent.mode === 'live',
+      livemode: true,
     });
   } catch (error: any) {
     console.error('[PaymentIntents] Capture error:', error);
@@ -11393,7 +11401,7 @@ async function handlePaymentIntentCancel(req: VercelRequest, res: VercelResponse
     const { data: intent, error: fetchError } = await supabase
       .from('payment_intents')
       .select('*')
-      .eq('id', intentId)
+      .eq('external_id', intentId)
       .eq('merchant_id', auth.merchantId)
       .single();
 
@@ -11411,7 +11419,7 @@ async function handlePaymentIntentCancel(req: VercelRequest, res: VercelResponse
         status: 'canceled',
         canceled_at: new Date().toISOString(),
       })
-      .eq('id', intentId)
+      .eq('external_id', intentId)
       .select()
       .single();
 
@@ -11420,13 +11428,13 @@ async function handlePaymentIntentCancel(req: VercelRequest, res: VercelResponse
     }
 
     return res.status(200).json({
-      id: updatedIntent.id,
+      id: updatedIntent.external_id,
       object: 'payment_intent',
       amount: updatedIntent.amount,
       currency: updatedIntent.currency,
       status: updatedIntent.status,
       created: Math.floor(new Date(updatedIntent.created_at).getTime() / 1000),
-      livemode: updatedIntent.mode === 'live',
+      livemode: true,
     });
   } catch (error: any) {
     console.error('[PaymentIntents] Cancel error:', error);
@@ -11451,7 +11459,7 @@ async function handlePaymentIntentQr(req: VercelRequest, res: VercelResponse, in
     const { data: intent, error } = await supabase
       .from('payment_intents')
       .select('*')
-      .eq('id', intentId)
+      .eq('external_id', intentId)
       .eq('merchant_id', auth.merchantId)
       .single();
 
@@ -11464,9 +11472,10 @@ async function handlePaymentIntentQr(req: VercelRequest, res: VercelResponse, in
     const paymentUrl = `${baseUrl}/i/${intentId}`;
 
     return res.status(200).json({
-      id: intent.id,
+      id: intent.external_id,
       object: 'payment_intent_qr',
       payment_url: paymentUrl,
+      qr_code_url: intent.qr_code_url,
       amount: intent.amount,
       currency: intent.currency,
       status: intent.status,
