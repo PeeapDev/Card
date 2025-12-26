@@ -28,6 +28,7 @@ import { useUserApps } from '@/context/UserAppsContext';
 import { useThemeColor } from '@/context/ThemeColorContext';
 import { NotificationBell } from '@/components/ui/NotificationBell';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { RoleSwitcher } from '@/components/ui/RoleSwitcher';
 import { NFCIndicator } from '@/components/nfc';
 import { supabase } from '@/lib/supabase';
 import { SkipLink } from '@/components/ui/SkipLink';
@@ -316,6 +317,7 @@ export function MainLayout({ children }: MainLayoutProps) {
                 </span>
               )}
               <NFCIndicator />
+              <RoleSwitcher compact />
               <ThemeToggle />
               <NotificationBell />
 

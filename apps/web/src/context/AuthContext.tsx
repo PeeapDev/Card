@@ -2,6 +2,19 @@ import { createContext, useContext, useState, useEffect, useCallback, ReactNode 
 import { authService, MfaRequiredResponse } from '@/services/auth.service';
 import type { User, LoginRequest, RegisterRequest, UserRole } from '@/types';
 
+// Storage key for active role preference
+const ACTIVE_ROLE_KEY = 'peeap_active_role';
+
+// Dashboard routes for each role
+const ROLE_DASHBOARDS: Record<UserRole, string> = {
+  user: '/dashboard',
+  merchant: '/merchant',
+  agent: '/agent',
+  admin: '/admin',
+  superadmin: '/admin',
+  developer: '/developer',
+};
+
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
@@ -12,6 +25,11 @@ interface AuthContextType {
   refreshUser: () => Promise<void>;
   hasRole: (role: UserRole) => boolean;
   hasAnyRole: (roles: UserRole[]) => boolean;
+  // New role switching functionality
+  activeRole: UserRole;
+  availableRoles: UserRole[];
+  switchRole: (role: UserRole) => void;
+  getRoleDashboard: (role: UserRole) => string;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -19,6 +37,39 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeRole, setActiveRole] = useState<UserRole>('user');
+
+  // Get available roles from user
+  const availableRoles: UserRole[] = user?.roles || ['user'];
+
+  // Get dashboard route for a role
+  const getRoleDashboard = useCallback((role: UserRole): string => {
+    return ROLE_DASHBOARDS[role] || '/dashboard';
+  }, []);
+
+  // Initialize active role from storage or user's first role
+  useEffect(() => {
+    if (user?.roles && user.roles.length > 0) {
+      const storedRole = localStorage.getItem(ACTIVE_ROLE_KEY) as UserRole | null;
+      if (storedRole && user.roles.includes(storedRole)) {
+        setActiveRole(storedRole);
+      } else {
+        // Default to first role (priority: user > merchant > agent)
+        const priorityOrder: UserRole[] = ['user', 'merchant', 'agent', 'admin', 'superadmin', 'developer'];
+        const firstRole = priorityOrder.find(r => user.roles.includes(r)) || user.roles[0];
+        setActiveRole(firstRole);
+        localStorage.setItem(ACTIVE_ROLE_KEY, firstRole);
+      }
+    }
+  }, [user?.roles]);
+
+  // Switch active role
+  const switchRole = useCallback((role: UserRole) => {
+    if (user?.roles?.includes(role)) {
+      setActiveRole(role);
+      localStorage.setItem(ACTIVE_ROLE_KEY, role);
+    }
+  }, [user?.roles]);
 
   const refreshUser = useCallback(async () => {
     try {
@@ -89,6 +140,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refreshUser,
         hasRole,
         hasAnyRole,
+        // Role switching
+        activeRole,
+        availableRoles,
+        switchRole,
+        getRoleDashboard,
       }}
     >
       {children}

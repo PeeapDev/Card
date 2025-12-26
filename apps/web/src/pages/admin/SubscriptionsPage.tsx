@@ -348,10 +348,23 @@ export function SubscriptionsPage() {
       if (!request) return;
 
       if (action === 'approve') {
-        // Update user role
+        // First, get current user roles
+        const { data: userData } = await supabase
+          .from('users')
+          .select('roles')
+          .eq('id', request.userId)
+          .single();
+
+        // Add new role to existing roles array (if not already present)
+        const currentRoles = userData?.roles || ['user'];
+        const newRoles = currentRoles.includes(request.toRole)
+          ? currentRoles
+          : [...currentRoles, request.toRole];
+
+        // Update user roles array
         await supabase
           .from('users')
-          .update({ roles: [request.toRole] })
+          .update({ roles: newRoles })
           .eq('id', request.userId);
       }
 

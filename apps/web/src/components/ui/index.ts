@@ -7,3 +7,4 @@ export { NotificationBell } from './NotificationBell';
 export { Modal } from './Modal';
 export { SkipLink } from './SkipLink';
 export { BrandedQRCode, generateBrandedQRSVG, generateBrandedQRDataURL, getPeeapLogoSVG } from './BrandedQRCode';
+export { RoleSwitcher } from './RoleSwitcher';

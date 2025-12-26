@@ -34,6 +34,7 @@ import { useApps } from '@/context/AppsContext';
 import { useThemeColor } from '@/context/ThemeColorContext';
 import { NotificationBell } from '@/components/ui/NotificationBell';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { RoleSwitcher } from '@/components/ui/RoleSwitcher';
 import { NFCIndicator } from '@/components/nfc';
 import {
   DndContext,
@@ -521,6 +522,7 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
                 </Link>
               )}
               <NFCIndicator />
+              <RoleSwitcher compact />
               <ThemeToggle />
               <NotificationBell />
             </div>

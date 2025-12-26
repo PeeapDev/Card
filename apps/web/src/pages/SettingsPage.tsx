@@ -27,12 +27,15 @@ import {
   ToggleRight,
   Sparkles,
   Palette,
+  ArrowUpCircle,
 } from 'lucide-react';
 import { MotionCard } from '@/components/ui/Card';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { BankAccountsSection } from '@/components/profile/BankAccountsSection';
 import { NotificationSettings } from '@/components/settings/NotificationSettings';
 import { ThemeColorSelector } from '@/components/settings/ThemeColorSelector';
+import { BecomeMerchantCard } from '@/components/settings/BecomeMerchantCard';
+import { BecomeAgentCard } from '@/components/settings/BecomeAgentCard';
 import { useAuth } from '@/context/AuthContext';
 import { useUserApps } from '@/context/UserAppsContext';
 import { supabase } from '@/lib/supabase';
@@ -340,6 +343,23 @@ export function SettingsPage() {
               </div>
             </div>
           </MotionCard>
+        </motion.div>
+
+        {/* Upgrade Your Account Section */}
+        <motion.div variants={itemVariants}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-gradient-to-br from-purple-100 to-orange-100 dark:from-purple-900/30 dark:to-orange-900/30 rounded-lg">
+              <ArrowUpCircle className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-900 dark:text-white">Upgrade Your Account</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Unlock more features by becoming a merchant or agent</p>
+            </div>
+          </div>
+          <div className="space-y-4">
+            <BecomeMerchantCard />
+            <BecomeAgentCard />
+          </div>
         </motion.div>
 
         {/* Bank Accounts Section */}
