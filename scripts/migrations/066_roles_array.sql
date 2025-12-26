@@ -9,58 +9,93 @@
 -- Users table
 DROP POLICY IF EXISTS "users_select_policy" ON users;
 
--- API Keys
-DROP POLICY IF EXISTS "Admins can manage api_keys" ON api_keys;
+-- Drop policies on tables that may or may not exist
+DO $$
+DECLARE
+  t TEXT;
+  p TEXT;
+BEGIN
+  -- API Keys
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'api_keys') THEN
+    DROP POLICY IF EXISTS "Admins can manage api_keys" ON api_keys;
+  END IF;
 
--- Webhooks
-DROP POLICY IF EXISTS "Admins can manage webhooks" ON webhooks;
+  -- Webhooks
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'webhooks') THEN
+    DROP POLICY IF EXISTS "Admins can manage webhooks" ON webhooks;
+  END IF;
 
--- Module system
-DROP POLICY IF EXISTS "Admins can manage module_config" ON module_config;
-DROP POLICY IF EXISTS "Admins can manage module_instances" ON module_instances;
-DROP POLICY IF EXISTS "Admins can manage module_data" ON module_data;
+  -- Module system
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'module_config') THEN
+    DROP POLICY IF EXISTS "Admins can manage module_config" ON module_config;
+  END IF;
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'module_instances') THEN
+    DROP POLICY IF EXISTS "Admins can manage module_instances" ON module_instances;
+  END IF;
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'module_data') THEN
+    DROP POLICY IF EXISTS "Admins can manage module_data" ON module_data;
+  END IF;
 
--- Admin notifications
-DROP POLICY IF EXISTS "Admins can view notifications" ON admin_notifications;
-DROP POLICY IF EXISTS "Admins can insert notifications" ON admin_notifications;
-DROP POLICY IF EXISTS "Admins can update notifications" ON admin_notifications;
+  -- Admin notifications
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'admin_notifications') THEN
+    DROP POLICY IF EXISTS "Admins can view notifications" ON admin_notifications;
+    DROP POLICY IF EXISTS "Admins can insert notifications" ON admin_notifications;
+    DROP POLICY IF EXISTS "Admins can update notifications" ON admin_notifications;
+  END IF;
 
--- NFC tags
-DROP POLICY IF EXISTS "Admins can view nfc_tags" ON nfc_tags;
-DROP POLICY IF EXISTS "Admins can insert nfc_tags" ON nfc_tags;
-DROP POLICY IF EXISTS "Admins can update nfc_tags" ON nfc_tags;
-DROP POLICY IF EXISTS "Admins can view all nfc_tag_assignments" ON nfc_tag_assignments;
-DROP POLICY IF EXISTS "Admins can manage nfc_tag_assignments" ON nfc_tag_assignments;
+  -- NFC tags
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'nfc_tags') THEN
+    DROP POLICY IF EXISTS "Admins can view nfc_tags" ON nfc_tags;
+    DROP POLICY IF EXISTS "Admins can insert nfc_tags" ON nfc_tags;
+    DROP POLICY IF EXISTS "Admins can update nfc_tags" ON nfc_tags;
+  END IF;
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'nfc_tag_assignments') THEN
+    DROP POLICY IF EXISTS "Admins can view all nfc_tag_assignments" ON nfc_tag_assignments;
+    DROP POLICY IF EXISTS "Admins can manage nfc_tag_assignments" ON nfc_tag_assignments;
+  END IF;
 
--- NFC payments
-DROP POLICY IF EXISTS "Admins can view all nfc_payments" ON nfc_payments;
-DROP POLICY IF EXISTS "Admins can insert nfc_payments" ON nfc_payments;
-DROP POLICY IF EXISTS "Admins can update nfc_payments" ON nfc_payments;
+  -- NFC payments
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'nfc_payments') THEN
+    DROP POLICY IF EXISTS "Admins can view all nfc_payments" ON nfc_payments;
+    DROP POLICY IF EXISTS "Admins can insert nfc_payments" ON nfc_payments;
+    DROP POLICY IF EXISTS "Admins can update nfc_payments" ON nfc_payments;
+  END IF;
 
--- Platform earnings
-DROP POLICY IF EXISTS "Admins can view platform_earnings" ON platform_earnings;
+  -- Platform earnings
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'platform_earnings') THEN
+    DROP POLICY IF EXISTS "Admins can view platform_earnings" ON platform_earnings;
+  END IF;
 
--- System float
-DROP POLICY IF EXISTS "Admins can view all float accounts" ON system_float_accounts;
-DROP POLICY IF EXISTS "Superadmins can insert float accounts" ON system_float_accounts;
-DROP POLICY IF EXISTS "Superadmins can update float accounts" ON system_float_accounts;
-DROP POLICY IF EXISTS "Admins can view all float transactions" ON system_float_transactions;
+  -- System float
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'system_float_accounts') THEN
+    DROP POLICY IF EXISTS "Admins can view all float accounts" ON system_float_accounts;
+    DROP POLICY IF EXISTS "Superadmins can insert float accounts" ON system_float_accounts;
+    DROP POLICY IF EXISTS "Superadmins can update float accounts" ON system_float_accounts;
+  END IF;
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'system_float_transactions') THEN
+    DROP POLICY IF EXISTS "Admins can view all float transactions" ON system_float_transactions;
+  END IF;
 
--- Checkout sessions
-DROP POLICY IF EXISTS "Admin full access to checkout_sessions" ON checkout_sessions;
+  -- Checkout sessions
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'checkout_sessions') THEN
+    DROP POLICY IF EXISTS "Admin full access to checkout_sessions" ON checkout_sessions;
+  END IF;
 
--- Page views
-DROP POLICY IF EXISTS "Admins can view all page_views" ON page_views;
+  -- Page views
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'page_views') THEN
+    DROP POLICY IF EXISTS "Admins can view all page_views" ON page_views;
+  END IF;
 
--- Bank accounts
-DROP POLICY IF EXISTS "admins_view_all_bank_accounts" ON user_bank_accounts;
+  -- Bank accounts
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'user_bank_accounts') THEN
+    DROP POLICY IF EXISTS "admins_view_all_bank_accounts" ON user_bank_accounts;
+  END IF;
 
--- KYC applications
-DROP POLICY IF EXISTS "admins_manage_kyc" ON kyc_applications;
-
--- Custom modules storage
-DROP POLICY IF EXISTS "admins_manage_module_code" ON storage.objects;
-DROP POLICY IF EXISTS "admins_delete_module_code" ON storage.objects;
+  -- KYC applications
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'kyc_applications') THEN
+    DROP POLICY IF EXISTS "admins_manage_kyc" ON kyc_applications;
+  END IF;
+END $$;
 
 -- =====================================================
 -- STEP 2: Alter the column type
