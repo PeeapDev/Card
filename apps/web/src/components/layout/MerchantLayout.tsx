@@ -68,10 +68,9 @@ interface NavItem {
 }
 
 // Base nav items (always available)
+// Note: Business Profile is now inside Business Settings
 const baseNavItems: NavItem[] = [
   { id: 'dashboard', path: '/merchant', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'terminal', path: '/merchant/terminal', label: 'Payment Terminal', icon: Nfc },
-  { id: 'driver-wallet', path: '/merchant/driver-wallet', label: 'Driver Wallet', icon: Wallet },
   { id: 'businesses', path: '/merchant/businesses', label: 'My Businesses', icon: Building2 },
   { id: 'transactions', path: '/merchant/transactions', label: 'Transactions', icon: ArrowLeftRight },
   { id: 'payouts', path: '/merchant/payouts', label: 'Payouts', icon: DollarSign },
@@ -79,7 +78,6 @@ const baseNavItems: NavItem[] = [
   { id: 'reports', path: '/merchant/reports', label: 'Reports', icon: BarChart3 },
   { id: 'payment-links', path: '/merchant/payment-links', label: 'Payment Links', icon: Link2 },
   { id: 'subscriptions', path: '/merchant/subscriptions', label: 'Subscription Plans', icon: Repeat },
-  { id: 'profile', path: '/merchant/profile', label: 'Business Profile', icon: Store },
   { id: 'subscription', path: '/merchant/subscription', label: 'My Plan', icon: CreditCard },
   { id: 'settings', path: '/merchant/settings', label: 'Settings', icon: Settings },
 ];
