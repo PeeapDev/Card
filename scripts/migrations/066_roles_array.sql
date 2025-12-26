@@ -242,7 +242,7 @@ ALTER TABLE users ALTER COLUMN roles SET DEFAULT ARRAY['user']::text[];
 -- =====================================================
 
 CREATE OR REPLACE FUNCTION is_admin_user(user_id uuid)
-RETURNS boolean AS $$
+RETURNS boolean AS $BODY$
 BEGIN
   RETURN EXISTS (
     SELECT 1 FROM users
@@ -250,7 +250,7 @@ BEGIN
     AND ('admin' = ANY(roles) OR 'superadmin' = ANY(roles))
   );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+$BODY$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 
 CREATE POLICY "users_select_policy" ON users
     FOR SELECT USING (
@@ -303,14 +303,14 @@ END $$;
 CREATE INDEX IF NOT EXISTS idx_users_roles ON users USING GIN (roles);
 
 CREATE OR REPLACE FUNCTION user_has_role(user_roles text[], check_role text)
-RETURNS boolean AS $$
+RETURNS boolean AS $BODY$
 BEGIN
   RETURN check_role = ANY(user_roles);
 END;
-$$ LANGUAGE plpgsql IMMUTABLE;
+$BODY$ LANGUAGE plpgsql IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION add_user_role(user_id_param uuid, new_role text)
-RETURNS void AS $$
+RETURNS void AS $BODY$
 BEGIN
   UPDATE users
   SET roles = array_append(roles, new_role),
@@ -318,16 +318,16 @@ BEGIN
   WHERE id = user_id_param
     AND NOT (new_role = ANY(roles));
 END;
-$$ LANGUAGE plpgsql;
+$BODY$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION remove_user_role(user_id_param uuid, role_to_remove text)
-RETURNS void AS $$
+RETURNS void AS $BODY$
 BEGIN
   UPDATE users
   SET roles = array_remove(roles, role_to_remove),
       updated_at = CURRENT_TIMESTAMP
   WHERE id = user_id_param;
 END;
-$$ LANGUAGE plpgsql;
+$BODY$ LANGUAGE plpgsql;
 
 NOTIFY pgrst, 'reload schema';
