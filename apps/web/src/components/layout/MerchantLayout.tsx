@@ -32,6 +32,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useDeveloperMode } from '@/context/DeveloperModeContext';
 import { useApps } from '@/context/AppsContext';
 import { useThemeColor } from '@/context/ThemeColorContext';
+import { supabase } from '@/lib/supabase';
 import { NotificationBell } from '@/components/ui/NotificationBell';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { RoleSwitcher } from '@/components/ui/RoleSwitcher';
@@ -171,6 +172,7 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
   const [isEditMode, setIsEditMode] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [hasSubscription, setHasSubscription] = useState(false);
   const { user, logout } = useAuth();
   const { isDeveloperMode, checkBusinesses, hasBusinesses, businessCount } = useDeveloperMode();
   const { isAppEnabled } = useApps();
@@ -196,6 +198,28 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
 
     return () => observer.disconnect();
   }, []);
+
+  // Check if user has an active Plus subscription
+  useEffect(() => {
+    const checkSubscription = async () => {
+      if (!user?.id) return;
+
+      try {
+        const { data } = await supabase
+          .from('merchant_subscriptions')
+          .select('id, status, tier')
+          .eq('user_id', user.id)
+          .in('status', ['active', 'trialing'])
+          .maybeSingle();
+
+        setHasSubscription(!!data);
+      } catch (err) {
+        console.error('Error checking subscription:', err);
+      }
+    };
+
+    checkSubscription();
+  }, [user?.id]);
 
   // Nav items with persisted order (start with base items, apps will be added via useEffect)
   const [navItems, setNavItems] = useState<NavItem[]>(() => {
@@ -502,14 +526,27 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
               <span className="hidden sm:inline-flex px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full text-xs font-medium">
                 Merchant Portal
               </span>
-              {/* Merchant+ Upgrade Button */}
-              <Link
-                to="/merchant/upgrade"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-full text-xs font-medium hover:from-amber-600 hover:to-orange-600 transition-all shadow-sm"
-              >
-                <Crown className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Upgrade to</span> Merchant+
-              </Link>
+              {/* Merchant+ Upgrade Button - only show if no subscription */}
+              {!hasSubscription ? (
+                <Link
+                  to="/merchant/upgrade"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-full text-xs font-medium hover:from-amber-600 hover:to-orange-600 transition-all shadow-sm"
+                >
+                  <Crown className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Upgrade to</span> Merchant+
+                </Link>
+              ) : (
+                <a
+                  href="https://plus.peeap.com/dashboard"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-full text-xs font-medium hover:from-purple-600 hover:to-indigo-600 transition-all shadow-sm"
+                >
+                  <Crown className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Go to</span> Plus
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
               {isDeveloperMode && (
                 <Link
                   to="/merchant/developer"

@@ -22,6 +22,14 @@ import {
   Shield,
   XCircle,
   Loader2,
+  Crown,
+  Zap,
+  Star,
+  ExternalLink,
+  Receipt,
+  TrendingUp,
+  Users,
+  Building2,
 } from 'lucide-react';
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
 import { Card } from '@/components/ui/Card';
@@ -250,73 +258,157 @@ export function MerchantSubscriptionPage() {
     );
   }
 
-  // No subscription - show upgrade options
+  // No subscription - show upgrade options with pricing
   if (!subscription) {
     return (
       <MerchantLayout>
-        <div className="max-w-4xl mx-auto space-y-6">
+        <div className="max-w-5xl mx-auto space-y-8">
           {/* Header */}
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Subscription</h1>
-            <p className="text-gray-600 mt-1">Manage your PeeAP Plus subscription</p>
+          <div className="text-center">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">My Plan</h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-2">Choose the right plan for your business</p>
           </div>
 
-          {/* Current Plan (Basic) */}
-          <Card className="p-6">
+          {/* Current Plan Banner */}
+          <Card className="p-6 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-750 border-gray-200 dark:border-gray-700">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center">
-                  <Wallet className="w-6 h-6 text-gray-600" />
+                <div className="w-14 h-14 bg-white dark:bg-gray-700 rounded-2xl shadow-sm flex items-center justify-center">
+                  <Wallet className="w-7 h-7 text-gray-500" />
                 </div>
                 <div>
-                  <h2 className="font-bold text-lg text-gray-900">Basic Plan</h2>
-                  <p className="text-gray-500 text-sm">Free forever</p>
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-bold text-xl text-gray-900 dark:text-white">Basic Plan</h2>
+                    <span className="px-2 py-0.5 bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 rounded text-xs font-medium">
+                      Current
+                    </span>
+                  </div>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Free forever • Basic payment acceptance</p>
                 </div>
               </div>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-gray-100 text-gray-700">
-                Current Plan
-              </span>
+              <div className="text-right">
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">NLE 0</p>
+                <p className="text-gray-500 text-sm">/month</p>
+              </div>
             </div>
           </Card>
 
-          {/* Upgrade CTA */}
-          <Card className="p-6 bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200">
-            <div className="flex items-start justify-between">
+          {/* Upgrade Section */}
+          <div>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center">
+                <Crown className="w-5 h-5 text-white" />
+              </div>
               <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <Sparkles className="w-5 h-5 text-amber-600" />
-                  <h3 className="font-bold text-gray-900">Upgrade to PeeAP Plus</h3>
-                </div>
-                <p className="text-gray-600 mb-4">
-                  Unlock invoicing, recurring payments, employee cards, and more with a 7-day free trial.
-                </p>
-                <div className="flex gap-3">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Upgrade to Peeap Plus</h2>
+                <p className="text-gray-500 text-sm">Start with 7 days free trial</p>
+              </div>
+            </div>
+
+            {/* Pricing Cards */}
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Business Plan */}
+              <Card className="p-6 border-2 border-amber-200 dark:border-amber-800 hover:border-amber-400 dark:hover:border-amber-600 transition-colors relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-amber-500/10 to-orange-500/10 rounded-bl-full" />
+                <div className="relative">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/30 rounded-xl flex items-center justify-center">
+                      <Zap className="w-5 h-5 text-amber-600" />
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">Business</h3>
+                  </div>
+                  <div className="mb-4">
+                    <span className="text-3xl font-bold text-gray-900 dark:text-white">NLE 150</span>
+                    <span className="text-gray-500">/month</span>
+                  </div>
+                  <ul className="space-y-3 mb-6">
+                    <li className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                      <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
+                      <span>Professional invoicing</span>
+                    </li>
+                    <li className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                      <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
+                      <span>Recurring payments</span>
+                    </li>
+                    <li className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                      <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
+                      <span>Customer management</span>
+                    </li>
+                    <li className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                      <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
+                      <span>Priority support</span>
+                    </li>
+                  </ul>
                   <button
                     onClick={() => handleUpgrade('business')}
-                    className="px-4 py-2 bg-amber-500 text-white rounded-lg font-medium hover:bg-amber-600 transition flex items-center gap-2"
+                    className="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl font-medium hover:from-amber-600 hover:to-orange-600 transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2"
                   >
-                    Business - NLE 150/mo
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleUpgrade('business_plus')}
-                    className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition flex items-center gap-2"
-                  >
-                    Business++ - NLE 500/mo
+                    Start Free Trial
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
-              </div>
-            </div>
-          </Card>
+              </Card>
 
-          {/* Plan Comparison Link */}
+              {/* Business++ Plan */}
+              <Card className="p-6 border-2 border-purple-200 dark:border-purple-800 hover:border-purple-400 dark:hover:border-purple-600 transition-colors relative overflow-hidden">
+                <div className="absolute -top-1 -right-1">
+                  <div className="bg-gradient-to-r from-purple-500 to-indigo-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
+                    POPULAR
+                  </div>
+                </div>
+                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-purple-500/10 to-indigo-500/10 rounded-bl-full" />
+                <div className="relative">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center">
+                      <Star className="w-5 h-5 text-purple-600" />
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">Business++</h3>
+                  </div>
+                  <div className="mb-4">
+                    <span className="text-3xl font-bold text-gray-900 dark:text-white">NLE 500</span>
+                    <span className="text-gray-500">/month</span>
+                  </div>
+                  <ul className="space-y-3 mb-6">
+                    <li className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                      <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
+                      <span>Everything in Business</span>
+                    </li>
+                    <li className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                      <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
+                      <span>Employee expense cards</span>
+                    </li>
+                    <li className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                      <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
+                      <span>Multi-user access</span>
+                    </li>
+                    <li className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                      <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
+                      <span>Advanced analytics</span>
+                    </li>
+                    <li className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                      <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
+                      <span>Dedicated account manager</span>
+                    </li>
+                  </ul>
+                  <button
+                    onClick={() => handleUpgrade('business_plus')}
+                    className="w-full py-3 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-xl font-medium hover:from-purple-600 hover:to-indigo-600 transition-all shadow-lg shadow-purple-500/20 flex items-center justify-center gap-2"
+                  >
+                    Start Free Trial
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </Card>
+            </div>
+          </div>
+
+          {/* Compare Plans Link */}
           <div className="text-center">
             <button
               onClick={() => navigate('/merchant/upgrade')}
-              className="text-amber-600 hover:text-amber-700 font-medium inline-flex items-center gap-1"
+              className="text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 font-medium inline-flex items-center gap-1"
             >
-              Compare all plans
+              Compare all plans and features
               <ArrowUpRight className="w-4 h-4" />
             </button>
           </div>
@@ -329,169 +421,230 @@ export function MerchantSubscriptionPage() {
 
   return (
     <MerchantLayout>
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-5xl mx-auto space-y-6">
         {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Subscription</h1>
-          <p className="text-gray-600 mt-1">Manage your PeeAP Plus subscription</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">My Plan</h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-1">Manage your PeeAP Plus subscription</p>
+          </div>
+          <a
+            href="https://plus.peeap.com/dashboard"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-xl font-medium hover:from-purple-600 hover:to-indigo-600 transition-all shadow-lg shadow-purple-500/20 flex items-center gap-2"
+          >
+            <Building2 className="w-4 h-4" />
+            Open Plus Dashboard
+            <ExternalLink className="w-4 h-4" />
+          </a>
         </div>
 
         {/* Trial Banner */}
         {subscription.status === 'trialing' && trialDays > 0 && (
-          <Card className="p-4 bg-blue-50 border-blue-200">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                  <Clock className="w-5 h-5 text-blue-600" />
+          <Card className="p-5 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-800">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/50 rounded-2xl flex items-center justify-center">
+                  <Clock className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
-                  <p className="font-medium text-blue-900">
-                    {trialDays} day{trialDays !== 1 ? 's' : ''} remaining in your free trial
+                  <p className="font-bold text-lg text-blue-900 dark:text-blue-100">
+                    {trialDays} day{trialDays !== 1 ? 's' : ''} remaining
                   </p>
-                  <p className="text-sm text-blue-700">
-                    Trial ends on {formatDate(subscription.trial_ends_at)}
+                  <p className="text-sm text-blue-700 dark:text-blue-300">
+                    Free trial ends on {formatDate(subscription.trial_ends_at)}
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => handleUpgrade(subscription.tier)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition"
+                className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition flex items-center gap-2 shadow-lg shadow-blue-500/20"
               >
                 Subscribe Now
+                <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </Card>
         )}
 
-        {/* Current Plan Card */}
-        <Card className="p-6">
+        {/* Current Plan Card - Improved */}
+        <Card className={`p-6 border-2 ${
+          subscription.tier === 'business_plus'
+            ? 'border-purple-200 dark:border-purple-800 bg-gradient-to-br from-purple-50/50 to-indigo-50/50 dark:from-purple-900/10 dark:to-indigo-900/10'
+            : subscription.tier === 'business'
+            ? 'border-amber-200 dark:border-amber-800 bg-gradient-to-br from-amber-50/50 to-orange-50/50 dark:from-amber-900/10 dark:to-orange-900/10'
+            : 'border-gray-200 dark:border-gray-700'
+        }`}>
           <div className="flex items-start justify-between mb-6">
             <div className="flex items-center gap-4">
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg ${
                 subscription.tier === 'business_plus'
-                  ? 'bg-purple-100'
+                  ? 'bg-gradient-to-br from-purple-500 to-indigo-500 shadow-purple-500/30'
                   : subscription.tier === 'business'
-                  ? 'bg-amber-100'
+                  ? 'bg-gradient-to-br from-amber-500 to-orange-500 shadow-amber-500/30'
                   : 'bg-gray-100'
               }`}>
-                <CreditCard className={`w-6 h-6 ${
-                  subscription.tier === 'business_plus'
-                    ? 'text-purple-600'
-                    : subscription.tier === 'business'
-                    ? 'text-amber-600'
-                    : 'text-gray-600'
-                }`} />
+                {subscription.tier === 'business_plus' ? (
+                  <Star className="w-7 h-7 text-white" />
+                ) : subscription.tier === 'business' ? (
+                  <Zap className="w-7 h-7 text-white" />
+                ) : (
+                  <CreditCard className="w-7 h-7 text-gray-600" />
+                )}
               </div>
               <div>
-                <h2 className="font-bold text-lg text-gray-900">
-                  {getTierName(subscription.tier)} Plan
-                </h2>
-                <p className="text-gray-500 text-sm">
+                <div className="flex items-center gap-2">
+                  <h2 className="font-bold text-xl text-gray-900 dark:text-white">
+                    {getTierName(subscription.tier)} Plan
+                  </h2>
+                  {getStatusBadge(subscription.status)}
+                </div>
+                <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
                   {subscription.currency} {formatPrice(subscription.price_monthly)}/month
                 </p>
               </div>
             </div>
-            {getStatusBadge(subscription.status)}
+            <div className="text-right">
+              <p className="text-3xl font-bold text-gray-900 dark:text-white">
+                {subscription.currency} {formatPrice(subscription.price_monthly)}
+              </p>
+              <p className="text-gray-500 text-sm">/month</p>
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
-                <Calendar className="w-4 h-4" />
-                {subscription.status === 'trialing' ? 'Trial Started' : 'Current Period Start'}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div className="p-4 bg-white/60 dark:bg-gray-800/60 rounded-xl">
+              <div className="flex items-center gap-2 text-gray-500 text-xs mb-1">
+                <Calendar className="w-3.5 h-3.5" />
+                {subscription.status === 'trialing' ? 'Trial Started' : 'Period Start'}
               </div>
-              <p className="font-medium text-gray-900">
+              <p className="font-semibold text-gray-900 dark:text-white text-sm">
                 {formatDate(subscription.status === 'trialing'
                   ? subscription.trial_started_at
                   : subscription.current_period_start)}
               </p>
             </div>
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
-                <RefreshCw className="w-4 h-4" />
-                {subscription.status === 'trialing' ? 'Trial Ends' : 'Next Billing Date'}
+            <div className="p-4 bg-white/60 dark:bg-gray-800/60 rounded-xl">
+              <div className="flex items-center gap-2 text-gray-500 text-xs mb-1">
+                <RefreshCw className="w-3.5 h-3.5" />
+                {subscription.status === 'trialing' ? 'Trial Ends' : 'Next Billing'}
               </div>
-              <p className="font-medium text-gray-900">
+              <p className="font-semibold text-gray-900 dark:text-white text-sm">
                 {formatDate(subscription.status === 'trialing'
                   ? subscription.trial_ends_at
                   : subscription.current_period_end)}
               </p>
             </div>
+            <div className="p-4 bg-white/60 dark:bg-gray-800/60 rounded-xl">
+              <div className="flex items-center gap-2 text-gray-500 text-xs mb-1">
+                <TrendingUp className="w-3.5 h-3.5" />
+                Status
+              </div>
+              <p className="font-semibold text-green-600 dark:text-green-400 text-sm capitalize">
+                {subscription.status === 'trialing' ? 'Free Trial' : subscription.status}
+              </p>
+            </div>
+            <div className="p-4 bg-white/60 dark:bg-gray-800/60 rounded-xl">
+              <div className="flex items-center gap-2 text-gray-500 text-xs mb-1">
+                <Wallet className="w-3.5 h-3.5" />
+                Payment
+              </div>
+              <p className="font-semibold text-gray-900 dark:text-white text-sm">Wallet</p>
+            </div>
           </div>
 
           {/* Actions */}
-          <div className="flex items-center justify-between pt-4 border-t">
+          <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
             <div className="flex gap-3">
               {subscription.tier === 'business' && (
                 <button
                   onClick={() => handleUpgrade('business_plus')}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition flex items-center gap-2"
+                  className="px-4 py-2.5 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-xl font-medium hover:from-purple-600 hover:to-indigo-600 transition-all shadow-lg shadow-purple-500/20 flex items-center gap-2"
                 >
+                  <Star className="w-4 h-4" />
                   Upgrade to Business++
-                  <ArrowUpRight className="w-4 h-4" />
-                </button>
-              )}
-              {subscription.status !== 'cancelled' && subscription.status !== 'expired' && (
-                <button
-                  onClick={() => setShowCancelConfirm(true)}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium transition"
-                >
-                  Cancel Subscription
                 </button>
               )}
             </div>
-            <a
-              href="https://plus.peeap.com/dashboard"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-amber-600 hover:text-amber-700 font-medium inline-flex items-center gap-1"
-            >
-              Go to Plus Dashboard
-              <ArrowUpRight className="w-4 h-4" />
-            </a>
+            {subscription.status !== 'cancelled' && subscription.status !== 'expired' && (
+              <button
+                onClick={() => setShowCancelConfirm(true)}
+                className="px-4 py-2 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 font-medium transition text-sm"
+              >
+                Cancel Subscription
+              </button>
+            )}
           </div>
         </Card>
 
-        {/* Payment Method */}
-        <Card className="p-6">
-          <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <Wallet className="w-5 h-5" />
-            Payment Method
-          </h3>
-          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                <Wallet className="w-5 h-5 text-green-600" />
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Payment Method */}
+          <Card className="p-6">
+            <h3 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <Wallet className="w-5 h-5 text-green-600" />
+              Payment Method
+            </h3>
+            <div className="flex items-center justify-between p-4 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-100 dark:border-green-800">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-green-100 dark:bg-green-900/50 rounded-xl flex items-center justify-center">
+                  <Wallet className="w-6 h-6 text-green-600 dark:text-green-400" />
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-900 dark:text-white">PeeAP Wallet</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Auto-deducted monthly</p>
+                </div>
               </div>
-              <div>
-                <p className="font-medium text-gray-900">PeeAP Wallet</p>
-                <p className="text-sm text-gray-500">Auto-deducted monthly</p>
+              <span className="px-3 py-1 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 rounded-full text-xs font-medium flex items-center gap-1">
+                <Check className="w-3 h-3" />
+                Active
+              </span>
+            </div>
+            <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+              Ensure sufficient wallet balance to avoid service interruption.
+            </p>
+          </Card>
+
+          {/* Quick Stats */}
+          <Card className="p-6">
+            <h3 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-blue-600" />
+              Subscription Stats
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl text-center">
+                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                  {invoices.filter(i => i.status === 'paid').length}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Payments Made</p>
+              </div>
+              <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-xl text-center">
+                <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                  {subscription.currency} {formatPrice(
+                    invoices.filter(i => i.status === 'paid').reduce((sum, inv) => sum + inv.amount, 0)
+                  )}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Total Paid</p>
               </div>
             </div>
-            <span className="text-sm text-green-600 font-medium flex items-center gap-1">
-              <Check className="w-4 h-4" />
-              Active
-            </span>
-          </div>
-          <p className="mt-3 text-sm text-gray-500">
-            Subscription payments are automatically deducted from your PeeAP wallet balance.
-            Ensure sufficient balance to avoid service interruption.
-          </p>
-        </Card>
+          </Card>
+        </div>
 
         {/* Billing History */}
         <Card className="p-6">
-          <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <History className="w-5 h-5" />
+          <h3 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <Receipt className="w-5 h-5 text-gray-600 dark:text-gray-400" />
             Billing History
           </h3>
 
           {invoices.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <FileText className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-              <p>No billing history yet</p>
+            <div className="text-center py-10 text-gray-500">
+              <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <FileText className="w-8 h-8 text-gray-400" />
+              </div>
+              <p className="font-medium text-gray-900 dark:text-white">No billing history yet</p>
               {subscription.status === 'trialing' && (
-                <p className="text-sm mt-1">Your first invoice will be generated after your trial ends</p>
+                <p className="text-sm mt-1 text-gray-500 dark:text-gray-400">Your first invoice will be generated after your trial ends</p>
               )}
             </div>
           ) : (
@@ -499,25 +652,43 @@ export function MerchantSubscriptionPage() {
               {invoices.map((invoice) => (
                 <div
                   key={invoice.id}
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                  className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                 >
-                  <div>
-                    <p className="font-medium text-gray-900">
-                      {invoice.invoice_number || `Invoice #${invoice.id.slice(0, 8)}`}
-                    </p>
-                    <p className="text-sm text-gray-500">{formatDate(invoice.created_at)}</p>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                      invoice.status === 'paid'
+                        ? 'bg-green-100 dark:bg-green-900/30'
+                        : invoice.status === 'pending'
+                        ? 'bg-amber-100 dark:bg-amber-900/30'
+                        : 'bg-red-100 dark:bg-red-900/30'
+                    }`}>
+                      <Receipt className={`w-5 h-5 ${
+                        invoice.status === 'paid'
+                          ? 'text-green-600 dark:text-green-400'
+                          : invoice.status === 'pending'
+                          ? 'text-amber-600 dark:text-amber-400'
+                          : 'text-red-600 dark:text-red-400'
+                      }`} />
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        {invoice.invoice_number || `Invoice #${invoice.id.slice(0, 8)}`}
+                      </p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">{formatDate(invoice.created_at)}</p>
+                    </div>
                   </div>
                   <div className="text-right">
-                    <p className="font-medium text-gray-900">
+                    <p className="font-semibold text-gray-900 dark:text-white">
                       {invoice.currency} {formatPrice(invoice.amount)}
                     </p>
-                    <span className={`text-xs font-medium ${
+                    <span className={`inline-flex items-center gap-1 text-xs font-medium ${
                       invoice.status === 'paid'
-                        ? 'text-green-600'
+                        ? 'text-green-600 dark:text-green-400'
                         : invoice.status === 'pending'
-                        ? 'text-amber-600'
-                        : 'text-red-600'
+                        ? 'text-amber-600 dark:text-amber-400'
+                        : 'text-red-600 dark:text-red-400'
                     }`}>
+                      {invoice.status === 'paid' && <Check className="w-3 h-3" />}
                       {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
                     </span>
                   </div>
