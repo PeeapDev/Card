@@ -29,6 +29,8 @@ import {
   HeartHandshake,
   MoreHorizontal,
   Store,
+  Shield,
+  AlertTriangle,
   type LucideIcon,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
@@ -43,9 +45,11 @@ interface BusinessCategory {
   parent_id: string | null;
   status: string;
   sort_order: number;
+  risk_level?: 'low' | 'medium' | 'high' | null;
   created_at: string;
   updated_at: string;
   merchant_count?: number;
+  subcategory_count?: number;
 }
 
 interface CategoryFormData {
@@ -54,6 +58,7 @@ interface CategoryFormData {
   icon: string;
   parent_id: string;
   sort_order: number;
+  risk_level: 'low' | 'medium' | 'high';
 }
 
 // Map icon names to Lucide components
@@ -96,6 +101,7 @@ export function BusinessCategoriesPage() {
     icon: 'Store',
     parent_id: '',
     sort_order: 0,
+    risk_level: 'low',
   });
 
   // Quick subcategory add state
@@ -126,11 +132,10 @@ export function BusinessCategoriesPage() {
         return;
       }
 
-      // Fetch merchant counts per category
+      // Fetch merchant counts per category from merchant_businesses table
       const { data: merchantCounts } = await supabase
-        .from('users')
+        .from('merchant_businesses')
         .select('business_category_id')
-        .ilike('roles', '%merchant%')
         .not('business_category_id', 'is', null);
 
       // Count merchants per category
@@ -140,10 +145,34 @@ export function BusinessCategoriesPage() {
         countMap.set(catId, (countMap.get(catId) || 0) + 1);
       });
 
+      // Count subcategories per parent category
+      const subcategoryCountMap = new Map<string, number>();
+      (categoriesData || []).forEach(cat => {
+        if (cat.parent_id) {
+          subcategoryCountMap.set(cat.parent_id, (subcategoryCountMap.get(cat.parent_id) || 0) + 1);
+        }
+      });
+
+      // Calculate total merchants per parent category (including subcategories)
+      const parentMerchantCounts = new Map<string, number>();
+      (categoriesData || []).forEach(cat => {
+        if (!cat.parent_id) {
+          // For parent categories: count direct + all subcategory merchants
+          let totalCount = countMap.get(cat.id) || 0;
+          (categoriesData || []).filter(sub => sub.parent_id === cat.id).forEach(sub => {
+            totalCount += countMap.get(sub.id) || 0;
+          });
+          parentMerchantCounts.set(cat.id, totalCount);
+        }
+      });
+
       // Merge counts with categories
       const categoriesWithCounts = (categoriesData || []).map(cat => ({
         ...cat,
-        merchant_count: countMap.get(cat.id) || 0,
+        merchant_count: cat.parent_id
+          ? (countMap.get(cat.id) || 0) // For subcategories: direct count
+          : (parentMerchantCounts.get(cat.id) || 0), // For parents: total including subcategories
+        subcategory_count: subcategoryCountMap.get(cat.id) || 0,
       }));
 
       setCategories(categoriesWithCounts);
@@ -206,6 +235,7 @@ export function BusinessCategoriesPage() {
       icon: 'Store',
       parent_id: '',
       sort_order: categories.length + 1,
+      risk_level: 'low',
     });
     setFormError('');
     setEditingCategory(null);
@@ -224,6 +254,7 @@ export function BusinessCategoriesPage() {
       icon: category.icon || 'Store',
       parent_id: category.parent_id || '',
       sort_order: category.sort_order,
+      risk_level: category.risk_level || 'low',
     });
     setFormError('');
     setShowModal(true);
@@ -252,6 +283,7 @@ export function BusinessCategoriesPage() {
         icon: formData.icon,
         parent_id: formData.parent_id || null,
         sort_order: formData.sort_order,
+        risk_level: formData.risk_level,
       };
 
       if (editingCategory) {
@@ -511,6 +543,7 @@ export function BusinessCategoriesPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subcategories</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Merchants</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Risk Level</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
@@ -599,6 +632,24 @@ export function BusinessCategoriesPage() {
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
                           {category.merchant_count || 0} merchants
                         </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        {category.risk_level === 'high' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                            <AlertTriangle className="w-3 h-3" />
+                            High Risk
+                          </span>
+                        ) : category.risk_level === 'medium' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">
+                            <Shield className="w-3 h-3" />
+                            Medium
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                            <Shield className="w-3 h-3" />
+                            Low
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
@@ -760,6 +811,53 @@ export function BusinessCategoriesPage() {
                   min={0}
                 />
                 <p className="text-xs text-gray-500 mt-1">Lower numbers appear first</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Risk Level (for KYC requirements)
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, risk_level: 'low' })}
+                    className={`p-3 rounded-lg border-2 transition-colors text-center ${
+                      formData.risk_level === 'low'
+                        ? 'border-green-500 bg-green-50 text-green-700'
+                        : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                    }`}
+                  >
+                    <Shield className="w-5 h-5 mx-auto mb-1" />
+                    <span className="text-xs font-medium">Low</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, risk_level: 'medium' })}
+                    className={`p-3 rounded-lg border-2 transition-colors text-center ${
+                      formData.risk_level === 'medium'
+                        ? 'border-yellow-500 bg-yellow-50 text-yellow-700'
+                        : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                    }`}
+                  >
+                    <Shield className="w-5 h-5 mx-auto mb-1" />
+                    <span className="text-xs font-medium">Medium</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, risk_level: 'high' })}
+                    className={`p-3 rounded-lg border-2 transition-colors text-center ${
+                      formData.risk_level === 'high'
+                        ? 'border-red-500 bg-red-50 text-red-700'
+                        : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                    }`}
+                  >
+                    <AlertTriangle className="w-5 h-5 mx-auto mb-1" />
+                    <span className="text-xs font-medium">High</span>
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  High risk categories require additional KYC verification before operation
+                </p>
               </div>
 
               <div className="flex gap-3 pt-4">

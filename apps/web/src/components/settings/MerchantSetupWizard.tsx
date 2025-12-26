@@ -164,8 +164,22 @@ export function MerchantSetupWizard({ onClose, onComplete }: MerchantSetupWizard
 
   // Form state - business info
   const [businessName, setBusinessName] = useState('');
-  const [categoryId, setCategoryId] = useState('');
+  const [mainCategoryId, setMainCategoryId] = useState('');
+  const [subCategoryId, setSubCategoryId] = useState('');
   const [description, setDescription] = useState('');
+
+  // Computed: available subcategories based on selected main category
+  const selectedMainCategory = categoryGroups.find(g => g.parent.id === mainCategoryId);
+  const availableSubcategories = selectedMainCategory?.children || [];
+
+  // The final category to submit (prefer subcategory, fallback to main)
+  const finalCategoryId = subCategoryId || mainCategoryId;
+  const selectedCategory = categories.find(c => c.id === finalCategoryId);
+
+  // Reset subcategory when main category changes
+  useEffect(() => {
+    setSubCategoryId('');
+  }, [mainCategoryId]);
 
   // Form state - contact & location
   const [businessPhone, setBusinessPhone] = useState('');
@@ -257,8 +271,13 @@ export function MerchantSetupWizard({ onClose, onComplete }: MerchantSetupWizard
       setError('Please enter your business name');
       return;
     }
-    if (currentStep === 2 && !categoryId) {
+    if (currentStep === 2 && !mainCategoryId) {
       setError('Please select a business category');
+      return;
+    }
+    // If main category has subcategories, require one to be selected
+    if (currentStep === 2 && availableSubcategories.length > 0 && !subCategoryId) {
+      setError('Please select a subcategory');
       return;
     }
 
@@ -288,7 +307,7 @@ export function MerchantSetupWizard({ onClose, onComplete }: MerchantSetupWizard
           merchant_id: user.id,
           name: businessName,
           description: description || null,
-          business_category_id: categoryId || null,
+          business_category_id: finalCategoryId || null,
           email: businessEmail || null,
           phone: businessPhone || null,
           address: address || null,
@@ -334,7 +353,7 @@ export function MerchantSetupWizard({ onClose, onComplete }: MerchantSetupWizard
           from_role: 'user',
           to_role: 'merchant',
           business_name: businessName,
-          business_type: categories.find(c => c.id === categoryId)?.name || 'Other',
+          business_type: selectedCategory?.name || 'Other',
           business_address: address,
           business_phone: businessPhone,
           reason: description,
@@ -374,8 +393,6 @@ export function MerchantSetupWizard({ onClose, onComplete }: MerchantSetupWizard
       triggerConfetti();
     }
   }, [currentStep]);
-
-  const selectedCategory = categories.find(c => c.id === categoryId);
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -541,6 +558,7 @@ export function MerchantSetupWizard({ onClose, onComplete }: MerchantSetupWizard
                     />
                   </div>
 
+                  {/* Two-step category selection */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Business Category *
@@ -551,41 +569,48 @@ export function MerchantSetupWizard({ onClose, onComplete }: MerchantSetupWizard
                       </div>
                     ) : (
                       <select
-                        value={categoryId}
-                        onChange={(e) => setCategoryId(e.target.value)}
+                        value={mainCategoryId}
+                        onChange={(e) => setMainCategoryId(e.target.value)}
                         className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500"
                       >
-                        <option value="">Select a category</option>
-                        {categoryGroups.length > 0 ? (
-                          // Show hierarchical categories with proper indentation
-                          categoryGroups.map((group) => (
-                            <optgroup key={group.parent.id} label={group.parent.name}>
-                              {group.children.length > 0 ? (
-                                // Show subcategories
-                                group.children.map((child) => (
-                                  <option key={child.id} value={child.id}>
-                                    {child.name}
-                                  </option>
-                                ))
-                              ) : (
-                                // No subcategories - show general option
-                                <option value={group.parent.id}>
-                                  {group.parent.name} (General)
-                                </option>
-                              )}
-                            </optgroup>
-                          ))
-                        ) : (
-                          // Fallback to flat list if no groups
-                          categories.map((cat) => (
-                            <option key={cat.id} value={cat.id}>
-                              {cat.name}
-                            </option>
-                          ))
-                        )}
+                        <option value="">Select main category</option>
+                        {categoryGroups.map((group) => (
+                          <option key={group.parent.id} value={group.parent.id}>
+                            {group.parent.icon} {group.parent.name}
+                          </option>
+                        ))}
                       </select>
                     )}
                   </div>
+
+                  {/* Subcategory dropdown - only shows when main category with subcategories is selected */}
+                  {mainCategoryId && availableSubcategories.length > 0 && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Subcategory *
+                      </label>
+                      <select
+                        value={subCategoryId}
+                        onChange={(e) => setSubCategoryId(e.target.value)}
+                        className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500"
+                      >
+                        <option value="">Select subcategory</option>
+                        {availableSubcategories.map((sub) => (
+                          <option key={sub.id} value={sub.id}>
+                            {sub.icon} {sub.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Show selected category info */}
+                  {selectedCategory && (
+                    <div className="flex items-center gap-2 p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg text-sm text-purple-700 dark:text-purple-300">
+                      <Check className="w-4 h-4" />
+                      Selected: {selectedCategory.name}
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
