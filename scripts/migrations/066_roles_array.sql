@@ -158,6 +158,12 @@ BEGIN
   IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'card_orders') THEN
     DROP POLICY IF EXISTS "card_orders_admin_update_policy" ON card_orders;
   END IF;
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'issued_cards') THEN
+    DROP POLICY IF EXISTS "Admins can view all cards" ON issued_cards;
+    DROP POLICY IF EXISTS "issued_cards_admin" ON issued_cards;
+    DROP POLICY IF EXISTS "issued_cards_select" ON issued_cards;
+    DROP POLICY IF EXISTS "issued_cards_update" ON issued_cards;
+  END IF;
 
   -- Pots
   IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'pots') THEN
