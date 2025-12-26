@@ -88,6 +88,12 @@ BEGIN
   END IF;
 
   -- System float
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'system_float') THEN
+    DROP POLICY IF EXISTS "system_float_select" ON system_float;
+    DROP POLICY IF EXISTS "system_float_insert" ON system_float;
+    DROP POLICY IF EXISTS "system_float_update" ON system_float;
+    DROP POLICY IF EXISTS "system_float_delete" ON system_float;
+  END IF;
   IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'system_float_accounts') THEN
     DROP POLICY IF EXISTS "Admins can view all float accounts" ON system_float_accounts;
     DROP POLICY IF EXISTS "Superadmins can insert float accounts" ON system_float_accounts;
