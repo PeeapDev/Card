@@ -94,10 +94,14 @@ export const authService = {
     }
 
     // Create user object
-    // Handle both 'roles' (comma-separated) and 'role' (single value) columns
+    // Handle roles as array (new) or string (legacy) or single role column
     let userRoles: UserRole[] = ['user'];
     if (dbUser.roles) {
-      userRoles = dbUser.roles.split(',').map((r: string) => r.trim()) as UserRole[];
+      if (Array.isArray(dbUser.roles)) {
+        userRoles = dbUser.roles as UserRole[];
+      } else if (typeof dbUser.roles === 'string') {
+        userRoles = dbUser.roles.split(',').map((r: string) => r.trim()) as UserRole[];
+      }
     } else if (dbUser.role) {
       userRoles = [dbUser.role] as UserRole[];
     }
