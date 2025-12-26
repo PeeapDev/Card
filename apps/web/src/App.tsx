@@ -115,6 +115,7 @@ import { ScanPayPage } from '@/pages/ScanPayPage';
 import { TestCheckoutPage } from '@/pages/TestCheckoutPage';
 import { AppPaymentRedirectPage } from '@/pages/AppPaymentRedirectPage';
 import { NFCPaymentPage } from '@/pages/NFCPaymentPage';
+import { PaymentLinkCheckoutPage } from '@/pages/PaymentLinkCheckoutPage';
 import { OnboardingPage } from '@/pages/OnboardingPage';
 
 // Merchant Pages
@@ -228,6 +229,9 @@ function App() {
 
                   {/* Secure NFC Payment Route */}
                   <Route path="/pay/nfc/:shortCode" element={<NFCPaymentPage />} />
+
+                  {/* Payment Link Checkout Route */}
+                  <Route path="/pay/:businessSlug/:linkSlug" element={<PaymentLinkCheckoutPage />} />
 
                   {/* Payment Success/Cancel Routes */}
                   <Route path="/payment/success" element={<PaymentSuccessPage />} />
@@ -1363,6 +1367,7 @@ function App() {
                   <Route path="/i/:intentId" element={<PaymentIntentPage />} />
                   <Route path="/pay" element={<PayPage />} />
                   <Route path="/pay/nfc/:shortCode" element={<NFCPaymentPage />} />
+                  <Route path="/pay/:businessSlug/:linkSlug" element={<PaymentLinkCheckoutPage />} />
                   <Route path="/payment/success" element={<PaymentSuccessPage />} />
                   <Route path="/payment/cancel" element={<PaymentCancelPage />} />
                   <Route path="/deposit/success" element={<DepositSuccessPage />} />
