@@ -268,11 +268,9 @@ export const paymentLinkService = {
 
   /**
    * Get the full payment link URL
+   * Always uses checkout.peeap.com for payment links
    */
   getPaymentLinkUrl(businessSlug: string, linkSlug: string): string {
-    const baseUrl = typeof window !== 'undefined'
-      ? window.location.origin
-      : 'https://my.peeap.com';
-    return `${baseUrl}/pay/${businessSlug}/${linkSlug}`;
+    return `https://checkout.peeap.com/pay/${businessSlug}/${linkSlug}`;
   },
 };

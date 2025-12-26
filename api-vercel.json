@@ -1,0 +1,33 @@
+{
+  "version": 2,
+  "buildCommand": "echo 'API only - no build'",
+  "installCommand": "npm install --legacy-peer-deps",
+  "outputDirectory": "public",
+  "framework": null,
+  "functions": {
+    "api/**/*.ts": {
+      "memory": 1024,
+      "maxDuration": 30
+    }
+  },
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/router",
+      "headers": {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Business-Id, X-Mode, X-User-Id"
+      }
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/router",
+      "headers": {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Business-Id, X-Mode, X-User-Id"
+      }
+    }
+  ]
+}

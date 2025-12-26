@@ -1,29 +1,24 @@
 /**
- * Payment Link Checkout Page
- * Public page for customers to pay via a merchant's payment link
+ * Payment Link Page
+ * Shows product/payment info and redirects to hosted checkout
  * Route: /pay/:businessSlug/:linkSlug
  */
 
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Store, Loader2, AlertCircle, CreditCard, DollarSign } from 'lucide-react';
-import { Card } from '@/components/ui/Card';
+import { useParams } from 'react-router-dom';
+import { Store, Loader2, AlertCircle, ArrowRight } from 'lucide-react';
 import { paymentLinkService, PaymentLink } from '@/services/paymentLink.service';
 import { createHostedCheckoutSession } from '@/lib/hostedCheckout';
-import { currencyService, Currency } from '@/services/currency.service';
 
 export function PaymentLinkCheckoutPage() {
   const { businessSlug, linkSlug } = useParams<{ businessSlug: string; linkSlug: string }>();
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [processing, setProcessing] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paymentLink, setPaymentLink] = useState<PaymentLink | null>(null);
   const [customAmount, setCustomAmount] = useState<string>('');
-  const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
 
   useEffect(() => {
-    currencyService.getDefaultCurrency().then(setDefaultCurrency);
     fetchPaymentLink();
   }, [businessSlug, linkSlug]);
 
@@ -34,17 +29,15 @@ export function PaymentLinkCheckoutPage() {
       return;
     }
 
-    setLoading(true);
     try {
       const link = await paymentLinkService.getPaymentLinkBySlug(businessSlug, linkSlug);
       if (!link) {
         setError('Payment link not found or expired');
       } else {
         setPaymentLink(link);
-        // Increment view count
         paymentLinkService.incrementViewCount(link.id).catch(() => {});
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error fetching payment link:', err);
       setError('Failed to load payment link');
     } finally {
@@ -52,11 +45,12 @@ export function PaymentLinkCheckoutPage() {
     }
   };
 
-  const handlePay = async () => {
+  const handlePayNow = async () => {
     if (!paymentLink) return;
 
-    // Validate amount for custom amount links
     let amount = paymentLink.amount;
+
+    // Validate custom amount if allowed
     if (paymentLink.allow_custom_amount) {
       const parsed = parseFloat(customAmount);
       if (isNaN(parsed) || parsed <= 0) {
@@ -64,11 +58,11 @@ export function PaymentLinkCheckoutPage() {
         return;
       }
       if (paymentLink.min_amount && parsed < paymentLink.min_amount) {
-        setError(`Minimum amount is ${currencySymbol} ${paymentLink.min_amount}`);
+        setError(`Minimum amount is Le ${paymentLink.min_amount.toLocaleString()}`);
         return;
       }
       if (paymentLink.max_amount && parsed > paymentLink.max_amount) {
-        setError(`Maximum amount is ${currencySymbol} ${paymentLink.max_amount}`);
+        setError(`Maximum amount is Le ${paymentLink.max_amount.toLocaleString()}`);
         return;
       }
       amount = parsed;
@@ -79,11 +73,10 @@ export function PaymentLinkCheckoutPage() {
       return;
     }
 
-    setProcessing(true);
+    setRedirecting(true);
     setError(null);
 
     try {
-      // Get the business's public key
       const business = (paymentLink as any).business;
       const publicKey = business?.is_live_mode
         ? business?.live_public_key
@@ -93,10 +86,10 @@ export function PaymentLinkCheckoutPage() {
         throw new Error('Business payment configuration not found');
       }
 
-      // Create hosted checkout session
+      // Create hosted checkout session and redirect
       const result = await createHostedCheckoutSession({
         publicKey,
-        amount: amount * 100, // Convert to minor units
+        amount: amount * 100,
         currency: paymentLink.currency || 'SLE',
         description: paymentLink.description || paymentLink.name,
         reference: `plink_${paymentLink.id}_${Date.now()}`,
@@ -108,164 +101,134 @@ export function PaymentLinkCheckoutPage() {
         },
       });
 
-      // Redirect to hosted checkout
       window.location.href = result.paymentUrl;
     } catch (err: any) {
       console.error('Error creating checkout:', err);
       setError(err.message || 'Failed to initiate payment');
-      setProcessing(false);
+      setRedirecting(false);
     }
   };
 
-  const currencySymbol = defaultCurrency?.symbol || 'Le';
+  const business = (paymentLink as any)?.business;
+  const formatAmount = (amt: number) => `Le ${amt.toLocaleString()}`;
 
-  const formatCurrency = (amount: number): string => {
-    return `${currencySymbol} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
+  // Loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
-        <div className="text-center">
-          <Loader2 className="w-10 h-10 animate-spin text-green-600 mx-auto mb-4" />
-          <p className="text-gray-500 dark:text-gray-400">Loading payment details...</p>
-        </div>
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-green-600" />
       </div>
     );
   }
 
+  // Error state
   if (error && !paymentLink) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
-        <Card className="max-w-md w-full p-8 text-center">
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md text-center">
           <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Payment Link Unavailable</h1>
-          <p className="text-gray-500 dark:text-gray-400 mb-6">{error}</p>
-          <button
-            onClick={() => navigate('/')}
-            className="px-6 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
-          >
-            Go Home
-          </button>
-        </Card>
+          <h1 className="text-xl font-bold mb-2">Payment Link Unavailable</h1>
+          <p className="text-gray-500">{error}</p>
+        </div>
       </div>
     );
   }
 
-  const business = (paymentLink as any)?.business;
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
-      <Card className="max-w-md w-full overflow-hidden">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-green-600 to-blue-600 p-6 text-white">
-          <div className="flex items-center gap-4 mb-4">
-            {business?.logo_url ? (
-              <img
-                src={business.logo_url}
-                alt={business.name}
-                className="w-16 h-16 rounded-xl bg-white object-cover"
-              />
-            ) : (
-              <div className="w-16 h-16 rounded-xl bg-white/20 flex items-center justify-center">
-                <Store className="w-8 h-8 text-white" />
-              </div>
-            )}
-            <div>
-              <h1 className="text-xl font-bold">{business?.name || 'Business'}</h1>
-              <p className="text-white/80 text-sm">{paymentLink?.name}</p>
-            </div>
-          </div>
-          {paymentLink?.description && (
-            <p className="text-white/90 text-sm">{paymentLink.description}</p>
-          )}
-        </div>
-
-        {/* Content */}
-        <div className="p-6 space-y-6">
-          {/* Amount Display */}
-          <div className="text-center">
-            {paymentLink?.allow_custom_amount ? (
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">Enter Amount</p>
-                <div className="relative max-w-xs mx-auto">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl text-gray-400">{currencySymbol}</span>
-                  <input
-                    type="number"
-                    value={customAmount}
-                    onChange={(e) => setCustomAmount(e.target.value)}
-                    placeholder="0.00"
-                    min={paymentLink.min_amount || 0}
-                    max={paymentLink.max_amount || undefined}
-                    className="w-full text-center text-3xl font-bold py-4 pl-12 pr-4 border-2 border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white dark:bg-gray-800"
-                  />
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl max-w-4xl w-full overflow-hidden">
+        <div className="grid md:grid-cols-2">
+          {/* Left - Product Info */}
+          <div className="p-8 bg-gradient-to-br from-green-600 to-green-700 text-white">
+            <div className="flex items-center gap-3 mb-6">
+              {business?.logo_url ? (
+                <img src={business.logo_url} alt="" className="w-12 h-12 rounded-xl bg-white object-cover" />
+              ) : (
+                <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
+                  <Store className="w-6 h-6" />
                 </div>
-                {(paymentLink.min_amount || paymentLink.max_amount) && (
-                  <p className="text-xs text-gray-400 mt-2">
-                    {paymentLink.min_amount && `Min: ${formatCurrency(paymentLink.min_amount)}`}
-                    {paymentLink.min_amount && paymentLink.max_amount && ' • '}
-                    {paymentLink.max_amount && `Max: ${formatCurrency(paymentLink.max_amount)}`}
-                  </p>
-                )}
-              </div>
-            ) : (
+              )}
               <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Amount to Pay</p>
-                <p className="text-4xl font-bold text-gray-900 dark:text-white">
-                  {formatCurrency(paymentLink?.amount || 0)}
-                </p>
+                <h2 className="font-bold text-lg">{business?.name || 'Business'}</h2>
               </div>
-            )}
-          </div>
-
-          {/* Error Message */}
-          {error && (
-            <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg text-sm flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              {error}
             </div>
-          )}
 
-          {/* Pay Button */}
-          <button
-            onClick={handlePay}
-            disabled={processing || (paymentLink?.allow_custom_amount && !customAmount)}
-            className="w-full py-4 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-xl font-semibold text-lg hover:from-green-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 transition-all transform hover:scale-[1.02]"
-          >
-            {processing ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Processing...
-              </>
-            ) : (
-              <>
-                <CreditCard className="w-5 h-5" />
-                Pay {paymentLink?.allow_custom_amount && customAmount
-                  ? formatCurrency(parseFloat(customAmount) || 0)
-                  : formatCurrency(paymentLink?.amount || 0)}
-              </>
-            )}
-          </button>
+            <div className="space-y-4">
+              <div>
+                <p className="text-white/70 text-sm">Payment for</p>
+                <h1 className="text-2xl font-bold">{paymentLink?.name}</h1>
+              </div>
 
-          {/* Secure Payment Badge */}
-          <div className="text-center">
-            <p className="text-xs text-gray-400 flex items-center justify-center gap-1">
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-              </svg>
-              Secured by Peeap
-            </p>
+              {paymentLink?.description && (
+                <p className="text-white/80">{paymentLink.description}</p>
+              )}
+
+              {!paymentLink?.allow_custom_amount && paymentLink?.amount && (
+                <div className="pt-4 border-t border-white/20">
+                  <p className="text-white/70 text-sm">Amount</p>
+                  <p className="text-3xl font-bold">{formatAmount(paymentLink.amount)}</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right - Pay Now */}
+          <div className="p-8 flex flex-col justify-center">
+            <div className="space-y-6">
+              {paymentLink?.allow_custom_amount && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Enter Amount
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">Le</span>
+                    <input
+                      type="number"
+                      value={customAmount}
+                      onChange={(e) => { setCustomAmount(e.target.value); setError(null); }}
+                      placeholder="0.00"
+                      className="w-full pl-12 pr-4 py-4 text-2xl font-bold border-2 border-gray-200 rounded-xl focus:border-green-500 focus:ring-0"
+                    />
+                  </div>
+                  {(paymentLink.min_amount || paymentLink.max_amount) && (
+                    <p className="text-xs text-gray-400 mt-2">
+                      {paymentLink.min_amount && `Min: ${formatAmount(paymentLink.min_amount)}`}
+                      {paymentLink.min_amount && paymentLink.max_amount && ' • '}
+                      {paymentLink.max_amount && `Max: ${formatAmount(paymentLink.max_amount)}`}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {error && (
+                <p className="text-red-600 text-sm">{error}</p>
+              )}
+
+              <button
+                onClick={handlePayNow}
+                disabled={redirecting || (paymentLink?.allow_custom_amount && !customAmount)}
+                className="w-full py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold text-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {redirecting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Redirecting...
+                  </>
+                ) : (
+                  <>
+                    Pay Now
+                    <ArrowRight className="w-5 h-5" />
+                  </>
+                )}
+              </button>
+
+              <p className="text-center text-xs text-gray-400">
+                Secured by PeeAP • Card, Mobile Money, QR
+              </p>
+            </div>
           </div>
         </div>
-
-        {/* Footer */}
-        <div className="px-6 py-4 bg-gray-50 dark:bg-gray-800/50 border-t dark:border-gray-700">
-          <div className="flex items-center justify-center gap-2 text-xs text-gray-400">
-            <span>Powered by</span>
-            <span className="font-semibold text-green-600">Peeap</span>
-          </div>
-        </div>
-      </Card>
+      </div>
     </div>
   );
 }

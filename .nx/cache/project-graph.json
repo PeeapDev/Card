@@ -15249,6 +15249,11 @@
       },
       {
         "source": "api-gateway",
+        "target": "npm:@supabase/supabase-js",
+        "type": "static"
+      },
+      {
+        "source": "api-gateway",
         "target": "npm:@nestjs/swagger",
         "type": "static"
       },
@@ -15295,6 +15300,21 @@
       {
         "source": "api-gateway",
         "target": "npm:@nestjs/terminus",
+        "type": "static"
+      },
+      {
+        "source": "api-gateway",
+        "target": "npm:class-validator",
+        "type": "static"
+      },
+      {
+        "source": "api-gateway",
+        "target": "npm:class-transformer",
+        "type": "static"
+      },
+      {
+        "source": "api-gateway",
+        "target": "npm:qrcode",
         "type": "static"
       },
       {

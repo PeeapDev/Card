@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "name": "peeap-api",
+  "buildCommand": "",
+  "outputDirectory": "public",
+  "framework": null,
+  "functions": {
+    "api/**/*.ts": {
+      "memory": 1024,
+      "maxDuration": 30
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/router" },
+    { "source": "/(.*)", "destination": "/api/router" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, DELETE, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization, X-Business-Id, X-Mode, X-User-Id" },
+        { "key": "Content-Type", "value": "application/json" }
+      ]
+    }
+  ]
+}
