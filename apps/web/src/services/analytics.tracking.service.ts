@@ -1,10 +1,10 @@
 /**
  * Website Analytics Tracking Service
  * Tracks page views, user sessions, and visitor information
- * Uses the API endpoint for reliable cross-domain tracking
+ * Uses Supabase directly to avoid CORS issues
  */
 
-import { API_URL } from '@/config/urls';
+import { supabase } from '@/lib/supabase';
 
 interface PageViewData {
   sessionId: string;
@@ -133,37 +133,33 @@ class AnalyticsTrackingService {
     try {
       console.log('[Analytics] Tracking page view:', path);
 
-      // Use API endpoint for reliable tracking
-      const response = await fetch(`${API_URL}/api/analytics/pageview`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          sessionId: this.sessionId,
-          userId: userId || null,
-          pagePath: path,
-          pageTitle: title || document.title,
+      // Use Supabase directly to avoid CORS issues
+      const { error } = await supabase
+        .from('page_views')
+        .insert({
+          session_id: this.sessionId,
+          user_id: userId || null,
+          page_path: path,
+          page_title: title || document.title,
           referrer: document.referrer || null,
-          userAgent: navigator.userAgent,
-          deviceType: getDeviceType(),
+          user_agent: navigator.userAgent,
+          device_type: getDeviceType(),
           browser: getBrowser(),
           os: getOS(),
-          screenWidth: window.screen.width,
-          screenHeight: window.screen.height,
-          isBounce: true,
-        }),
-      });
+          screen_width: window.screen.width,
+          screen_height: window.screen.height,
+          is_bounce: true,
+        });
 
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        console.error('[Analytics] Failed to track page view:', error);
+      if (error) {
+        // Silently fail - analytics shouldn't break the app
+        console.warn('[Analytics] Failed to track page view:', error.message);
       } else {
-        const data = await response.json();
-        console.log('[Analytics] Page view tracked successfully:', data);
+        console.log('[Analytics] Page view tracked successfully');
       }
     } catch (error) {
-      console.error('[Analytics] Exception tracking page view:', error);
+      // Silently fail - analytics shouldn't break the app
+      console.warn('[Analytics] Exception tracking page view:', error);
     }
   }
 
@@ -176,29 +172,24 @@ class AnalyticsTrackingService {
   }
 
   /**
-   * Send page duration - uses beacon API for reliable unload tracking
+   * Send page duration - updates Supabase directly
    */
-  private sendDuration() {
+  private async sendDuration() {
     if (!this.currentPath || !this.pageStartTime) return;
 
     const duration = Math.round((Date.now() - this.pageStartTime) / 1000);
 
     if (duration > 0 && duration < 3600) { // Ignore durations > 1 hour (likely idle)
       try {
-        // Use sendBeacon for reliable tracking during page unload
-        const data = JSON.stringify({
-          sessionId: this.sessionId,
-          pagePath: this.currentPath,
-          durationSeconds: duration,
-        });
-
-        // sendBeacon is more reliable during page unload than fetch
-        if (navigator.sendBeacon) {
-          navigator.sendBeacon(
-            `${API_URL}/api/analytics/pageview/duration`,
-            new Blob([data], { type: 'application/json' })
-          );
-        }
+        // Update duration in Supabase
+        await supabase
+          .from('page_views')
+          .update({
+            duration_seconds: duration,
+            is_bounce: false,
+          })
+          .eq('session_id', this.sessionId)
+          .eq('page_path', this.currentPath);
       } catch (error) {
         // Ignore errors on unload
       }

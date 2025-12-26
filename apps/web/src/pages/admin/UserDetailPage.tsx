@@ -232,7 +232,7 @@ export function UserDetailPage() {
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (kycData) {
         setKycApplication(kycData);
