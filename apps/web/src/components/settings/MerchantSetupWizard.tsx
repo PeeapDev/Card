@@ -201,8 +201,9 @@ export function MerchantSetupWizard({ onClose, onComplete }: MerchantSetupWizard
           setCategories(data);
 
           // Organize into groups: parent categories with their children
+          // Handle both null and undefined for parent_id
           const parentCategories = data.filter(c => !c.parent_id);
-          const childCategories = data.filter(c => c.parent_id);
+          const childCategories = data.filter(c => !!c.parent_id);
 
           const groups: CategoryGroup[] = parentCategories.map(parent => ({
             parent,
@@ -556,26 +557,23 @@ export function MerchantSetupWizard({ onClose, onComplete }: MerchantSetupWizard
                       >
                         <option value="">Select a category</option>
                         {categoryGroups.length > 0 ? (
-                          // Show hierarchical categories with optgroups
+                          // Show hierarchical categories with proper indentation
                           categoryGroups.map((group) => (
-                            group.children.length > 0 ? (
-                              <optgroup key={group.parent.id} label={group.parent.name}>
-                                {/* Allow selecting parent category too */}
-                                <option value={group.parent.id}>
-                                  {group.parent.name} (General)
-                                </option>
-                                {group.children.map((child) => (
+                            <optgroup key={group.parent.id} label={group.parent.name}>
+                              {group.children.length > 0 ? (
+                                // Show subcategories
+                                group.children.map((child) => (
                                   <option key={child.id} value={child.id}>
                                     {child.name}
                                   </option>
-                                ))}
-                              </optgroup>
-                            ) : (
-                              // Parent with no children - show as regular option
-                              <option key={group.parent.id} value={group.parent.id}>
-                                {group.parent.name}
-                              </option>
-                            )
+                                ))
+                              ) : (
+                                // No subcategories - show general option
+                                <option value={group.parent.id}>
+                                  {group.parent.name} (General)
+                                </option>
+                              )}
+                            </optgroup>
                           ))
                         ) : (
                           // Fallback to flat list if no groups
