@@ -105,6 +105,10 @@ BEGIN
   END IF;
   IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'system_float_history') THEN
     DROP POLICY IF EXISTS "Allow admin write system_float_history" ON system_float_history;
+    DROP POLICY IF EXISTS "float_history_select" ON system_float_history;
+    DROP POLICY IF EXISTS "float_history_insert" ON system_float_history;
+    DROP POLICY IF EXISTS "float_history_update" ON system_float_history;
+    DROP POLICY IF EXISTS "float_history_delete" ON system_float_history;
   END IF;
 
   -- Mobile money float
