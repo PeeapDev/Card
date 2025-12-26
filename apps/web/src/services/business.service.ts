@@ -473,8 +473,26 @@ export const businessService = {
 
   /**
    * Approve a business
+   * This also:
+   * 1. Updates the user_role_requests status to 'approved'
+   * 2. Adds 'merchant' role to the user's roles array
    */
   async approveBusiness(businessId: string, adminId: string, notes?: string): Promise<MerchantBusiness> {
+    // First get the business to find the merchant_id
+    const { data: business, error: fetchError } = await supabase
+      .from('merchant_businesses')
+      .select('merchant_id')
+      .eq('id', businessId)
+      .single();
+
+    if (fetchError || !business) {
+      console.error('Error fetching business:', fetchError);
+      throw new Error('Business not found');
+    }
+
+    const merchantId = business.merchant_id;
+
+    // Update the business approval status
     const { data, error } = await supabase
       .from('merchant_businesses')
       .update({
@@ -490,6 +508,36 @@ export const businessService = {
     if (error) {
       console.error('Error approving business:', error);
       throw new Error(error.message);
+    }
+
+    // Update the user_role_requests status to 'approved'
+    await supabase
+      .from('user_role_requests')
+      .update({
+        status: 'approved',
+        reviewed_by: adminId,
+        reviewed_at: new Date().toISOString(),
+        review_notes: notes || 'Approved by admin',
+      })
+      .eq('user_id', merchantId)
+      .eq('to_role', 'merchant')
+      .eq('status', 'pending');
+
+    // Add 'merchant' role to the user's roles array if not already present
+    const { data: userData } = await supabase
+      .from('users')
+      .select('roles')
+      .eq('id', merchantId)
+      .single();
+
+    if (userData) {
+      const currentRoles = Array.isArray(userData.roles) ? userData.roles : [];
+      if (!currentRoles.includes('merchant')) {
+        await supabase
+          .from('users')
+          .update({ roles: [...currentRoles, 'merchant'] })
+          .eq('id', merchantId);
+      }
     }
 
     return data;
