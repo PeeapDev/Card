@@ -80,14 +80,19 @@ export const bankAccountService = {
    */
   async getAvailableBanks(country: string = 'SL'): Promise<Bank[]> {
     try {
-      const response = await api.get<{ banks: Bank[] } | Bank[]>(`/payouts/banks?country=${country}`);
+      // Use the NestJS monime/banks endpoint
+      const response = await api.get<{ result: Bank[] } | Bank[]>(`/monime/banks?country=${country}`);
 
-      // Handle both response formats
+      // Handle various response formats (Monime returns { result: [...] })
       let banks: Bank[];
       if (Array.isArray(response)) {
         banks = response;
+      } else if ((response as any).result) {
+        banks = (response as any).result;
+      } else if ((response as any).banks) {
+        banks = (response as any).banks;
       } else {
-        banks = response.banks || [];
+        banks = [];
       }
 
       // Map any legacy format (id -> providerId)

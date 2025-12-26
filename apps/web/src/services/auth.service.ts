@@ -10,6 +10,54 @@ export interface MfaRequiredResponse {
   email: string;
 }
 
+/**
+ * Parse roles from database - handles various formats:
+ * - Proper array: ['superadmin', 'admin']
+ * - Array with comma-separated element: ['superadmin,admin'] (migration bug)
+ * - PostgreSQL string format: '{superadmin,admin}'
+ * - Comma-separated string: 'superadmin,admin'
+ * - Single role: 'admin'
+ */
+function parseRoles(rolesData: unknown): UserRole[] {
+  if (!rolesData) return ['user'];
+
+  // Already a proper array - but elements might contain commas (migration bug)
+  if (Array.isArray(rolesData)) {
+    const allRoles: string[] = [];
+    for (const item of rolesData) {
+      if (typeof item === 'string' && item.length > 0) {
+        // Check if the item itself contains commas (migration bug: ['admin,user'])
+        if (item.includes(',')) {
+          allRoles.push(...item.split(',').map(r => r.trim()).filter(r => r));
+        } else {
+          allRoles.push(item.trim());
+        }
+      }
+    }
+    return allRoles.length > 0 ? (allRoles as UserRole[]) : ['user'];
+  }
+
+  // PostgreSQL array string format: {role1,role2}
+  if (typeof rolesData === 'string') {
+    const trimmed = rolesData.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      const inner = trimmed.slice(1, -1);
+      if (!inner) return ['user'];
+      const roles = inner.split(',').map(r => r.trim()).filter(r => r) as UserRole[];
+      return roles.length > 0 ? roles : ['user'];
+    }
+    // Comma-separated string
+    if (trimmed.includes(',')) {
+      const roles = trimmed.split(',').map(r => r.trim()).filter(r => r) as UserRole[];
+      return roles.length > 0 ? roles : ['user'];
+    }
+    // Single role string
+    if (trimmed) return [trimmed as UserRole];
+  }
+
+  return ['user'];
+}
+
 export const authService = {
   async login(data: LoginRequest & { mfaCode?: string }): Promise<{ user: User; tokens: AuthTokens } | MfaRequiredResponse> {
     // Determine if login is via phone or email
@@ -93,18 +141,9 @@ export const authService = {
       }
     }
 
-    // Create user object
-    // Handle roles as array (new) or string (legacy) or single role column
-    let userRoles: UserRole[] = ['user'];
-    if (dbUser.roles) {
-      if (Array.isArray(dbUser.roles)) {
-        userRoles = dbUser.roles as UserRole[];
-      } else if (typeof dbUser.roles === 'string') {
-        userRoles = dbUser.roles.split(',').map((r: string) => r.trim()) as UserRole[];
-      }
-    } else if (dbUser.role) {
-      userRoles = [dbUser.role] as UserRole[];
-    }
+    // Parse roles - handles PostgreSQL array, string array, or legacy single role
+    const userRoles = parseRoles(dbUser.roles || dbUser.role);
+    console.log('[Auth] Login roles parsed:', { raw: dbUser.roles, parsed: userRoles });
 
     const user: User = {
       id: dbUser.id,

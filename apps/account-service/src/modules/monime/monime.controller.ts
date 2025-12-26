@@ -74,8 +74,8 @@ export class MonimeController {
 
   @Get('banks')
   @ApiOperation({ summary: 'List available banks for withdrawal' })
-  async listBanks() {
-    return this.monimeService.listBanks();
+  async listBanks(@Query('country') country?: string) {
+    return this.monimeService.listBanks(country);
   }
 
   @Get('deposits')

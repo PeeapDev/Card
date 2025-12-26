@@ -51,6 +51,7 @@ export function LoginPage() {
       // Login successful - cast to User since we know MFA isn't required at this point
       const user = result as { roles: UserRole[] };
       const redirectPath = fromState || getUserDashboard(user.roles);
+      console.log('[Login] Redirect decision:', { roles: user.roles, fromState, redirectPath });
       navigate(redirectPath, { replace: true });
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Invalid credentials';
@@ -74,6 +75,7 @@ export function LoginPage() {
       // Login successful
       const user = result as { roles: UserRole[] };
       const redirectPath = fromState || getUserDashboard(user.roles);
+      console.log('[Login MFA] Redirect decision:', { roles: user.roles, fromState, redirectPath });
       navigate(redirectPath, { replace: true });
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Invalid verification code';

@@ -293,18 +293,23 @@ export class MonimeService {
 
   private async completeDeposit(transaction: MonimeTransaction, data: any): Promise<void> {
     try {
-      // Credit wallet via Supabase
+      // Calculate fee - use Monime fee from webhook or calculate 1.5%
+      const grossAmount = Number(transaction.amount);
+      const fee = data.fees?.value || Math.round(grossAmount * 0.015); // 1.5% fee
+      const netAmount = grossAmount - fee;
+
+      // Credit wallet via Supabase with NET amount (after Monime 1.5% fee)
       await creditSupabaseWallet(
         transaction.walletId,
-        Number(transaction.amount) / 100, // Convert from minor units
+        netAmount / 100, // Convert from minor units
         transaction.monimeReference,
         `Monime deposit - ${transaction.id}`,
       );
 
       transaction.status = MonimeTransactionStatus.COMPLETED;
       transaction.completedAt = new Date();
-      transaction.fee = data.fees?.value || 0;
-      transaction.netAmount = Number(transaction.amount) - (transaction.fee || 0);
+      transaction.fee = fee;
+      transaction.netAmount = netAmount;
 
       this.logger.log(`Deposit completed: ${transaction.id}`);
     } catch (error) {
@@ -338,8 +343,8 @@ export class MonimeService {
     return this.transactionRepo.find({ where, order: { createdAt: 'DESC' }, take: 50 });
   }
 
-  async listBanks() {
-    return this.monimeApi.listBanks('SL');
+  async listBanks(country: string = 'SL') {
+    return this.monimeApi.listBanks(country);
   }
 
   /**
@@ -372,20 +377,23 @@ export class MonimeService {
       const lineItem = sessionData?.result?.lineItems?.data?.[0];
       const amount = lineItem?.price?.value || 0;
       const currency = lineItem?.price?.currency || 'SLE';
+      // Calculate fee - use Monime fee from session or calculate 1.5%
+      const fee = sessionData?.result?.fees?.value || Math.round(amount * 0.015);
+      const netAmount = amount - fee;
 
       if (sessionStatus === 'completed') {
-        // Credit the wallet via Supabase (frontend wallet database)
+        // Credit the wallet via Supabase with NET amount (after Monime 1.5% fee)
         try {
           const { wallet } = await creditSupabaseWallet(
             walletId,
-            amount / 100, // Convert from minor units
+            netAmount / 100, // Convert from minor units
             sessionId,
             `Monime deposit - ${sessionId}`,
           );
 
           return {
             status: 'completed',
-            amount,
+            amount: netAmount, // Return net amount credited
             currency,
             newBalance: wallet ? parseFloat(wallet.balance?.toString() || '0') : undefined,
           };
@@ -393,7 +401,7 @@ export class MonimeService {
           this.logger.error(`Failed to credit wallet via Supabase: ${error}`);
           return {
             status: 'completed',
-            amount,
+            amount: netAmount,
             currency,
           };
         }
@@ -401,7 +409,7 @@ export class MonimeService {
 
       return {
         status: sessionStatus || 'unknown',
-        amount,
+        amount: netAmount,
         currency,
       };
     }
@@ -409,9 +417,11 @@ export class MonimeService {
     // Check if already completed
     if (transaction.status === MonimeTransactionStatus.COMPLETED) {
       const wallet = await getSupabaseWallet(walletId);
+      // Return netAmount if available, otherwise calculate it
+      const returnAmount = transaction.netAmount || (Number(transaction.amount) - (transaction.fee || Math.round(Number(transaction.amount) * 0.015)));
       return {
         status: 'completed',
-        amount: Number(transaction.amount),
+        amount: returnAmount,
         currency: transaction.currencyCode,
         newBalance: wallet ? parseFloat(wallet.balance?.toString() || '0') : undefined,
       };
@@ -419,11 +429,16 @@ export class MonimeService {
 
     // Verify session is completed
     if (sessionStatus === 'completed') {
-      // Credit the wallet via Supabase
+      // Calculate fee - use Monime fee from session or calculate 1.5%
+      const grossAmount = Number(transaction.amount);
+      const fee = sessionData?.result?.fees?.value || Math.round(grossAmount * 0.015);
+      const netAmount = grossAmount - fee;
+
+      // Credit the wallet via Supabase with NET amount (after Monime 1.5% fee)
       try {
         const { wallet } = await creditSupabaseWallet(
           transaction.walletId,
-          Number(transaction.amount) / 100, // Convert from minor units
+          netAmount / 100, // Convert from minor units
           transaction.monimeReference,
           `Monime deposit - ${transaction.id}`,
         );
@@ -431,13 +446,15 @@ export class MonimeService {
         // Update transaction status
         transaction.status = MonimeTransactionStatus.COMPLETED;
         transaction.completedAt = new Date();
+        transaction.fee = fee;
+        transaction.netAmount = netAmount;
         await this.transactionRepo.save(transaction);
 
-        this.logger.log(`Deposit completed via callback: ${transaction.id}`);
+        this.logger.log(`Deposit completed via callback: ${transaction.id}, gross: ${grossAmount}, fee: ${fee}, net: ${netAmount}`);
 
         return {
           status: 'completed',
-          amount: Number(transaction.amount),
+          amount: netAmount, // Return net amount credited
           currency: transaction.currencyCode,
           newBalance: wallet ? parseFloat(wallet.balance?.toString() || '0') : undefined,
         };
@@ -446,11 +463,13 @@ export class MonimeService {
         // Still mark as completed in our system
         transaction.status = MonimeTransactionStatus.COMPLETED;
         transaction.completedAt = new Date();
+        transaction.fee = fee;
+        transaction.netAmount = netAmount;
         await this.transactionRepo.save(transaction);
 
         return {
           status: 'completed',
-          amount: Number(transaction.amount),
+          amount: netAmount,
           currency: transaction.currencyCode,
         };
       }
