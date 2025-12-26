@@ -885,7 +885,7 @@ export const adminNotificationService = {
             .from('profiles')
             .select('full_name')
             .eq('id', tx.user_id)
-            .single();
+            .maybeSingle();
           if (profile) userName = profile.full_name || 'Unknown';
         }
         results.push({
@@ -930,7 +930,7 @@ export const adminNotificationService = {
             .from('profiles')
             .select('full_name')
             .eq('id', tx.user_id)
-            .single();
+            .maybeSingle();
           if (profile) userName = profile.full_name || 'Unknown';
         }
         results.push({

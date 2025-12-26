@@ -516,7 +516,7 @@ ${params.businessPhone ? `Contact: ${params.businessPhone}` : ''}`;
         .from('profiles')
         .select('id, phone')
         .eq('phone', params.recipientPhone)
-        .single();
+        .maybeSingle();
 
       if (userProfile?.id) {
         // User exists - send in-app notification

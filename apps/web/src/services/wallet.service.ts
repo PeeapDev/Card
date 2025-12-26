@@ -369,22 +369,22 @@ export const walletService = {
         if (senderWallet?.user_id && recipientWallet?.user_id) {
           const { data: senderProfile } = await supabase
             .from('profiles')
-            .select('first_name, last_name, phone')
+            .select('full_name, phone')
             .eq('id', senderWallet.user_id)
-            .single();
+            .maybeSingle();
 
           const { data: recipientProfile } = await supabase
             .from('profiles')
-            .select('first_name, last_name, phone')
+            .select('full_name, phone')
             .eq('id', recipientWallet.user_id)
-            .single();
+            .maybeSingle();
 
           const senderName = senderProfile
-            ? `${senderProfile.first_name || ''} ${senderProfile.last_name || ''}`.trim() || senderProfile.phone || 'Unknown'
+            ? senderProfile.full_name || senderProfile.phone || 'Unknown'
             : 'Unknown';
 
           const recipientName = recipientProfile
-            ? `${recipientProfile.first_name || ''} ${recipientProfile.last_name || ''}`.trim() || recipientProfile.phone || 'Unknown'
+            ? recipientProfile.full_name || recipientProfile.phone || 'Unknown'
             : 'Unknown';
 
           // Notify recipient
@@ -527,12 +527,12 @@ export const walletService = {
         // Get sender's name for recipient notification
         const { data: senderProfile } = await supabase
           .from('profiles')
-          .select('first_name, last_name, phone')
+          .select('full_name, phone')
           .eq('id', senderWallet.user_id)
-          .single();
+          .maybeSingle();
 
         const senderName = senderProfile
-          ? `${senderProfile.first_name || ''} ${senderProfile.last_name || ''}`.trim() || senderProfile.phone || 'Unknown'
+          ? senderProfile.full_name || senderProfile.phone || 'Unknown'
           : 'Unknown';
 
         // Notify recipient of received transfer
@@ -551,12 +551,12 @@ export const walletService = {
         if (recipientWallet?.user_id) {
           const { data: recipientProfile } = await supabase
             .from('profiles')
-            .select('first_name, last_name, phone')
+            .select('full_name, phone')
             .eq('id', recipientWallet.user_id)
-            .single();
+            .maybeSingle();
 
           const recipientName = recipientProfile
-            ? `${recipientProfile.first_name || ''} ${recipientProfile.last_name || ''}`.trim() || recipientProfile.phone || 'Unknown'
+            ? recipientProfile.full_name || recipientProfile.phone || 'Unknown'
             : 'Unknown';
 
           // Notify sender of sent transfer
