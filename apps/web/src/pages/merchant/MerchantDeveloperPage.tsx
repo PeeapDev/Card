@@ -1281,7 +1281,7 @@ const portalUrl = '${checkoutUrl}/subscriptions?email={customer_email}';
  * ============================================================================
  * Business: ${business.name}
  * Mode: ${isLive ? 'LIVE' : 'SANDBOX (Test Mode)'}
- * Secret Key: ${secretKey}
+ * Public Key: ${publicKey}
  *
  * WHAT IS THIS?
  * Display a QR code on your website/app. Customer scans with their phone
@@ -1291,30 +1291,206 @@ const portalUrl = '${checkoutUrl}/subscriptions?email={customer_email}';
  *   - v0.dev / Next.js / React websites
  *   - Mobile apps (React Native, Flutter, iOS, Android)
  *   - Bus terminals, POS devices, kiosks
+ *   - Localhost development
  *   - Any platform that can display an image
  *
- * HOW IT WORKS:
- *   1. Your BACKEND creates a payment intent (holds your secret key)
- *   2. Your FRONTEND displays the QR code image
- *   3. Customer scans QR with their phone
- *   4. Customer pays on THEIR phone (not your site)
- *   5. Your site detects payment via polling/webhook
- *   6. Show "Payment successful!" - no redirect needed
+ * TWO INTEGRATION OPTIONS:
+ *   OPTION A: Frontend-Only (Simple) - No backend needed!
+ *   OPTION B: Backend Integration (More Secure) - For production apps
  *
- * ⚠️  IMPORTANT: Secret key must NEVER be in frontend code!
  * ============================================================================
  */
 
 
-// ============================================================================
-// STEP 1: CREATE BACKEND API ROUTES
-// ============================================================================
+// ############################################################################
+//
+//  OPTION A: FRONTEND-ONLY INTEGRATION (Recommended for quick setup)
+//
+//  Perfect for: localhost, v0.dev, Vercel previews, prototypes
+//  Uses your PUBLIC KEY - safe to include in frontend code
+//
+// ############################################################################
+
+// Your public key - safe to use in frontend
+const PEEAP_PUBLIC_KEY = '${publicKey}';
+
 /**
- * You need TWO backend API routes:
- *   1. /api/create-payment - Creates payment intent
- *   2. /api/check-payment  - Checks payment status
- *
- * For Next.js/v0: Create these in your app/api/ folder
+ * React Component - Copy this into your app!
+ */
+'use client';
+import { useState } from 'react';
+
+export function PeeapQRPayment({
+  amount,
+  description,
+  onSuccess,
+  onError
+}: {
+  amount: number;        // Amount in Leones (100 = Le 100)
+  description?: string;
+  onSuccess?: (data: { transaction_id: string; id: string }) => void;
+  onError?: (error: string) => void;
+}) {
+  const [status, setStatus] = useState<'idle' | 'loading' | 'showing_qr' | 'paid' | 'error'>('idle');
+  const [qrUrl, setQrUrl] = useState('');
+  const [payUrl, setPayUrl] = useState('');
+  const [error, setError] = useState('');
+
+  // Create payment and show QR
+  async function startPayment() {
+    setStatus('loading');
+    setError('');
+
+    try {
+      // Call Peeap API directly - no backend needed!
+      const res = await fetch('${apiUrl}/api/v1/payment-intents/public', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          publicKey: PEEAP_PUBLIC_KEY,
+          amount,
+          currency: 'SLE',
+          description: description || 'Payment'
+        })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to create payment');
+      }
+
+      const data = await res.json();
+      setQrUrl(data.qr_code_image);
+      setPayUrl(data.pay_url);
+      setStatus('showing_qr');
+
+      // Start polling for payment
+      pollPayment(data.id);
+
+    } catch (err: any) {
+      setError(err.message);
+      setStatus('error');
+      onError?.(err.message);
+    }
+  }
+
+  // Poll for payment completion
+  async function pollPayment(intentId: string) {
+    try {
+      const res = await fetch(\`${apiUrl}/api/v1/payment-intents/\${intentId}/status\`);
+      const data = await res.json();
+
+      if (data.paid) {
+        setStatus('paid');
+        onSuccess?.({ transaction_id: data.transaction_id, id: intentId });
+      } else if (data.status === 'canceled' || data.status === 'failed') {
+        setStatus('error');
+        setError('Payment was canceled or failed');
+        onError?.('Payment failed');
+      } else {
+        // Keep polling every 2 seconds
+        setTimeout(() => pollPayment(intentId), 2000);
+      }
+    } catch {
+      setTimeout(() => pollPayment(intentId), 2000);
+    }
+  }
+
+  // Format amount for display
+  const displayAmount = \`Le \${amount.toLocaleString()}\`;
+
+  return (
+    <div style={{ textAlign: 'center', padding: '20px' }}>
+      {status === 'idle' && (
+        <button
+          onClick={startPayment}
+          style={{
+            padding: '16px 32px',
+            fontSize: '18px',
+            backgroundColor: '#7C3AED',
+            color: 'white',
+            border: 'none',
+            borderRadius: '12px',
+            cursor: 'pointer'
+          }}
+        >
+          Pay {displayAmount}
+        </button>
+      )}
+
+      {status === 'loading' && (
+        <div>
+          <p>Creating payment...</p>
+        </div>
+      )}
+
+      {status === 'showing_qr' && (
+        <div>
+          <p style={{ marginBottom: '16px', color: '#666' }}>
+            Scan with your phone to pay {displayAmount}
+          </p>
+          <img
+            src={qrUrl}
+            alt="Scan to pay"
+            style={{ width: '250px', height: '250px', margin: '0 auto' }}
+          />
+          <p style={{ marginTop: '16px', fontSize: '14px', color: '#999' }}>
+            Or open: <a href={payUrl} target="_blank" rel="noopener">{payUrl}</a>
+          </p>
+          <p style={{ marginTop: '8px', color: '#666' }}>
+            Waiting for payment...
+          </p>
+        </div>
+      )}
+
+      {status === 'paid' && (
+        <div>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>✅</div>
+          <h3 style={{ color: '#16A34A', marginBottom: '8px' }}>Payment Successful!</h3>
+          <p style={{ color: '#666' }}>{displayAmount} received</p>
+        </div>
+      )}
+
+      {status === 'error' && (
+        <div>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>❌</div>
+          <h3 style={{ color: '#DC2626', marginBottom: '8px' }}>Payment Failed</h3>
+          <p style={{ color: '#666' }}>{error}</p>
+          <button onClick={startPayment} style={{ marginTop: '16px' }}>
+            Try Again
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Usage:
+// <PeeapQRPayment
+//   amount={5000}
+//   description="Product Name"
+//   onSuccess={(data) => console.log('Paid!', data)}
+// />
+
+
+// ############################################################################
+//
+//  OPTION B: BACKEND INTEGRATION (More Secure - for production apps)
+//
+//  Uses your SECRET KEY - requires backend routes
+//  Better for: Production apps with sensitive transactions
+//
+// ############################################################################
+
+// Secret Key: ${secretKey}
+// ⚠️ NEVER put this in frontend code! Use backend routes instead.
+
+// ----------------------------------------------------------------------------
+// FILE: app/api/create-payment/route.ts (Next.js App Router)
+// ----------------------------------------------------------------------------
+/**
+ * Backend route for creating payment intents
+ * For Next.js/v0: Create this in your app/api/ folder
  * For other frameworks: Create equivalent endpoints
  */
 
@@ -1419,75 +1595,52 @@ export async function GET(req: NextRequest) {
 
 
 // ============================================================================
-// STEP 3: FRONTEND COMPONENT (Copy this into your page)
+// FRONTEND COMPONENT FOR BACKEND INTEGRATION
 // ============================================================================
+// When using Option B (backend routes), use this component that calls your routes:
 
-// ----------------------------------------------------------------------------
-// OPTION A: React Component (for Next.js, v0, etc.)
-// ----------------------------------------------------------------------------
+/*
 'use client';
 import { useState } from 'react';
 
-export function PeeapQRPayment({
-  amount,
-  description,
-  onSuccess,
-  onError
-}: {
-  amount: number;        // Amount in cents (5000 = Le 50.00)
-  description?: string;
-  onSuccess?: (data: { transaction_id: string }) => void;
-  onError?: (error: string) => void;
-}) {
-  const [status, setStatus] = useState<'idle' | 'loading' | 'showing_qr' | 'paid' | 'error'>('idle');
+export function PeeapQRPaymentBackend({ amount, description, onSuccess, onError }) {
+  const [status, setStatus] = useState('idle');
   const [qrUrl, setQrUrl] = useState('');
   const [payUrl, setPayUrl] = useState('');
   const [error, setError] = useState('');
 
-  // Create payment and show QR
   async function startPayment() {
     setStatus('loading');
-    setError('');
-
     try {
+      // Calls YOUR backend route (not Peeap directly)
       const res = await fetch('/api/create-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount, description })
       });
-
-      if (!res.ok) throw new Error('Failed to create payment');
-
       const data = await res.json();
       setQrUrl(data.qr_code_url);
       setPayUrl(data.pay_url);
       setStatus('showing_qr');
-
-      // Start polling for payment
       pollPayment(data.id);
-
-    } catch (err: any) {
+    } catch (err) {
       setError(err.message);
       setStatus('error');
       onError?.(err.message);
     }
   }
 
-  // Poll for payment completion
-  async function pollPayment(intentId: string) {
+  async function pollPayment(intentId) {
     try {
-      const res = await fetch(\`/api/check-payment?id=\${intentId}\`);
+      const res = await fetch('/api/check-payment?id=' + intentId);
       const data = await res.json();
-
       if (data.paid) {
         setStatus('paid');
-        onSuccess?.({ transaction_id: data.transaction_id });
+        onSuccess?.(data);
       } else if (data.status === 'canceled' || data.status === 'failed') {
         setStatus('error');
-        setError('Payment was canceled or failed');
         onError?.('Payment failed');
       } else {
-        // Keep polling every 2 seconds
         setTimeout(() => pollPayment(intentId), 2000);
       }
     } catch {
@@ -1495,86 +1648,18 @@ export function PeeapQRPayment({
     }
   }
 
-  // Format amount for display
-  const displayAmount = \`Le \${(amount / 100).toFixed(2)}\`;
-
-  return (
-    <div style={{ textAlign: 'center', padding: '20px' }}>
-      {status === 'idle' && (
-        <button
-          onClick={startPayment}
-          style={{
-            padding: '16px 32px',
-            fontSize: '18px',
-            backgroundColor: '#7C3AED',
-            color: 'white',
-            border: 'none',
-            borderRadius: '12px',
-            cursor: 'pointer'
-          }}
-        >
-          Pay {displayAmount}
-        </button>
-      )}
-
-      {status === 'loading' && (
-        <div>
-          <p>Creating payment...</p>
-        </div>
-      )}
-
-      {status === 'showing_qr' && (
-        <div>
-          <p style={{ marginBottom: '16px', color: '#666' }}>
-            Scan with your phone to pay {displayAmount}
-          </p>
-          <img
-            src={qrUrl}
-            alt="Scan to pay"
-            style={{ width: '250px', height: '250px', margin: '0 auto' }}
-          />
-          <p style={{ marginTop: '16px', fontSize: '14px', color: '#999' }}>
-            Or open: <a href={payUrl} target="_blank" rel="noopener">{payUrl}</a>
-          </p>
-          <p style={{ marginTop: '8px', color: '#666' }}>
-            Waiting for payment...
-          </p>
-        </div>
-      )}
-
-      {status === 'paid' && (
-        <div>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>✅</div>
-          <h3 style={{ color: '#16A34A', marginBottom: '8px' }}>Payment Successful!</h3>
-          <p style={{ color: '#666' }}>{displayAmount} received</p>
-        </div>
-      )}
-
-      {status === 'error' && (
-        <div>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>❌</div>
-          <h3 style={{ color: '#DC2626', marginBottom: '8px' }}>Payment Failed</h3>
-          <p style={{ color: '#666' }}>{error}</p>
-          <button onClick={startPayment} style={{ marginTop: '16px' }}>
-            Try Again
-          </button>
-        </div>
-      )}
-    </div>
-  );
+  // ... render same UI as Option A component
 }
-
-// Usage in your page:
-// <PeeapQRPayment
-//   amount={5000}  // Le 50.00
-//   description="Product Name"
-//   onSuccess={(data) => console.log('Paid!', data)}
-// />
+*/
 
 
-// ----------------------------------------------------------------------------
-// OPTION B: Plain HTML/JavaScript (for any website)
-// ----------------------------------------------------------------------------
+// ############################################################################
+//
+//  PLAIN HTML/JAVASCRIPT VERSION (Frontend-Only)
+//
+//  For websites that don't use React - pure vanilla JavaScript
+//
+// ############################################################################
 /*
 <!DOCTYPE html>
 <html>
@@ -1584,19 +1669,21 @@ export function PeeapQRPayment({
     .peeap-container { text-align: center; padding: 40px; font-family: sans-serif; }
     .peeap-btn { padding: 16px 32px; font-size: 18px; background: #7C3AED; color: white; border: none; border-radius: 12px; cursor: pointer; }
     .peeap-btn:hover { background: #6D28D9; }
-    .peeap-qr { width: 250px; height: 250px; margin: 20px auto; }
+    .peeap-qr { width: 250px; height: 250px; margin: 20px auto; display: block; }
     .peeap-success { color: #16A34A; }
     .peeap-error { color: #DC2626; }
   </style>
 </head>
 <body>
   <div class="peeap-container" id="peeap-payment">
-    <h2>Total: Le 50.00</h2>
+    <h2>Total: Le 5,000</h2>
     <button class="peeap-btn" onclick="startPeeapPayment()">Pay Now</button>
   </div>
 
   <script>
-    var AMOUNT = 5000;  // Amount in cents
+    // Your Peeap Public Key - safe to include here
+    var PEEAP_PUBLIC_KEY = '${publicKey}';
+    var AMOUNT = 5000;  // Amount in Leones
     var DESCRIPTION = 'Your Product';
 
     async function startPeeapPayment() {
@@ -1604,32 +1691,38 @@ export function PeeapQRPayment({
       container.innerHTML = '<p>Creating payment...</p>';
 
       try {
-        // 1. Create payment intent via your backend
-        var res = await fetch('/api/create-payment', {
+        // Call Peeap API directly - no backend needed!
+        var res = await fetch('${apiUrl}/api/v1/payment-intents/public', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ amount: AMOUNT, description: DESCRIPTION })
+          body: JSON.stringify({
+            publicKey: PEEAP_PUBLIC_KEY,
+            amount: AMOUNT,
+            currency: 'SLE',
+            description: DESCRIPTION
+          })
         });
         var data = await res.json();
 
         // 2. Show QR code
         container.innerHTML =
           '<p>Scan with your phone to pay:</p>' +
-          '<img src="' + data.qr_code_url + '" class="peeap-qr" />' +
+          '<img src="' + data.qr_code_image + '" class="peeap-qr" />' +
           '<p>Or open: <a href="' + data.pay_url + '" target="_blank">' + data.pay_url + '</a></p>' +
           '<p id="peeap-status">Waiting for payment...</p>';
 
-        // 3. Poll for payment
+        // 3. Poll for payment - calls Peeap API directly
         pollPeeapPayment(data.id);
 
       } catch (err) {
-        container.innerHTML = '<p class="peeap-error">Failed to create payment. Please try again.</p>';
+        container.innerHTML = '<p class="peeap-error">Failed to create payment. ' + (err.message || 'Please try again.') + '</p>';
       }
     }
 
     async function pollPeeapPayment(intentId) {
       try {
-        var res = await fetch('/api/check-payment?id=' + intentId);
+        // Call Peeap status API directly - no backend needed!
+        var res = await fetch('${apiUrl}/api/v1/payment-intents/' + intentId + '/status');
         var data = await res.json();
 
         if (data.paid) {
@@ -1654,15 +1747,22 @@ export function PeeapQRPayment({
 
 
 // ============================================================================
-// STEP 4: TEST IT
+// TEST YOUR INTEGRATION
 // ============================================================================
 /**
- * 1. Add your PEEAP_SECRET_KEY to environment variables
- * 2. Create the two API routes (create-payment, check-payment)
- * 3. Add the PeeapQRPayment component to your page
- * 4. Click "Pay" → QR appears → Scan with phone → Pay → See success!
+ * OPTION A (Frontend-Only):
+ *   1. Copy the React component or HTML code above
+ *   2. Replace PEEAP_PUBLIC_KEY with your public key
+ *   3. Run your app and click "Pay"
+ *   4. QR appears → Scan with phone → Pay → See success!
  *
- * Test with sandbox key first (sk_test_...) before going live.
+ * OPTION B (Backend Integration):
+ *   1. Add PEEAP_SECRET_KEY to your environment variables
+ *   2. Create the two API routes (create-payment, check-payment)
+ *   3. Add the frontend component to your page
+ *   4. Test the flow
+ *
+ * Test with sandbox keys first (pk_test_... / sk_test_...) before going live.
  */
 
 

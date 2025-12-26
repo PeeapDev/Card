@@ -364,6 +364,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ========== PAYMENT INTENTS ENDPOINTS ==========
     } else if (path === 'v1/payment-intents' || path === 'v1/payment-intents/') {
       return await handlePaymentIntents(req, res);
+    } else if (path === 'v1/payment-intents/public' || path === 'v1/payment-intents/public/') {
+      return await handlePaymentIntentsPublic(req, res);
+    } else if (path.match(/^v1\/payment-intents\/[^/]+\/status$/)) {
+      const intentId = path.split('/')[2];
+      return await handlePaymentIntentStatusPublic(req, res, intentId);
     } else if (path.match(/^v1\/payment-intents\/[^/]+$/)) {
       const intentId = path.split('/')[2];
       return await handlePaymentIntentById(req, res, intentId);
@@ -11107,6 +11112,147 @@ async function handlePaymentIntents(req: VercelRequest, res: VercelResponse) {
     });
   } catch (error: any) {
     console.error('[PaymentIntents] Error:', error);
+    return res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+}
+
+/**
+ * Create Payment Intent with Public Key - POST /v1/payment-intents/public
+ *
+ * This endpoint allows frontend/browser-based payment intent creation using public keys.
+ * Perfect for: localhost development, v0.dev, Vercel previews, any frontend-only environment.
+ *
+ * Usage:
+ *   POST https://api.peeap.com/api/v1/payment-intents/public
+ *   Body: { publicKey, amount, currency, description }
+ */
+async function handlePaymentIntentsPublic(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const { publicKey, amount, currency, description, reference, metadata } = req.body;
+
+    // Validate public key
+    if (!publicKey || typeof publicKey !== 'string') {
+      return res.status(400).json({ error: 'publicKey is required' });
+    }
+
+    if (!publicKey.startsWith('pk_live_') && !publicKey.startsWith('pk_test_')) {
+      return res.status(400).json({ error: 'Invalid public key format. Must start with pk_live_ or pk_test_' });
+    }
+
+    // Validate amount
+    if (!amount || typeof amount !== 'number' || amount <= 0) {
+      return res.status(400).json({ error: 'amount is required and must be a positive number' });
+    }
+
+    // Determine mode and key column
+    const isLiveKey = publicKey.startsWith('pk_live_');
+    const mode = isLiveKey ? 'live' : 'test';
+    const keyColumn = isLiveKey ? 'live_public_key' : 'test_public_key';
+
+    // Look up the merchant by public key
+    const { data: merchant, error: merchantError } = await supabase
+      .from('merchant_businesses')
+      .select('id, name, status')
+      .eq(keyColumn, publicKey)
+      .single();
+
+    if (merchantError || !merchant) {
+      console.error('[PaymentIntentsPublic] Merchant lookup error:', merchantError);
+      return res.status(401).json({ error: 'Invalid public key' });
+    }
+
+    if (merchant.status !== 'ACTIVE') {
+      return res.status(403).json({ error: 'Merchant account is not active' });
+    }
+
+    // Create payment intent
+    const externalId = `pi_${randomUUID().replace(/-/g, '')}`;
+    const clientSecret = `${externalId}_secret_${randomUUID().replace(/-/g, '').substring(0, 24)}`;
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+    const qrCodeUrl = `https://my.peeap.com/i/${externalId}`;
+
+    const { data: intent, error: insertError } = await supabase
+      .from('payment_intents')
+      .insert({
+        external_id: externalId,
+        merchant_id: merchant.id,
+        amount,
+        currency: (currency || 'SLE').toUpperCase(),
+        status: 'requires_payment_method',
+        client_secret: clientSecret,
+        description: description || null,
+        metadata: { ...(metadata || {}), reference: reference || null },
+        capture_method: 'automatic',
+        payment_methods_allowed: ['wallet', 'card', 'qr', 'nfc', 'mobile_money'],
+        expires_at: expiresAt.toISOString(),
+        qr_code_url: qrCodeUrl,
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('[PaymentIntentsPublic] Create error:', insertError);
+      return res.status(500).json({ error: 'Failed to create payment intent' });
+    }
+
+    // Return response optimized for frontend use
+    return res.status(201).json({
+      id: intent.external_id,
+      amount: intent.amount,
+      currency: intent.currency,
+      status: intent.status,
+      description: intent.description,
+      qr_code_url: intent.qr_code_url,
+      qr_code_image: `https://api.peeap.com/api/v1/payment-intents/${intent.external_id}/qr`,
+      pay_url: qrCodeUrl,
+      expires_at: Math.floor(new Date(intent.expires_at).getTime() / 1000),
+      created: Math.floor(new Date(intent.created_at).getTime() / 1000),
+      livemode: mode === 'live',
+      merchant_name: merchant.name,
+    });
+  } catch (error: any) {
+    console.error('[PaymentIntentsPublic] Error:', error);
+    return res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+}
+
+/**
+ * Check Payment Intent Status (Public) - GET /v1/payment-intents/:id/status
+ *
+ * Public endpoint for checking payment status without authentication.
+ * Used by frontend polling to detect when payment is complete.
+ */
+async function handlePaymentIntentStatusPublic(req: VercelRequest, res: VercelResponse, intentId: string) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const { data: intent, error } = await supabase
+      .from('payment_intents')
+      .select('external_id, status, amount, currency, transaction_id, succeeded_at')
+      .eq('external_id', intentId)
+      .single();
+
+    if (error || !intent) {
+      return res.status(404).json({ error: 'Payment intent not found' });
+    }
+
+    return res.status(200).json({
+      id: intent.external_id,
+      status: intent.status,
+      paid: intent.status === 'succeeded',
+      amount: intent.amount,
+      currency: intent.currency,
+      transaction_id: intent.transaction_id,
+      completed_at: intent.succeeded_at ? Math.floor(new Date(intent.succeeded_at).getTime() / 1000) : null,
+    });
+  } catch (error: any) {
+    console.error('[PaymentIntentStatusPublic] Error:', error);
     return res.status(500).json({ error: error.message || 'Internal server error' });
   }
 }
