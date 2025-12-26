@@ -81,6 +81,13 @@ BEGIN
   IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'nfc_fraud_alerts') THEN
     DROP POLICY IF EXISTS "Admins view fraud alerts" ON nfc_fraud_alerts;
   END IF;
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'nfc_prepaid_cards') THEN
+    DROP POLICY IF EXISTS "nfc_cards_user_policy" ON nfc_prepaid_cards;
+    DROP POLICY IF EXISTS "nfc_cards_admin_policy" ON nfc_prepaid_cards;
+    DROP POLICY IF EXISTS "nfc_prepaid_cards_select" ON nfc_prepaid_cards;
+    DROP POLICY IF EXISTS "nfc_prepaid_cards_insert" ON nfc_prepaid_cards;
+    DROP POLICY IF EXISTS "nfc_prepaid_cards_update" ON nfc_prepaid_cards;
+  END IF;
 
   -- Platform earnings
   IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'platform_earnings') THEN
