@@ -28,7 +28,7 @@ import { ConfigService } from '@nestjs/config';
 import { getSupabaseClient } from '../../lib/supabase';
 
 @ApiTags('Payment Intents')
-@Controller('v1/payment-intents')
+@Controller('payment-intents')
 export class PaymentIntentsController {
   private readonly logger = new Logger(PaymentIntentsController.name);
 
@@ -43,15 +43,17 @@ export class PaymentIntentsController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a payment intent' })
-  @ApiHeader({ name: 'X-API-Key', description: 'Merchant API key', required: true })
+  @ApiHeader({ name: 'X-API-Key', description: 'Merchant API key', required: false })
+  @ApiHeader({ name: 'Authorization', description: 'Bearer token (alternative to X-API-Key)', required: false })
   @ApiBody({ type: CreatePaymentIntentDto })
   async create(
     @Body() dto: CreatePaymentIntentDto,
     @Headers('x-api-key') apiKey: string,
+    @Headers('authorization') authHeader: string,
     @Headers('idempotency-key') idempotencyKey?: string,
   ): Promise<PaymentIntentResponse> {
-    // Validate API key
-    const keyData = await this.validateApiKey(apiKey);
+    // Validate API key (accept both X-API-Key and Authorization: Bearer)
+    const keyData = await this.validateApiKey(apiKey || this.extractBearerToken(authHeader));
 
     // Use idempotency key from header if not in body
     if (idempotencyKey && !dto.idempotency_key) {
@@ -75,22 +77,25 @@ export class PaymentIntentsController {
   @ApiOperation({ summary: 'Retrieve a payment intent' })
   @ApiParam({ name: 'id', description: 'Payment intent ID (pi_xxx)' })
   @ApiHeader({ name: 'X-API-Key', description: 'Merchant API key', required: false })
+  @ApiHeader({ name: 'Authorization', description: 'Bearer token (alternative to X-API-Key)', required: false })
   async get(
     @Param('id') id: string,
     @Headers('x-api-key') apiKey?: string,
+    @Headers('authorization') authHeader?: string,
   ): Promise<PaymentIntentResponse> {
     // Allow public access for checkout pages
     const intent = await this.paymentIntentsService.get(id);
 
     // If API key provided, verify ownership
-    if (apiKey) {
-      const keyData = await this.validateApiKey(apiKey);
+    const effectiveKey = apiKey || this.extractBearerToken(authHeader);
+    if (effectiveKey) {
+      const keyData = await this.validateApiKey(effectiveKey);
       if (intent.merchant_user_id !== keyData.userId) {
         throw new UnauthorizedException('Access denied');
       }
     }
 
-    return this.formatResponse(intent, !apiKey);
+    return this.formatResponse(intent, !effectiveKey);
   }
 
   /**
@@ -98,17 +103,19 @@ export class PaymentIntentsController {
    */
   @Get()
   @ApiOperation({ summary: 'List all payment intents' })
-  @ApiHeader({ name: 'X-API-Key', description: 'Merchant API key', required: true })
+  @ApiHeader({ name: 'X-API-Key', description: 'Merchant API key', required: false })
+  @ApiHeader({ name: 'Authorization', description: 'Bearer token (alternative to X-API-Key)', required: false })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'offset', required: false, type: Number })
   @ApiQuery({ name: 'status', required: false, enum: ['requires_payment_method', 'requires_confirmation', 'processing', 'succeeded', 'canceled', 'failed'] })
   async list(
     @Headers('x-api-key') apiKey: string,
+    @Headers('authorization') authHeader: string,
     @Query('limit') limit?: number,
     @Query('offset') offset?: number,
     @Query('status') status?: PaymentIntentStatus,
   ): Promise<{ data: PaymentIntentResponse[]; has_more: boolean; total: number }> {
-    const keyData = await this.validateApiKey(apiKey);
+    const keyData = await this.validateApiKey(apiKey || this.extractBearerToken(authHeader));
 
     const result = await this.paymentIntentsService.list(keyData.userId, {
       limit: limit || 20,
@@ -170,13 +177,15 @@ export class PaymentIntentsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Capture a payment intent' })
   @ApiParam({ name: 'id', description: 'Payment intent ID (pi_xxx)' })
-  @ApiHeader({ name: 'X-API-Key', description: 'Merchant API key', required: true })
+  @ApiHeader({ name: 'X-API-Key', description: 'Merchant API key', required: false })
+  @ApiHeader({ name: 'Authorization', description: 'Bearer token (alternative to X-API-Key)', required: false })
   async capture(
     @Param('id') id: string,
     @Body() body: { amount?: number },
     @Headers('x-api-key') apiKey: string,
+    @Headers('authorization') authHeader: string,
   ): Promise<{ success: boolean; error?: string }> {
-    await this.validateApiKey(apiKey);
+    await this.validateApiKey(apiKey || this.extractBearerToken(authHeader));
     return this.paymentIntentsService.capture(id, body.amount);
   }
 
@@ -187,13 +196,15 @@ export class PaymentIntentsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Cancel a payment intent' })
   @ApiParam({ name: 'id', description: 'Payment intent ID (pi_xxx)' })
-  @ApiHeader({ name: 'X-API-Key', description: 'Merchant API key', required: true })
+  @ApiHeader({ name: 'X-API-Key', description: 'Merchant API key', required: false })
+  @ApiHeader({ name: 'Authorization', description: 'Bearer token (alternative to X-API-Key)', required: false })
   async cancel(
     @Param('id') id: string,
     @Body() body: { reason?: string },
     @Headers('x-api-key') apiKey: string,
+    @Headers('authorization') authHeader: string,
   ): Promise<{ success: boolean; error?: string }> {
-    await this.validateApiKey(apiKey);
+    await this.validateApiKey(apiKey || this.extractBearerToken(authHeader));
     return this.paymentIntentsService.cancel(id, body.reason);
   }
 
@@ -212,6 +223,18 @@ export class PaymentIntentsController {
   // ============================================================================
   // Helper Methods
   // ============================================================================
+
+  /**
+   * Extract Bearer token from Authorization header
+   */
+  private extractBearerToken(authHeader: string): string | null {
+    if (!authHeader) return null;
+    const parts = authHeader.split(' ');
+    if (parts.length === 2 && parts[0].toLowerCase() === 'bearer') {
+      return parts[1];
+    }
+    return null;
+  }
 
   private async validateApiKey(apiKey: string): Promise<{
     userId: string;

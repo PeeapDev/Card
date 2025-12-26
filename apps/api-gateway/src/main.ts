@@ -16,10 +16,12 @@ async function bootstrap() {
   app.use(compression());
 
   // CORS
+  const corsOrigins = configService.get('CORS_ORIGINS', '*');
   app.enableCors({
-    origin: configService.get('CORS_ORIGINS', '*').split(','),
+    origin: corsOrigins === '*' ? true : corsOrigins.split(','),
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Client-Secret', 'X-Device-Fingerprint', 'Idempotency-Key'],
   });
 
   // Global prefix
