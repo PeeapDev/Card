@@ -2,11 +2,14 @@
 -- Description: Convert roles column from VARCHAR to TEXT[] array for multi-role support
 -- This enables users to have multiple roles (user + merchant, user + agent, etc.)
 
--- Step 1: Drop the existing default first (required before type change)
+-- Step 1: Drop RLS policies that reference the roles column
+DROP POLICY IF EXISTS "users_select_policy" ON users;
+
+-- Step 2: Drop the existing default (required before type change)
 ALTER TABLE users
 ALTER COLUMN roles DROP DEFAULT;
 
--- Step 2: Convert roles column from VARCHAR to TEXT[] array
+-- Step 3: Convert roles column from VARCHAR to TEXT[] array
 -- Handle existing data by wrapping single role in array
 ALTER TABLE users
 ALTER COLUMN roles TYPE text[]
@@ -16,14 +19,30 @@ USING CASE
   ELSE ARRAY[roles]::text[]
 END;
 
--- Step 3: Set new default for new users
+-- Step 4: Set new default for new users
 ALTER TABLE users
 ALTER COLUMN roles SET DEFAULT ARRAY['user']::text[];
 
--- Step 4: Create index for array queries (GIN index for containment queries)
+-- Step 5: Recreate the select policy with array-compatible syntax
+CREATE POLICY "users_select_policy" ON users
+    FOR SELECT USING (
+        -- Always allow user to see themselves
+        id = auth.uid()
+        OR
+        -- Admins (level >= 80) can see everyone
+        user_role_level(auth.uid()) >= 80
+        OR
+        -- Regular users can see other ACTIVE users with role 'user'
+        (
+            status = 'ACTIVE'
+            AND 'user' = ANY(roles)
+        )
+    );
+
+-- Step 6: Create index for array queries (GIN index for containment queries)
 CREATE INDEX IF NOT EXISTS idx_users_roles ON users USING GIN (roles);
 
--- Step 5: Create helper function to check if user has a role
+-- Step 7: Create helper function to check if user has a role
 CREATE OR REPLACE FUNCTION user_has_role(user_roles text[], check_role text)
 RETURNS boolean AS $$
 BEGIN
@@ -31,7 +50,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
--- Step 6: Create helper function to add a role to user
+-- Step 8: Create helper function to add a role to user
 CREATE OR REPLACE FUNCTION add_user_role(user_id_param uuid, new_role text)
 RETURNS void AS $$
 BEGIN
@@ -43,7 +62,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Step 7: Create helper function to remove a role from user
+-- Step 9: Create helper function to remove a role from user
 CREATE OR REPLACE FUNCTION remove_user_role(user_id_param uuid, role_to_remove text)
 RETURNS void AS $$
 BEGIN
