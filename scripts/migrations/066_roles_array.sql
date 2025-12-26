@@ -177,6 +177,14 @@ BEGIN
     DROP POLICY IF EXISTS "Admins can delete businesses" ON businesses;
   END IF;
 
+  -- Refund requests
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'refund_requests') THEN
+    DROP POLICY IF EXISTS "refund_requests_select_own" ON refund_requests;
+    DROP POLICY IF EXISTS "refund_requests_insert" ON refund_requests;
+    DROP POLICY IF EXISTS "refund_requests_update" ON refund_requests;
+    DROP POLICY IF EXISTS "refund_requests_admin" ON refund_requests;
+  END IF;
+
   -- Subscriptions
   IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'merchant_subscriptions') THEN
     DROP POLICY IF EXISTS "Admins can view all subscriptions" ON merchant_subscriptions;
