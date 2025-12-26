@@ -24,6 +24,9 @@ BEGIN
   IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'webhooks') THEN
     DROP POLICY IF EXISTS "Admins can manage webhooks" ON webhooks;
   END IF;
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'webhook_deliveries') THEN
+    DROP POLICY IF EXISTS "Admins can view webhook_deliveries" ON webhook_deliveries;
+  END IF;
 
   -- Module system
   IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'module_config') THEN
@@ -155,6 +158,10 @@ DO $$ BEGIN
   IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'webhooks') THEN
     EXECUTE 'CREATE POLICY "Admins can manage webhooks" ON webhooks
       FOR ALL USING (is_admin_user(auth.uid()))';
+  END IF;
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'webhook_deliveries') THEN
+    EXECUTE 'CREATE POLICY "Admins can view webhook_deliveries" ON webhook_deliveries
+      FOR SELECT USING (is_admin_user(auth.uid()))';
   END IF;
 END $$;
 
