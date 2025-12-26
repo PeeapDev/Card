@@ -42,6 +42,12 @@ interface BusinessCategory {
   id: string;
   name: string;
   icon: string;
+  parent_id: string | null;
+}
+
+interface CategoryGroup {
+  parent: BusinessCategory;
+  children: BusinessCategory[];
 }
 
 interface MerchantSetupWizardProps {
@@ -147,6 +153,7 @@ export function MerchantSetupWizard({ onClose, onComplete }: MerchantSetupWizard
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [categories, setCategories] = useState<BusinessCategory[]>([]);
+  const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
 
   // Form state - personal info (pre-filled)
@@ -180,18 +187,29 @@ export function MerchantSetupWizard({ onClose, onComplete }: MerchantSetupWizard
     }
   }, [user]);
 
-  // Fetch business categories
+  // Fetch business categories with hierarchy
   useEffect(() => {
     const fetchCategories = async () => {
       try {
         const { data, error } = await supabase
           .from('business_categories')
-          .select('id, name, icon')
+          .select('id, name, icon, parent_id')
           .eq('status', 'ACTIVE')
           .order('sort_order');
 
         if (!error && data) {
           setCategories(data);
+
+          // Organize into groups: parent categories with their children
+          const parentCategories = data.filter(c => !c.parent_id);
+          const childCategories = data.filter(c => c.parent_id);
+
+          const groups: CategoryGroup[] = parentCategories.map(parent => ({
+            parent,
+            children: childCategories.filter(child => child.parent_id === parent.id)
+          }));
+
+          setCategoryGroups(groups);
         }
       } catch (err) {
         console.error('Failed to fetch categories:', err);
@@ -286,7 +304,26 @@ export function MerchantSetupWizard({ onClose, onComplete }: MerchantSetupWizard
         throw new Error(businessError.message || 'Failed to create business');
       }
 
-      // 2. Submit role request for admin approval
+      // 2. Create merchant wallet for business payments
+      const walletExternalId = `wal_merchant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const { error: walletError } = await supabase
+        .from('wallets')
+        .insert({
+          external_id: walletExternalId,
+          user_id: user.id,
+          balance: 0,
+          currency: 'SLE',
+          wallet_type: 'merchant',
+          name: `${businessName} Wallet`,
+          status: 'ACTIVE',
+        });
+
+      if (walletError) {
+        console.error('Merchant wallet creation error:', walletError);
+        // Don't fail - wallet can be created later
+      }
+
+      // 3. Submit role request for admin approval
       const { error: requestError } = await supabase
         .from('user_role_requests')
         .insert({
@@ -518,11 +555,36 @@ export function MerchantSetupWizard({ onClose, onComplete }: MerchantSetupWizard
                         className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500"
                       >
                         <option value="">Select a category</option>
-                        {categories.map((cat) => (
-                          <option key={cat.id} value={cat.id}>
-                            {cat.name}
-                          </option>
-                        ))}
+                        {categoryGroups.length > 0 ? (
+                          // Show hierarchical categories with optgroups
+                          categoryGroups.map((group) => (
+                            group.children.length > 0 ? (
+                              <optgroup key={group.parent.id} label={group.parent.name}>
+                                {/* Allow selecting parent category too */}
+                                <option value={group.parent.id}>
+                                  {group.parent.name} (General)
+                                </option>
+                                {group.children.map((child) => (
+                                  <option key={child.id} value={child.id}>
+                                    {child.name}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            ) : (
+                              // Parent with no children - show as regular option
+                              <option key={group.parent.id} value={group.parent.id}>
+                                {group.parent.name}
+                              </option>
+                            )
+                          ))
+                        ) : (
+                          // Fallback to flat list if no groups
+                          categories.map((cat) => (
+                            <option key={cat.id} value={cat.id}>
+                              {cat.name}
+                            </option>
+                          ))
+                        )}
                       </select>
                     )}
                   </div>
