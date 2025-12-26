@@ -145,6 +145,10 @@ BEGIN
   -- KYC applications
   IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'kyc_applications') THEN
     DROP POLICY IF EXISTS "admins_manage_kyc" ON kyc_applications;
+    DROP POLICY IF EXISTS "kyc_applications_admin_all" ON kyc_applications;
+    DROP POLICY IF EXISTS "kyc_applications_select" ON kyc_applications;
+    DROP POLICY IF EXISTS "kyc_applications_insert" ON kyc_applications;
+    DROP POLICY IF EXISTS "kyc_applications_update" ON kyc_applications;
   END IF;
 
   -- Card management
