@@ -5,7 +5,11 @@
  * Includes proper error handling, type safety, and transaction support
  */
 
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase';
+
+// Note: We use supabaseAdmin because this app uses custom JWT auth,
+// not Supabase Auth. auth.uid() returns NULL, so RLS policies fail.
+// The app handles authorization by verifying user.id matches the resource owner.
 import type {
   Pot,
   PotTransaction,
@@ -142,7 +146,7 @@ export const potService = {
    */
   async getPots(userId: string): Promise<Pot[]> {
     // First get pots
-    const { data: pots, error } = await supabase
+    const { data: pots, error } = await supabaseAdmin
       .from('pots')
       .select('*')
       .eq('user_id', userId)
@@ -160,7 +164,7 @@ export const potService = {
 
     // Get wallet balances for all pots
     const walletIds = pots.map(p => p.wallet_id).filter(Boolean);
-    const { data: wallets } = await supabase
+    const { data: wallets } = await supabaseAdmin
       .from('wallets')
       .select('id, balance')
       .in('id', walletIds);
@@ -179,7 +183,7 @@ export const potService = {
    * Get a single pot by ID
    */
   async getPot(potId: string): Promise<Pot> {
-    const { data: pot, error } = await supabase
+    const { data: pot, error } = await supabaseAdmin
       .from('pots')
       .select('*')
       .eq('id', potId)
@@ -193,7 +197,7 @@ export const potService = {
     // Get wallet balance
     let balance = 0;
     if (pot.wallet_id) {
-      const { data: wallet } = await supabase
+      const { data: wallet } = await supabaseAdmin
         .from('wallets')
         .select('balance')
         .eq('id', pot.wallet_id)
@@ -269,7 +273,7 @@ export const potService = {
   async createPot(userId: string, request: CreatePotRequest): Promise<Pot> {
 
     // First check if pots table exists by trying to query it
-    const { error: tableCheckError } = await supabase
+    const { error: tableCheckError } = await supabaseAdmin
       .from('pots')
       .select('id')
       .limit(1);
@@ -314,7 +318,7 @@ export const potService = {
     }
 
     // Create pot wallet
-    const { data: wallet, error: walletError } = await supabase
+    const { data: wallet, error: walletError } = await supabaseAdmin
       .from('wallets')
       .insert({
         external_id: externalId,
@@ -334,7 +338,7 @@ export const potService = {
 
 
     // Create pot
-    const { data: pot, error: potError } = await supabase
+    const { data: pot, error: potError } = await supabaseAdmin
       .from('pots')
       .insert({
         user_id: userId,
@@ -363,7 +367,7 @@ export const potService = {
     if (potError) {
       console.error('Failed to create pot, cleaning up wallet:', potError);
       // Cleanup wallet
-      const { error: deleteError } = await supabase.from('wallets').delete().eq('id', wallet.id);
+      const { error: deleteError } = await supabaseAdmin.from('wallets').delete().eq('id', wallet.id);
       if (deleteError) {
         console.error('Failed to cleanup wallet:', deleteError);
       }
@@ -418,7 +422,7 @@ export const potService = {
       updates.next_auto_deposit_date = nextDate.toISOString();
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('pots')
       .update(updates)
       .eq('id', potId)
@@ -451,7 +455,7 @@ export const potService = {
     }
 
     // Get source wallet
-    const { data: sourceWallet, error: sourceError } = await supabase
+    const { data: sourceWallet, error: sourceError } = await supabaseAdmin
       .from('wallets')
       .select('balance, status')
       .eq('id', request.sourceWalletId)
@@ -471,7 +475,7 @@ export const potService = {
     }
 
     // Debit source wallet
-    const { error: debitError } = await supabase
+    const { error: debitError } = await supabaseAdmin
       .from('wallets')
       .update({
         balance: sourceBalance - request.amount,
@@ -484,7 +488,7 @@ export const potService = {
     }
 
     // Get pot wallet balance
-    const { data: potWallet } = await supabase
+    const { data: potWallet } = await supabaseAdmin
       .from('wallets')
       .select('balance')
       .eq('id', pot.walletId)
@@ -494,7 +498,7 @@ export const potService = {
     const newBalance = potBalance + request.amount;
 
     // Credit pot wallet
-    const { error: creditError } = await supabase
+    const { error: creditError } = await supabaseAdmin
       .from('wallets')
       .update({
         balance: newBalance,
@@ -504,7 +508,7 @@ export const potService = {
 
     if (creditError) {
       // Rollback
-      await supabase
+      await supabaseAdmin
         .from('wallets')
         .update({ balance: sourceBalance })
         .eq('id', request.sourceWalletId);
@@ -513,7 +517,7 @@ export const potService = {
 
     // Create pot transaction record
     const reference = `CTB-${Date.now()}`;
-    const { data: potTx, error: txError } = await supabase
+    const { data: potTx, error: txError } = await supabaseAdmin
       .from('pot_transactions')
       .insert({
         pot_id: request.potId,
@@ -534,7 +538,7 @@ export const potService = {
     }
 
     // Update pot
-    await supabase
+    await supabaseAdmin
       .from('pots')
       .update({ updated_at: new Date().toISOString() })
       .eq('id', request.potId);
@@ -662,7 +666,7 @@ export const potService = {
 
     // Debit pot wallet
     const newPotBalance = pot.currentBalance - request.amount;
-    const { error: debitError } = await supabase
+    const { error: debitError } = await supabaseAdmin
       .from('wallets')
       .update({
         balance: newPotBalance,
@@ -675,7 +679,7 @@ export const potService = {
     }
 
     // Get destination wallet balance
-    const { data: destWallet } = await supabase
+    const { data: destWallet } = await supabaseAdmin
       .from('wallets')
       .select('balance')
       .eq('id', request.destinationWalletId)
@@ -684,7 +688,7 @@ export const potService = {
     const destBalance = parseFloat(destWallet?.balance) || 0;
 
     // Credit destination wallet
-    const { error: creditError } = await supabase
+    const { error: creditError } = await supabaseAdmin
       .from('wallets')
       .update({
         balance: destBalance + actualAmount,
@@ -694,7 +698,7 @@ export const potService = {
 
     if (creditError) {
       // Rollback
-      await supabase
+      await supabaseAdmin
         .from('wallets')
         .update({ balance: pot.currentBalance })
         .eq('id', pot.walletId);
@@ -703,7 +707,7 @@ export const potService = {
 
     // Create pot transaction record
     const reference = `WTD-${Date.now()}`;
-    const { data: potTx, error: txError } = await supabase
+    const { data: potTx, error: txError } = await supabaseAdmin
       .from('pot_transactions')
       .insert({
         pot_id: request.potId,
@@ -725,7 +729,7 @@ export const potService = {
 
     // Record penalty if applicable
     if (penaltyAmount > 0) {
-      await supabase.from('pot_transactions').insert({
+      await supabaseAdmin.from('pot_transactions').insert({
         pot_id: request.potId,
         transaction_type: 'penalty',
         amount: penaltyAmount,
@@ -738,7 +742,7 @@ export const potService = {
     }
 
     // Update pot
-    await supabase
+    await supabaseAdmin
       .from('pots')
       .update({ updated_at: new Date().toISOString() })
       .eq('id', request.potId);
@@ -786,7 +790,7 @@ export const potService = {
     }
 
     // Close pot
-    await supabase
+    await supabaseAdmin
       .from('pots')
       .update({
         status: 'CLOSED',
@@ -797,7 +801,7 @@ export const potService = {
       .eq('id', potId);
 
     // Close pot wallet
-    await supabase
+    await supabaseAdmin
       .from('wallets')
       .update({
         status: 'CLOSED',
@@ -819,7 +823,7 @@ export const potService = {
     const limit = params?.limit || 10;
     const offset = (page - 1) * limit;
 
-    let query = supabase
+    let query = supabaseAdmin
       .from('pot_transactions')
       .select('*', { count: 'exact' })
       .eq('pot_id', potId);
@@ -855,7 +859,7 @@ export const potService = {
     userId: string,
     params?: { unreadOnly?: boolean; potId?: string; limit?: number }
   ): Promise<PotNotification[]> {
-    let query = supabase
+    let query = supabaseAdmin
       .from('pot_notifications')
       .select('*')
       .eq('user_id', userId);
@@ -884,7 +888,7 @@ export const potService = {
    * Mark notification as read
    */
   async markNotificationRead(notificationId: string): Promise<void> {
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('pot_notifications')
       .update({
         is_read: true,
@@ -902,7 +906,7 @@ export const potService = {
    * Get pot settings
    */
   async getPotSettings(): Promise<PotSettings> {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('pot_settings')
       .select('setting_key, setting_value')
       .eq('is_active', true);
@@ -978,7 +982,7 @@ export const potService = {
     const limit = params?.limit || 20;
     const offset = (page - 1) * limit;
 
-    let query = supabase.from('pots').select('*', { count: 'exact' });
+    let query = supabaseAdmin.from('pots').select('*', { count: 'exact' });
 
     if (params?.status) {
       query = query.eq('status', params.status);
@@ -999,7 +1003,7 @@ export const potService = {
 
     // Get wallet balances
     const walletIds = (data || []).map(p => p.wallet_id).filter(Boolean);
-    const { data: wallets } = await supabase
+    const { data: wallets } = await supabaseAdmin
       .from('wallets')
       .select('id, balance')
       .in('id', walletIds);
@@ -1032,7 +1036,7 @@ export const potService = {
     reason?: string
   ): Promise<boolean> {
     // Use direct table update
-    const { error: updateError } = await supabase
+    const { error: updateError } = await supabaseAdmin
         .from('pots')
         .update({
           admin_locked: lock,
@@ -1053,7 +1057,7 @@ export const potService = {
    * Admin force unlock pot
    */
   async adminForceUnlock(potId: string, adminId: string): Promise<boolean> {
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('pots')
       .update({
         lock_status: 'UNLOCKED',
@@ -1079,7 +1083,7 @@ export const potService = {
    * Update pot settings (admin)
    */
   async updatePotSetting(key: string, value: any): Promise<void> {
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('pot_settings')
       .update({
         setting_value: { value },
