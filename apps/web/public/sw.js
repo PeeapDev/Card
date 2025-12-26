@@ -4,9 +4,9 @@
  * Enables offline functionality by caching assets and API responses
  */
 
-const CACHE_NAME = 'peeap-pos-v1';
-const STATIC_CACHE = 'peeap-static-v1';
-const API_CACHE = 'peeap-api-v1';
+const CACHE_NAME = 'peeap-pos-v2';
+const STATIC_CACHE = 'peeap-static-v2';
+const API_CACHE = 'peeap-api-v2';
 
 // Assets to cache on install
 const STATIC_ASSETS = [
@@ -63,7 +63,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Skip cross-origin requests except for images
+  // Skip Supabase REST API requests - let them pass through to network
+  // These should never be cached to avoid stale data issues
+  if (request.url.includes('supabase.co/rest/')) {
+    return;
+  }
+
+  // Skip cross-origin requests except for Supabase storage
   if (url.origin !== self.location.origin && !request.url.includes('supabase')) {
     return;
   }
