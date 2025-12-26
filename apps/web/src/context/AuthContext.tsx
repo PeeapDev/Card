@@ -47,15 +47,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return ROLE_DASHBOARDS[role] || '/dashboard';
   }, []);
 
-  // Initialize active role from storage or user's first role
+  // Initialize active role from storage or user's highest priority role
   useEffect(() => {
     if (user?.roles && user.roles.length > 0) {
       const storedRole = localStorage.getItem(ACTIVE_ROLE_KEY) as UserRole | null;
       if (storedRole && user.roles.includes(storedRole)) {
         setActiveRole(storedRole);
       } else {
-        // Default to first role (priority: user > merchant > agent)
-        const priorityOrder: UserRole[] = ['user', 'merchant', 'agent', 'admin', 'superadmin', 'developer'];
+        // Default to highest privilege role first (superadmin > admin > developer > merchant > agent > user)
+        const priorityOrder: UserRole[] = ['superadmin', 'admin', 'developer', 'merchant', 'agent', 'user'];
         const firstRole = priorityOrder.find(r => user.roles.includes(r)) || user.roles[0];
         setActiveRole(firstRole);
         localStorage.setItem(ACTIVE_ROLE_KEY, firstRole);
