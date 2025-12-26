@@ -19,6 +19,9 @@ BEGIN
   IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'api_keys') THEN
     DROP POLICY IF EXISTS "Admins can manage api_keys" ON api_keys;
   END IF;
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'api_requests') THEN
+    DROP POLICY IF EXISTS "Admins can view api_requests" ON api_requests;
+  END IF;
 
   -- Webhooks
   IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'webhooks') THEN
@@ -150,6 +153,10 @@ DO $$ BEGIN
   IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'api_keys') THEN
     EXECUTE 'CREATE POLICY "Admins can manage api_keys" ON api_keys
       FOR ALL USING (is_admin_user(auth.uid()))';
+  END IF;
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'api_requests') THEN
+    EXECUTE 'CREATE POLICY "Admins can view api_requests" ON api_requests
+      FOR SELECT USING (is_admin_user(auth.uid()))';
   END IF;
 END $$;
 
