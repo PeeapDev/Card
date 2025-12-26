@@ -88,6 +88,12 @@ BEGIN
     DROP POLICY IF EXISTS "nfc_prepaid_cards_insert" ON nfc_prepaid_cards;
     DROP POLICY IF EXISTS "nfc_prepaid_cards_update" ON nfc_prepaid_cards;
   END IF;
+  IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'nfc_card_transactions') THEN
+    DROP POLICY IF EXISTS "nfc_transactions_user_policy" ON nfc_card_transactions;
+    DROP POLICY IF EXISTS "nfc_transactions_admin_policy" ON nfc_card_transactions;
+    DROP POLICY IF EXISTS "nfc_card_transactions_select" ON nfc_card_transactions;
+    DROP POLICY IF EXISTS "nfc_card_transactions_insert" ON nfc_card_transactions;
+  END IF;
 
   -- Platform earnings
   IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'platform_earnings') THEN
