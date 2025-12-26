@@ -6,6 +6,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { walletService } from '@/services/wallet.service';
 
 // =====================================================
 // TYPES
@@ -1161,10 +1162,33 @@ class MerchantTierService {
             console.error('Error creating merchant subscription:', insertError);
             return null;
           }
+
+          // Create Business+ wallet for the user if tier is business or business_plus
+          if (tier === 'business' || tier === 'business_plus') {
+            try {
+              await walletService.createBusinessPlusWallet(userId);
+              console.log('Business+ wallet created for user:', userId);
+            } catch (walletError) {
+              console.error('Error creating Business+ wallet:', walletError);
+              // Don't fail subscription creation if wallet creation fails
+            }
+          }
+
           return insertData as MerchantSubscription;
         }
         console.error('RPC error:', error);
         return null;
+      }
+
+      // Create Business+ wallet for successful RPC subscription creation
+      if (data && (tier === 'business' || tier === 'business_plus')) {
+        try {
+          await walletService.createBusinessPlusWallet(userId);
+          console.log('Business+ wallet created for user:', userId);
+        } catch (walletError) {
+          console.error('Error creating Business+ wallet:', walletError);
+          // Don't fail subscription creation if wallet creation fails
+        }
       }
 
       return data as MerchantSubscription;
@@ -1201,8 +1225,28 @@ class MerchantTierService {
           .single();
 
         if (updateError) return null;
+
+        // Ensure Business+ wallet exists when subscription is activated
+        if (updateData && (updateData.tier === 'business' || updateData.tier === 'business_plus')) {
+          try {
+            await walletService.createBusinessPlusWallet(userId);
+          } catch (walletError) {
+            console.error('Error creating Business+ wallet:', walletError);
+          }
+        }
+
         return updateData as MerchantSubscription;
       }
+
+      // Create Business+ wallet on successful activation
+      if (data && (data.tier === 'business' || data.tier === 'business_plus')) {
+        try {
+          await walletService.createBusinessPlusWallet(userId);
+        } catch (walletError) {
+          console.error('Error creating Business+ wallet:', walletError);
+        }
+      }
+
       return data as MerchantSubscription;
     } catch (error) {
       console.error('Error activating subscription:', error);

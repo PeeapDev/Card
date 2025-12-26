@@ -231,12 +231,74 @@ export function NotificationSettings() {
           )}
         </div>
 
-        {pushPermission === 'denied' && (
-          <p className="mt-3 text-sm text-red-600 dark:text-red-400">
-            Notifications are blocked. Please enable them in your browser settings.
-          </p>
-        )}
       </div>
+
+      {/* Blocked by Browser - Prominent Reset Instructions */}
+      {pushPermission === 'denied' && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-5">
+          <div className="flex items-start gap-4">
+            <div className="p-2 bg-red-100 dark:bg-red-900/40 rounded-lg">
+              <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400" />
+            </div>
+            <div className="flex-1">
+              <h4 className="font-semibold text-red-800 dark:text-red-200 text-lg mb-1">
+                Notifications Blocked
+              </h4>
+              <p className="text-sm text-red-700 dark:text-red-300 mb-4">
+                Your browser has blocked notifications for this site. To receive payment alerts, security warnings, and other important updates, you'll need to allow notifications in your browser settings.
+              </p>
+
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-red-100 dark:border-red-900">
+                <h5 className="font-medium text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                  <span>How to Enable Notifications:</span>
+                </h5>
+
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3">
+                    <span className="flex-shrink-0 w-6 h-6 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center text-xs font-bold text-primary-700 dark:text-primary-300">1</span>
+                    <p className="text-sm text-gray-700 dark:text-gray-300">
+                      Click the <strong>lock icon</strong> (or info icon) in your browser's address bar, next to the URL
+                    </p>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <span className="flex-shrink-0 w-6 h-6 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center text-xs font-bold text-primary-700 dark:text-primary-300">2</span>
+                    <p className="text-sm text-gray-700 dark:text-gray-300">
+                      Find <strong>"Notifications"</strong> in the site permissions dropdown
+                    </p>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <span className="flex-shrink-0 w-6 h-6 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center text-xs font-bold text-primary-700 dark:text-primary-300">3</span>
+                    <p className="text-sm text-gray-700 dark:text-gray-300">
+                      Change it from <strong>"Block"</strong> to <strong>"Allow"</strong> or <strong>"Ask"</strong>
+                    </p>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <span className="flex-shrink-0 w-6 h-6 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center text-xs font-bold text-primary-700 dark:text-primary-300">4</span>
+                    <p className="text-sm text-gray-700 dark:text-gray-300">
+                      <strong>Refresh this page</strong> to apply the changes
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => window.location.reload()}
+                  className="mt-4 w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Bell className="w-4 h-4" />
+                  I've Updated Settings - Refresh Page
+                </button>
+              </div>
+
+              <p className="text-xs text-red-600 dark:text-red-400 mt-3">
+                Note: Due to browser security, we cannot automatically enable notifications. You must change this setting manually.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Test Notification - Always show to allow testing */}
       <div className="flex items-center justify-between py-3 border-b border-gray-200 dark:border-gray-700">
@@ -266,21 +328,6 @@ export function NotificationSettings() {
           {testSent ? 'Sent!' : 'Send Test'}
         </button>
       </div>
-
-      {/* Reset Permission Instructions */}
-      {pushPermission === 'denied' && (
-        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
-          <h4 className="font-medium text-yellow-800 dark:text-yellow-200 mb-2">
-            How to Reset Notification Permission:
-          </h4>
-          <ol className="text-sm text-yellow-700 dark:text-yellow-300 list-decimal list-inside space-y-1">
-            <li>Click the lock/info icon in the browser's address bar</li>
-            <li>Find "Notifications" in the permissions list</li>
-            <li>Change it from "Block" to "Ask" or "Allow"</li>
-            <li>Refresh the page</li>
-          </ol>
-        </div>
-      )}
 
       {/* Quick Actions */}
       {isPushEnabled && (

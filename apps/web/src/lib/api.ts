@@ -2,11 +2,11 @@
  * API client utility for making requests to the backend
  */
 
-// Ensure API_BASE_URL ends with /api for proper routing
+// Ensure API_BASE_URL ends with /api/v1 for proper routing to NestJS backend
 const envApiUrl = import.meta.env.VITE_API_URL;
 const API_BASE_URL = envApiUrl
-  ? (envApiUrl.endsWith('/api') ? envApiUrl : `${envApiUrl}/api`)
-  : '/api';
+  ? (envApiUrl.includes('/api/v1') ? envApiUrl : `${envApiUrl.replace(/\/api\/?$/, '')}/api/v1`)
+  : '/api/v1';
 
 interface RequestOptions extends RequestInit {
   params?: Record<string, string>;

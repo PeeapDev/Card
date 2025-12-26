@@ -4,7 +4,7 @@
  * Dropdown component that allows users with multiple roles to switch between
  * their available dashboards (User, Merchant, Agent, etc.)
  *
- * Only renders if user has 2+ roles.
+ * Also shows Business+ option for subscribed merchants (opens in new tab with SSO).
  */
 
 import { useState, useRef, useEffect } from 'react';
@@ -18,8 +18,12 @@ import {
   Code,
   ChevronDown,
   Check,
+  Crown,
+  ExternalLink,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
+import { ssoService } from '@/services/sso.service';
 import type { UserRole } from '@/types';
 import { clsx } from 'clsx';
 
@@ -75,9 +79,34 @@ interface RoleSwitcherProps {
 
 export function RoleSwitcher({ className, compact = false }: RoleSwitcherProps) {
   const navigate = useNavigate();
-  const { availableRoles, activeRole, switchRole, getRoleDashboard } = useAuth();
+  const { user, availableRoles, activeRole, switchRole, getRoleDashboard } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
+  const [hasSubscription, setHasSubscription] = useState(false);
+  const [subscriptionTier, setSubscriptionTier] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Check if user has an active Plus subscription
+  useEffect(() => {
+    const checkSubscription = async () => {
+      if (!user?.id) return;
+
+      try {
+        const { data } = await supabase
+          .from('merchant_subscriptions')
+          .select('id, status, tier')
+          .eq('user_id', user.id)
+          .in('status', ['active', 'trialing'])
+          .maybeSingle();
+
+        setHasSubscription(!!data);
+        setSubscriptionTier(data?.tier || null);
+      } catch (err) {
+        console.error('Error checking subscription:', err);
+      }
+    };
+
+    checkSubscription();
+  }, [user?.id]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -91,8 +120,32 @@ export function RoleSwitcher({ className, compact = false }: RoleSwitcherProps) 
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Don't render if user has only one role
-  if (availableRoles.length <= 1) {
+  // Handle opening Business+ in new tab with SSO
+  const handleOpenBusinessPlus = async () => {
+    if (!user) return;
+    setIsOpen(false);
+
+    try {
+      // Use SSO to redirect to Plus dashboard
+      const redirectUrl = await ssoService.getRedirectUrl({
+        user: user,
+        targetApp: 'plus',
+        redirectPath: '/dashboard',
+      });
+
+      // Open in new tab
+      window.open(redirectUrl, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      console.error('SSO redirect failed:', err);
+      // Fallback to direct link
+      window.open('https://plus.peeap.com/dashboard', '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  // Show if user has multiple roles OR has a subscription
+  const shouldRender = availableRoles.length > 1 || hasSubscription;
+
+  if (!shouldRender) {
     return null;
   }
 
@@ -203,6 +256,30 @@ export function RoleSwitcher({ className, compact = false }: RoleSwitcherProps) 
                   </button>
                 );
               })}
+
+              {/* Business+ Option - Only show if subscribed */}
+              {hasSubscription && (
+                <>
+                  <div className="my-1 border-t border-gray-100 dark:border-gray-700" />
+                  <button
+                    onClick={handleOpenBusinessPlus}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-purple-50 dark:hover:bg-purple-900/20"
+                  >
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gradient-to-br from-purple-500 to-indigo-500">
+                      <Crown className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-purple-700 dark:text-purple-300">
+                        Business+
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {subscriptionTier === 'business_plus' ? 'Business++' : 'Business'} • Opens new tab
+                      </p>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-purple-500 dark:text-purple-400" />
+                  </button>
+                </>
+              )}
             </div>
           </motion.div>
         )}

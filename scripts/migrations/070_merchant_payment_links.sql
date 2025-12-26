@@ -54,21 +54,20 @@ CREATE INDEX idx_merchant_payment_links_merchant_id ON merchant_payment_links(me
 CREATE INDEX idx_merchant_payment_links_status ON merchant_payment_links(status);
 CREATE INDEX idx_merchant_payment_links_created_at ON merchant_payment_links(created_at DESC);
 
--- RLS
+-- RLS - Using service_role only since app uses custom auth (not Supabase Auth)
+-- The app uses supabaseAdmin client which bypasses RLS
 ALTER TABLE merchant_payment_links ENABLE ROW LEVEL SECURITY;
 
--- Service role has full access
+-- Service role has full access (used by the app)
 CREATE POLICY "Service role full access on merchant_payment_links"
     ON merchant_payment_links FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- Merchants can manage their own payment links
-CREATE POLICY "Merchants manage own payment links"
-    ON merchant_payment_links FOR ALL TO authenticated
-    USING (merchant_id = auth.uid())
-    WITH CHECK (merchant_id = auth.uid());
+-- Allow authenticated users to read (for public checkout pages)
+CREATE POLICY "Authenticated read payment links"
+    ON merchant_payment_links FOR SELECT TO authenticated USING (true);
 
--- Public can view active payment links (for checkout)
-CREATE POLICY "Public view active payment links"
+-- Allow anon to read active payment links (for public checkout)
+CREATE POLICY "Anon read active payment links"
     ON merchant_payment_links FOR SELECT TO anon
     USING (status = 'active' AND (expires_at IS NULL OR expires_at > NOW()));
 

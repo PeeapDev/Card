@@ -145,6 +145,27 @@ export function MerchantSubscriptionPage() {
     }
   };
 
+  // Open Plus dashboard in new tab with SSO auto-login
+  const handleOpenPlusDashboard = async () => {
+    if (!user) return;
+
+    try {
+      // Use SSO to get redirect URL
+      const redirectUrl = await ssoService.getRedirectUrl({
+        user: user,
+        targetApp: 'plus',
+        redirectPath: '/dashboard',
+      });
+
+      // Open in new tab
+      window.open(redirectUrl, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      console.error('SSO redirect failed:', err);
+      // Fallback to direct link
+      window.open('https://plus.peeap.com/dashboard', '_blank', 'noopener,noreferrer');
+    }
+  };
+
   const handleCancelSubscription = async () => {
     setCancellingSubscription(true);
     try {
@@ -428,20 +449,18 @@ export function MerchantSubscriptionPage() {
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">My Plan</h1>
             <p className="text-gray-600 dark:text-gray-400 mt-1">Manage your PeeAP Plus subscription</p>
           </div>
-          <a
-            href="https://plus.peeap.com/dashboard"
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            onClick={handleOpenPlusDashboard}
             className="px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-xl font-medium hover:from-purple-600 hover:to-indigo-600 transition-all shadow-lg shadow-purple-500/20 flex items-center gap-2"
           >
             <Building2 className="w-4 h-4" />
             Open Plus Dashboard
             <ExternalLink className="w-4 h-4" />
-          </a>
+          </button>
         </div>
 
-        {/* Trial Banner */}
-        {subscription.status === 'trialing' && trialDays > 0 && (
+        {/* Trial Banner - Show when trial is active OR when trial_ends_at exists and hasn't passed */}
+        {(subscription.status === 'trialing' || (subscription.trial_ends_at && trialDays > 0)) && (
           <Card className="p-5 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-800">
             <div className="flex items-center justify-between flex-wrap gap-4">
               <div className="flex items-center gap-4">
@@ -450,20 +469,30 @@ export function MerchantSubscriptionPage() {
                 </div>
                 <div>
                   <p className="font-bold text-lg text-blue-900 dark:text-blue-100">
-                    {trialDays} day{trialDays !== 1 ? 's' : ''} remaining
+                    {trialDays > 0 ? (
+                      <>{trialDays} day{trialDays !== 1 ? 's' : ''} remaining in trial</>
+                    ) : (
+                      <>Trial period</>
+                    )}
                   </p>
                   <p className="text-sm text-blue-700 dark:text-blue-300">
-                    Free trial ends on {formatDate(subscription.trial_ends_at)}
+                    {subscription.trial_ends_at ? (
+                      <>Started {formatDate(subscription.trial_started_at)} • Ends {formatDate(subscription.trial_ends_at)}</>
+                    ) : (
+                      <>Subscription started {formatDate(subscription.created_at)}</>
+                    )}
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => handleUpgrade(subscription.tier)}
-                className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition flex items-center gap-2 shadow-lg shadow-blue-500/20"
-              >
-                Subscribe Now
-                <ArrowRight className="w-4 h-4" />
-              </button>
+              {trialDays > 0 && subscription.status === 'trialing' && (
+                <button
+                  onClick={() => handleUpgrade(subscription.tier)}
+                  className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition flex items-center gap-2 shadow-lg shadow-blue-500/20"
+                >
+                  Subscribe Now
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </Card>
         )}

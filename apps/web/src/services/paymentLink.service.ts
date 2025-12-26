@@ -3,7 +3,7 @@
  * Manages merchant payment links for shareable checkout URLs
  */
 
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseAdmin } from '@/lib/supabase';
 import { sessionService } from './session.service';
 
 export interface PaymentLink {
@@ -70,7 +70,7 @@ export const paymentLinkService = {
    * Get all payment links for a business
    */
   async getPaymentLinks(businessId: string): Promise<PaymentLink[]> {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('merchant_payment_links')
       .select(`
         *,
@@ -96,7 +96,7 @@ export const paymentLinkService = {
       throw new Error('Not authenticated');
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('merchant_payment_links')
       .select(`
         *,
@@ -117,7 +117,7 @@ export const paymentLinkService = {
    * Get a single payment link by ID
    */
   async getPaymentLink(id: string): Promise<PaymentLink> {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('merchant_payment_links')
       .select(`
         *,
@@ -138,7 +138,7 @@ export const paymentLinkService = {
    * Get a payment link by slug (for public checkout)
    */
   async getPaymentLinkBySlug(businessSlug: string, linkSlug: string): Promise<PaymentLink | null> {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('merchant_payment_links')
       .select(`
         *,
@@ -167,7 +167,7 @@ export const paymentLinkService = {
       throw new Error('Not authenticated');
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('merchant_payment_links')
       .insert({
         business_id: dto.business_id,
@@ -202,7 +202,7 @@ export const paymentLinkService = {
    * Update a payment link
    */
   async updatePaymentLink(id: string, dto: UpdatePaymentLinkDto): Promise<PaymentLink> {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('merchant_payment_links')
       .update({
         ...dto,
@@ -227,7 +227,7 @@ export const paymentLinkService = {
    * Delete a payment link
    */
   async deletePaymentLink(id: string): Promise<void> {
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('merchant_payment_links')
       .delete()
       .eq('id', id);

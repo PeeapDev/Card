@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase';
 import type { Wallet, Transaction, PaginatedResponse } from '@/types';
 import { notificationService } from '@/services/notification.service';
 
-export type WalletType = 'primary' | 'driver' | 'pot' | 'merchant' | 'pos';
+export type WalletType = 'primary' | 'driver' | 'pot' | 'merchant' | 'pos' | 'business_plus';
 
 export interface CreateWalletRequest {
   currency?: string;
@@ -156,6 +156,7 @@ export const walletService = {
       merchant: 'MRC',
       pos: 'POS',
       pot: 'POT',
+      business_plus: 'BIZ',
     };
     const prefix = prefixMap[walletType] || 'WAL';
     const externalId = `${prefix}-${data.currency || 'SLE'}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
@@ -165,6 +166,7 @@ export const walletService = {
       driver: 'Driver Wallet',
       pos: 'POS Wallet',
       merchant: 'Merchant Wallet',
+      business_plus: 'Business+ Wallet',
     };
 
     const { data: wallet, error } = await supabase
@@ -666,6 +668,27 @@ export const walletService = {
     }
 
     return mapWallet(data);
+  },
+
+  /**
+   * Create Business+ wallet for a user when they subscribe to Business Plus
+   * This wallet is used for Business+ specific features like expense cards
+   */
+  async createBusinessPlusWallet(userId: string): Promise<ExtendedWallet> {
+    // Check if wallet already exists
+    const existing = await this.getWalletByType(userId, 'business_plus');
+    if (existing) {
+      return existing;
+    }
+
+    // Create new Business+ wallet with higher limits
+    return this.createWallet(userId, {
+      walletType: 'business_plus',
+      name: 'Business+ Wallet',
+      currency: 'SLE',
+      dailyLimit: 50000, // Higher limits for Business+
+      monthlyLimit: 500000,
+    });
   },
 
   /**

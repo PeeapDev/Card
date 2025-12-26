@@ -12,16 +12,19 @@ import {
   EyeOff,
   Loader2,
   X,
-  DollarSign,
-  Calendar,
   TrendingUp,
   Users,
+  QrCode,
+  Download,
+  Share2,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
 import { currencyService, Currency } from '@/services/currency.service';
 import { paymentLinkService, PaymentLink, CreatePaymentLinkDto } from '@/services/paymentLink.service';
 import { businessService, MerchantBusiness } from '@/services/business.service';
+import { PaymentLinkSetupWizard } from '@/components/merchant/PaymentLinkSetupWizard';
+import QRCode from 'qrcode';
 
 export function MerchantPaymentLinksPage() {
   const [paymentLinks, setPaymentLinks] = useState<PaymentLink[]>([]);
@@ -31,9 +34,12 @@ export function MerchantPaymentLinksPage() {
   const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showQRModal, setShowQRModal] = useState<PaymentLink | null>(null);
+  const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showWizard, setShowWizard] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState<CreatePaymentLinkDto>({
@@ -62,6 +68,10 @@ export function MerchantPaymentLinksPage() {
       if (businessesData.length > 0 && !formData.business_id) {
         setFormData(prev => ({ ...prev, business_id: businessesData[0].id }));
       }
+      // Show wizard if no payment links exist and has businesses
+      if (linksData.length === 0 && businessesData.length > 0) {
+        setShowWizard(true);
+      }
     } catch (err) {
       console.error('Error fetching data:', err);
       setError('Failed to load payment links');
@@ -81,6 +91,61 @@ export function MerchantPaymentLinksPage() {
     navigator.clipboard.writeText(url);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const generateQRCode = async (url: string) => {
+    try {
+      const qrDataUrl = await QRCode.toDataURL(url, {
+        width: 300,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#ffffff',
+        },
+      });
+      setQrCodeUrl(qrDataUrl);
+    } catch (err) {
+      console.error('Error generating QR code:', err);
+    }
+  };
+
+  const showQRCodeModal = async (link: PaymentLink) => {
+    setShowQRModal(link);
+    const url = paymentLinkService.getPaymentLinkUrl(link.business?.slug || '', link.slug);
+    await generateQRCode(url);
+  };
+
+  const downloadQRCode = () => {
+    if (!qrCodeUrl || !showQRModal) return;
+    const linkElement = document.createElement('a');
+    linkElement.download = `payment-link-qr-${showQRModal.slug}.png`;
+    linkElement.href = qrCodeUrl;
+    linkElement.click();
+  };
+
+  const shareLink = async (link: PaymentLink) => {
+    const url = paymentLinkService.getPaymentLinkUrl(link.business?.slug || '', link.slug);
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: link.name,
+          text: link.description || 'Pay via this link',
+          url: url,
+        });
+      } catch (err) {
+        // User cancelled or share failed, copy to clipboard instead
+        copyToClipboard(link.id, link.business?.slug || '', link.slug);
+      }
+    } else {
+      copyToClipboard(link.id, link.business?.slug || '', link.slug);
+    }
+  };
+
+  const handleWizardComplete = async (data: CreatePaymentLinkDto & { createWallet?: boolean }) => {
+    // TODO: Implement wallet creation logic when createWallet is true
+    const link = await paymentLinkService.createPaymentLink(data);
+    await fetchData();
+    return link;
   };
 
   const handleCreate = async () => {
@@ -167,6 +232,22 @@ export function MerchantPaymentLinksPage() {
     totalPayments: paymentLinks.reduce((sum, l) => sum + (l.payment_count || 0), 0),
     totalCollected: paymentLinks.reduce((sum, l) => sum + (l.total_collected || 0), 0),
   };
+
+  // Show wizard for first-time users
+  if (showWizard && paymentLinks.length === 0 && businesses.length > 0 && !loading) {
+    return (
+      <MerchantLayout>
+        <div className="py-8">
+          <PaymentLinkSetupWizard
+            businesses={businesses}
+            currencySymbol={currencySymbol}
+            onComplete={handleWizardComplete}
+            onSkip={() => setShowWizard(false)}
+          />
+        </div>
+      </MerchantLayout>
+    );
+  }
 
   return (
     <MerchantLayout>
@@ -289,11 +370,11 @@ export function MerchantPaymentLinksPage() {
               </p>
               {businesses.length > 0 && !searchTerm && (
                 <button
-                  onClick={() => setShowCreateModal(true)}
+                  onClick={() => setShowWizard(true)}
                   className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 inline-flex items-center gap-2"
                 >
                   <Plus className="w-4 h-4" />
-                  Create Your First Payment Link
+                  Get Started with Payment Links
                 </button>
               )}
             </div>
@@ -332,7 +413,21 @@ export function MerchantPaymentLinksPage() {
                       <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{link.view_count}</td>
                       <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{link.payment_count}</td>
                       <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => showQRCodeModal(link)}
+                            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                            title="QR Code"
+                          >
+                            <QrCode className="w-4 h-4 text-gray-500" />
+                          </button>
+                          <button
+                            onClick={() => shareLink(link)}
+                            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                            title="Share"
+                          >
+                            <Share2 className="w-4 h-4 text-gray-500" />
+                          </button>
                           <button
                             onClick={() => copyToClipboard(link.id, link.business?.slug || '', link.slug)}
                             className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
@@ -508,6 +603,81 @@ export function MerchantPaymentLinksPage() {
                       Create Link
                     </>
                   )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* QR Code Modal */}
+      {showQRModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between p-4 border-b dark:border-gray-700">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">QR Code</h2>
+              <button
+                onClick={() => {
+                  setShowQRModal(null);
+                  setQrCodeUrl(null);
+                }}
+                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="p-6 text-center space-y-4">
+              <h3 className="font-semibold text-gray-900 dark:text-white">{showQRModal.name}</h3>
+
+              {qrCodeUrl ? (
+                <div className="flex justify-center">
+                  <div className="p-4 bg-white rounded-xl shadow-lg inline-block">
+                    <img src={qrCodeUrl} alt="Payment QR Code" className="w-48 h-48" />
+                  </div>
+                </div>
+              ) : (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+                </div>
+              )}
+
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Scan this QR code to open the payment link
+              </p>
+
+              {/* Payment URL */}
+              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                <p className="text-xs text-gray-400 mb-1">Payment Link URL</p>
+                <p className="text-sm text-gray-900 dark:text-white break-all">
+                  {paymentLinkService.getPaymentLinkUrl(showQRModal.business?.slug || '', showQRModal.slug)}
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => copyToClipboard(showQRModal.id, showQRModal.business?.slug || '', showQRModal.slug)}
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center justify-center gap-2"
+                >
+                  {copiedId === showQRModal.id ? (
+                    <>
+                      <CheckCircle className="w-4 h-4 text-green-500" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      Copy Link
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={downloadQRCode}
+                  disabled={!qrCodeUrl}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  Download QR
                 </button>
               </div>
             </div>
