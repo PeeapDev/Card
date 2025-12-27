@@ -27,77 +27,22 @@ const fileToDataUrl = (file: File): Promise<string> => {
 };
 
 /**
- * Upload a product image to Supabase Storage
- * Falls back to base64 data URL if storage upload fails
+ * Upload a product image
+ * Uses base64 data URL directly (stored with product in database)
+ * This avoids storage bucket RLS issues and works immediately
  */
 export const uploadProductImage = async (
   file: File,
   businessId: string,
   productId?: string
 ): Promise<UploadResult> => {
-  // Generate unique filename
-  const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-  const fileName = `${businessId}/${productId || 'temp'}_${Date.now()}.${fileExt}`;
-
-  try {
-    // Try to upload to Supabase Storage using admin client to bypass RLS
-    const { data, error } = await supabaseAdmin.storage
-      .from(PRODUCT_IMAGES_BUCKET)
-      .upload(fileName, file, {
-        cacheControl: '3600',
-        upsert: true,
-      });
-
-    if (error) {
-      console.error('Supabase storage error:', error.message);
-
-      // Check if bucket doesn't exist
-      if (error.message.includes('Bucket not found') || error.message.includes('not found')) {
-        console.warn('Storage bucket not configured. Using base64 fallback.');
-        const dataUrl = await fileToDataUrl(file);
-        return {
-          url: dataUrl,
-          path: 'base64',
-        };
-      }
-
-      // For RLS errors, try base64 fallback
-      if (error.message.includes('row-level security') || error.message.includes('policy')) {
-        console.warn('Storage RLS policy blocking upload. Using base64 fallback.');
-        const dataUrl = await fileToDataUrl(file);
-        return {
-          url: dataUrl,
-          path: 'base64',
-        };
-      }
-
-      // For other errors, try base64 fallback
-      console.warn('Storage upload failed. Using base64 fallback.');
-      const dataUrl = await fileToDataUrl(file);
-      return {
-        url: dataUrl,
-        path: 'base64',
-      };
-    }
-
-    // Get public URL
-    const { data: urlData } = supabaseAdmin.storage
-      .from(PRODUCT_IMAGES_BUCKET)
-      .getPublicUrl(data.path);
-
-    return {
-      url: urlData.publicUrl,
-      path: data.path,
-    };
-  } catch (err) {
-    console.error('Upload error, using base64 fallback:', err);
-    // Fallback to base64 data URL
-    const dataUrl = await fileToDataUrl(file);
-    return {
-      url: dataUrl,
-      path: 'base64',
-    };
-  }
+  // Use base64 encoding - works without storage configuration
+  // Images are stored directly in the database with the product
+  const dataUrl = await fileToDataUrl(file);
+  return {
+    url: dataUrl,
+    path: 'base64',
+  };
 };
 
 /**
