@@ -408,7 +408,8 @@ export const getProductByBarcode = async (businessId: string, barcode: string): 
 };
 
 export const createProduct = async (product: Partial<POSProduct>): Promise<POSProduct> => {
-  const { data, error } = await supabase
+  // Use supabaseAdmin to bypass RLS policies
+  const { data, error } = await supabaseAdmin
     .from('pos_products')
     .insert(product)
     .select()
@@ -419,7 +420,8 @@ export const createProduct = async (product: Partial<POSProduct>): Promise<POSPr
 };
 
 export const updateProduct = async (id: string, updates: Partial<POSProduct>): Promise<POSProduct> => {
-  const { data, error } = await supabase
+  // Use supabaseAdmin to bypass RLS policies
+  const { data, error } = await supabaseAdmin
     .from('pos_products')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id)
@@ -431,7 +433,8 @@ export const updateProduct = async (id: string, updates: Partial<POSProduct>): P
 };
 
 export const deleteProduct = async (id: string): Promise<void> => {
-  const { error } = await supabase
+  // Use supabaseAdmin to bypass RLS policies
+  const { error } = await supabaseAdmin
     .from('pos_products')
     .update({ is_active: false, updated_at: new Date().toISOString() })
     .eq('id', id);
