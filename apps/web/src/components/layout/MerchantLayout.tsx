@@ -80,7 +80,6 @@ interface NavItem {
 const baseNavItems: NavItem[] = [
   { id: 'dashboard', path: '/merchant', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'transactions', path: '/merchant/transactions', label: 'Transactions', icon: ArrowLeftRight },
-  { id: 'invoices', path: '/merchant/invoices', label: 'Invoices', icon: FileText },
   { id: 'payouts', path: '/merchant/payouts', label: 'Payouts', icon: DollarSign },
   { id: 'refunds', path: '/merchant/refunds', label: 'Refunds', icon: RefreshCw },
   { id: 'reports', path: '/merchant/reports', label: 'Reports', icon: BarChart3 },
@@ -94,11 +93,11 @@ const developerNavItems: NavItem[] = [
 ];
 
 // App nav items (conditionally added based on enabled apps in Settings)
-// Note: Invoices is now in baseNavItems as a core feature
 const appNavItems: Record<string, NavItem> = {
   terminal: { id: 'terminal', path: '/merchant/terminal', label: 'Payment Terminal', icon: Nfc },
   driver_wallet: { id: 'driver-wallet', path: '/merchant/driver-wallet', label: 'Driver Wallet', icon: Wallet },
   payment_links: { id: 'payment-links', path: '/merchant/payment-links', label: 'Payment Links', icon: Link2 },
+  invoices: { id: 'invoices', path: '/merchant/invoices', label: 'Invoices', icon: FileText },
   pos: { id: 'pos', path: '/merchant/apps/pos', label: 'Point of Sale', icon: ShoppingCart },
   fuel_station: { id: 'fuel-station', path: '/merchant/apps/fuel-station', label: 'Fuel Station', icon: Car },
   transportation: { id: 'transportation', path: '/merchant/apps/transportation', label: 'Transportation', icon: Car },
@@ -386,10 +385,10 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
   const activeItem = navItems.find((item) => item.id === activeId);
 
   // Check if any app is enabled to show in sidebar
-  // Note: Invoices is now a core feature, not an app
   const isTerminalEnabled = isAppEnabled('terminal');
   const isDriverWalletEnabled = isAppEnabled('driver_wallet');
   const isPaymentLinksEnabled = isAppEnabled('payment_links');
+  const isInvoicesEnabled = isAppEnabled('invoices');
   const isPosEnabled = isAppEnabled('pos');
   const isFuelStationEnabled = isAppEnabled('fuel_station');
   const isTransportationEnabled = isAppEnabled('transportation');
@@ -401,12 +400,13 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
     if (isTerminalEnabled) apps.push(appNavItems.terminal);
     if (isDriverWalletEnabled) apps.push(appNavItems.driver_wallet);
     if (isPaymentLinksEnabled) apps.push(appNavItems.payment_links);
+    if (isInvoicesEnabled) apps.push(appNavItems.invoices);
     if (isPosEnabled) apps.push(appNavItems.pos);
     if (isFuelStationEnabled) apps.push(appNavItems.fuel_station);
     if (isTransportationEnabled) apps.push(appNavItems.transportation);
     if (isEventsEnabled) apps.push(appNavItems.events);
     return apps;
-  }, [isTerminalEnabled, isDriverWalletEnabled, isPaymentLinksEnabled, isPosEnabled, isFuelStationEnabled, isTransportationEnabled, isEventsEnabled]);
+  }, [isTerminalEnabled, isDriverWalletEnabled, isPaymentLinksEnabled, isInvoicesEnabled, isPosEnabled, isFuelStationEnabled, isTransportationEnabled, isEventsEnabled]);
 
   // State for Apps menu popup
   const [appsMenuOpen, setAppsMenuOpen] = useState(false);
