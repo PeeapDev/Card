@@ -1,827 +1,386 @@
-/**
- * New Invoice Page
- *
- * Create invoices with:
- * - Multiple invoice types (Standard, Proforma, Quote, etc.)
- * - Recurring billing options
- * - Line items with product search
- * - Tax, discounts, and payment terms
- */
-
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
-  FileText,
   Plus,
   Trash2,
-  Search,
-  Package,
-  User,
-  Mail,
-  Phone,
-  Calendar,
   Save,
   Send,
   Loader2,
-  Calculator,
-  DollarSign,
-  Repeat,
-  FileCheck,
-  FileMinus,
-  FilePlus,
-  Receipt,
-  Info,
-  ChevronDown,
-  Clock,
+  Calendar,
+  User,
+  Mail,
+  Phone,
 } from 'lucide-react';
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
-import {
-  invoiceService,
-  InvoiceItem,
-  InvoiceType,
-  RecurringFrequency,
-  INVOICE_TYPE_CONFIG,
-  RECURRING_FREQUENCY_CONFIG,
-} from '@/services/invoice.service';
+import { invoiceService, InvoiceItem, InvoiceType } from '@/services/invoice.service';
 import { useBusiness } from '@/context/BusinessContext';
 
-interface LineItem {
-  id: string;
-  name: string;
-  description?: string;
-  quantity: number;
-  unit_price: number;
-  total: number;
-  product_id?: string;
-}
-
-const INVOICE_TYPE_ICONS: Record<InvoiceType, any> = {
-  standard: FileText,
-  proforma: FileCheck,
-  quote: FileText,
-  credit_note: FileMinus,
-  debit_note: FilePlus,
-  receipt: Receipt,
-};
+const INVOICE_TYPES: { id: InvoiceType; label: string; desc: string }[] = [
+  { id: 'standard', label: 'Standard Invoice', desc: 'Regular invoice' },
+  { id: 'proforma', label: 'Proforma Invoice', desc: 'Preliminary invoice' },
+  { id: 'quote', label: 'Quote / Estimate', desc: 'Price quote' },
+  { id: 'credit_note', label: 'Credit Note', desc: 'Credit/refund' },
+  { id: 'debit_note', label: 'Debit Note', desc: 'Additional charges' },
+  { id: 'receipt', label: 'Receipt', desc: 'Payment proof' },
+];
 
 export default function NewInvoicePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { business: currentBusiness } = useBusiness();
+  const { business } = useBusiness();
+  const [saving, setSaving] = useState(false);
+  const [sending, setSending] = useState(false);
 
-  // Get invoice type from URL params
-  const initialType = (searchParams.get('type') as InvoiceType) || 'standard';
-
-  // Form state
-  const [invoiceType, setInvoiceType] = useState<InvoiceType>(initialType);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
+  const [invoiceType, setInvoiceType] = useState<InvoiceType>(
+    (searchParams.get('type') as InvoiceType) || 'standard'
+  );
   const [customerName, setCustomerName] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-  const [items, setItems] = useState<LineItem[]>([]);
-  const [taxRate, setTaxRate] = useState(0);
-  const [discountAmount, setDiscountAmount] = useState(0);
+  const [title, setTitle] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [notes, setNotes] = useState('');
-  const [terms, setTerms] = useState('');
-  const [currency, setCurrency] = useState('SLE');
+  const [taxRate, setTaxRate] = useState(0);
+  const [discountAmount, setDiscountAmount] = useState(0);
 
-  // Recurring settings
-  const [isRecurring, setIsRecurring] = useState(false);
-  const [recurringFrequency, setRecurringFrequency] = useState<RecurringFrequency>('monthly');
-  const [recurringStartDate, setRecurringStartDate] = useState('');
-  const [recurringEndDate, setRecurringEndDate] = useState('');
-  const [recurringMaxCount, setRecurringMaxCount] = useState<number | undefined>(undefined);
-  const [recurringName, setRecurringName] = useState('');
+  const [items, setItems] = useState<InvoiceItem[]>([
+    { name: '', description: '', quantity: 1, unit_price: 0, total: 0 }
+  ]);
 
-  // UI state
-  const [saving, setSaving] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [showTypeSelector, setShowTypeSelector] = useState(false);
+  const addItem = () => {
+    setItems([...items, { name: '', description: '', quantity: 1, unit_price: 0, total: 0 }]);
+  };
 
-  // Calculate totals
-  const subtotal = items.reduce((sum, item) => sum + item.total, 0);
+  const removeItem = (index: number) => {
+    if (items.length > 1) {
+      setItems(items.filter((_, i) => i !== index));
+    }
+  };
+
+  const updateItem = (index: number, field: keyof InvoiceItem, value: string | number) => {
+    const newItems = [...items];
+    newItems[index] = { ...newItems[index], [field]: value };
+    newItems[index].total = newItems[index].quantity * newItems[index].unit_price;
+    setItems(newItems);
+  };
+
+  const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
   const taxAmount = subtotal * (taxRate / 100);
-  const totalAmount = subtotal + taxAmount - discountAmount;
+  const total = subtotal + taxAmount - discountAmount;
 
-  // Set default due date based on settings
-  useEffect(() => {
-    if (!dueDate) {
-      const date = new Date();
-      date.setDate(date.getDate() + 14); // Default 14 days
-      setDueDate(date.toISOString().split('T')[0]);
-    }
-    if (!recurringStartDate) {
-      const date = new Date();
-      date.setDate(date.getDate() + 1);
-      setRecurringStartDate(date.toISOString().split('T')[0]);
-    }
-  }, []);
-
-  const addEmptyItem = () => {
-    setItems([
-      ...items,
-      {
-        id: Date.now().toString(),
-        name: '',
-        quantity: 1,
-        unit_price: 0,
-        total: 0,
-      },
-    ]);
-  };
-
-  const updateItem = (id: string, field: keyof LineItem, value: any) => {
-    setItems(items.map(item => {
-      if (item.id !== id) return item;
-
-      const updated = { ...item, [field]: value };
-
-      if (field === 'quantity' || field === 'unit_price') {
-        updated.total = updated.quantity * updated.unit_price;
-      }
-
-      return updated;
-    }));
-  };
-
-  const removeItem = (id: string) => {
-    setItems(items.filter(item => item.id !== id));
-  };
-
-  const handleProductSearch = async (query: string) => {
-    setSearchQuery(query);
-    if (query.length < 2 || !currentBusiness?.id) {
-      setSearchResults([]);
+  const handleSave = async (send: boolean = false) => {
+    if (!business?.id) {
+      alert('No business selected');
       return;
     }
 
-    setSearching(true);
-    const products = await invoiceService.searchProductsForMention(query, currentBusiness.id);
-    setSearchResults(products);
-    setSearching(false);
-  };
+    if (!customerName.trim()) {
+      alert('Please enter customer name');
+      return;
+    }
 
-  const addProductAsItem = (product: any) => {
-    setItems([
-      ...items,
-      {
-        id: Date.now().toString(),
-        name: product.name,
-        description: product.description,
-        quantity: 1,
-        unit_price: product.price,
-        total: product.price,
-        product_id: product.id,
-      },
-    ]);
-    setSearchQuery('');
-    setSearchResults([]);
-  };
+    if (items.length === 0 || !items[0].name.trim()) {
+      alert('Please add at least one item');
+      return;
+    }
 
-  const handleSave = async (sendAfterSave = false) => {
-    if (!currentBusiness?.id || items.length === 0) return;
+    send ? setSending(true) : setSaving(true);
 
-    setSaving(true);
-
-    // If recurring, create a template instead
-    if (isRecurring && recurringName) {
-      const { template, error } = await invoiceService.createRecurringTemplate({
-        businessId: currentBusiness.id,
-        name: recurringName,
-        description: description,
-        customerName,
-        customerEmail,
-        customerPhone,
-        invoiceType,
-        title,
-        currency,
-        items: items.map(item => ({
-          name: item.name,
-          description: item.description,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          total: item.total,
-          product_id: item.product_id,
-        })),
+    try {
+      const { invoice, error } = await invoiceService.createInvoice({
+        businessId: business.id,
+        customerName: customerName.trim(),
+        customerEmail: customerEmail.trim() || undefined,
+        customerPhone: customerPhone.trim() || undefined,
+        title: title.trim() || undefined,
+        items: items.filter(i => i.name.trim()),
         taxRate,
         discountAmount,
-        notes,
-        terms,
-        frequency: recurringFrequency,
-        startDate: recurringStartDate,
-        endDate: recurringEndDate || undefined,
-        maxOccurrences: recurringMaxCount,
-        autoSend: sendAfterSave,
+        dueDate: dueDate || undefined,
+        notes: notes.trim() || undefined,
+        invoiceType,
       });
 
-      if (error) {
-        alert('Failed to create recurring invoice: ' + error);
-        setSaving(false);
+      if (error || !invoice) {
+        alert(error || 'Failed to create invoice');
         return;
       }
 
+      if (send) {
+        await invoiceService.sendInvoice(invoice.id);
+      }
+
+      navigate(`/merchant/invoices/${invoice.id}`);
+    } catch (err: any) {
+      alert(err.message || 'Failed to create invoice');
+    } finally {
       setSaving(false);
-      navigate('/merchant/invoices?tab=recurring');
-      return;
-    }
-
-    const invoiceData = {
-      businessId: currentBusiness.id,
-      title,
-      description,
-      customerName,
-      customerEmail,
-      customerPhone,
-      currency,
-      items: items.map(item => ({
-        name: item.name,
-        description: item.description,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        total: item.total,
-        product_id: item.product_id,
-      })),
-      taxRate,
-      discountAmount,
-      dueDate: dueDate || undefined,
-      notes,
-      terms,
-      invoiceType,
-    };
-
-    const { invoice, error } = await invoiceService.createInvoice(invoiceData);
-
-    if (error || !invoice) {
-      alert('Failed to create invoice: ' + error);
-      setSaving(false);
-      return;
-    }
-
-    // Generate payment link
-    await invoiceService.generatePaymentLink(invoice.id);
-
-    if (sendAfterSave) {
-      setSending(true);
-      await invoiceService.sendInvoice(invoice.id);
       setSending(false);
     }
-
-    setSaving(false);
-    navigate('/merchant/invoices');
   };
-
-  const typeConfig = INVOICE_TYPE_CONFIG[invoiceType];
-  const TypeIcon = INVOICE_TYPE_ICONS[invoiceType];
 
   return (
     <MerchantLayout>
-      <div className="p-6 max-w-4xl mx-auto">
+      <div className="p-4 md:p-6 max-w-4xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
           <button
             onClick={() => navigate('/merchant/invoices')}
-            className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
           </button>
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              New {typeConfig.label}
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400">{typeConfig.description}</p>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">New Invoice</h1>
+            <p className="text-gray-600 dark:text-gray-400">Create a new invoice for your customer</p>
           </div>
         </div>
 
         <div className="space-y-6">
-          {/* Invoice Type Selector */}
+          {/* Invoice Type */}
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Invoice Type</h2>
-            </div>
-
-            <div className="relative">
-              <button
-                onClick={() => setShowTypeSelector(!showTypeSelector)}
-                className="w-full flex items-center justify-between px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-left"
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-lg bg-${typeConfig.color}-100 dark:bg-${typeConfig.color}-900/30 flex items-center justify-center`}>
-                    <TypeIcon className={`w-5 h-5 text-${typeConfig.color}-600 dark:text-${typeConfig.color}-400`} />
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-white">{typeConfig.label}</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{typeConfig.description}</p>
-                  </div>
-                </div>
-                <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${showTypeSelector ? 'rotate-180' : ''}`} />
-              </button>
-
-              {showTypeSelector && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setShowTypeSelector(false)} />
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-20 max-h-80 overflow-y-auto">
-                    {(Object.keys(INVOICE_TYPE_CONFIG) as InvoiceType[]).map(type => {
-                      const config = INVOICE_TYPE_CONFIG[type];
-                      const Icon = INVOICE_TYPE_ICONS[type];
-                      const isSelected = type === invoiceType;
-                      return (
-                        <button
-                          key={type}
-                          onClick={() => {
-                            setInvoiceType(type);
-                            setShowTypeSelector(false);
-                          }}
-                          className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 text-left ${
-                            isSelected ? 'bg-primary-50 dark:bg-primary-900/20' : ''
-                          }`}
-                        >
-                          <Icon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-                          <div className="flex-1">
-                            <p className="font-medium text-gray-900 dark:text-white">{config.label}</p>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">{config.description}</p>
-                          </div>
-                          {isSelected && (
-                            <div className="w-5 h-5 rounded-full bg-primary-600 flex items-center justify-center">
-                              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                              </svg>
-                            </div>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Recurring Toggle */}
-            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Repeat className="w-5 h-5 text-purple-500" />
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-white">Recurring Invoice</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Automatically generate on a schedule</p>
-                  </div>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={isRecurring}
-                    onChange={(e) => setIsRecurring(e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 dark:peer-focus:ring-primary-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary-600"></div>
-                </label>
-              </div>
-
-              {isRecurring && (
-                <div className="mt-4 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Template Name *
-                    </label>
-                    <input
-                      type="text"
-                      value={recurringName}
-                      onChange={(e) => setRecurringName(e.target.value)}
-                      placeholder="e.g., Monthly Maintenance Fee"
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Frequency
-                      </label>
-                      <select
-                        value={recurringFrequency}
-                        onChange={(e) => setRecurringFrequency(e.target.value as RecurringFrequency)}
-                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                      >
-                        {(Object.keys(RECURRING_FREQUENCY_CONFIG) as RecurringFrequency[]).map(freq => (
-                          <option key={freq} value={freq}>
-                            {RECURRING_FREQUENCY_CONFIG[freq].label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Start Date
-                      </label>
-                      <input
-                        type="date"
-                        value={recurringStartDate}
-                        onChange={(e) => setRecurringStartDate(e.target.value)}
-                        min={new Date().toISOString().split('T')[0]}
-                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        End Date (Optional)
-                      </label>
-                      <input
-                        type="date"
-                        value={recurringEndDate}
-                        onChange={(e) => setRecurringEndDate(e.target.value)}
-                        min={recurringStartDate}
-                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-2 text-sm text-purple-700 dark:text-purple-300">
-                    <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                    <p>
-                      This will create a recurring invoice template. Invoices will be automatically generated based on the schedule.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Invoice Details */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Invoice Details</h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Title
-                </label>
-                <input
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g., Website Development Project"
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                />
-              </div>
-
-              {!isRecurring && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Due Date
-                  </label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      type="date"
-                      value={dueDate}
-                      onChange={(e) => setDueDate(e.target.value)}
-                      min={new Date().toISOString().split('T')[0]}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Description
-                </label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Brief description of this invoice"
-                  rows={2}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none"
-                />
-              </div>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Invoice Type</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {INVOICE_TYPES.map(type => (
+                <button
+                  key={type.id}
+                  onClick={() => setInvoiceType(type.id)}
+                  className={`p-4 rounded-lg border-2 text-left transition-all ${
+                    invoiceType === type.id
+                      ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <p className="font-medium text-gray-900 dark:text-white">{type.label}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{type.desc}</p>
+                </button>
+              ))}
             </div>
           </div>
 
           {/* Customer Details */}
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Customer Details</h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Customer Name
+                  Customer Name *
                 </label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
                     type="text"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
                     placeholder="John Doe"
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   />
                 </div>
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Email
                 </label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
                     type="email"
                     value={customerEmail}
                     onChange={(e) => setCustomerEmail(e.target.value)}
                     placeholder="john@example.com"
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   />
                 </div>
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Phone
                 </label>
                 <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
                     type="tel"
                     value={customerPhone}
                     onChange={(e) => setCustomerPhone(e.target.value)}
-                    placeholder="+232 XX XXX XXX"
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    placeholder="+232 76 123456"
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   />
                 </div>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Due Date
+                </label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Invoice Title (Optional)
+              </label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Website Development Services"
+                className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              />
             </div>
           </div>
 
           {/* Line Items */}
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Line Items</h2>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Items</h2>
               <button
-                onClick={addEmptyItem}
-                className="flex items-center gap-1 text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400"
+                onClick={addItem}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
               >
                 <Plus className="w-4 h-4" />
                 Add Item
               </button>
             </div>
 
-            {/* Product Search */}
-            <div className="mb-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => handleProductSearch(e.target.value)}
-                  placeholder="Search products to add..."
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                />
-                {searching && (
-                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-gray-400" />
-                )}
-              </div>
-
-              {searchResults.length > 0 && (
-                <div className="mt-2 border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-200 dark:divide-gray-700 max-h-48 overflow-y-auto">
-                  {searchResults.map(product => (
-                    <button
-                      key={product.id}
-                      onClick={() => addProductAsItem(product)}
-                      className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50"
-                    >
-                      <div className="flex items-center gap-3">
-                        <Package className="w-5 h-5 text-purple-500" />
-                        <span className="font-medium text-gray-900 dark:text-white">{product.name}</span>
-                      </div>
-                      <span className="font-medium text-gray-900 dark:text-white">
-                        {product.currency} {product.price.toLocaleString()}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Items List */}
-            <div className="space-y-3">
-              {items.length === 0 ? (
-                <div className="text-center py-8 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
-                  <Package className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                  <p className="text-gray-500 dark:text-gray-400">No items added yet</p>
-                  <button
-                    onClick={addEmptyItem}
-                    className="mt-2 text-sm text-primary-600 hover:text-primary-700"
-                  >
-                    Add your first item
-                  </button>
-                </div>
-              ) : (
-                <>
-                  {/* Header */}
-                  <div className="grid grid-cols-12 gap-3 px-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                    <div className="col-span-5">Item</div>
-                    <div className="col-span-2 text-center">Qty</div>
-                    <div className="col-span-3">Price</div>
-                    <div className="col-span-2 text-right">Total</div>
-                  </div>
-
-                  {items.map((item) => (
-                    <div
-                      key={item.id}
-                      className="grid grid-cols-12 gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg items-center"
-                    >
-                      <div className="col-span-5">
-                        <input
-                          type="text"
-                          value={item.name}
-                          onChange={(e) => updateItem(item.id, 'name', e.target.value)}
-                          placeholder="Item name"
-                          className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                        />
-                      </div>
-
-                      <div className="col-span-2">
-                        <input
-                          type="number"
-                          min="1"
-                          value={item.quantity}
-                          onChange={(e) => updateItem(item.id, 'quantity', parseInt(e.target.value) || 1)}
-                          className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-center"
-                        />
-                      </div>
-
-                      <div className="col-span-3">
-                        <div className="relative">
-                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">
-                            {currency}
-                          </span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={item.unit_price}
-                            onChange={(e) => updateItem(item.id, 'unit_price', parseFloat(e.target.value) || 0)}
-                            className="w-full pl-10 pr-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-right"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="col-span-2 flex items-center justify-end gap-2">
-                        <span className="text-sm font-medium text-gray-900 dark:text-white">
-                          {currency} {item.total.toLocaleString()}
-                        </span>
-                        <button
-                          onClick={() => removeItem(item.id)}
-                          className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+            <div className="space-y-4">
+              {items.map((item, index) => (
+                <div key={index} className="flex gap-4 items-start p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                  <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Item Name</label>
+                      <input
+                        type="text"
+                        value={item.name}
+                        onChange={(e) => updateItem(index, 'name', e.target.value)}
+                        placeholder="Product or service name"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                      />
                     </div>
-                  ))}
-                </>
-              )}
+                    <div>
+                      <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Qty</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={item.quantity}
+                        onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 1)}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Unit Price (SLE)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={item.unit_price}
+                        onChange={(e) => updateItem(index, 'unit_price', parseFloat(e.target.value) || 0)}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div className="text-right pt-6">
+                    <p className="font-semibold text-gray-900 dark:text-white">
+                      SLE {(item.quantity * item.unit_price).toLocaleString()}
+                    </p>
+                  </div>
+                  {items.length > 1 && (
+                    <button
+                      onClick={() => removeItem(index)}
+                      className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg mt-5"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
-          </div>
 
-          {/* Tax, Discount & Totals */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Tax Rate (%)
-                  </label>
-                  <div className="relative">
-                    <Calculator className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            {/* Totals */}
+            <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex justify-end">
+                <div className="w-72 space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">Subtotal</span>
+                    <span className="text-gray-900 dark:text-white font-medium">SLE {subtotal.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">Tax (%)</span>
                     <input
                       type="number"
                       min="0"
                       max="100"
-                      step="0.1"
                       value={taxRate}
                       onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-right bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                     />
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Discount ({currency})
-                  </label>
-                  <div className="relative">
-                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  {taxAmount > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">Tax Amount</span>
+                      <span className="text-gray-900 dark:text-white">SLE {taxAmount.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">Discount (SLE)</span>
                     <input
                       type="number"
                       min="0"
-                      step="0.01"
                       value={discountAmount}
                       onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      className="w-24 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-right bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                     />
                   </div>
-                </div>
-              </div>
-
-              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-400">Subtotal</span>
-                    <span className="text-gray-900 dark:text-white">{currency} {subtotal.toLocaleString()}</span>
-                  </div>
-                  {taxRate > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600 dark:text-gray-400">Tax ({taxRate}%)</span>
-                      <span className="text-gray-900 dark:text-white">{currency} {taxAmount.toLocaleString()}</span>
-                    </div>
-                  )}
-                  {discountAmount > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600 dark:text-gray-400">Discount</span>
-                      <span className="text-green-600 dark:text-green-400">-{currency} {discountAmount.toLocaleString()}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between pt-3 border-t border-gray-200 dark:border-gray-600">
-                    <span className="font-semibold text-gray-900 dark:text-white">Total</span>
-                    <span className="font-bold text-xl text-gray-900 dark:text-white">
-                      {currency} {totalAmount.toLocaleString()}
-                    </span>
+                  <div className="flex justify-between text-lg font-bold pt-3 border-t border-gray-200 dark:border-gray-700">
+                    <span className="text-gray-900 dark:text-white">Total</span>
+                    <span className="text-green-600">SLE {total.toLocaleString()}</span>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Notes & Terms */}
+          {/* Notes */}
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Notes
-                </label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Additional notes for the customer..."
-                  rows={4}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Terms & Conditions
-                </label>
-                <textarea
-                  value={terms}
-                  onChange={(e) => setTerms(e.target.value)}
-                  placeholder="Payment terms, late fees, etc..."
-                  rows={4}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none"
-                />
-              </div>
-            </div>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Notes</h2>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Additional notes for the customer..."
+              rows={3}
+              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none"
+            />
           </div>
 
           {/* Actions */}
-          <div className="flex items-center justify-end gap-4">
+          <div className="flex flex-col sm:flex-row gap-4 justify-end">
             <button
               onClick={() => navigate('/merchant/invoices')}
-              className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+              className="px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 font-medium"
             >
               Cancel
             </button>
             <button
               onClick={() => handleSave(false)}
-              disabled={saving || items.length === 0 || (isRecurring && !recurringName)}
-              className="flex items-center gap-2 px-6 py-2 border border-primary-600 text-primary-600 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 disabled:opacity-50"
+              disabled={saving || sending}
+              className="flex items-center justify-center gap-2 px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium disabled:opacity-50"
             >
-              {saving && !sending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Save className="w-4 h-4" />
-              )}
-              {isRecurring ? 'Create Template' : 'Save as Draft'}
+              {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+              Save as Draft
             </button>
             <button
               onClick={() => handleSave(true)}
-              disabled={saving || items.length === 0 || (isRecurring && !recurringName)}
-              className="flex items-center gap-2 px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+              disabled={saving || sending}
+              className="flex items-center justify-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium disabled:opacity-50"
             >
-              {sending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Send className="w-4 h-4" />
-              )}
-              {isRecurring ? 'Create & Activate' : 'Save & Send'}
+              {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+              Save & Send
             </button>
           </div>
         </div>
