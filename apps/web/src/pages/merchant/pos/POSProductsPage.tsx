@@ -136,6 +136,8 @@ export function POSProductsPage() {
   const [imageSearchQuery, setImageSearchQuery] = useState('');
   const [searchingImages, setSearchingImages] = useState(false);
   const [searchResults, setSearchResults] = useState<string[]>([]);
+  const [loadedImages, setLoadedImages] = useState<Set<number>>(new Set());
+  const [failedImages, setFailedImages] = useState<Set<number>>(new Set());
 
   const [categoryForm, setCategoryForm] = useState({
     name: '',
@@ -290,17 +292,34 @@ export function POSProductsPage() {
     setProductForm(prev => ({ ...prev, barcode }));
   };
 
-  // Search for product images (using placeholder service)
+  // Search for product images using Lorem Picsum (free, reliable placeholder images)
   const searchProductImages = async () => {
     if (!imageSearchQuery.trim()) return;
     setSearchingImages(true);
+    setSearchResults([]);
+    setLoadedImages(new Set());
+    setFailedImages(new Set());
     try {
-      // Use Unsplash source for product images
-      const searchTerms = encodeURIComponent(imageSearchQuery);
+      // Generate a hash from search query for consistent results
+      const hashCode = (str: string) => {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+          const char = str.charCodeAt(i);
+          hash = ((hash << 5) - hash) + char;
+          hash = hash & hash;
+        }
+        return Math.abs(hash);
+      };
+
+      const baseSeed = hashCode(imageSearchQuery.toLowerCase());
       const results: string[] = [];
+
+      // Use Lorem Picsum with seeds for consistent, nice product images
       for (let i = 0; i < 8; i++) {
-        results.push(`https://source.unsplash.com/400x400/?${searchTerms}&sig=${Date.now() + i}`);
+        const seed = baseSeed + i * 100;
+        results.push(`https://picsum.photos/seed/${seed}/400/400`);
       }
+
       setSearchResults(results);
     } catch (error) {
       console.error('Error searching images:', error);
@@ -338,7 +357,7 @@ export function POSProductsPage() {
       const localPreview = URL.createObjectURL(file);
       setImagePreview(localPreview);
 
-      // Upload with compression
+      // Upload with compression (automatically falls back to base64 if storage fails)
       const result = await storageService.uploadProductImageWithCompression(
         file,
         merchantId,
@@ -348,10 +367,26 @@ export function POSProductsPage() {
       // Update form with uploaded URL
       setProductForm(prev => ({ ...prev, image_url: result.url }));
       setImagePreview(result.url);
+
+      // Inform user if we used fallback
+      if (result.path === 'base64') {
+        console.log('Image saved as embedded data (storage not available)');
+      }
     } catch (error) {
       console.error('Error uploading image:', error);
-      alert('Failed to upload image. Please try again.');
-      setImagePreview(productForm.image_url || null);
+      // Try direct base64 as last resort
+      try {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const dataUrl = e.target?.result as string;
+          setProductForm(prev => ({ ...prev, image_url: dataUrl }));
+          setImagePreview(dataUrl);
+        };
+        reader.readAsDataURL(file);
+      } catch {
+        alert('Failed to upload image. Please try again or enter a URL manually.');
+        setImagePreview(productForm.image_url || null);
+      }
     } finally {
       setUploading(false);
     }
@@ -644,12 +679,17 @@ export function POSProductsPage() {
                       src={product.image_url}
                       alt={product.name}
                       className="w-full h-40 object-cover"
+                      onError={(e) => {
+                        // Hide broken image and show placeholder
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        target.nextElementSibling?.classList.remove('hidden');
+                      }}
                     />
-                  ) : (
-                    <div className="w-full h-40 bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
-                      <Package className="w-12 h-12 text-gray-400" />
-                    </div>
-                  )}
+                  ) : null}
+                  <div className={`w-full h-40 bg-gray-100 dark:bg-gray-900 flex items-center justify-center ${product.image_url ? 'hidden' : ''}`}>
+                    <Package className="w-12 h-12 text-gray-400" />
+                  </div>
 
                   {/* Sale Badge */}
                   {(product as any).is_on_sale && (
@@ -1040,12 +1080,31 @@ export function POSProductsPage() {
                               key={i}
                               type="button"
                               onClick={() => selectSearchImage(url)}
-                              className="aspect-square rounded-lg overflow-hidden border-2 border-transparent hover:border-blue-500 transition-colors"
+                              disabled={failedImages.has(i)}
+                              className={`aspect-square rounded-lg overflow-hidden border-2 transition-colors relative ${
+                                failedImages.has(i)
+                                  ? 'border-gray-200 opacity-50 cursor-not-allowed'
+                                  : 'border-transparent hover:border-blue-500'
+                              }`}
                             >
+                              {/* Loading skeleton */}
+                              {!loadedImages.has(i) && !failedImages.has(i) && (
+                                <div className="absolute inset-0 bg-gray-200 dark:bg-gray-700 animate-pulse flex items-center justify-center">
+                                  <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
+                                </div>
+                              )}
+                              {/* Failed placeholder */}
+                              {failedImages.has(i) && (
+                                <div className="absolute inset-0 bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                                  <ImageIcon className="w-6 h-6 text-gray-400" />
+                                </div>
+                              )}
                               <img
                                 src={url}
-                                alt={`Search result ${i + 1}`}
-                                className="w-full h-full object-cover"
+                                alt={`Product image option ${i + 1}`}
+                                className={`w-full h-full object-cover ${!loadedImages.has(i) ? 'opacity-0' : 'opacity-100'}`}
+                                onLoad={() => setLoadedImages(prev => new Set(prev).add(i))}
+                                onError={() => setFailedImages(prev => new Set(prev).add(i))}
                               />
                             </button>
                           ))}
