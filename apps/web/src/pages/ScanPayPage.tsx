@@ -266,22 +266,43 @@ export function ScanPayPage() {
   const fetchWallets = async () => {
     if (!user?.id) return;
 
-    // Fetch all active wallets for the user
+    const paymentCurrency = session?.currencyCode || 'SLE';
+
+    // Fetch all wallets for the user (check both uppercase and lowercase status)
     const { data: userWallets, error: walletsError } = await supabase
       .from('wallets')
-      .select('id, name, balance, wallet_type')
+      .select('id, name, balance, wallet_type, currency, status')
       .eq('user_id', user.id)
-      .eq('status', 'active')
-      .order('wallet_type', { ascending: true });
+      .order('balance', { ascending: false });
 
     if (walletsError) {
       console.error('Error fetching wallets:', walletsError);
       return;
     }
 
+    console.log('All user wallets:', userWallets);
+
     if (userWallets && userWallets.length > 0) {
+      // Filter for active wallets (handle both ACTIVE and active)
+      // Also filter by matching currency for the payment
+      const activeWallets = userWallets.filter(w => {
+        const isActive = w.status?.toLowerCase() === 'active';
+        const matchesCurrency = !w.currency || w.currency === paymentCurrency;
+        return isActive && matchesCurrency;
+      });
+
+      console.log('Active wallets for currency', paymentCurrency, ':', activeWallets);
+
+      // If no wallets match currency, show all active wallets
+      const walletsToShow = activeWallets.length > 0 ? activeWallets : userWallets.filter(w => w.status?.toLowerCase() === 'active');
+
+      if (walletsToShow.length === 0) {
+        console.error('No active wallets found');
+        return;
+      }
+
       // Map wallet types to friendly names if name is missing
-      const walletsWithNames = userWallets.map(w => ({
+      const walletsWithNames = walletsToShow.map(w => ({
         ...w,
         name: w.name || getWalletName(w.wallet_type),
       }));
@@ -296,12 +317,12 @@ export function ScanPayPage() {
           // Prefer primary wallet if it can afford the payment
           if (a.wallet_type === 'primary') return -1;
           if (b.wallet_type === 'primary') return 1;
-          return 0;
+          // Otherwise prefer higher balance
+          return b.balance - a.balance;
         })[0];
 
-      // If no wallet can afford, just select primary
-      const primaryWallet = walletsWithNames.find(w => w.wallet_type === 'primary');
-      const selectedId = affordableWallet?.id || primaryWallet?.id || walletsWithNames[0].id;
+      // If no wallet can afford, just select the one with highest balance
+      const selectedId = affordableWallet?.id || walletsWithNames[0].id;
       setSelectedWalletId(selectedId);
 
       // Set the index for the carousel
