@@ -1,11 +1,15 @@
 /**
  * New Invoice Page
  *
- * Create a new invoice with line items, customer details, and payment terms
+ * Create invoices with:
+ * - Multiple invoice types (Standard, Proforma, Quote, etc.)
+ * - Recurring billing options
+ * - Line items with product search
+ * - Tax, discounts, and payment terms
  */
 
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   FileText,
@@ -22,9 +26,24 @@ import {
   Loader2,
   Calculator,
   DollarSign,
+  Repeat,
+  FileCheck,
+  FileMinus,
+  FilePlus,
+  Receipt,
+  Info,
+  ChevronDown,
+  Clock,
 } from 'lucide-react';
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
-import { invoiceService, InvoiceItem } from '@/services/invoice.service';
+import {
+  invoiceService,
+  InvoiceItem,
+  InvoiceType,
+  RecurringFrequency,
+  INVOICE_TYPE_CONFIG,
+  RECURRING_FREQUENCY_CONFIG,
+} from '@/services/invoice.service';
 import { useBusiness } from '@/context/BusinessContext';
 
 interface LineItem {
@@ -37,11 +56,25 @@ interface LineItem {
   product_id?: string;
 }
 
+const INVOICE_TYPE_ICONS: Record<InvoiceType, any> = {
+  standard: FileText,
+  proforma: FileCheck,
+  quote: FileText,
+  credit_note: FileMinus,
+  debit_note: FilePlus,
+  receipt: Receipt,
+};
+
 export default function NewInvoicePage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { business: currentBusiness } = useBusiness();
 
+  // Get invoice type from URL params
+  const initialType = (searchParams.get('type') as InvoiceType) || 'standard';
+
   // Form state
+  const [invoiceType, setInvoiceType] = useState<InvoiceType>(initialType);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [customerName, setCustomerName] = useState('');
@@ -55,17 +88,40 @@ export default function NewInvoicePage() {
   const [terms, setTerms] = useState('');
   const [currency, setCurrency] = useState('SLE');
 
+  // Recurring settings
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurringFrequency, setRecurringFrequency] = useState<RecurringFrequency>('monthly');
+  const [recurringStartDate, setRecurringStartDate] = useState('');
+  const [recurringEndDate, setRecurringEndDate] = useState('');
+  const [recurringMaxCount, setRecurringMaxCount] = useState<number | undefined>(undefined);
+  const [recurringName, setRecurringName] = useState('');
+
   // UI state
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
+  const [showTypeSelector, setShowTypeSelector] = useState(false);
 
   // Calculate totals
   const subtotal = items.reduce((sum, item) => sum + item.total, 0);
   const taxAmount = subtotal * (taxRate / 100);
   const totalAmount = subtotal + taxAmount - discountAmount;
+
+  // Set default due date based on settings
+  useEffect(() => {
+    if (!dueDate) {
+      const date = new Date();
+      date.setDate(date.getDate() + 14); // Default 14 days
+      setDueDate(date.toISOString().split('T')[0]);
+    }
+    if (!recurringStartDate) {
+      const date = new Date();
+      date.setDate(date.getDate() + 1);
+      setRecurringStartDate(date.toISOString().split('T')[0]);
+    }
+  }, []);
 
   const addEmptyItem = () => {
     setItems([
@@ -133,6 +189,48 @@ export default function NewInvoicePage() {
 
     setSaving(true);
 
+    // If recurring, create a template instead
+    if (isRecurring && recurringName) {
+      const { template, error } = await invoiceService.createRecurringTemplate({
+        businessId: currentBusiness.id,
+        name: recurringName,
+        description: description,
+        customerName,
+        customerEmail,
+        customerPhone,
+        invoiceType,
+        title,
+        currency,
+        items: items.map(item => ({
+          name: item.name,
+          description: item.description,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          total: item.total,
+          product_id: item.product_id,
+        })),
+        taxRate,
+        discountAmount,
+        notes,
+        terms,
+        frequency: recurringFrequency,
+        startDate: recurringStartDate,
+        endDate: recurringEndDate || undefined,
+        maxOccurrences: recurringMaxCount,
+        autoSend: sendAfterSave,
+      });
+
+      if (error) {
+        alert('Failed to create recurring invoice: ' + error);
+        setSaving(false);
+        return;
+      }
+
+      setSaving(false);
+      navigate('/merchant/invoices?tab=recurring');
+      return;
+    }
+
     const invoiceData = {
       businessId: currentBusiness.id,
       title,
@@ -154,6 +252,7 @@ export default function NewInvoicePage() {
       dueDate: dueDate || undefined,
       notes,
       terms,
+      invoiceType,
     };
 
     const { invoice, error } = await invoiceService.createInvoice(invoiceData);
@@ -177,6 +276,9 @@ export default function NewInvoicePage() {
     navigate('/merchant/invoices');
   };
 
+  const typeConfig = INVOICE_TYPE_CONFIG[invoiceType];
+  const TypeIcon = INVOICE_TYPE_ICONS[invoiceType];
+
   return (
     <MerchantLayout>
       <div className="p-6 max-w-4xl mx-auto">
@@ -188,13 +290,169 @@ export default function NewInvoicePage() {
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">New Invoice</h1>
-            <p className="text-gray-600 dark:text-gray-400">Create a new invoice for your customer</p>
+          <div className="flex-1">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+              New {typeConfig.label}
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400">{typeConfig.description}</p>
           </div>
         </div>
 
         <div className="space-y-6">
+          {/* Invoice Type Selector */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Invoice Type</h2>
+            </div>
+
+            <div className="relative">
+              <button
+                onClick={() => setShowTypeSelector(!showTypeSelector)}
+                className="w-full flex items-center justify-between px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-lg bg-${typeConfig.color}-100 dark:bg-${typeConfig.color}-900/30 flex items-center justify-center`}>
+                    <TypeIcon className={`w-5 h-5 text-${typeConfig.color}-600 dark:text-${typeConfig.color}-400`} />
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900 dark:text-white">{typeConfig.label}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{typeConfig.description}</p>
+                  </div>
+                </div>
+                <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${showTypeSelector ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showTypeSelector && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setShowTypeSelector(false)} />
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-20 max-h-80 overflow-y-auto">
+                    {(Object.keys(INVOICE_TYPE_CONFIG) as InvoiceType[]).map(type => {
+                      const config = INVOICE_TYPE_CONFIG[type];
+                      const Icon = INVOICE_TYPE_ICONS[type];
+                      const isSelected = type === invoiceType;
+                      return (
+                        <button
+                          key={type}
+                          onClick={() => {
+                            setInvoiceType(type);
+                            setShowTypeSelector(false);
+                          }}
+                          className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 text-left ${
+                            isSelected ? 'bg-primary-50 dark:bg-primary-900/20' : ''
+                          }`}
+                        >
+                          <Icon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                          <div className="flex-1">
+                            <p className="font-medium text-gray-900 dark:text-white">{config.label}</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{config.description}</p>
+                          </div>
+                          {isSelected && (
+                            <div className="w-5 h-5 rounded-full bg-primary-600 flex items-center justify-center">
+                              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                              </svg>
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Recurring Toggle */}
+            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Repeat className="w-5 h-5 text-purple-500" />
+                  <div>
+                    <p className="font-medium text-gray-900 dark:text-white">Recurring Invoice</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Automatically generate on a schedule</p>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isRecurring}
+                    onChange={(e) => setIsRecurring(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 dark:peer-focus:ring-primary-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary-600"></div>
+                </label>
+              </div>
+
+              {isRecurring && (
+                <div className="mt-4 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Template Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={recurringName}
+                      onChange={(e) => setRecurringName(e.target.value)}
+                      placeholder="e.g., Monthly Maintenance Fee"
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Frequency
+                      </label>
+                      <select
+                        value={recurringFrequency}
+                        onChange={(e) => setRecurringFrequency(e.target.value as RecurringFrequency)}
+                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      >
+                        {(Object.keys(RECURRING_FREQUENCY_CONFIG) as RecurringFrequency[]).map(freq => (
+                          <option key={freq} value={freq}>
+                            {RECURRING_FREQUENCY_CONFIG[freq].label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Start Date
+                      </label>
+                      <input
+                        type="date"
+                        value={recurringStartDate}
+                        onChange={(e) => setRecurringStartDate(e.target.value)}
+                        min={new Date().toISOString().split('T')[0]}
+                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        End Date (Optional)
+                      </label>
+                      <input
+                        type="date"
+                        value={recurringEndDate}
+                        onChange={(e) => setRecurringEndDate(e.target.value)}
+                        min={recurringStartDate}
+                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2 text-sm text-purple-700 dark:text-purple-300">
+                    <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <p>
+                      This will create a recurring invoice template. Invoices will be automatically generated based on the schedule.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Invoice Details */}
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Invoice Details</h2>
@@ -213,21 +471,23 @@ export default function NewInvoicePage() {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Due Date
-                </label>
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="date"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    min={new Date().toISOString().split('T')[0]}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  />
+              {!isRecurring && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Due Date
+                  </label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="date"
+                      value={dueDate}
+                      onChange={(e) => setDueDate(e.target.value)}
+                      min={new Date().toISOString().split('T')[0]}
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -541,7 +801,7 @@ export default function NewInvoicePage() {
             </button>
             <button
               onClick={() => handleSave(false)}
-              disabled={saving || items.length === 0}
+              disabled={saving || items.length === 0 || (isRecurring && !recurringName)}
               className="flex items-center gap-2 px-6 py-2 border border-primary-600 text-primary-600 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 disabled:opacity-50"
             >
               {saving && !sending ? (
@@ -549,11 +809,11 @@ export default function NewInvoicePage() {
               ) : (
                 <Save className="w-4 h-4" />
               )}
-              Save as Draft
+              {isRecurring ? 'Create Template' : 'Save as Draft'}
             </button>
             <button
               onClick={() => handleSave(true)}
-              disabled={saving || items.length === 0}
+              disabled={saving || items.length === 0 || (isRecurring && !recurringName)}
               className="flex items-center gap-2 px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
             >
               {sending ? (
@@ -561,7 +821,7 @@ export default function NewInvoicePage() {
               ) : (
                 <Send className="w-4 h-4" />
               )}
-              Save & Send
+              {isRecurring ? 'Create & Activate' : 'Save & Send'}
             </button>
           </div>
         </div>

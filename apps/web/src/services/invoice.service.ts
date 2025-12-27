@@ -47,6 +47,17 @@ export interface Invoice {
   metadata: Record<string, any>;
   created_at: string;
   updated_at: string;
+  // Invoice type
+  invoice_type: InvoiceType;
+  // Recurring fields
+  is_recurring?: boolean;
+  recurring_frequency?: RecurringFrequency;
+  recurring_start_date?: string;
+  recurring_end_date?: string;
+  recurring_next_date?: string;
+  recurring_count?: number;
+  recurring_max_count?: number;
+  parent_invoice_id?: string;
   // Joined
   business_name?: string;
   merchant_name?: string;
@@ -89,6 +100,60 @@ export interface ParsedMention {
 export type InvoiceStatus = 'draft' | 'sent' | 'viewed' | 'paid' | 'overdue' | 'cancelled';
 export type PaymentStatus = 'unpaid' | 'partial' | 'paid' | 'overdue' | 'cancelled';
 export type MentionType = 'user' | 'staff' | 'product' | 'receipt' | 'invoice' | 'transaction';
+export type InvoiceType = 'standard' | 'proforma' | 'quote' | 'credit_note' | 'debit_note' | 'receipt';
+export type RecurringFrequency = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly';
+
+export interface RecurringInvoiceTemplate {
+  id: string;
+  business_id: string;
+  merchant_id?: string;
+  name: string;
+  description?: string;
+  customer_id?: string;
+  customer_name?: string;
+  customer_email?: string;
+  customer_phone?: string;
+  invoice_type: InvoiceType;
+  title?: string;
+  currency: string;
+  items: InvoiceItem[];
+  tax_rate: number;
+  discount_amount: number;
+  notes?: string;
+  terms?: string;
+  frequency: RecurringFrequency;
+  start_date: string;
+  end_date?: string;
+  due_days: number;
+  max_occurrences?: number;
+  last_generated_at?: string;
+  next_generation_date?: string;
+  total_generated: number;
+  total_amount_billed: number;
+  status: 'active' | 'paused' | 'cancelled' | 'completed';
+  auto_send: boolean;
+  send_days_before: number;
+  metadata: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+export const INVOICE_TYPE_CONFIG: Record<InvoiceType, { label: string; description: string; color: string }> = {
+  standard: { label: 'Standard Invoice', description: 'Regular invoice for goods or services', color: 'blue' },
+  proforma: { label: 'Proforma Invoice', description: 'Preliminary invoice before final billing', color: 'purple' },
+  quote: { label: 'Quote / Estimate', description: 'Price quote for potential work', color: 'cyan' },
+  credit_note: { label: 'Credit Note', description: 'Credit for returned goods or overpayment', color: 'green' },
+  debit_note: { label: 'Debit Note', description: 'Additional charges or adjustments', color: 'orange' },
+  receipt: { label: 'Receipt', description: 'Proof of payment received', color: 'gray' },
+};
+
+export const RECURRING_FREQUENCY_CONFIG: Record<RecurringFrequency, { label: string; days: number }> = {
+  weekly: { label: 'Weekly', days: 7 },
+  biweekly: { label: 'Every 2 Weeks', days: 14 },
+  monthly: { label: 'Monthly', days: 30 },
+  quarterly: { label: 'Quarterly', days: 90 },
+  yearly: { label: 'Yearly', days: 365 },
+};
 
 class InvoiceService {
   // ==========================================
@@ -114,6 +179,12 @@ class InvoiceService {
     dueDate?: string;
     notes?: string;
     terms?: string;
+    invoiceType?: InvoiceType;
+    isRecurring?: boolean;
+    recurringFrequency?: RecurringFrequency;
+    recurringStartDate?: string;
+    recurringEndDate?: string;
+    recurringMaxCount?: number;
   }): Promise<{ invoice: Invoice | null; error: string | null }> {
     try {
       const { data: user } = await supabase.auth.getUser();
@@ -154,6 +225,13 @@ class InvoiceService {
           terms: data.terms,
           status: 'draft',
           payment_status: 'unpaid',
+          invoice_type: data.invoiceType || 'standard',
+          is_recurring: data.isRecurring || false,
+          recurring_frequency: data.recurringFrequency,
+          recurring_start_date: data.recurringStartDate,
+          recurring_end_date: data.recurringEndDate,
+          recurring_max_count: data.recurringMaxCount,
+          recurring_next_date: data.isRecurring && data.recurringStartDate ? data.recurringStartDate : null,
         })
         .select()
         .single();
@@ -1013,6 +1091,367 @@ class InvoiceService {
     } catch (err) {
       console.error('Failed to get payment link:', err);
       return null;
+    }
+  }
+
+  // ==========================================
+  // RECURRING INVOICE TEMPLATES
+  // ==========================================
+
+  /**
+   * Create a recurring invoice template
+   */
+  async createRecurringTemplate(data: {
+    businessId: string;
+    name: string;
+    description?: string;
+    customerId?: string;
+    customerName?: string;
+    customerEmail?: string;
+    customerPhone?: string;
+    invoiceType?: InvoiceType;
+    title?: string;
+    currency?: string;
+    items: InvoiceItem[];
+    taxRate?: number;
+    discountAmount?: number;
+    notes?: string;
+    terms?: string;
+    frequency: RecurringFrequency;
+    startDate: string;
+    endDate?: string;
+    dueDays?: number;
+    maxOccurrences?: number;
+    autoSend?: boolean;
+    sendDaysBefore?: number;
+  }): Promise<{ template: RecurringInvoiceTemplate | null; error: string | null }> {
+    try {
+      const { data: user } = await supabase.auth.getUser();
+      if (!user?.user) throw new Error('Not authenticated');
+
+      const { data: template, error } = await supabase
+        .from('recurring_invoice_templates')
+        .insert({
+          business_id: data.businessId,
+          merchant_id: user.user.id,
+          name: data.name,
+          description: data.description,
+          customer_id: data.customerId,
+          customer_name: data.customerName,
+          customer_email: data.customerEmail,
+          customer_phone: data.customerPhone,
+          invoice_type: data.invoiceType || 'standard',
+          title: data.title,
+          currency: data.currency || 'SLE',
+          items: data.items,
+          tax_rate: data.taxRate || 0,
+          discount_amount: data.discountAmount || 0,
+          notes: data.notes,
+          terms: data.terms,
+          frequency: data.frequency,
+          start_date: data.startDate,
+          end_date: data.endDate,
+          due_days: data.dueDays || 14,
+          max_occurrences: data.maxOccurrences,
+          next_generation_date: data.startDate,
+          auto_send: data.autoSend ?? true,
+          send_days_before: data.sendDaysBefore || 0,
+          status: 'active',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return { template, error: null };
+    } catch (err: any) {
+      console.error('Failed to create recurring template:', err);
+      return { template: null, error: err.message };
+    }
+  }
+
+  /**
+   * Get recurring templates for a business
+   */
+  async getRecurringTemplates(businessId: string, status?: string): Promise<RecurringInvoiceTemplate[]> {
+    try {
+      let query = supabase
+        .from('recurring_invoice_templates')
+        .select('*')
+        .eq('business_id', businessId)
+        .order('created_at', { ascending: false });
+
+      if (status) query = query.eq('status', status);
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+      return data || [];
+    } catch (err) {
+      console.error('Failed to get recurring templates:', err);
+      return [];
+    }
+  }
+
+  /**
+   * Update recurring template status
+   */
+  async updateRecurringTemplateStatus(templateId: string, status: 'active' | 'paused' | 'cancelled'): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('recurring_invoice_templates')
+        .update({ status, updated_at: new Date().toISOString() })
+        .eq('id', templateId);
+
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.error('Failed to update recurring template status:', err);
+      return false;
+    }
+  }
+
+  /**
+   * Delete recurring template
+   */
+  async deleteRecurringTemplate(templateId: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('recurring_invoice_templates')
+        .delete()
+        .eq('id', templateId);
+
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.error('Failed to delete recurring template:', err);
+      return false;
+    }
+  }
+
+  /**
+   * Get invoices by type
+   */
+  async getBusinessInvoicesByType(businessId: string, invoiceType: InvoiceType): Promise<Invoice[]> {
+    try {
+      const { data, error } = await supabase
+        .from('invoices')
+        .select('*')
+        .eq('business_id', businessId)
+        .eq('invoice_type', invoiceType)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    } catch (err) {
+      console.error('Failed to get invoices by type:', err);
+      return [];
+    }
+  }
+
+  /**
+   * Duplicate an invoice
+   */
+  async duplicateInvoice(invoiceId: string): Promise<{ invoice: Invoice | null; error: string | null }> {
+    try {
+      const original = await this.getInvoice(invoiceId);
+      if (!original) throw new Error('Invoice not found');
+
+      return this.createInvoice({
+        businessId: original.business_id,
+        customerId: original.customer_id,
+        customerName: original.customer_name,
+        customerEmail: original.customer_email,
+        customerPhone: original.customer_phone,
+        title: original.title ? `Copy of ${original.title}` : 'Copy of Invoice',
+        description: original.description,
+        currency: original.currency,
+        items: original.items,
+        taxRate: original.tax_rate,
+        discountAmount: original.discount_amount,
+        notes: original.notes,
+        terms: original.terms,
+        invoiceType: original.invoice_type,
+      });
+    } catch (err: any) {
+      console.error('Failed to duplicate invoice:', err);
+      return { invoice: null, error: err.message };
+    }
+  }
+
+  /**
+   * Convert quote/proforma to standard invoice
+   */
+  async convertToInvoice(invoiceId: string): Promise<{ invoice: Invoice | null; error: string | null }> {
+    try {
+      const original = await this.getInvoice(invoiceId);
+      if (!original) throw new Error('Invoice not found');
+
+      if (!['quote', 'proforma'].includes(original.invoice_type)) {
+        throw new Error('Only quotes and proforma invoices can be converted');
+      }
+
+      return this.createInvoice({
+        businessId: original.business_id,
+        customerId: original.customer_id,
+        customerName: original.customer_name,
+        customerEmail: original.customer_email,
+        customerPhone: original.customer_phone,
+        title: original.title,
+        description: original.description,
+        currency: original.currency,
+        items: original.items,
+        taxRate: original.tax_rate,
+        discountAmount: original.discount_amount,
+        dueDate: original.due_date,
+        notes: original.notes,
+        terms: original.terms,
+        invoiceType: 'standard',
+      });
+    } catch (err: any) {
+      console.error('Failed to convert to invoice:', err);
+      return { invoice: null, error: err.message };
+    }
+  }
+
+  /**
+   * Cancel an invoice
+   */
+  async cancelInvoice(invoiceId: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('invoices')
+        .update({
+          status: 'cancelled',
+          payment_status: 'cancelled',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', invoiceId);
+
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.error('Failed to cancel invoice:', err);
+      return false;
+    }
+  }
+
+  /**
+   * Delete an invoice (only drafts)
+   */
+  async deleteInvoice(invoiceId: string): Promise<boolean> {
+    try {
+      const invoice = await this.getInvoice(invoiceId);
+      if (!invoice) throw new Error('Invoice not found');
+      if (invoice.status !== 'draft') throw new Error('Only draft invoices can be deleted');
+
+      const { error } = await supabase
+        .from('invoices')
+        .delete()
+        .eq('id', invoiceId);
+
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.error('Failed to delete invoice:', err);
+      return false;
+    }
+  }
+
+  /**
+   * Get invoice stats for dashboard
+   */
+  async getInvoiceStats(businessId: string): Promise<{
+    total: number;
+    draft: number;
+    sent: number;
+    paid: number;
+    overdue: number;
+    cancelled: number;
+    totalAmount: number;
+    paidAmount: number;
+    pendingAmount: number;
+    overdueAmount: number;
+    byType: Record<InvoiceType, number>;
+    recurringActive: number;
+  }> {
+    try {
+      const { data: invoices } = await supabase
+        .from('invoices')
+        .select('status, payment_status, total_amount, amount_paid, invoice_type')
+        .eq('business_id', businessId);
+
+      const { data: recurringTemplates } = await supabase
+        .from('recurring_invoice_templates')
+        .select('id')
+        .eq('business_id', businessId)
+        .eq('status', 'active');
+
+      const stats = {
+        total: 0,
+        draft: 0,
+        sent: 0,
+        paid: 0,
+        overdue: 0,
+        cancelled: 0,
+        totalAmount: 0,
+        paidAmount: 0,
+        pendingAmount: 0,
+        overdueAmount: 0,
+        byType: {
+          standard: 0,
+          proforma: 0,
+          quote: 0,
+          credit_note: 0,
+          debit_note: 0,
+          receipt: 0,
+        } as Record<InvoiceType, number>,
+        recurringActive: recurringTemplates?.length || 0,
+      };
+
+      if (invoices) {
+        for (const inv of invoices) {
+          stats.total++;
+          stats.totalAmount += inv.total_amount;
+          stats.paidAmount += inv.amount_paid || 0;
+
+          if (inv.status === 'draft') stats.draft++;
+          else if (inv.status === 'sent' || inv.status === 'viewed') stats.sent++;
+          else if (inv.status === 'paid') stats.paid++;
+          else if (inv.status === 'overdue') {
+            stats.overdue++;
+            stats.overdueAmount += inv.total_amount - (inv.amount_paid || 0);
+          }
+          else if (inv.status === 'cancelled') stats.cancelled++;
+
+          if (inv.payment_status !== 'paid' && inv.status !== 'cancelled') {
+            stats.pendingAmount += inv.total_amount - (inv.amount_paid || 0);
+          }
+
+          const invType = (inv.invoice_type || 'standard') as InvoiceType;
+          if (stats.byType[invType] !== undefined) {
+            stats.byType[invType]++;
+          }
+        }
+      }
+
+      return stats;
+    } catch (err) {
+      console.error('Failed to get invoice stats:', err);
+      return {
+        total: 0,
+        draft: 0,
+        sent: 0,
+        paid: 0,
+        overdue: 0,
+        cancelled: 0,
+        totalAmount: 0,
+        paidAmount: 0,
+        pendingAmount: 0,
+        overdueAmount: 0,
+        byType: { standard: 0, proforma: 0, quote: 0, credit_note: 0, debit_note: 0, receipt: 0 },
+        recurringActive: 0,
+      };
     }
   }
 }

@@ -72,6 +72,7 @@ import { PaymentReceiver } from '@/components/payment/PaymentReceiver';
 import { walletService } from '@/services/wallet.service';
 import { monimeService, MonimeTransaction } from '@/services/monime.service';
 import { notificationService } from '@/services/notification.service';
+import { sendReceipt, ReceiptData } from '@/services/receipt.service';
 import { POSWallet } from '@/components/pos/POSWallet';
 
 // Format currency - using Le (Leone) symbol
@@ -870,6 +871,48 @@ export function POSTerminalPage() {
       // Store sale with items for receipt printing
       setLastSale({ ...sale, items: saleItems });
       setSaleComplete(true);
+
+      // Automatically send receipt to customer if they have phone or email
+      if (selectedCustomer && (selectedCustomer.phone || selectedCustomer.email)) {
+        try {
+          const receiptData: ReceiptData = {
+            saleId: sale.id,
+            saleNumber: sale.sale_number,
+            merchantId: merchantId!,
+            merchantName: business?.name || `${user?.firstName} ${user?.lastName}`,
+            customerName: selectedCustomer.name,
+            customerPhone: selectedCustomer.phone,
+            customerEmail: selectedCustomer.email,
+            items: saleItems.map((item: any) => ({
+              name: item.product_name,
+              quantity: item.quantity,
+              unitPrice: item.unit_price,
+              total: item.total_price,
+            })),
+            subtotal,
+            discount: totalDiscount,
+            tax: taxAmount,
+            total: totalAmount,
+            paymentMethod,
+            amountPaid: paymentMethod === 'cash' ? parseFloat(cashReceived) : totalAmount,
+            change: paymentMethod === 'cash' ? change : 0,
+            date: new Date().toISOString(),
+          };
+
+          // Send receipt (creates notification and chat message)
+          // The service will look up the user by phone/email
+          sendReceipt(receiptData, { sendNotification: true, sendToChat: true })
+            .then(result => {
+              if (result.success) {
+                console.log('Receipt sent to customer successfully');
+              }
+            })
+            .catch(err => console.error('Error sending receipt:', err));
+        } catch (err) {
+          console.error('Error preparing receipt data:', err);
+        }
+      }
+
       setCart([]);
       offlineSync.clearCart();
       setCashReceived('');

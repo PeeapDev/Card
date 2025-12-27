@@ -155,7 +155,8 @@ import { MerchantBusinessSettingsPage } from '@/pages/merchant/BusinessSettingsP
 import { MerchantSupportPage } from '@/pages/merchant/MerchantSupportPage';
 import { MerchantNotificationsPage } from '@/pages/merchant/MerchantNotificationsPage';
 // POS Pages
-import { POSTerminalPage, POSProductsPage, POSSalesPage, POSSetupWizard, POSReportsPage, POSStaffPage, POSInventoryPage, POSLoyaltyPage, POSSettingsPage, POSKitchenDisplayPage, POSCustomerDisplayPage, POSTableManagementPage, POSCustomersPage, POSSuppliersPage, POSDiscountsPage, POSPurchaseOrdersPage, POSMarketplacePage, POSPaymentCallbackPage } from '@/pages/merchant/pos';
+import { POSTerminalPage, POSProductsPage, POSSalesPage, POSSetupWizard, POSReportsPage, POSStaffPage, POSInventoryPage, POSLoyaltyPage, POSSettingsPage, POSKitchenDisplayPage, POSCustomerDisplayPage, POSTableManagementPage, POSCustomersPage, POSSuppliersPage, POSDiscountsPage, POSPurchaseOrdersPage, POSMarketplacePage, POSPaymentCallbackPage, POSReceiptsPage } from '@/pages/merchant/pos';
+import { POSLabelsPage } from '@/pages/merchant/pos/POSLabelsPage';
 import { POSAppPage } from '@/pages/merchant/apps/POSAppPage';
 // Events Pages
 import { EventsAppPage } from '@/pages/merchant/apps/EventsAppPage';
@@ -1208,6 +1209,58 @@ function App() {
                 }
               />
               <Route
+                path="/merchant/pos/labels"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <POSLabelsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/pos/customers"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <POSCustomersPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/pos/suppliers"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <POSSuppliersPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/pos/discounts"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <POSDiscountsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/pos/purchase-orders"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <POSPurchaseOrdersPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/merchant/pos/payment/callback"
+                element={<POSPaymentCallbackPage />}
+              />
+              <Route
+                path="/merchant/pos/receipts"
+                element={
+                  <RoleBasedRoute allowedRoles={['merchant']}>
+                    <POSReceiptsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
                 path="/merchant/subscriptions"
                 element={
                   <RoleBasedRoute allowedRoles={['merchant']}>
@@ -1567,6 +1620,7 @@ function App() {
                   <Route path="/merchant/pos/setup" element={<RoleBasedRoute allowedRoles={['merchant']}><POSSetupWizard /></RoleBasedRoute>} />
                   <Route path="/merchant/pos/terminal" element={<RoleBasedRoute allowedRoles={['merchant']}><POSTerminalPage /></RoleBasedRoute>} />
                   <Route path="/merchant/pos/products" element={<RoleBasedRoute allowedRoles={['merchant']}><POSProductsPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/pos/labels" element={<RoleBasedRoute allowedRoles={['merchant']}><POSLabelsPage /></RoleBasedRoute>} />
                   <Route path="/merchant/pos/sales" element={<RoleBasedRoute allowedRoles={['merchant']}><POSSalesPage /></RoleBasedRoute>} />
                   <Route path="/merchant/pos/reports" element={<RoleBasedRoute allowedRoles={['merchant']}><POSReportsPage /></RoleBasedRoute>} />
                   <Route path="/merchant/pos/staff" element={<RoleBasedRoute allowedRoles={['merchant']}><POSStaffPage /></RoleBasedRoute>} />
@@ -1582,6 +1636,7 @@ function App() {
                   <Route path="/merchant/pos/purchase-orders" element={<RoleBasedRoute allowedRoles={['merchant']}><POSPurchaseOrdersPage /></RoleBasedRoute>} />
                   <Route path="/merchant/pos/marketplace" element={<RoleBasedRoute allowedRoles={['merchant']}><POSMarketplacePage /></RoleBasedRoute>} />
                   <Route path="/merchant/pos/payment/callback" element={<POSPaymentCallbackPage />} />
+                  <Route path="/merchant/pos/receipts" element={<RoleBasedRoute allowedRoles={['merchant']}><POSReceiptsPage /></RoleBasedRoute>} />
                   {/* Events App Routes */}
                   <Route path="/merchant/apps/events" element={<RoleBasedRoute allowedRoles={['merchant']}><EventsAppPage /></RoleBasedRoute>} />
                   <Route path="/merchant/events/setup" element={<RoleBasedRoute allowedRoles={['merchant']}><EventsSetupWizard /></RoleBasedRoute>} />

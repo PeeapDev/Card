@@ -30,6 +30,9 @@ import {
   Link2,
   FileText,
   Crown,
+  Pin,
+  PinOff,
+  MoreVertical,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
@@ -46,7 +49,7 @@ import { supabase } from '@/lib/supabase';
 export function MerchantSettingsPage() {
   const { user } = useAuth();
   const { isDeveloperMode, toggleDeveloperMode } = useDeveloperMode();
-  const { isAppEnabled, toggleApp, refreshApps, completeAppSetup } = useApps();
+  const { isAppEnabled, toggleApp, refreshApps, completeAppSetup, isAppPinned, toggleAppPin } = useApps();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'general');
@@ -499,8 +502,27 @@ export function MerchantSettingsPage() {
                               </div>
                             </div>
 
-                            {/* Actions - Toggle and Open */}
-                            <div className="flex items-center gap-3 flex-shrink-0">
+                            {/* Actions - Toggle, Pin, and Open */}
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {/* Pin to Sidebar Button - only for enabled apps */}
+                              {app.enabled && !app.comingSoon && !app.requiresPlus && (
+                                <button
+                                  onClick={() => toggleAppPin(app.id)}
+                                  className={`p-2 rounded-lg transition-colors ${
+                                    isAppPinned(app.id)
+                                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                                      : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                  }`}
+                                  title={isAppPinned(app.id) ? 'Unpin from sidebar' : 'Pin to sidebar'}
+                                >
+                                  {isAppPinned(app.id) ? (
+                                    <Pin className="w-4 h-4" />
+                                  ) : (
+                                    <PinOff className="w-4 h-4" />
+                                  )}
+                                </button>
+                              )}
+
                               {/* Toggle Switch - not for comingSoon or requiresPlus */}
                               {!app.comingSoon && !app.requiresPlus && (
                                 <button
@@ -556,7 +578,7 @@ export function MerchantSettingsPage() {
                         How Apps Work
                       </p>
                       <p className="text-sm text-blue-700 dark:text-blue-400 mt-1">
-                        Enabled apps appear in the "Apps" section of your sidebar. Toggle an app off to remove it from navigation.
+                        Enabled apps appear in the "Apps" section of your sidebar. Use the <Pin className="w-3 h-3 inline mx-1" /> pin button to add apps directly to your main sidebar for quick access.
                         Your data is preserved even when apps are disabled.
                       </p>
                     </div>

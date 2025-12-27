@@ -207,7 +207,7 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
   const userMenuRef = useRef<HTMLDivElement>(null);
   const { user, logout } = useAuth();
   const { isDeveloperMode, checkBusinesses, hasBusinesses, businessCount } = useDeveloperMode();
-  const { isAppEnabled } = useApps();
+  const { isAppEnabled, isAppPinned, pinnedApps } = useApps();
   const { getGlassColors } = useThemeColor();
 
   // Get themed glass colors for merchant dashboard
@@ -585,6 +585,38 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
                 )}
               </DragOverlay>
             </DndContext>
+
+            {/* Pinned Apps - Show directly in sidebar */}
+            {pinnedApps.length > 0 && (
+              <div className="pt-4 mt-4 border-t border-gray-200 dark:border-gray-700/50">
+                <p className="px-4 mb-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Pinned Apps
+                </p>
+                {pinnedApps.map((appId) => {
+                  const app = appNavItems[appId];
+                  if (!app) return null;
+                  const AppIcon = app.icon;
+                  const isActive = location.pathname === app.path ||
+                    (app.path !== '/merchant' && location.pathname.startsWith(app.path));
+
+                  return (
+                    <Link
+                      key={app.id}
+                      to={app.path}
+                      className={clsx(
+                        'flex items-center px-4 py-3 rounded-lg transition-colors mb-1',
+                        isActive
+                          ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                          : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                      )}
+                    >
+                      <AppIcon className="w-5 h-5 mr-3" />
+                      {app.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Apps Menu - Shows enabled apps as icon grid (like mobile phone) */}
             {enabledApps.length > 0 && (

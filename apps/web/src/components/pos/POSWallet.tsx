@@ -1,7 +1,7 @@
 /**
  * POS Wallet Component
  *
- * Displays POS wallet balance and allows transfers to/from primary wallet
+ * Displays POS wallet and primary wallet as beautiful cards similar to dashboard
  */
 
 import { useState, useEffect } from 'react';
@@ -11,16 +11,14 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   RefreshCw,
-  ChevronDown,
-  ChevronUp,
   X,
   Check,
   AlertCircle,
   Loader2,
-  Banknote,
   ArrowLeftRight,
   CreditCard,
   PiggyBank,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { walletService, ExtendedWallet, WalletType } from '@/services/wallet.service';
@@ -36,8 +34,6 @@ export function POSWallet({ onBalanceChange, compact = false }: POSWalletProps) 
   const [loading, setLoading] = useState(true);
   const [posWallet, setPosWallet] = useState<ExtendedWallet | null>(null);
   const [primaryWallet, setPrimaryWallet] = useState<ExtendedWallet | null>(null);
-  const [allWallets, setAllWallets] = useState<ExtendedWallet[]>([]);
-  const [expanded, setExpanded] = useState(!compact);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transferDirection, setTransferDirection] = useState<'to-pos' | 'from-pos'>('to-pos');
   const [transferAmount, setTransferAmount] = useState('');
@@ -64,12 +60,6 @@ export function POSWallet({ onBalanceChange, compact = false }: POSWalletProps) 
       // Get primary wallet
       const primary = await walletService.getWalletByType(user.id, 'primary');
       setPrimaryWallet(primary);
-
-      // Get all wallets for display - only show POS-relevant wallets (pos and primary)
-      const wallets = await walletService.getWallets(user.id);
-      setAllWallets((wallets as ExtendedWallet[]).filter(w =>
-        w.walletType === 'pos' || w.walletType === 'primary'
-      ));
     } catch (error) {
       console.error('Error loading wallets:', error);
     } finally {
@@ -126,153 +116,156 @@ export function POSWallet({ onBalanceChange, compact = false }: POSWalletProps) 
     }
   };
 
-  const getWalletIcon = (type: WalletType) => {
-    switch (type) {
-      case 'pos':
-        return <CreditCard className="w-4 h-4" />;
-      case 'driver':
-        return <Banknote className="w-4 h-4" />;
-      case 'merchant':
-        return <Wallet className="w-4 h-4" />;
-      default:
-        return <PiggyBank className="w-4 h-4" />;
-    }
+  const openTransfer = (direction: 'to-pos' | 'from-pos') => {
+    setTransferDirection(direction);
+    setTransferAmount('');
+    setMessage(null);
+    setShowTransferModal(true);
   };
 
   if (loading) {
     return (
-      <div className={`bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 ${compact ? '' : 'p-6'}`}>
-        <div className="animate-pulse flex items-center gap-3">
-          <div className="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded-lg" />
-          <div className="flex-1">
-            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-24 mb-2" />
-            <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-32" />
-          </div>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {[1, 2].map((i) => (
+          <div key={i} className="h-48 bg-gradient-to-br from-gray-200 to-gray-300 dark:from-gray-700 dark:to-gray-800 rounded-2xl animate-pulse" />
+        ))}
       </div>
     );
   }
 
   return (
     <>
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-        {/* Header - Always visible */}
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="w-full p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl">
-              <Wallet className="w-5 h-5 text-white" />
+      {/* Wallet Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* POS Wallet Card */}
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-500 via-green-500 to-teal-600 p-6 text-white shadow-xl shadow-green-500/25">
+          {/* Background Pattern */}
+          <div className="absolute top-0 right-0 w-64 h-64 opacity-10">
+            <svg viewBox="0 0 200 200" className="w-full h-full">
+              <defs>
+                <pattern id="pos-pattern" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+                  <circle cx="20" cy="20" r="2" fill="currentColor" />
+                </pattern>
+              </defs>
+              <rect x="0" y="0" width="200" height="200" fill="url(#pos-pattern)" />
+            </svg>
+          </div>
+
+          {/* Decorative circles */}
+          <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-2xl" />
+          <div className="absolute -bottom-20 -left-10 w-60 h-60 bg-white/5 rounded-full blur-3xl" />
+
+          <div className="relative z-10">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-white/20 backdrop-blur-sm rounded-xl">
+                  <CreditCard className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-green-100 text-sm font-medium">POS Wallet</p>
+                  <p className="text-xs text-green-200/70">Sales & Float</p>
+                </div>
+              </div>
+              <button
+                onClick={handleRefresh}
+                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                title="Refresh"
+              >
+                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              </button>
             </div>
-            <div className="text-left">
-              <p className="text-sm text-gray-500 dark:text-gray-400">POS Wallet</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">
+
+            {/* Balance */}
+            <div className="mb-6">
+              <p className="text-3xl font-bold tracking-tight">
                 {formatCurrency(posWallet?.balance || 0, 'SLE')}
               </p>
+              <p className="text-green-100/80 text-sm mt-1">Available Balance</p>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => openTransfer('to-pos')}
+                disabled={!primaryWallet || primaryWallet.balance <= 0}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-xl text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ArrowDownLeft className="w-4 h-4" />
+                Add Funds
+              </button>
+              <button
+                onClick={() => openTransfer('from-pos')}
+                disabled={!posWallet || posWallet.balance <= 0}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-white text-green-600 hover:bg-green-50 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ArrowUpRight className="w-4 h-4" />
+                Withdraw
+              </button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleRefresh();
-              }}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
-              title="Refresh"
-            >
-              <RefreshCw className={`w-4 h-4 text-gray-500 ${refreshing ? 'animate-spin' : ''}`} />
-            </button>
-            {expanded ? (
-              <ChevronUp className="w-5 h-5 text-gray-400" />
-            ) : (
-              <ChevronDown className="w-5 h-5 text-gray-400" />
-            )}
+        </div>
+
+        {/* Primary Wallet Card */}
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-600 p-6 text-white shadow-xl shadow-blue-500/25">
+          {/* Background Pattern */}
+          <div className="absolute top-0 right-0 w-64 h-64 opacity-10">
+            <svg viewBox="0 0 200 200" className="w-full h-full">
+              <defs>
+                <pattern id="primary-pattern" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+                  <rect x="18" y="18" width="4" height="4" fill="currentColor" transform="rotate(45 20 20)" />
+                </pattern>
+              </defs>
+              <rect x="0" y="0" width="200" height="200" fill="url(#primary-pattern)" />
+            </svg>
           </div>
-        </button>
 
-        {/* Expanded Content */}
-        <AnimatePresence>
-          {expanded && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <div className="px-4 pb-4 space-y-4 border-t border-gray-100 dark:border-gray-700 pt-4">
-                {/* All Wallets */}
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Your Wallets</p>
-                  <div className="space-y-2">
-                    {allWallets.map((wallet) => (
-                      <div
-                        key={wallet.id}
-                        className={`flex items-center justify-between p-3 rounded-lg ${
-                          wallet.walletType === 'pos'
-                            ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
-                            : 'bg-gray-50 dark:bg-gray-700/50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`p-2 rounded-lg ${
-                            wallet.walletType === 'pos'
-                              ? 'bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400'
-                              : wallet.walletType === 'primary'
-                              ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'
-                              : 'bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-400'
-                          }`}>
-                            {getWalletIcon(wallet.walletType)}
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-gray-900 dark:text-white capitalize">
-                              {wallet.name || `${wallet.walletType} Wallet`}
-                            </p>
-                            <p className="text-xs text-gray-500">{wallet.currency}</p>
-                          </div>
-                        </div>
-                        <p className="font-semibold text-gray-900 dark:text-white">
-                          {formatCurrency(wallet.balance, 'SLE')}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
+          {/* Decorative circles */}
+          <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-2xl" />
+          <div className="absolute -bottom-20 -left-10 w-60 h-60 bg-white/5 rounded-full blur-3xl" />
+
+          <div className="relative z-10">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-white/20 backdrop-blur-sm rounded-xl">
+                  <Wallet className="w-6 h-6" />
                 </div>
-
-                {/* Transfer Buttons */}
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => {
-                      setTransferDirection('to-pos');
-                      setShowTransferModal(true);
-                    }}
-                    disabled={!primaryWallet || primaryWallet.balance <= 0}
-                    className="flex items-center justify-center gap-2 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <ArrowDownLeft className="w-4 h-4" />
-                    <span className="text-sm font-medium">Add to POS</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setTransferDirection('from-pos');
-                      setShowTransferModal(true);
-                    }}
-                    disabled={!posWallet || posWallet.balance <= 0}
-                    className="flex items-center justify-center gap-2 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <ArrowUpRight className="w-4 h-4" />
-                    <span className="text-sm font-medium">To Main</span>
-                  </button>
+                <div>
+                  <p className="text-blue-100 text-sm font-medium">Main Wallet</p>
+                  <p className="text-xs text-blue-200/70">Primary Account</p>
                 </div>
-
-                {/* Info text */}
-                <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-                  Transfer funds between your wallets to manage your POS float
-                </p>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              <div className="flex items-center gap-1 px-2 py-1 bg-white/20 rounded-full text-xs">
+                <Sparkles className="w-3 h-3" />
+                Primary
+              </div>
+            </div>
+
+            {/* Balance */}
+            <div className="mb-6">
+              <p className="text-3xl font-bold tracking-tight">
+                {formatCurrency(primaryWallet?.balance || 0, 'SLE')}
+              </p>
+              <p className="text-blue-100/80 text-sm mt-1">Available Balance</p>
+            </div>
+
+            {/* Transfer hint */}
+            <div className="flex items-center justify-between py-2.5 px-4 bg-white/10 backdrop-blur-sm rounded-xl">
+              <div className="flex items-center gap-2">
+                <ArrowLeftRight className="w-4 h-4 text-blue-200" />
+                <span className="text-sm text-blue-100">Transfer to POS</span>
+              </div>
+              <button
+                onClick={() => openTransfer('to-pos')}
+                disabled={!primaryWallet || primaryWallet.balance <= 0}
+                className="text-sm font-medium text-white hover:text-blue-200 transition-colors disabled:opacity-50"
+              >
+                Send
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Transfer Modal */}
@@ -295,12 +288,20 @@ export function POSWallet({ onBalanceChange, compact = false }: POSWalletProps) 
               {/* Header */}
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                    <ArrowLeftRight className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  <div className={`p-2 rounded-lg ${
+                    transferDirection === 'to-pos'
+                      ? 'bg-green-100 dark:bg-green-900/30'
+                      : 'bg-blue-100 dark:bg-blue-900/30'
+                  }`}>
+                    <ArrowLeftRight className={`w-5 h-5 ${
+                      transferDirection === 'to-pos'
+                        ? 'text-green-600 dark:text-green-400'
+                        : 'text-blue-600 dark:text-blue-400'
+                    }`} />
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-                      {transferDirection === 'to-pos' ? 'Add to POS Wallet' : 'Transfer to Main Wallet'}
+                      {transferDirection === 'to-pos' ? 'Add to POS Wallet' : 'Withdraw to Main'}
                     </h3>
                     <p className="text-sm text-gray-500">Move funds between wallets</p>
                   </div>
@@ -322,14 +323,14 @@ export function POSWallet({ onBalanceChange, compact = false }: POSWalletProps) 
                       : 'bg-green-100 dark:bg-green-900/30 text-green-600'
                   }`}>
                     {transferDirection === 'to-pos' ? (
-                      <PiggyBank className="w-6 h-6" />
+                      <Wallet className="w-6 h-6" />
                     ) : (
                       <CreditCard className="w-6 h-6" />
                     )}
                   </div>
                   <p className="text-xs text-gray-500 mt-2">From</p>
                   <p className="text-sm font-medium text-gray-900 dark:text-white">
-                    {transferDirection === 'to-pos' ? 'Main Wallet' : 'POS Wallet'}
+                    {transferDirection === 'to-pos' ? 'Main' : 'POS'}
                   </p>
                   <p className="text-xs text-gray-500">
                     {formatCurrency(
@@ -339,8 +340,10 @@ export function POSWallet({ onBalanceChange, compact = false }: POSWalletProps) 
                   </p>
                 </div>
 
-                <div className="flex-shrink-0">
-                  <ArrowLeftRight className="w-6 h-6 text-gray-400" />
+                <div className="flex-shrink-0 px-4">
+                  <div className="w-10 h-10 bg-gray-200 dark:bg-gray-600 rounded-full flex items-center justify-center">
+                    <ArrowLeftRight className="w-5 h-5 text-gray-400" />
+                  </div>
                 </div>
 
                 <div className="text-center">
@@ -352,12 +355,12 @@ export function POSWallet({ onBalanceChange, compact = false }: POSWalletProps) 
                     {transferDirection === 'to-pos' ? (
                       <CreditCard className="w-6 h-6" />
                     ) : (
-                      <PiggyBank className="w-6 h-6" />
+                      <Wallet className="w-6 h-6" />
                     )}
                   </div>
                   <p className="text-xs text-gray-500 mt-2">To</p>
                   <p className="text-sm font-medium text-gray-900 dark:text-white">
-                    {transferDirection === 'to-pos' ? 'POS Wallet' : 'Main Wallet'}
+                    {transferDirection === 'to-pos' ? 'POS' : 'Main'}
                   </p>
                   <p className="text-xs text-gray-500">
                     {formatCurrency(
@@ -385,12 +388,6 @@ export function POSWallet({ onBalanceChange, compact = false }: POSWalletProps) 
                     className="w-full pl-14 pr-4 py-4 text-2xl font-bold border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 text-right"
                   />
                 </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Available: {formatCurrency(
-                    transferDirection === 'to-pos' ? primaryWallet?.balance || 0 : posWallet?.balance || 0,
-                    'SLE'
-                  )}
-                </p>
               </div>
 
               {/* Quick Amount Buttons */}
@@ -401,7 +398,7 @@ export function POSWallet({ onBalanceChange, compact = false }: POSWalletProps) 
                     onClick={() => setTransferAmount(amt.toString())}
                     className="py-2 text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
                   >
-                    {amt}
+                    {amt.toLocaleString()}
                   </button>
                 ))}
               </div>
@@ -433,12 +430,16 @@ export function POSWallet({ onBalanceChange, compact = false }: POSWalletProps) 
                 <button
                   onClick={handleTransfer}
                   disabled={transferring || !transferAmount || parseFloat(transferAmount) <= 0}
-                  className="flex-1 py-3 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                  className={`flex-1 py-3 text-white rounded-xl font-medium flex items-center justify-center gap-2 disabled:opacity-50 ${
+                    transferDirection === 'to-pos'
+                      ? 'bg-green-600 hover:bg-green-700'
+                      : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
                 >
                   {transferring ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Transferring...
+                      Processing...
                     </>
                   ) : (
                     <>

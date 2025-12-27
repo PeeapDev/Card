@@ -169,6 +169,15 @@ export function POSAppPage() {
       bgColor: 'bg-blue-100 dark:bg-blue-900/30',
       category: 'operations',
     },
+    {
+      title: 'Receipts',
+      description: 'Print & send receipts',
+      icon: FileText,
+      href: '/merchant/pos/receipts',
+      color: 'text-teal-600',
+      bgColor: 'bg-teal-100 dark:bg-teal-900/30',
+      category: 'operations',
+    },
     // Product & Catalog
     {
       title: 'Products',

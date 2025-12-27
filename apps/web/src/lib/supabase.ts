@@ -13,4 +13,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Admin client for operations that need to bypass RLS (like POS settings)
 // The app manages authorization - we check user.id matches the resource owner
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false,
+  },
+  global: {
+    headers: {
+      Authorization: `Bearer ${supabaseServiceKey}`,
+    },
+  },
+});

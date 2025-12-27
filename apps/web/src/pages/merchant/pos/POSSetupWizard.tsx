@@ -37,6 +37,9 @@ import {
   Edit2,
   X,
   FolderOpen,
+  Download,
+  LayoutGrid,
+  List,
 } from 'lucide-react';
 
 const FREE_PRODUCT_LIMIT = 15;
@@ -94,6 +97,185 @@ const colorOptions = [
   '#EC4899', '#06B6D4', '#84CC16', '#F97316', '#6366F1',
 ];
 
+// Template categories for different business types
+interface CategoryTemplate {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  categories: { name: string; color: string; description?: string }[];
+}
+
+const categoryTemplates: CategoryTemplate[] = [
+  {
+    id: 'restaurant',
+    name: 'Restaurant',
+    icon: '🍽️',
+    description: 'Food & dining categories',
+    categories: [
+      { name: 'Appetizers', color: '#F59E0B', description: 'Starters and small plates' },
+      { name: 'Main Courses', color: '#EF4444', description: 'Main dishes and entrees' },
+      { name: 'Desserts', color: '#EC4899', description: 'Sweet treats and desserts' },
+      { name: 'Beverages', color: '#3B82F6', description: 'Drinks and refreshments' },
+      { name: 'Sides', color: '#10B981', description: 'Side dishes and extras' },
+      { name: 'Specials', color: '#8B5CF6', description: 'Daily specials and promotions' },
+    ],
+  },
+  {
+    id: 'grocery',
+    name: 'Grocery Store',
+    icon: '🛒',
+    description: 'Supermarket & grocery',
+    categories: [
+      { name: 'Fresh Produce', color: '#10B981', description: 'Fruits and vegetables' },
+      { name: 'Dairy & Eggs', color: '#F59E0B', description: 'Milk, cheese, eggs' },
+      { name: 'Meat & Seafood', color: '#EF4444', description: 'Fresh meat and fish' },
+      { name: 'Bakery', color: '#F97316', description: 'Bread and baked goods' },
+      { name: 'Beverages', color: '#3B82F6', description: 'Drinks and juices' },
+      { name: 'Snacks', color: '#8B5CF6', description: 'Chips, cookies, candy' },
+      { name: 'Canned Goods', color: '#6366F1', description: 'Canned and packaged foods' },
+      { name: 'Household', color: '#06B6D4', description: 'Cleaning supplies' },
+    ],
+  },
+  {
+    id: 'pharmacy',
+    name: 'Pharmacy',
+    icon: '💊',
+    description: 'Medicine & health products',
+    categories: [
+      { name: 'Prescription Drugs', color: '#EF4444', description: 'Doctor prescribed medicines' },
+      { name: 'Over-the-Counter', color: '#3B82F6', description: 'Common medicines' },
+      { name: 'Vitamins & Supplements', color: '#10B981', description: 'Health supplements' },
+      { name: 'First Aid', color: '#F97316', description: 'Bandages and first aid' },
+      { name: 'Personal Care', color: '#EC4899', description: 'Hygiene products' },
+      { name: 'Baby Care', color: '#8B5CF6', description: 'Baby products' },
+    ],
+  },
+  {
+    id: 'electronics',
+    name: 'Electronics',
+    icon: '📱',
+    description: 'Tech & gadgets',
+    categories: [
+      { name: 'Phones & Tablets', color: '#3B82F6', description: 'Mobile devices' },
+      { name: 'Computers', color: '#6366F1', description: 'Laptops and desktops' },
+      { name: 'Accessories', color: '#10B981', description: 'Cases, chargers, cables' },
+      { name: 'Audio', color: '#8B5CF6', description: 'Headphones and speakers' },
+      { name: 'Gaming', color: '#EF4444', description: 'Games and consoles' },
+      { name: 'Cameras', color: '#F59E0B', description: 'Cameras and photography' },
+    ],
+  },
+  {
+    id: 'clothing',
+    name: 'Clothing Store',
+    icon: '👕',
+    description: 'Fashion & apparel',
+    categories: [
+      { name: 'Men\'s Wear', color: '#3B82F6', description: 'Men\'s clothing' },
+      { name: 'Women\'s Wear', color: '#EC4899', description: 'Women\'s clothing' },
+      { name: 'Kids Wear', color: '#F59E0B', description: 'Children\'s clothing' },
+      { name: 'Footwear', color: '#10B981', description: 'Shoes and sandals' },
+      { name: 'Accessories', color: '#8B5CF6', description: 'Bags, belts, jewelry' },
+      { name: 'Sportswear', color: '#EF4444', description: 'Athletic clothing' },
+    ],
+  },
+  {
+    id: 'cafe',
+    name: 'Café / Coffee Shop',
+    icon: '☕',
+    description: 'Coffee & light bites',
+    categories: [
+      { name: 'Hot Drinks', color: '#F97316', description: 'Coffee, tea, hot chocolate' },
+      { name: 'Cold Drinks', color: '#3B82F6', description: 'Iced coffee, smoothies' },
+      { name: 'Pastries', color: '#F59E0B', description: 'Croissants, muffins, cakes' },
+      { name: 'Sandwiches', color: '#10B981', description: 'Light meals' },
+      { name: 'Snacks', color: '#8B5CF6', description: 'Quick bites' },
+    ],
+  },
+  {
+    id: 'hardware',
+    name: 'Hardware Store',
+    icon: '🔧',
+    description: 'Tools & building materials',
+    categories: [
+      { name: 'Hand Tools', color: '#6366F1', description: 'Hammers, screwdrivers, pliers' },
+      { name: 'Power Tools', color: '#EF4444', description: 'Drills, saws, grinders' },
+      { name: 'Plumbing', color: '#3B82F6', description: 'Pipes and fittings' },
+      { name: 'Electrical', color: '#F59E0B', description: 'Wires, switches, bulbs' },
+      { name: 'Paint', color: '#10B981', description: 'Paints and brushes' },
+      { name: 'Building Materials', color: '#84CC16', description: 'Cement, nails, wood' },
+    ],
+  },
+  {
+    id: 'beauty',
+    name: 'Beauty & Cosmetics',
+    icon: '💄',
+    description: 'Makeup & skincare',
+    categories: [
+      { name: 'Makeup', color: '#EC4899', description: 'Lipstick, foundation, mascara' },
+      { name: 'Skincare', color: '#10B981', description: 'Creams, serums, moisturizers' },
+      { name: 'Hair Care', color: '#8B5CF6', description: 'Shampoo, conditioner, styling' },
+      { name: 'Fragrances', color: '#F59E0B', description: 'Perfumes and colognes' },
+      { name: 'Nail Care', color: '#EF4444', description: 'Nail polish and tools' },
+      { name: 'Men\'s Grooming', color: '#3B82F6', description: 'Razors, aftershave' },
+    ],
+  },
+  {
+    id: 'bookstore',
+    name: 'Bookstore',
+    icon: '📚',
+    description: 'Books & stationery',
+    categories: [
+      { name: 'Fiction', color: '#8B5CF6', description: 'Novels and stories' },
+      { name: 'Non-Fiction', color: '#3B82F6', description: 'Educational and reference' },
+      { name: 'Children\'s Books', color: '#F59E0B', description: 'Kids books and comics' },
+      { name: 'Textbooks', color: '#10B981', description: 'School and university' },
+      { name: 'Stationery', color: '#EC4899', description: 'Pens, notebooks, supplies' },
+      { name: 'Magazines', color: '#06B6D4', description: 'Periodicals and newspapers' },
+    ],
+  },
+  {
+    id: 'bakery',
+    name: 'Bakery',
+    icon: '🥐',
+    description: 'Fresh baked goods',
+    categories: [
+      { name: 'Bread', color: '#F97316', description: 'Fresh bread and rolls' },
+      { name: 'Pastries', color: '#F59E0B', description: 'Croissants, danish, pies' },
+      { name: 'Cakes', color: '#EC4899', description: 'Birthday and occasion cakes' },
+      { name: 'Cookies', color: '#84CC16', description: 'Cookies and biscuits' },
+      { name: 'Specialty', color: '#8B5CF6', description: 'Custom orders' },
+    ],
+  },
+  {
+    id: 'general',
+    name: 'General Store',
+    icon: '🏪',
+    description: 'Mixed retail',
+    categories: [
+      { name: 'Food & Snacks', color: '#10B981', description: 'Packaged foods' },
+      { name: 'Beverages', color: '#3B82F6', description: 'Drinks' },
+      { name: 'Household', color: '#F59E0B', description: 'Home essentials' },
+      { name: 'Personal Care', color: '#EC4899', description: 'Toiletries' },
+      { name: 'Stationery', color: '#8B5CF6', description: 'Office supplies' },
+      { name: 'Miscellaneous', color: '#6366F1', description: 'Other items' },
+    ],
+  },
+  {
+    id: 'mobile',
+    name: 'Mobile Shop',
+    icon: '📲',
+    description: 'Phones & airtime',
+    categories: [
+      { name: 'Mobile Phones', color: '#3B82F6', description: 'New and used phones' },
+      { name: 'Airtime & Data', color: '#10B981', description: 'Top-ups and bundles' },
+      { name: 'Accessories', color: '#F59E0B', description: 'Cases, chargers, cables' },
+      { name: 'Repairs', color: '#EF4444', description: 'Screen repairs, unlocking' },
+      { name: 'SIM Cards', color: '#8B5CF6', description: 'New SIM registrations' },
+    ],
+  },
+];
+
 export function POSSetupWizard() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -113,6 +295,11 @@ export function POSSetupWizard() {
     description: '',
     color: '#3B82F6',
   });
+
+  // Template categories state
+  const [selectedTemplates, setSelectedTemplates] = useState<Set<string>>(new Set());
+  const [importingTemplates, setImportingTemplates] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(true);
 
   // Load existing settings if any
   useEffect(() => {
@@ -163,10 +350,96 @@ export function POSSetupWizard() {
     try {
       const cats = await posService.getCategories(user.id);
       setCategories(cats);
+      // Hide templates if user already has categories
+      if (cats.length > 0) {
+        setShowTemplates(false);
+      }
     } catch (error) {
       console.error('Error loading categories:', error);
     } finally {
       setLoadingCategories(false);
+    }
+  };
+
+  // Toggle template selection
+  const toggleTemplate = (templateId: string) => {
+    setSelectedTemplates(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(templateId)) {
+        newSet.delete(templateId);
+      } else {
+        newSet.add(templateId);
+      }
+      return newSet;
+    });
+  };
+
+  // Import selected templates
+  const importSelectedTemplates = async () => {
+    if (!user?.id || selectedTemplates.size === 0) return;
+
+    setImportingTemplates(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    try {
+      // Get all categories from selected templates
+      const categoriesToImport: { name: string; color: string; description?: string }[] = [];
+
+      selectedTemplates.forEach(templateId => {
+        const template = categoryTemplates.find(t => t.id === templateId);
+        if (template) {
+          categoriesToImport.push(...template.categories);
+        }
+      });
+
+      // Remove duplicates based on name
+      const uniqueCategories = categoriesToImport.filter((cat, index, self) =>
+        index === self.findIndex(c => c.name === cat.name)
+      );
+
+      // Create categories in database one by one
+      for (const cat of uniqueCategories) {
+        try {
+          await posService.createCategory({
+            merchant_id: user.id,
+            name: cat.name,
+            description: cat.description,
+            color: cat.color,
+          });
+          successCount++;
+        } catch (catError: any) {
+          console.error(`Error creating category "${cat.name}":`, catError);
+          // Check if it's a duplicate error - ignore and count as success
+          if (catError?.code === '23505') {
+            // Unique constraint violation - category already exists
+            successCount++;
+          } else {
+            errorCount++;
+          }
+        }
+      }
+
+      // Reload categories
+      await loadCategories();
+
+      // Clear selection and hide templates
+      setSelectedTemplates(new Set());
+      setShowTemplates(false);
+
+      // Show result message
+      if (errorCount === 0) {
+        // All successful - no alert needed, just show the categories
+      } else if (successCount > 0) {
+        alert(`Imported ${successCount} categories. ${errorCount} failed.`);
+      } else {
+        alert('Failed to import categories. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error importing templates:', error);
+      alert('Failed to import categories. Please try again.');
+    } finally {
+      setImportingTemplates(false);
     }
   };
 
@@ -413,86 +686,170 @@ export function POSSetupWizard() {
           <div className="space-y-6">
             <div className="text-center mb-6">
               <h2 className="text-xl font-bold text-gray-900 dark:text-white">Product Categories</h2>
-              <p className="text-gray-500 dark:text-gray-400">Organize your products into categories for easier management</p>
+              <p className="text-gray-500 dark:text-gray-400">Choose from templates or create your own categories</p>
             </div>
 
-            <div className="max-w-2xl mx-auto">
-              {/* Add Category Button */}
-              <div className="flex justify-end mb-4">
-                <Button onClick={() => openCategoryModal()}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Category
-                </Button>
-              </div>
-
-              {/* Categories List */}
-              {loadingCategories ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+            <div className="max-w-4xl mx-auto">
+              {/* View Toggle */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowTemplates(true)}
+                    className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${
+                      showTemplates
+                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                        : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'
+                    }`}
+                  >
+                    <LayoutGrid className="w-4 h-4" />
+                    Templates
+                  </button>
+                  <button
+                    onClick={() => setShowTemplates(false)}
+                    className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${
+                      !showTemplates
+                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                        : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'
+                    }`}
+                  >
+                    <List className="w-4 h-4" />
+                    My Categories ({categories.length})
+                  </button>
                 </div>
-              ) : categories.length === 0 ? (
-                <div className="text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-xl">
-                  <FolderOpen className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No categories yet</h3>
-                  <p className="text-gray-500 dark:text-gray-400 mb-4">
-                    Create categories to organize your products
-                  </p>
+                {!showTemplates && (
                   <Button onClick={() => openCategoryModal()}>
                     <Plus className="w-4 h-4 mr-2" />
-                    Create First Category
+                    Add Category
                   </Button>
+                )}
+              </div>
+
+              {showTemplates ? (
+                /* Template Categories Grid */
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Select one or more business templates to import their categories:
+                  </p>
+
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {categoryTemplates.map((template) => {
+                      const isSelected = selectedTemplates.has(template.id);
+                      return (
+                        <button
+                          key={template.id}
+                          onClick={() => toggleTemplate(template.id)}
+                          className={`relative p-4 rounded-xl border-2 transition-all text-left hover:shadow-md ${
+                            isSelected
+                              ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                              : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                          }`}
+                        >
+                          {/* Checkbox indicator */}
+                          <div className={`absolute top-2 right-2 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
+                            isSelected
+                              ? 'bg-green-500 border-green-500'
+                              : 'border-gray-300 dark:border-gray-600'
+                          }`}>
+                            {isSelected && <Check className="w-3 h-3 text-white" />}
+                          </div>
+
+                          <div className="text-2xl mb-2">{template.icon}</div>
+                          <h4 className="font-medium text-gray-900 dark:text-white text-sm">{template.name}</h4>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{template.description}</p>
+                          <p className="text-xs text-green-600 dark:text-green-400 mt-2">
+                            {template.categories.length} categories
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Import Button */}
+                  {selectedTemplates.size > 0 && (
+                    <div className="flex items-center justify-between p-4 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-800">
+                      <div>
+                        <p className="font-medium text-green-800 dark:text-green-300">
+                          {selectedTemplates.size} template{selectedTemplates.size > 1 ? 's' : ''} selected
+                        </p>
+                        <p className="text-sm text-green-600 dark:text-green-400">
+                          {Array.from(selectedTemplates).reduce((sum, id) => {
+                            const t = categoryTemplates.find(t => t.id === id);
+                            return sum + (t?.categories.length || 0);
+                          }, 0)} categories will be imported
+                        </p>
+                      </div>
+                      <Button onClick={importSelectedTemplates} disabled={importingTemplates}>
+                        {importingTemplates ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Download className="w-4 h-4 mr-2" />
+                        )}
+                        Import Selected
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {categories.map(cat => (
-                    <div
-                      key={cat.id}
-                      className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="w-4 h-4 rounded-full"
-                          style={{ backgroundColor: cat.color }}
-                        />
-                        <div>
-                          <p className="font-medium text-gray-900 dark:text-white">{cat.name}</p>
-                          {cat.description && (
-                            <p className="text-sm text-gray-500 dark:text-gray-400">{cat.description}</p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => openCategoryModal(cat)}
-                          className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-500 hover:text-gray-700"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => deleteCategory(cat)}
-                          className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-gray-500 hover:text-red-600"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                /* My Categories List */
+                <>
+                  {loadingCategories ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+                    </div>
+                  ) : categories.length === 0 ? (
+                    <div className="text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-xl">
+                      <FolderOpen className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No categories yet</h3>
+                      <p className="text-gray-500 dark:text-gray-400 mb-4">
+                        Import from templates or create your own
+                      </p>
+                      <div className="flex justify-center gap-3">
+                        <Button variant="outline" onClick={() => setShowTemplates(true)}>
+                          <LayoutGrid className="w-4 h-4 mr-2" />
+                          View Templates
+                        </Button>
+                        <Button onClick={() => openCategoryModal()}>
+                          <Plus className="w-4 h-4 mr-2" />
+                          Create Category
+                        </Button>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {categories.map(cat => (
+                        <div
+                          key={cat.id}
+                          className="group inline-flex items-center gap-2 pl-3 pr-2 py-2 rounded-full border-2 transition-all hover:shadow-md cursor-default"
+                          style={{
+                            borderColor: cat.color,
+                            backgroundColor: `${cat.color}15`,
+                          }}
+                        >
+                          <div
+                            className="w-3 h-3 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: cat.color }}
+                          />
+                          <span className="font-medium text-gray-900 dark:text-white text-sm">{cat.name}</span>
+                          <div className="flex items-center gap-0.5 ml-1">
+                            <button
+                              onClick={() => openCategoryModal(cat)}
+                              className="p-1.5 hover:bg-white/60 dark:hover:bg-gray-700/60 rounded-full text-gray-400 hover:text-gray-600 transition-colors"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => deleteCategory(cat)}
+                              className="p-1.5 hover:bg-red-100/60 dark:hover:bg-red-900/40 rounded-full text-gray-400 hover:text-red-500 transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
-
-              <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <Tag className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-blue-900 dark:text-blue-300">
-                      Categories help organize products
-                    </p>
-                    <p className="text-sm text-blue-700 dark:text-blue-400 mt-1">
-                      Examples: Beverages, Snacks, Electronics, Groceries, etc.
-                    </p>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         );

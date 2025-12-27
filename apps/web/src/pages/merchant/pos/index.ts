@@ -16,3 +16,4 @@ export { POSDiscountsPage } from './POSDiscountsPage';
 export { POSPurchaseOrdersPage } from './POSPurchaseOrdersPage';
 export { POSMarketplacePage } from './POSMarketplacePage';
 export { POSPaymentCallbackPage } from './POSPaymentCallbackPage';
+export { POSReceiptsPage } from './POSReceiptsPage';

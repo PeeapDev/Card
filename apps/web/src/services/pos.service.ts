@@ -311,48 +311,68 @@ export interface POSSalesReport {
 }
 
 // Categories
+// Note: Using supabaseAdmin to bypass RLS since app uses custom auth
 export const getCategories = async (businessId: string): Promise<POSCategory[]> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('pos_categories')
     .select('*')
     .eq('merchant_id', businessId)
     .eq('is_active', true)
     .order('sort_order', { ascending: true });
 
-  if (error) throw error;
+  if (error) {
+    console.error('[POS] Error fetching categories:', error);
+    throw error;
+  }
   return data || [];
 };
 
 export const createCategory = async (category: Partial<POSCategory>): Promise<POSCategory> => {
-  const { data, error } = await supabase
+  // Use supabaseAdmin to bypass RLS since app uses custom auth
+  const { data, error } = await supabaseAdmin
     .from('pos_categories')
-    .insert(category)
+    .insert({
+      ...category,
+      is_active: true,
+      sort_order: 0,
+    })
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    console.error('[POS] Error creating category:', error);
+    throw error;
+  }
   return data;
 };
 
 export const updateCategory = async (id: string, updates: Partial<POSCategory>): Promise<POSCategory> => {
-  const { data, error } = await supabase
+  // Use supabaseAdmin to bypass RLS since app uses custom auth
+  const { data, error } = await supabaseAdmin
     .from('pos_categories')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id)
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    console.error('[POS] Error updating category:', error);
+    throw error;
+  }
   return data;
 };
 
 export const deleteCategory = async (id: string): Promise<void> => {
-  const { error } = await supabase
+  // Use supabaseAdmin to bypass RLS since app uses custom auth
+  const { error } = await supabaseAdmin
     .from('pos_categories')
     .delete()
     .eq('id', id);
 
-  if (error) throw error;
+  if (error) {
+    console.error('[POS] Error deleting category:', error);
+    throw error;
+  }
 };
 
 // Products

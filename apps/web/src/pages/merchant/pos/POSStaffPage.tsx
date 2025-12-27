@@ -30,10 +30,16 @@ import {
   WifiOff,
   Cloud,
   CloudOff,
+  CheckCircle,
+  Mail,
+  Phone,
+  AtSign,
 } from 'lucide-react';
 import posService, { POSStaff } from '@/services/pos.service';
 import { useLimitCheck } from '@/hooks/useTierLimits';
 import { UpgradeLimitPrompt } from '@/components/subscription/UpgradeLimitPrompt';
+import { UserSearch, SearchResult } from '@/components/ui/UserSearch';
+import { notificationService } from '@/services/notification.service';
 
 // Role badges
 const RoleBadge = ({ role }: { role: string }) => {
@@ -119,6 +125,10 @@ export function POSStaffPage() {
     is_active: true,
   });
 
+  // Selected user from search (for new staff)
+  const [selectedUser, setSelectedUser] = useState<SearchResult | null>(null);
+  const [modalStep, setModalStep] = useState<'search' | 'configure'>('search');
+
   useEffect(() => {
     if (merchantId) {
       loadStaff();
@@ -146,6 +156,8 @@ export function POSStaffPage() {
         return;
       }
       setEditingStaff(null);
+      setSelectedUser(null);
+      setModalStep('search'); // Start with user search for new staff
       const defaultPerms = posService.DEFAULT_PERMISSIONS['cashier'];
       setForm({
         name: '',
@@ -157,8 +169,10 @@ export function POSStaffPage() {
         is_active: true,
       });
     } else {
-      // Editing existing staff - no limit check needed
+      // Editing existing staff - go directly to configure step
       setEditingStaff(staffMember);
+      setSelectedUser(null);
+      setModalStep('configure');
       setForm({
         name: staffMember.name,
         email: staffMember.email || '',
@@ -176,6 +190,8 @@ export function POSStaffPage() {
   const closeModal = () => {
     setShowModal(false);
     setEditingStaff(null);
+    setSelectedUser(null);
+    setModalStep('search');
     setForm({
       name: '',
       email: '',
@@ -185,6 +201,25 @@ export function POSStaffPage() {
       permissions: [],
       is_active: true,
     });
+  };
+
+  // Handle user selection from search
+  const handleUserSelect = (user: SearchResult) => {
+    // Check if this user is already a staff member
+    const existingStaff = staff.find(s => s.user_id === user.id);
+    if (existingStaff) {
+      alert(`${user.first_name} ${user.last_name} is already a staff member with role: ${existingStaff.role}`);
+      return;
+    }
+
+    setSelectedUser(user);
+    setForm({
+      ...form,
+      name: `${user.first_name} ${user.last_name}`.trim(),
+      email: user.email || '',
+      phone: user.phone || '',
+    });
+    setModalStep('configure');
   };
 
   const handleRoleChange = (role: 'admin' | 'manager' | 'cashier') => {
@@ -212,6 +247,12 @@ export function POSStaffPage() {
   };
 
   const saveStaff = async () => {
+    // For new staff, a user must be selected
+    if (!editingStaff && !selectedUser) {
+      alert('Please search and select a user from the system');
+      return;
+    }
+
     if (!form.name.trim()) {
       alert('Please enter staff name');
       return;
@@ -222,6 +263,7 @@ export function POSStaffPage() {
 
       const staffData: Partial<POSStaff> = {
         merchant_id: merchantId!,
+        user_id: selectedUser?.id || editingStaff?.user_id, // Link to system user
         name: form.name,
         email: form.email || undefined,
         phone: form.phone || undefined,
@@ -229,13 +271,32 @@ export function POSStaffPage() {
         role: form.role,
         permissions: form.permissions,
         is_active: form.is_active,
+        invitation_status: editingStaff ? editingStaff.invitation_status : 'pending',
+        invited_at: editingStaff ? editingStaff.invited_at : new Date().toISOString(),
       };
 
       // Use offline sync - works offline with IndexedDB
+      let createdStaff: POSStaff | null = null;
       if (editingStaff) {
         await offlineSync.updateStaff(editingStaff.id!, staffData);
       } else {
-        await offlineSync.createStaff(staffData as POSStaff);
+        createdStaff = await offlineSync.createStaff(staffData as POSStaff);
+
+        // Send staff invitation notification to the user
+        if (selectedUser && createdStaff?.id) {
+          try {
+            await notificationService.sendStaffInvitation({
+              userId: selectedUser.id,
+              merchantName: user?.firstName ? `${user.firstName}'s Business` : 'A business',
+              role: form.role,
+              merchantId: merchantId!,
+              staffId: createdStaff.id,
+            });
+          } catch (notifError) {
+            console.error('Failed to send invitation notification:', notifError);
+            // Don't fail the whole operation if notification fails
+          }
+        }
       }
 
       await loadStaff();
@@ -473,16 +534,33 @@ export function POSStaffPage() {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <button
-                          onClick={() => toggleActive(member)}
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                            member.is_active
-                              ? 'bg-green-100 text-green-700'
-                              : 'bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300'
-                          }`}
-                        >
-                          {member.is_active ? 'Active' : 'Inactive'}
-                        </button>
+                        <div className="flex flex-col gap-1">
+                          <button
+                            onClick={() => toggleActive(member)}
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium w-fit ${
+                              member.is_active
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300'
+                            }`}
+                          >
+                            {member.is_active ? 'Active' : 'Inactive'}
+                          </button>
+                          {member.invitation_status && member.invitation_status !== 'accepted' && (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium w-fit ${
+                              member.invitation_status === 'pending'
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-red-100 text-red-700'
+                            }`}>
+                              {member.invitation_status === 'pending' ? 'Invite Pending' : 'Declined'}
+                            </span>
+                          )}
+                          {member.user_id && (
+                            <span className="text-xs text-green-600 flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3" />
+                              Linked
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-2">
@@ -514,177 +592,284 @@ export function POSStaffPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
-              <h2 className="text-lg font-semibold">
-                {editingStaff ? 'Edit Staff Member' : 'Add Staff Member'}
-              </h2>
+              <div className="flex items-center gap-3">
+                {/* Back button when on configure step for new staff */}
+                {!editingStaff && modalStep === 'configure' && (
+                  <button
+                    onClick={() => {
+                      setModalStep('search');
+                      setSelectedUser(null);
+                    }}
+                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                  >
+                    <ArrowLeft className="w-5 h-5" />
+                  </button>
+                )}
+                <h2 className="text-lg font-semibold">
+                  {editingStaff
+                    ? 'Edit Staff Member'
+                    : modalStep === 'search'
+                      ? 'Find Team Member'
+                      : 'Assign Role & Permissions'}
+                </h2>
+              </div>
               <button
                 onClick={closeModal}
-                className="p-2 hover:bg-gray-100 dark:bg-gray-900 rounded-lg"
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-4 space-y-6">
-              {/* Basic Info */}
-              <div className="space-y-4">
-                <h3 className="font-medium text-gray-900 dark:text-white">Basic Information</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Name *
-                    </label>
-                    <input
-                      type="text"
-                      value={form.name}
-                      onChange={e => setForm({ ...form, name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500"
-                      placeholder="Staff name"
-                    />
+            {/* Step 1: Search for User (only for new staff) */}
+            {!editingStaff && modalStep === 'search' && (
+              <div className="p-6 space-y-6">
+                <div className="text-center mb-6">
+                  <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Search className="w-8 h-8 text-primary-600" />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Email
-                    </label>
-                    <input
-                      type="email"
-                      value={form.email}
-                      onChange={e => setForm({ ...form, email: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500"
-                      placeholder="staff@example.com"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Phone
-                    </label>
-                    <input
-                      type="tel"
-                      value={form.phone}
-                      onChange={e => setForm({ ...form, phone: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500"
-                      placeholder="+232 xx xxx xxxx"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      PIN Code
-                    </label>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <input
-                          type={showPin ? 'text' : 'password'}
-                          value={form.pin}
-                          onChange={e => setForm({ ...form, pin: e.target.value.slice(0, 6) })}
-                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500"
-                          placeholder="4-6 digits"
-                          maxLength={6}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPin(!showPin)}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:text-gray-400"
-                        >
-                          {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                      <Button variant="outline" onClick={generatePin}>
-                        Generate
-                      </Button>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white">Search for a User</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    Find an existing user in the system to add as staff. They will receive an invitation notification.
+                  </p>
+                </div>
+
+                <UserSearch
+                  onSelect={handleUserSelect}
+                  placeholder="Search by @username, phone, or name..."
+                  excludeUserId={merchantId}
+                  autoFocus
+                />
+
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+                  <div className="flex gap-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-amber-800 dark:text-amber-200">
+                      <p className="font-medium">Only registered users can be added as staff</p>
+                      <p className="mt-1 text-amber-700 dark:text-amber-300">
+                        The person you want to add must have an account in the system first. They will receive a notification and POS access will appear in their sidebar.
+                      </p>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Role */}
-              <div className="space-y-4">
-                <h3 className="font-medium text-gray-900 dark:text-white">Role</h3>
-                <div className="flex gap-3">
-                  {(['admin', 'manager', 'cashier'] as const).map(role => (
+                <div className="p-4 border-t bg-gray-50 dark:bg-gray-700 -mx-6 -mb-6">
+                  <Button variant="outline" className="w-full" onClick={closeModal}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Configure Role & Permissions (or Edit existing) */}
+            {(editingStaff || modalStep === 'configure') && (
+              <>
+                <div className="p-4 space-y-6">
+                  {/* Selected User Info (read-only for new staff) */}
+                  {selectedUser && !editingStaff && (
+                    <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-xl p-4">
+                      <div className="flex items-center gap-4">
+                        {selectedUser.profile_picture ? (
+                          <img
+                            src={selectedUser.profile_picture}
+                            alt={`${selectedUser.first_name} ${selectedUser.last_name}`}
+                            className="w-16 h-16 rounded-full object-cover border-2 border-primary-200"
+                          />
+                        ) : (
+                          <div className="w-16 h-16 bg-primary-200 rounded-full flex items-center justify-center">
+                            <span className="text-primary-700 font-bold text-xl">
+                              {selectedUser.first_name?.charAt(0)}{selectedUser.last_name?.charAt(0)}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-gray-900 dark:text-white text-lg">
+                              {selectedUser.first_name} {selectedUser.last_name}
+                            </h3>
+                            {selectedUser.kyc_status === 'approved' && (
+                              <CheckCircle className="w-5 h-5 text-green-500" fill="currentColor" stroke="white" strokeWidth={2} />
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-3 mt-1 text-sm text-gray-600 dark:text-gray-400">
+                            {selectedUser.username && (
+                              <span className="flex items-center gap-1">
+                                <AtSign className="w-3.5 h-3.5" />
+                                {selectedUser.username}
+                              </span>
+                            )}
+                            {selectedUser.phone && (
+                              <span className="flex items-center gap-1">
+                                <Phone className="w-3.5 h-3.5" />
+                                {selectedUser.phone}
+                              </span>
+                            )}
+                            {selectedUser.email && (
+                              <span className="flex items-center gap-1">
+                                <Mail className="w-3.5 h-3.5" />
+                                {selectedUser.email}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Staff name (editable for editing, hidden for new) */}
+                  {editingStaff && (
+                    <div className="space-y-4">
+                      <h3 className="font-medium text-gray-900 dark:text-white">Staff Information</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Display Name
+                          </label>
+                          <input
+                            type="text"
+                            value={form.name}
+                            onChange={e => setForm({ ...form, name: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-gray-700"
+                            placeholder="Staff name"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            PIN Code
+                          </label>
+                          <div className="flex gap-2">
+                            <div className="relative flex-1">
+                              <input
+                                type={showPin ? 'text' : 'password'}
+                                value={form.pin}
+                                onChange={e => setForm({ ...form, pin: e.target.value.slice(0, 6) })}
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-gray-700"
+                                placeholder="4-6 digits"
+                                maxLength={6}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowPin(!showPin)}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                              >
+                                {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                              </button>
+                            </div>
+                            <Button variant="outline" onClick={generatePin}>
+                              Generate
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Role */}
+                  <div className="space-y-4">
+                    <h3 className="font-medium text-gray-900 dark:text-white">Select Role</h3>
+                    <div className="flex gap-3">
+                      {(['admin', 'manager', 'cashier'] as const).map(role => (
+                        <button
+                          key={role}
+                          onClick={() => handleRoleChange(role)}
+                          className={`flex-1 p-4 border rounded-lg text-center transition-all ${
+                            form.role === role
+                              ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
+                              : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                          }`}
+                        >
+                          <Shield className={`w-6 h-6 mx-auto mb-2 ${
+                            form.role === role ? 'text-primary-600' : 'text-gray-400'
+                          }`} />
+                          <p className="font-medium capitalize">{role}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {role === 'admin' && 'Full access'}
+                            {role === 'manager' && 'Most features'}
+                            {role === 'cashier' && 'Sales only'}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Permissions */}
+                  <div className="space-y-4">
+                    <h3 className="font-medium text-gray-900 dark:text-white">Permissions</h3>
+                    <div className="space-y-4">
+                      {Object.entries(PERMISSION_GROUPS).map(([group, permissions]) => (
+                        <div key={group} className="border dark:border-gray-700 rounded-lg p-3">
+                          <h4 className="font-medium text-sm text-gray-700 dark:text-gray-300 mb-2">{group}</h4>
+                          <div className="flex flex-wrap gap-2">
+                            {permissions.map(perm => (
+                              <button
+                                key={perm.key}
+                                onClick={() => togglePermission(perm.key)}
+                                className={`px-3 py-1 text-sm rounded-full transition-colors ${
+                                  form.permissions.includes(perm.key)
+                                    ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
+                                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                }`}
+                              >
+                                {perm.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Active Status */}
+                  <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">Active Status</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Inactive staff cannot log in</p>
+                    </div>
                     <button
-                      key={role}
-                      onClick={() => handleRoleChange(role)}
-                      className={`flex-1 p-4 border rounded-lg text-center transition-all ${
-                        form.role === role
-                          ? 'border-primary-500 bg-primary-50 text-primary-700'
-                          : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:border-gray-600'
+                      onClick={() => setForm({ ...form, is_active: !form.is_active })}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        form.is_active ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
                       }`}
                     >
-                      <Shield className={`w-6 h-6 mx-auto mb-2 ${
-                        form.role === role ? 'text-primary-600' : 'text-gray-400'
-                      }`} />
-                      <p className="font-medium capitalize">{role}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        {role === 'admin' && 'Full access'}
-                        {role === 'manager' && 'Most features'}
-                        {role === 'cashier' && 'Sales only'}
-                      </p>
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          form.is_active ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
                     </button>
-                  ))}
-                </div>
-              </div>
+                  </div>
 
-              {/* Permissions */}
-              <div className="space-y-4">
-                <h3 className="font-medium text-gray-900 dark:text-white">Permissions</h3>
-                <div className="space-y-4">
-                  {Object.entries(PERMISSION_GROUPS).map(([group, permissions]) => (
-                    <div key={group} className="border rounded-lg p-3">
-                      <h4 className="font-medium text-sm text-gray-700 dark:text-gray-300 mb-2">{group}</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {permissions.map(perm => (
-                          <button
-                            key={perm.key}
-                            onClick={() => togglePermission(perm.key)}
-                            className={`px-3 py-1 text-sm rounded-full transition-colors ${
-                              form.permissions.includes(perm.key)
-                                ? 'bg-primary-100 text-primary-700'
-                                : 'bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-200'
-                            }`}
-                          >
-                            {perm.label}
-                          </button>
-                        ))}
+                  {/* Notification info for new staff */}
+                  {!editingStaff && selectedUser && (
+                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                      <div className="flex gap-3">
+                        <Mail className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <div className="text-sm text-blue-800 dark:text-blue-200">
+                          <p className="font-medium">Invitation will be sent</p>
+                          <p className="mt-1 text-blue-700 dark:text-blue-300">
+                            {selectedUser.first_name} will receive a notification and POS will appear in their sidebar immediately.
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  ))}
+                  )}
                 </div>
-              </div>
 
-              {/* Active Status */}
-              <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                <div>
-                  <p className="font-medium">Active Status</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Inactive staff cannot log in</p>
+                <div className="p-4 border-t bg-gray-50 dark:bg-gray-700 flex gap-3">
+                  <Button variant="outline" className="flex-1" onClick={closeModal}>
+                    Cancel
+                  </Button>
+                  <Button className="flex-1" onClick={saveStaff} disabled={saving}>
+                    {saving ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4 mr-2" />
+                    )}
+                    {editingStaff ? 'Update' : 'Send Invitation'}
+                  </Button>
                 </div>
-                <button
-                  onClick={() => setForm({ ...form, is_active: !form.is_active })}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    form.is_active ? 'bg-primary-600' : 'bg-gray-300'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white dark:bg-gray-800 transition-transform ${
-                      form.is_active ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-4 border-t bg-gray-50 dark:bg-gray-700 flex gap-3">
-              <Button variant="outline" className="flex-1" onClick={closeModal}>
-                Cancel
-              </Button>
-              <Button className="flex-1" onClick={saveStaff} disabled={saving}>
-                {saving ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Save className="w-4 h-4 mr-2" />
-                )}
-                {editingStaff ? 'Update' : 'Create'}
-              </Button>
-            </div>
+              </>
+            )}
           </div>
         </div>
       )}

@@ -16,17 +16,23 @@ export interface AppConfig {
   setup_completed: boolean;
   wallet_id?: string;
   settings?: Record<string, any>;
+  pinned_to_sidebar?: boolean;
 }
 
 interface AppsContextType {
   enabledApps: Record<string, boolean>;
   appConfigs: Record<string, AppConfig>;
+  pinnedApps: string[]; // List of app IDs pinned to sidebar
   isAppEnabled: (appId: string) => boolean;
   isAppSetupComplete: (appId: string) => boolean;
+  isAppPinned: (appId: string) => boolean;
   toggleApp: (appId: string) => Promise<boolean>; // Returns true if setup wizard should be shown
   enableApp: (appId: string, setupComplete?: boolean) => Promise<void>;
   disableApp: (appId: string) => Promise<void>;
   completeAppSetup: (appId: string, walletId?: string, settings?: Record<string, any>) => Promise<void>;
+  toggleAppPin: (appId: string) => Promise<void>;
+  pinApp: (appId: string) => Promise<void>;
+  unpinApp: (appId: string) => Promise<void>;
   isLoading: boolean;
   hasLoadedFromDB: boolean;
   refreshApps: () => Promise<void>;
@@ -56,6 +62,7 @@ export function AppsProvider({ children }: AppsProviderProps) {
   const [hasLoadedFromDB, setHasLoadedFromDB] = useState(false);
   const [enabledApps, setEnabledApps] = useState<Record<string, boolean>>({});
   const [appConfigs, setAppConfigs] = useState<Record<string, AppConfig>>({});
+  const [pinnedApps, setPinnedApps] = useState<string[]>([]);
 
   // Load app states from database
   const loadAppsFromDatabase = useCallback(async () => {
@@ -96,7 +103,8 @@ export function AppsProvider({ children }: AppsProviderProps) {
         };
       });
 
-      // Override with database values
+      // Override with database values and track pinned apps
+      const pinned: string[] = [];
       if (appSettings) {
         appSettings.forEach((setting: any) => {
           enabled[setting.app_id] = setting.enabled;
@@ -107,12 +115,18 @@ export function AppsProvider({ children }: AppsProviderProps) {
             setup_completed: setting.setup_completed,
             wallet_id: setting.wallet_id,
             settings: setting.settings,
+            pinned_to_sidebar: setting.pinned_to_sidebar,
           };
+          // Track pinned apps
+          if (setting.enabled && setting.pinned_to_sidebar) {
+            pinned.push(setting.app_id);
+          }
         });
       }
 
       setEnabledApps(enabled);
       setAppConfigs(configs);
+      setPinnedApps(pinned);
       setHasLoadedFromDB(true);
     } catch (error) {
       console.error('Error loading app settings from database:', error);
@@ -290,17 +304,110 @@ export function AppsProvider({ children }: AppsProviderProps) {
     }
   };
 
+  // Check if app is pinned to sidebar
+  const isAppPinned = (appId: string): boolean => {
+    return pinnedApps.includes(appId);
+  };
+
+  // Toggle app pin status
+  const toggleAppPin = async (appId: string) => {
+    if (isAppPinned(appId)) {
+      await unpinApp(appId);
+    } else {
+      await pinApp(appId);
+    }
+  };
+
+  // Pin app to sidebar
+  const pinApp = async (appId: string) => {
+    if (!user?.id || !enabledApps[appId]) return;
+
+    // Update local state
+    setPinnedApps(prev => [...prev, appId]);
+    setAppConfigs(prev => ({
+      ...prev,
+      [appId]: {
+        ...prev[appId],
+        pinned_to_sidebar: true,
+      },
+    }));
+
+    // Persist to database
+    try {
+      const { error } = await supabase
+        .from('merchant_app_settings')
+        .upsert({
+          merchant_id: user.id,
+          app_id: appId,
+          pinned_to_sidebar: true,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'merchant_id,app_id',
+        });
+
+      if (error) {
+        console.error('Error pinning app:', error);
+        // Revert on error
+        setPinnedApps(prev => prev.filter(id => id !== appId));
+      }
+    } catch (error) {
+      console.error('Error pinning app:', error);
+    }
+  };
+
+  // Unpin app from sidebar
+  const unpinApp = async (appId: string) => {
+    if (!user?.id) return;
+
+    // Update local state
+    setPinnedApps(prev => prev.filter(id => id !== appId));
+    setAppConfigs(prev => ({
+      ...prev,
+      [appId]: {
+        ...prev[appId],
+        pinned_to_sidebar: false,
+      },
+    }));
+
+    // Persist to database
+    try {
+      const { error } = await supabase
+        .from('merchant_app_settings')
+        .upsert({
+          merchant_id: user.id,
+          app_id: appId,
+          pinned_to_sidebar: false,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'merchant_id,app_id',
+        });
+
+      if (error) {
+        console.error('Error unpinning app:', error);
+        // Revert on error
+        setPinnedApps(prev => [...prev, appId]);
+      }
+    } catch (error) {
+      console.error('Error unpinning app:', error);
+    }
+  };
+
   return (
     <AppsContext.Provider
       value={{
         enabledApps,
         appConfigs,
+        pinnedApps,
         isAppEnabled,
         isAppSetupComplete,
+        isAppPinned,
         toggleApp,
         enableApp,
         disableApp,
         completeAppSetup,
+        toggleAppPin,
+        pinApp,
+        unpinApp,
         isLoading,
         hasLoadedFromDB,
         refreshApps: loadAppsFromDatabase,

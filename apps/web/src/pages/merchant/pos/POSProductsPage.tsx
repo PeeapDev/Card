@@ -25,6 +25,14 @@ import {
   Check,
   Upload,
   Camera,
+  Wand2,
+  Percent,
+  Copy,
+  Layers,
+  ImageIcon,
+  Globe,
+  Printer,
+  Download,
 } from 'lucide-react';
 import posService, { POSProduct, POSCategory } from '@/services/pos.service';
 import storageService from '@/services/storage.service';
@@ -34,6 +42,33 @@ import { UpgradeLimitPrompt } from '@/components/subscription/UpgradeLimitPrompt
 // Format currency - using Le (Leone) symbol
 const formatCurrency = (amount: number) => {
   return `NLe ${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+};
+
+// Generate SKU from product name
+const generateSKU = (name: string, categoryName?: string): string => {
+  const prefix = categoryName
+    ? categoryName.substring(0, 3).toUpperCase()
+    : 'PRD';
+  const namePart = name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 4).toUpperCase();
+  const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+  return `${prefix}-${namePart}-${random}`;
+};
+
+// Generate EAN-13 compatible barcode
+const generateBarcode = (): string => {
+  // Use prefix 200-299 for in-store products
+  const prefix = '2' + Math.floor(Math.random() * 10).toString();
+  const productCode = Math.floor(Math.random() * 10000000000).toString().padStart(10, '0');
+  const baseCode = prefix + productCode;
+
+  // Calculate check digit (EAN-13)
+  let sum = 0;
+  for (let i = 0; i < 12; i++) {
+    sum += parseInt(baseCode[i]) * (i % 2 === 0 ? 1 : 3);
+  }
+  const checkDigit = (10 - (sum % 10)) % 10;
+
+  return baseCode + checkDigit;
 };
 
 export function POSProductsPage() {
@@ -89,7 +124,18 @@ export function POSProductsPage() {
     stock_quantity: '0',
     low_stock_threshold: '10',
     is_featured: false,
+    is_on_sale: false,
+    sale_price: '',
+    is_variant: false,
+    parent_product_id: '',
+    variant_name: '', // e.g., "Large", "Red", "500ml"
   });
+
+  // Image search state
+  const [showImageSearch, setShowImageSearch] = useState(false);
+  const [imageSearchQuery, setImageSearchQuery] = useState('');
+  const [searchingImages, setSearchingImages] = useState(false);
+  const [searchResults, setSearchResults] = useState<string[]>([]);
 
   const [categoryForm, setCategoryForm] = useState({
     name: '',
@@ -150,7 +196,7 @@ export function POSProductsPage() {
   }, [products, selectedCategory, searchQuery]);
 
   // Product form handlers
-  const openProductModal = (product?: POSProduct) => {
+  const openProductModal = (product?: POSProduct, asVariantOf?: POSProduct) => {
     // If adding new product, check limits first
     if (!product) {
       if (!tryAddProduct(products.length)) {
@@ -158,21 +204,51 @@ export function POSProductsPage() {
         return;
       }
       setEditingProduct(null);
-      setProductForm({
-        name: '',
-        description: '',
-        category_id: '',
-        sku: '',
-        barcode: '',
-        price: '',
-        cost_price: '',
-        image_url: '',
-        track_inventory: false,
-        stock_quantity: '0',
-        low_stock_threshold: '10',
-        is_featured: false,
-      });
-      setImagePreview(null);
+
+      // If creating as variant of another product, prefill some fields
+      if (asVariantOf) {
+        setProductForm({
+          name: '',
+          description: asVariantOf.description || '',
+          category_id: asVariantOf.category_id || '',
+          sku: '',
+          barcode: '',
+          price: '', // Price should be different for variant
+          cost_price: asVariantOf.cost_price?.toString() || '',
+          image_url: '', // Image should be different for variant
+          track_inventory: asVariantOf.track_inventory,
+          stock_quantity: '0',
+          low_stock_threshold: asVariantOf.low_stock_threshold.toString(),
+          is_featured: false,
+          is_on_sale: false,
+          sale_price: '',
+          is_variant: true,
+          parent_product_id: asVariantOf.id,
+          variant_name: '',
+        });
+        setImagePreview(null);
+      } else {
+        setProductForm({
+          name: '',
+          description: '',
+          category_id: '',
+          sku: '',
+          barcode: '',
+          price: '',
+          cost_price: '',
+          image_url: '',
+          track_inventory: false,
+          stock_quantity: '0',
+          low_stock_threshold: '10',
+          is_featured: false,
+          is_on_sale: false,
+          sale_price: '',
+          is_variant: false,
+          parent_product_id: '',
+          variant_name: '',
+        });
+        setImagePreview(null);
+      }
     } else {
       // Editing existing product - no limit check needed
       setEditingProduct(product);
@@ -189,10 +265,54 @@ export function POSProductsPage() {
         stock_quantity: product.stock_quantity.toString(),
         low_stock_threshold: product.low_stock_threshold.toString(),
         is_featured: product.is_featured,
+        is_on_sale: (product as any).is_on_sale || false,
+        sale_price: (product as any).sale_price?.toString() || '',
+        is_variant: (product as any).is_variant || false,
+        parent_product_id: (product as any).parent_product_id || '',
+        variant_name: (product as any).variant_name || '',
       });
       setImagePreview(product.image_url || null);
     }
+    setShowImageSearch(false);
+    setSearchResults([]);
     setShowProductModal(true);
+  };
+
+  // Generate SKU and Barcode
+  const handleGenerateSKU = () => {
+    const categoryName = categories.find(c => c.id === productForm.category_id)?.name;
+    const sku = generateSKU(productForm.name || 'Product', categoryName);
+    setProductForm(prev => ({ ...prev, sku }));
+  };
+
+  const handleGenerateBarcode = () => {
+    const barcode = generateBarcode();
+    setProductForm(prev => ({ ...prev, barcode }));
+  };
+
+  // Search for product images (using placeholder service)
+  const searchProductImages = async () => {
+    if (!imageSearchQuery.trim()) return;
+    setSearchingImages(true);
+    try {
+      // Use Unsplash source for product images
+      const searchTerms = encodeURIComponent(imageSearchQuery);
+      const results: string[] = [];
+      for (let i = 0; i < 8; i++) {
+        results.push(`https://source.unsplash.com/400x400/?${searchTerms}&sig=${Date.now() + i}`);
+      }
+      setSearchResults(results);
+    } catch (error) {
+      console.error('Error searching images:', error);
+    } finally {
+      setSearchingImages(false);
+    }
+  };
+
+  const selectSearchImage = (url: string) => {
+    setProductForm(prev => ({ ...prev, image_url: url }));
+    setImagePreview(url);
+    setShowImageSearch(false);
   };
 
   // Handle image upload
@@ -249,9 +369,15 @@ export function POSProductsPage() {
       return;
     }
 
+    // Validate sale price if on sale
+    if (productForm.is_on_sale && !productForm.sale_price) {
+      alert('Please enter a sale price');
+      return;
+    }
+
     setSaving(true);
     try {
-      const productData = {
+      const productData: any = {
         merchant_id: merchantId!,
         name: productForm.name,
         description: productForm.description || undefined,
@@ -265,6 +391,11 @@ export function POSProductsPage() {
         stock_quantity: parseInt(productForm.stock_quantity) || 0,
         low_stock_threshold: parseInt(productForm.low_stock_threshold) || 10,
         is_featured: productForm.is_featured,
+        is_on_sale: productForm.is_on_sale,
+        sale_price: productForm.is_on_sale && productForm.sale_price ? parseFloat(productForm.sale_price) : null,
+        is_variant: productForm.is_variant,
+        parent_product_id: productForm.is_variant && productForm.parent_product_id ? productForm.parent_product_id : null,
+        variant_name: productForm.is_variant && productForm.variant_name ? productForm.variant_name : null,
       };
 
       if (editingProduct) {
@@ -402,6 +533,17 @@ export function POSProductsPage() {
                 {products.length}/{productLimit} products
               </div>
             )}
+            {/* Print Labels Button */}
+            {products.length > 0 && (
+              <Button
+                variant="outline"
+                onClick={() => navigate('/merchant/pos/labels')}
+                className="text-purple-600 border-purple-200 hover:bg-purple-50"
+              >
+                <Printer className="w-4 h-4 mr-2" />
+                Print Labels
+              </Button>
+            )}
             <Button variant="outline" onClick={() => openCategoryModal()}>
               <Tag className="w-4 h-4 mr-2" />
               Add Category
@@ -496,26 +638,49 @@ export function POSProductsPage() {
                 className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-md transition-shadow"
               >
                 {/* Product Image */}
-                {product.image_url ? (
-                  <img
-                    src={product.image_url}
-                    alt={product.name}
-                    className="w-full h-40 object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-40 bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
-                    <Package className="w-12 h-12 text-gray-400" />
-                  </div>
-                )}
+                <div className="relative">
+                  {product.image_url ? (
+                    <img
+                      src={product.image_url}
+                      alt={product.name}
+                      className="w-full h-40 object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-40 bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
+                      <Package className="w-12 h-12 text-gray-400" />
+                    </div>
+                  )}
+
+                  {/* Sale Badge */}
+                  {(product as any).is_on_sale && (
+                    <div className="absolute top-2 left-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                      SALE
+                    </div>
+                  )}
+
+                  {/* Variant Badge */}
+                  {(product as any).is_variant && (
+                    <div className="absolute top-2 right-2 bg-indigo-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                      <Layers className="w-3 h-3" />
+                      {(product as any).variant_name || 'Variant'}
+                    </div>
+                  )}
+                </div>
 
                 {/* Product Info */}
                 <div className="p-4">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex-1">
                       <h3 className="font-medium text-gray-900 dark:text-white">{product.name}</h3>
-                      {product.sku && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400">SKU: {product.sku}</p>
-                      )}
+                      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                        {product.sku && <span>SKU: {product.sku}</span>}
+                        {product.barcode && (
+                          <span className="flex items-center gap-1">
+                            <Barcode className="w-3 h-3" />
+                            {product.barcode.substring(0, 8)}...
+                          </span>
+                        )}
+                      </div>
                     </div>
                     {product.is_featured && (
                       <span className="bg-yellow-100 text-yellow-700 text-xs px-2 py-0.5 rounded-full">
@@ -524,9 +689,23 @@ export function POSProductsPage() {
                     )}
                   </div>
 
-                  <p className="text-xl font-bold text-primary-600 mb-2">
-                    {formatCurrency(product.price)}
-                  </p>
+                  {/* Price with Sale */}
+                  <div className="mb-2">
+                    {(product as any).is_on_sale ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl font-bold text-red-600">
+                          {formatCurrency((product as any).sale_price)}
+                        </span>
+                        <span className="text-sm text-gray-400 line-through">
+                          {formatCurrency(product.price)}
+                        </span>
+                      </div>
+                    ) : (
+                      <p className="text-xl font-bold text-primary-600">
+                        {formatCurrency(product.price)}
+                      </p>
+                    )}
+                  </div>
 
                   {product.category && (
                     <span
@@ -561,6 +740,18 @@ export function POSProductsPage() {
                       <Edit2 className="w-3 h-3 mr-1" />
                       Edit
                     </Button>
+                    {/* Add Variant button - only for non-variants */}
+                    {!(product as any).is_variant && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-indigo-600 hover:bg-indigo-50"
+                        onClick={() => openProductModal(undefined, product)}
+                        title="Add variant"
+                      >
+                        <Copy className="w-3 h-3" />
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
@@ -666,33 +857,74 @@ export function POSProductsPage() {
                 </div>
               </div>
 
-              {/* SKU & Barcode */}
+              {/* SKU & Barcode with Generate buttons */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     SKU
                   </label>
-                  <input
-                    type="text"
-                    value={productForm.sku}
-                    onChange={e => setProductForm(prev => ({ ...prev, sku: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500"
-                    placeholder="e.g., COK-500"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={productForm.sku}
+                      onChange={e => setProductForm(prev => ({ ...prev, sku: e.target.value }))}
+                      className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      placeholder="e.g., COK-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleGenerateSKU}
+                      className="px-3 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                      title="Generate SKU"
+                    >
+                      <Wand2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Barcode
+                    Barcode (EAN-13)
                   </label>
-                  <input
-                    type="text"
-                    value={productForm.barcode}
-                    onChange={e => setProductForm(prev => ({ ...prev, barcode: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500"
-                    placeholder="Scan or enter"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={productForm.barcode}
+                      onChange={e => setProductForm(prev => ({ ...prev, barcode: e.target.value }))}
+                      className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      placeholder="Scan or enter"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleGenerateBarcode}
+                      className="px-3 py-2 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors"
+                      title="Generate Barcode"
+                    >
+                      <Barcode className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
+
+              {/* Display generated barcode visual */}
+              {productForm.barcode && (
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 text-center">
+                  <div className="font-mono text-lg tracking-widest mb-1">{productForm.barcode}</div>
+                  <div className="flex justify-center gap-0.5">
+                    {productForm.barcode.split('').map((digit, i) => (
+                      <div key={i} className="flex flex-col items-center">
+                        <div
+                          className="bg-black dark:bg-white"
+                          style={{
+                            width: '2px',
+                            height: `${20 + (parseInt(digit) * 2)}px`,
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">EAN-13 Barcode</p>
+                </div>
+              )}
 
               {/* Description */}
               <div>
@@ -736,26 +968,90 @@ export function POSProductsPage() {
                       )}
                     </div>
                   ) : (
-                    <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer hover:border-primary-400 hover:bg-gray-50 dark:bg-gray-700 transition-colors">
-                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                        {uploading ? (
-                          <Loader2 className="w-10 h-10 text-gray-400 animate-spin mb-2" />
-                        ) : (
-                          <>
-                            <Upload className="w-10 h-10 text-gray-400 mb-2" />
-                            <p className="text-sm text-gray-500 dark:text-gray-400">Click to upload image</p>
-                            <p className="text-xs text-gray-400 mt-1">PNG, JPG up to 5MB</p>
-                          </>
-                        )}
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Upload Option */}
+                      <label className="flex flex-col items-center justify-center h-32 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer hover:border-primary-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                        <div className="flex flex-col items-center justify-center py-4">
+                          {uploading ? (
+                            <Loader2 className="w-8 h-8 text-gray-400 animate-spin mb-2" />
+                          ) : (
+                            <>
+                              <Upload className="w-8 h-8 text-gray-400 mb-2" />
+                              <p className="text-xs text-gray-500 dark:text-gray-400">Upload</p>
+                            </>
+                          )}
+                        </div>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageUpload}
+                          className="hidden"
+                          disabled={uploading}
+                        />
+                      </label>
+
+                      {/* Search Online Option */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowImageSearch(true);
+                          setImageSearchQuery(productForm.name || '');
+                        }}
+                        className="flex flex-col items-center justify-center h-32 border-2 border-dashed border-blue-300 dark:border-blue-600 rounded-lg hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                      >
+                        <Globe className="w-8 h-8 text-blue-400 mb-2" />
+                        <p className="text-xs text-blue-500 dark:text-blue-400">Search Online</p>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Image Search Panel */}
+                  {showImageSearch && (
+                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 space-y-3">
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={imageSearchQuery}
+                          onChange={e => setImageSearchQuery(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && searchProductImages()}
+                          className="flex-1 px-3 py-2 border border-blue-300 dark:border-blue-700 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm bg-white dark:bg-gray-800"
+                          placeholder="Search for product images..."
+                        />
+                        <Button
+                          size="sm"
+                          onClick={searchProductImages}
+                          disabled={searchingImages}
+                        >
+                          {searchingImages ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                        </Button>
+                        <button
+                          type="button"
+                          onClick={() => setShowImageSearch(false)}
+                          className="p-2 text-gray-500 hover:text-gray-700"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
                       </div>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageUpload}
-                        className="hidden"
-                        disabled={uploading}
-                      />
-                    </label>
+
+                      {searchResults.length > 0 && (
+                        <div className="grid grid-cols-4 gap-2">
+                          {searchResults.map((url, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => selectSearchImage(url)}
+                              className="aspect-square rounded-lg overflow-hidden border-2 border-transparent hover:border-blue-500 transition-colors"
+                            >
+                              <img
+                                src={url}
+                                alt={`Search result ${i + 1}`}
+                                className="w-full h-full object-cover"
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   )}
 
                   {/* Or enter URL manually */}
@@ -827,6 +1123,108 @@ export function POSProductsPage() {
                 />
                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Featured product</span>
               </label>
+
+              {/* On Sale Toggle */}
+              <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4 space-y-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={productForm.is_on_sale}
+                    onChange={e => setProductForm(prev => ({ ...prev, is_on_sale: e.target.checked }))}
+                    className="w-4 h-4 text-orange-600 rounded"
+                  />
+                  <span className="text-sm font-medium text-orange-700 dark:text-orange-300 flex items-center gap-2">
+                    <Percent className="w-4 h-4" />
+                    This product is on sale
+                  </span>
+                </label>
+
+                {productForm.is_on_sale && (
+                  <div>
+                    <label className="block text-xs text-orange-600 dark:text-orange-400 mb-1">
+                      Sale Price (SLE)
+                    </label>
+                    <input
+                      type="number"
+                      value={productForm.sale_price}
+                      onChange={e => setProductForm(prev => ({ ...prev, sale_price: e.target.value }))}
+                      className="w-full px-3 py-2 border border-orange-300 dark:border-orange-700 rounded-lg focus:ring-2 focus:ring-orange-500 bg-white dark:bg-gray-800"
+                      placeholder="Enter sale price"
+                    />
+                    {productForm.price && productForm.sale_price && (
+                      <p className="text-xs text-orange-600 mt-1">
+                        {Math.round((1 - parseFloat(productForm.sale_price) / parseFloat(productForm.price)) * 100)}% off
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Product Variant */}
+              <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-4 space-y-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={productForm.is_variant}
+                    onChange={e => setProductForm(prev => ({
+                      ...prev,
+                      is_variant: e.target.checked,
+                      parent_product_id: e.target.checked ? prev.parent_product_id : '',
+                      variant_name: e.target.checked ? prev.variant_name : '',
+                    }))}
+                    className="w-4 h-4 text-indigo-600 rounded"
+                  />
+                  <span className="text-sm font-medium text-indigo-700 dark:text-indigo-300 flex items-center gap-2">
+                    <Layers className="w-4 h-4" />
+                    This is a product variant
+                  </span>
+                </label>
+
+                {productForm.is_variant && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-indigo-600 dark:text-indigo-400 mb-1">
+                        Parent Product
+                      </label>
+                      <select
+                        value={productForm.parent_product_id}
+                        onChange={e => {
+                          const parentProduct = products.find(p => p.id === e.target.value);
+                          if (parentProduct) {
+                            setProductForm(prev => ({
+                              ...prev,
+                              parent_product_id: e.target.value,
+                              description: parentProduct.description || prev.description,
+                              category_id: parentProduct.category_id || prev.category_id,
+                              cost_price: parentProduct.cost_price?.toString() || prev.cost_price,
+                            }));
+                          } else {
+                            setProductForm(prev => ({ ...prev, parent_product_id: e.target.value }));
+                          }
+                        }}
+                        className="w-full px-3 py-2 border border-indigo-300 dark:border-indigo-700 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-800"
+                      >
+                        <option value="">Select parent product</option>
+                        {products.filter(p => !(p as any).is_variant && p.id !== editingProduct?.id).map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-indigo-600 dark:text-indigo-400 mb-1">
+                        Variant Name (e.g., "Large", "Red", "500ml")
+                      </label>
+                      <input
+                        type="text"
+                        value={productForm.variant_name}
+                        onChange={e => setProductForm(prev => ({ ...prev, variant_name: e.target.value }))}
+                        className="w-full px-3 py-2 border border-indigo-300 dark:border-indigo-700 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-800"
+                        placeholder="e.g., Large, Small, 500ml"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="p-4 border-t bg-gray-50 dark:bg-gray-700 flex gap-3">
