@@ -997,7 +997,13 @@ export function ScanPayPage() {
 
               {/* Dropdown */}
               {walletSelectorOpen && wallets.length > 1 && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 z-10 overflow-hidden">
+                <>
+                  {/* Backdrop to close dropdown */}
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setWalletSelectorOpen(false)}
+                  />
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden max-h-60 overflow-y-auto">
                   {wallets.map((wallet) => {
                     const WalletIcon = getWalletIcon(wallet.wallet_type);
                     const canAfford = wallet.balance >= session.amount;
@@ -1028,7 +1034,8 @@ export function ScanPayPage() {
                       </button>
                     );
                   })}
-                </div>
+                  </div>
+                </>
               )}
             </div>
           </div>
