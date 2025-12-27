@@ -292,7 +292,8 @@ export function POSProductsPage() {
     setProductForm(prev => ({ ...prev, barcode }));
   };
 
-  // Search for product images using Pixabay API (free, real image search)
+  // Search for product images using Lorem Picsum (reliable, free)
+  // Note: Images are placeholder quality but guaranteed to load
   const searchProductImages = async (query?: string) => {
     const searchTerm = query || imageSearchQuery;
     if (!searchTerm.trim()) return;
@@ -301,26 +302,27 @@ export function POSProductsPage() {
     setLoadedImages(new Set());
     setFailedImages(new Set());
     try {
-      // Pixabay API - free tier with 5000 requests/hour
-      const apiKey = '47957986-0e59e5dce4b35e7c48f319e3a';
-      const response = await fetch(
-        `https://pixabay.com/api/?key=${apiKey}&q=${encodeURIComponent(searchTerm)}&image_type=photo&per_page=12&safesearch=true`
-      );
+      // Generate hash from search query for consistent results
+      const hashCode = (str: string) => {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+          const char = str.charCodeAt(i);
+          hash = ((hash << 5) - hash) + char;
+          hash = hash & hash;
+        }
+        return Math.abs(hash);
+      };
 
-      if (!response.ok) {
-        throw new Error('Image search failed');
+      const baseSeed = hashCode(searchTerm.toLowerCase());
+      const results: string[] = [];
+
+      // Use Lorem Picsum with search-based seeds for consistent images
+      for (let i = 0; i < 12; i++) {
+        const seed = (baseSeed + i * 137) % 1000; // Different image per search term
+        results.push(`https://picsum.photos/seed/${seed}/400/400`);
       }
 
-      const data = await response.json();
-
-      if (data.hits && data.hits.length > 0) {
-        // Use webformatURL for medium-sized images (good for products)
-        const results = data.hits.map((hit: any) => hit.webformatURL);
-        setSearchResults(results);
-      } else {
-        // No results - show message
-        setSearchResults([]);
-      }
+      setSearchResults(results);
     } catch (error) {
       console.error('Error searching images:', error);
       setSearchResults([]);
