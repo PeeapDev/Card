@@ -43,6 +43,7 @@ import {
   FileText,
   Bot,
   User,
+  TrendingUp,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { AdminNotificationBell } from '@/components/ui/AdminNotificationBell';
@@ -112,6 +113,7 @@ const navSections: NavSection[] = [
       { path: '/admin/business-categories', label: 'Business Categories', icon: Briefcase, badge: 'New', badgeColor: 'primary' },
       { path: '/admin/fee-settings', label: 'Fees & Pricing', icon: DollarSign },
       { path: '/admin/subscriptions', label: 'Subscriptions', icon: Wallet },
+      { path: '/admin/nrr', label: 'Revenue Retention', icon: TrendingUp, badge: 'New', badgeColor: 'primary' },
     ],
   },
   {
