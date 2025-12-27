@@ -292,41 +292,56 @@ export function POSProductsPage() {
     setProductForm(prev => ({ ...prev, barcode }));
   };
 
-  // Search for product images using Lorem Picsum (free, reliable placeholder images)
-  const searchProductImages = async () => {
-    if (!imageSearchQuery.trim()) return;
+  // Search for product images using Pixabay API (free, real image search)
+  const searchProductImages = async (query?: string) => {
+    const searchTerm = query || imageSearchQuery;
+    if (!searchTerm.trim()) return;
     setSearchingImages(true);
     setSearchResults([]);
     setLoadedImages(new Set());
     setFailedImages(new Set());
     try {
-      // Generate a hash from search query for consistent results
-      const hashCode = (str: string) => {
-        let hash = 0;
-        for (let i = 0; i < str.length; i++) {
-          const char = str.charCodeAt(i);
-          hash = ((hash << 5) - hash) + char;
-          hash = hash & hash;
-        }
-        return Math.abs(hash);
-      };
+      // Pixabay API - free tier with 5000 requests/hour
+      const apiKey = '47957986-0e59e5dce4b35e7c48f319e3a';
+      const response = await fetch(
+        `https://pixabay.com/api/?key=${apiKey}&q=${encodeURIComponent(searchTerm)}&image_type=photo&per_page=12&safesearch=true`
+      );
 
-      const baseSeed = hashCode(imageSearchQuery.toLowerCase());
-      const results: string[] = [];
-
-      // Use Lorem Picsum with seeds for consistent, nice product images
-      for (let i = 0; i < 8; i++) {
-        const seed = baseSeed + i * 100;
-        results.push(`https://picsum.photos/seed/${seed}/400/400`);
+      if (!response.ok) {
+        throw new Error('Image search failed');
       }
 
-      setSearchResults(results);
+      const data = await response.json();
+
+      if (data.hits && data.hits.length > 0) {
+        // Use webformatURL for medium-sized images (good for products)
+        const results = data.hits.map((hit: any) => hit.webformatURL);
+        setSearchResults(results);
+      } else {
+        // No results - show message
+        setSearchResults([]);
+      }
     } catch (error) {
       console.error('Error searching images:', error);
+      setSearchResults([]);
     } finally {
       setSearchingImages(false);
     }
   };
+
+  // Debounced search - triggers as user types
+  useEffect(() => {
+    if (!showImageSearch || !imageSearchQuery.trim()) {
+      setSearchResults([]);
+      return;
+    }
+
+    const debounceTimer = setTimeout(() => {
+      searchProductImages(imageSearchQuery);
+    }, 500); // Wait 500ms after user stops typing
+
+    return () => clearTimeout(debounceTimer);
+  }, [imageSearchQuery, showImageSearch]);
 
   const selectSearchImage = (url: string) => {
     setProductForm(prev => ({ ...prev, image_url: url }));
@@ -1049,21 +1064,19 @@ export function POSProductsPage() {
                   {showImageSearch && (
                     <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 space-y-3">
                       <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={imageSearchQuery}
-                          onChange={e => setImageSearchQuery(e.target.value)}
-                          onKeyDown={e => e.key === 'Enter' && searchProductImages()}
-                          className="flex-1 px-3 py-2 border border-blue-300 dark:border-blue-700 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm bg-white dark:bg-gray-800"
-                          placeholder="Search for product images..."
-                        />
-                        <Button
-                          size="sm"
-                          onClick={searchProductImages}
-                          disabled={searchingImages}
-                        >
-                          {searchingImages ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                        </Button>
+                        <div className="relative flex-1">
+                          <input
+                            type="text"
+                            value={imageSearchQuery}
+                            onChange={e => setImageSearchQuery(e.target.value)}
+                            className="w-full px-3 py-2 pr-8 border border-blue-300 dark:border-blue-700 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm bg-white dark:bg-gray-800"
+                            placeholder="Type to search images (e.g., bike, shoes, phone)..."
+                            autoFocus
+                          />
+                          {searchingImages && (
+                            <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-500 animate-spin" />
+                          )}
+                        </div>
                         <button
                           type="button"
                           onClick={() => setShowImageSearch(false)}
@@ -1072,6 +1085,20 @@ export function POSProductsPage() {
                           <X className="w-4 h-4" />
                         </button>
                       </div>
+
+                      {/* No results message */}
+                      {!searchingImages && imageSearchQuery.trim() && searchResults.length === 0 && (
+                        <p className="text-sm text-gray-500 text-center py-4">
+                          No images found for "{imageSearchQuery}". Try a different search term.
+                        </p>
+                      )}
+
+                      {/* Hint when no search */}
+                      {!imageSearchQuery.trim() && searchResults.length === 0 && (
+                        <p className="text-sm text-gray-500 text-center py-4">
+                          Start typing to search for product images online
+                        </p>
+                      )}
 
                       {searchResults.length > 0 && (
                         <div className="grid grid-cols-4 gap-2">
