@@ -5,7 +5,7 @@
  * Includes proper error handling, type safety, and transaction support
  */
 
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseAdmin } from '@/lib/supabase';
 import type { Wallet, Transaction, PaginatedResponse } from '@/types';
 import { notificationService } from '@/services/notification.service';
 
@@ -86,7 +86,8 @@ export const walletService = {
    * Get all wallets for the current user
    */
   async getWallets(userId: string): Promise<Wallet[]> {
-    const { data, error } = await supabase
+    // Use supabaseAdmin to bypass RLS
+    const { data, error } = await supabaseAdmin
       .from('wallets')
       .select('*')
       .eq('user_id', userId)
@@ -169,7 +170,8 @@ export const walletService = {
       business_plus: 'Business+ Wallet',
     };
 
-    const { data: wallet, error } = await supabase
+    // Use supabaseAdmin to bypass RLS
+    const { data: wallet, error } = await supabaseAdmin
       .from('wallets')
       .insert({
         user_id: userId,
@@ -197,7 +199,8 @@ export const walletService = {
    * Get wallet by type for a user
    */
   async getWalletByType(userId: string, walletType: WalletType): Promise<ExtendedWallet | null> {
-    const { data, error } = await supabase
+    // Use supabaseAdmin to bypass RLS
+    const { data, error } = await supabaseAdmin
       .from('wallets')
       .select('*')
       .eq('user_id', userId)

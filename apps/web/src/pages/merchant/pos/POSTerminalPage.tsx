@@ -278,10 +278,22 @@ export function POSTerminalPage() {
 
       // Load merchant wallet for QR payments
       try {
-        const wallets = await walletService.getWallets(merchantId!) as any[];
-        const primaryWallet = wallets.find(w => w.wallet_type === 'primary' || w.wallet_type === 'merchant') || wallets[0];
+        let wallets = await walletService.getWallets(merchantId!) as any[];
+        let primaryWallet = wallets.find(w => w.wallet_type === 'primary' || w.wallet_type === 'merchant') || wallets[0];
+
+        // Auto-create a primary wallet if merchant doesn't have one
+        if (!primaryWallet) {
+          console.log('[POS] No wallet found, creating primary wallet...');
+          primaryWallet = await walletService.createWallet(merchantId!, {
+            walletType: 'primary',
+            currency: 'SLE',
+            name: 'Primary Wallet',
+          });
+        }
+
         if (primaryWallet) {
           setMerchantWalletId(primaryWallet.id);
+          console.log('[POS] Merchant wallet loaded:', primaryWallet.id);
         }
       } catch (err) {
         console.error('Error loading merchant wallet:', err);
