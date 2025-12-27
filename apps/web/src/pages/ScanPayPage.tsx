@@ -268,12 +268,11 @@ export function ScanPayPage() {
 
     const paymentCurrency = session?.currencyCode || 'SLE';
 
-    // Fetch all wallets for the user (check both uppercase and lowercase status)
+    // Fetch all wallets for the user
     const { data: userWallets, error: walletsError } = await supabase
       .from('wallets')
       .select('id, name, balance, wallet_type, currency, status')
-      .eq('user_id', user.id)
-      .order('balance', { ascending: false });
+      .eq('user_id', user.id);
 
     if (walletsError) {
       console.error('Error fetching wallets:', walletsError);
@@ -281,48 +280,61 @@ export function ScanPayPage() {
     }
 
     console.log('All user wallets:', userWallets);
+    console.log('Payment currency:', paymentCurrency);
 
     if (userWallets && userWallets.length > 0) {
-      // Filter for active wallets (handle both ACTIVE and active)
-      // Also filter by matching currency for the payment
-      const activeWallets = userWallets.filter(w => {
-        const isActive = w.status?.toLowerCase() === 'active';
-        const matchesCurrency = !w.currency || w.currency === paymentCurrency;
-        return isActive && matchesCurrency;
-      });
+      // Filter for active wallets only (handle both ACTIVE and active)
+      const allActiveWallets = userWallets.filter(w =>
+        w.status?.toLowerCase() === 'active'
+      );
 
-      console.log('Active wallets for currency', paymentCurrency, ':', activeWallets);
+      // Separate wallets by currency match
+      const matchingCurrencyWallets = allActiveWallets.filter(w =>
+        w.currency === paymentCurrency || (!w.currency && paymentCurrency === 'SLE')
+      );
 
-      // If no wallets match currency, show all active wallets
-      const walletsToShow = activeWallets.length > 0 ? activeWallets : userWallets.filter(w => w.status?.toLowerCase() === 'active');
+      const otherWallets = allActiveWallets.filter(w =>
+        w.currency !== paymentCurrency && (w.currency || paymentCurrency !== 'SLE')
+      );
 
-      if (walletsToShow.length === 0) {
+      console.log('Matching currency wallets:', matchingCurrencyWallets);
+      console.log('Other wallets:', otherWallets);
+
+      // Show matching currency wallets first, sorted by balance (highest first)
+      // Then other wallets after
+      const sortedWallets = [
+        ...matchingCurrencyWallets.sort((a, b) => b.balance - a.balance),
+        ...otherWallets.sort((a, b) => b.balance - a.balance)
+      ];
+
+      if (sortedWallets.length === 0) {
         console.error('No active wallets found');
         return;
       }
 
       // Map wallet types to friendly names if name is missing
-      const walletsWithNames = walletsToShow.map(w => ({
+      const walletsWithNames = sortedWallets.map(w => ({
         ...w,
         name: w.name || getWalletName(w.wallet_type),
       }));
 
       setWallets(walletsWithNames);
 
-      // Select wallet with highest balance that can cover the payment, or default to primary
+      // Select wallet with highest balance that can afford the payment AND matches currency
       const paymentAmount = session?.amount || 0;
-      const affordableWallet = walletsWithNames
-        .filter(w => w.balance >= paymentAmount)
-        .sort((a, b) => {
-          // Prefer primary wallet if it can afford the payment
-          if (a.wallet_type === 'primary') return -1;
-          if (b.wallet_type === 'primary') return 1;
-          // Otherwise prefer higher balance
-          return b.balance - a.balance;
-        })[0];
+      const affordableMatchingWallet = walletsWithNames
+        .filter(w => {
+          const currencyMatches = w.currency === paymentCurrency || (!w.currency && paymentCurrency === 'SLE');
+          return w.balance >= paymentAmount && currencyMatches;
+        })
+        .sort((a, b) => b.balance - a.balance)[0];
 
-      // If no wallet can afford, just select the one with highest balance
-      const selectedId = affordableWallet?.id || walletsWithNames[0].id;
+      // If no matching wallet can afford, select first matching currency wallet (even with insufficient balance)
+      const firstMatchingWallet = walletsWithNames.find(w =>
+        w.currency === paymentCurrency || (!w.currency && paymentCurrency === 'SLE')
+      );
+
+      const selectedId = affordableMatchingWallet?.id || firstMatchingWallet?.id || walletsWithNames[0].id;
       setSelectedWalletId(selectedId);
 
       // Set the index for the carousel
@@ -1064,88 +1076,85 @@ export function ScanPayPage() {
             </div>
 
             {/* Wallet Carousel */}
-            <div className="flex items-center justify-center gap-2">
+            <div className="flex items-center justify-center gap-1">
               {/* Left Arrow */}
               <button
                 onClick={handlePrevWallet}
                 disabled={currentWalletIndex === 0}
-                className={`p-2 rounded-full transition-all ${
+                className={`p-3 rounded-full transition-all active:scale-90 ${
                   currentWalletIndex === 0
                     ? 'text-gray-300 cursor-not-allowed'
-                    : 'text-gray-600 hover:bg-gray-100 active:scale-95'
+                    : 'text-indigo-600 hover:bg-indigo-50 active:bg-indigo-100'
                 }`}
               >
-                <ChevronLeft className="w-6 h-6" />
+                <ChevronLeft className="w-8 h-8" />
               </button>
 
-              {/* Wallet Cards Container */}
-              <div className="flex-1 overflow-hidden">
-                <div
-                  className="flex transition-transform duration-300 ease-out"
-                  style={{ transform: `translateX(calc(50% - ${currentWalletIndex * 100}% - 50%))` }}
-                >
-                  {wallets.map((wallet, index) => {
-                    const WalletIcon = getWalletIcon(wallet.wallet_type);
-                    const isActive = index === currentWalletIndex;
-                    const canAfford = wallet.balance >= session.amount;
+              {/* Wallet Card - Single card that updates */}
+              <div className="flex-1 max-w-[240px]">
+                {wallets.length > 0 && (() => {
+                  const wallet = wallets[currentWalletIndex];
+                  const WalletIcon = getWalletIcon(wallet?.wallet_type || 'primary');
+                  const canAfford = wallet ? wallet.balance >= session.amount : false;
+                  const currencySymbol = wallet?.currency === 'USD' ? '$' : 'Le';
 
-                    return (
-                      <div
-                        key={wallet.id}
-                        onClick={() => {
-                          setCurrentWalletIndex(index);
-                          setSelectedWalletId(wallet.id);
-                        }}
-                        className={`flex-shrink-0 w-full px-2 transition-all duration-300 ${
-                          isActive ? 'scale-100 opacity-100' : 'scale-90 opacity-50'
-                        }`}
-                      >
-                        <div
-                          className={`p-4 rounded-2xl border-2 transition-all cursor-pointer ${
-                            isActive
-                              ? canAfford
-                                ? 'border-green-500 bg-green-50'
-                                : 'border-red-400 bg-red-50'
-                              : 'border-gray-200 bg-gray-50'
-                          }`}
-                        >
-                          <div className="flex items-center justify-center gap-3">
-                            <div className={`p-2 rounded-full ${
-                              isActive && canAfford ? 'bg-green-100' : isActive ? 'bg-red-100' : 'bg-gray-100'
-                            }`}>
-                              <WalletIcon className={`w-6 h-6 ${
-                                isActive && canAfford ? 'text-green-600' : isActive ? 'text-red-500' : 'text-gray-500'
-                              }`} />
-                            </div>
-                            <div className="text-center">
-                              <p className={`font-semibold ${isActive ? 'text-gray-900' : 'text-gray-500'}`}>
-                                {wallet.name}
-                              </p>
-                              {!canAfford && isActive && (
-                                <p className="text-xs text-red-500">Insufficient</p>
-                              )}
-                            </div>
-                          </div>
+                  return (
+                    <div
+                      className={`p-5 rounded-2xl border-3 transition-all duration-500 ease-out transform ${
+                        canAfford
+                          ? 'border-green-500 bg-gradient-to-br from-green-50 to-emerald-50 shadow-lg shadow-green-100'
+                          : 'border-red-400 bg-gradient-to-br from-red-50 to-orange-50 shadow-lg shadow-red-100'
+                      }`}
+                      style={{
+                        animation: 'slideIn 0.3s ease-out'
+                      }}
+                    >
+                      <div className="flex flex-col items-center gap-2">
+                        <div className={`p-3 rounded-full ${
+                          canAfford ? 'bg-green-100' : 'bg-red-100'
+                        }`}>
+                          <WalletIcon className={`w-8 h-8 ${
+                            canAfford ? 'text-green-600' : 'text-red-500'
+                          }`} />
+                        </div>
+                        <div className="text-center">
+                          <p className="font-bold text-gray-900 text-lg">
+                            {wallet?.name || 'Wallet'}
+                          </p>
+                          <p className={`text-sm font-medium ${canAfford ? 'text-green-600' : 'text-red-500'}`}>
+                            {currencySymbol} {wallet?.balance?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}
+                          </p>
+                          {!canAfford && (
+                            <p className="text-xs text-red-500 mt-1">Insufficient balance</p>
+                          )}
+                          {wallet?.currency && wallet.currency !== (session.currencyCode || 'SLE') && (
+                            <p className="text-xs text-orange-500 mt-1">Different currency</p>
+                          )}
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Right Arrow */}
               <button
                 onClick={handleNextWallet}
                 disabled={currentWalletIndex === wallets.length - 1}
-                className={`p-2 rounded-full transition-all ${
+                className={`p-3 rounded-full transition-all active:scale-90 ${
                   currentWalletIndex === wallets.length - 1
                     ? 'text-gray-300 cursor-not-allowed'
-                    : 'text-gray-600 hover:bg-gray-100 active:scale-95'
+                    : 'text-indigo-600 hover:bg-indigo-50 active:bg-indigo-100'
                 }`}
               >
-                <ChevronRight className="w-6 h-6" />
+                <ChevronRight className="w-8 h-8" />
               </button>
             </div>
+
+            {/* Wallet counter */}
+            <p className="text-center text-sm text-gray-500 mt-2">
+              Wallet {currentWalletIndex + 1} of {wallets.length}
+            </p>
 
             {/* Wallet Dots Indicator */}
             {wallets.length > 1 && (
