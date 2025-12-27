@@ -268,9 +268,9 @@ export const paymentLinkService = {
 
   /**
    * Get the full payment link URL
-   * Always uses checkout.peeap.com for payment links
+   * Uses my.peeap.com for payment links
    */
   getPaymentLinkUrl(businessSlug: string, linkSlug: string): string {
-    return `https://checkout.peeap.com/pay/${businessSlug}/${linkSlug}`;
+    return `https://my.peeap.com/pay/${businessSlug}/${linkSlug}`;
   },
 };

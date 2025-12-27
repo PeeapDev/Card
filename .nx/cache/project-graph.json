@@ -1,5 +1,19 @@
 {
   "nodes": {
+    ".vercel-checkout": {
+      "name": ".vercel-checkout",
+      "type": "lib",
+      "data": {
+        "root": "apps/web/.vercel-checkout",
+        "targets": {},
+        "name": ".vercel-checkout",
+        "projectId": "prj_eJPPUhVeZrLfBJKRLOf5oxoSYYK6",
+        "orgId": "team_a4AHDkL7V82m37zyZZPP2rNC",
+        "projectName": "peeap-checkout",
+        "implicitDependencies": [],
+        "tags": []
+      }
+    },
     "notification-service": {
       "name": "notification-service",
       "type": "app",
@@ -14558,6 +14572,7 @@
     }
   },
   "dependencies": {
+    ".vercel-checkout": [],
     "notification-service": [
       {
         "source": "notification-service",

@@ -2,27 +2,31 @@
  * Apps Context
  *
  * Manages enabled/disabled state for merchant apps
- * Loads state from database and syncs across components
- * Uses localStorage as cache for offline support
+ * Persists all state to database - NO localStorage
  */
 
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { useAuth } from './AuthContext';
-import posService from '@/services/pos.service';
-import eventService from '@/services/event.service';
+import { supabase } from '@/lib/supabase';
 
 export interface AppConfig {
   id: string;
   name: string;
   enabled: boolean;
+  setup_completed: boolean;
+  wallet_id?: string;
+  settings?: Record<string, any>;
 }
 
 interface AppsContextType {
   enabledApps: Record<string, boolean>;
+  appConfigs: Record<string, AppConfig>;
   isAppEnabled: (appId: string) => boolean;
-  toggleApp: (appId: string) => void;
-  enableApp: (appId: string) => void;
-  disableApp: (appId: string) => void;
+  isAppSetupComplete: (appId: string) => boolean;
+  toggleApp: (appId: string) => Promise<boolean>; // Returns true if setup wizard should be shown
+  enableApp: (appId: string, setupComplete?: boolean) => Promise<void>;
+  disableApp: (appId: string) => Promise<void>;
+  completeAppSetup: (appId: string, walletId?: string, settings?: Record<string, any>) => Promise<void>;
   isLoading: boolean;
   hasLoadedFromDB: boolean;
   refreshApps: () => Promise<void>;
@@ -30,15 +34,17 @@ interface AppsContextType {
 
 const AppsContext = createContext<AppsContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'peeap_enabled_apps';
-
-// Default app states
-const DEFAULT_APPS: Record<string, boolean> = {
-  pos: false, // POS disabled by default until user enables it
-  fuel_station: false,
-  transportation: false,
-  events: false, // Events disabled by default until user enables it
-};
+// List of all available apps
+const ALL_APPS = [
+  'pos',
+  'events',
+  'terminal',
+  'driver_wallet',
+  'invoices',
+  'payment_links',
+  'fuel_station',
+  'transportation',
+];
 
 interface AppsProviderProps {
   children: ReactNode;
@@ -48,9 +54,10 @@ export function AppsProvider({ children }: AppsProviderProps) {
   const { user, isLoading: authLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [hasLoadedFromDB, setHasLoadedFromDB] = useState(false);
-  const [enabledApps, setEnabledApps] = useState<Record<string, boolean>>(DEFAULT_APPS);
+  const [enabledApps, setEnabledApps] = useState<Record<string, boolean>>({});
+  const [appConfigs, setAppConfigs] = useState<Record<string, AppConfig>>({});
 
-  // Load app states from database (primary source of truth)
+  // Load app states from database
   const loadAppsFromDatabase = useCallback(async () => {
     if (!user?.id) {
       setIsLoading(false);
@@ -61,40 +68,54 @@ export function AppsProvider({ children }: AppsProviderProps) {
       setIsLoading(true);
       const merchantId = user.id;
 
-      // Check POS setup status from database
-      const posEnabled = await posService.isPOSSetupCompleted(merchantId);
+      // Fetch all app settings for this merchant
+      const { data: appSettings, error } = await supabase
+        .from('merchant_app_settings')
+        .select('*')
+        .eq('merchant_id', merchantId);
 
-      // Check Events setup status from database
-      const eventsEnabled = await eventService.isEventsSetupCompleted(merchantId);
-
-      // Update state with database values
-      const newState = {
-        ...DEFAULT_APPS,
-        pos: posEnabled,
-        events: eventsEnabled,
-      };
-
-      setEnabledApps(newState);
-      setHasLoadedFromDB(true);
-
-      // Update localStorage cache for faster subsequent loads
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
-      } catch (e) {
-        console.error('Error caching app settings:', e);
+      if (error) {
+        console.error('Error loading app settings:', error);
+        setHasLoadedFromDB(true);
+        setIsLoading(false);
+        return;
       }
+
+      // Build enabled apps map and configs
+      const enabled: Record<string, boolean> = {};
+      const configs: Record<string, AppConfig> = {};
+
+      // Initialize all apps as disabled
+      ALL_APPS.forEach(appId => {
+        enabled[appId] = false;
+        configs[appId] = {
+          id: appId,
+          name: appId,
+          enabled: false,
+          setup_completed: false,
+        };
+      });
+
+      // Override with database values
+      if (appSettings) {
+        appSettings.forEach((setting: any) => {
+          enabled[setting.app_id] = setting.enabled;
+          configs[setting.app_id] = {
+            id: setting.app_id,
+            name: setting.app_id,
+            enabled: setting.enabled,
+            setup_completed: setting.setup_completed,
+            wallet_id: setting.wallet_id,
+            settings: setting.settings,
+          };
+        });
+      }
+
+      setEnabledApps(enabled);
+      setAppConfigs(configs);
+      setHasLoadedFromDB(true);
     } catch (error) {
       console.error('Error loading app settings from database:', error);
-      // On error, try to load from localStorage cache as fallback
-      try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          setEnabledApps({ ...DEFAULT_APPS, ...JSON.parse(stored) });
-        }
-      } catch (e) {
-        // If localStorage also fails, keep defaults
-        console.error('Error loading from cache fallback:', e);
-      }
       setHasLoadedFromDB(true);
     } finally {
       setIsLoading(false);
@@ -104,7 +125,6 @@ export function AppsProvider({ children }: AppsProviderProps) {
   // Load from database when user changes and auth is done loading
   useEffect(() => {
     if (authLoading) {
-      // Wait for auth to finish before loading app settings
       return;
     }
     loadAppsFromDatabase();
@@ -114,115 +134,159 @@ export function AppsProvider({ children }: AppsProviderProps) {
     return enabledApps[appId] ?? false;
   };
 
-  const toggleApp = async (appId: string) => {
-    const newValue = !enabledApps[appId];
+  const isAppSetupComplete = (appId: string): boolean => {
+    return appConfigs[appId]?.setup_completed ?? false;
+  };
 
-    // Update local state immediately
-    setEnabledApps(prev => ({
-      ...prev,
-      [appId]: newValue,
-    }));
+  // Toggle app - returns true if setup wizard should be shown (first time enabling)
+  const toggleApp = async (appId: string): Promise<boolean> => {
+    const currentlyEnabled = enabledApps[appId];
+    const setupComplete = appConfigs[appId]?.setup_completed ?? false;
 
-    // Update localStorage cache
-    try {
-      const newState = { ...enabledApps, [appId]: newValue };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
-    } catch (e) {
-      console.error('Error caching app settings:', e);
-    }
-
-    // Persist to database
-    if (user?.id) {
-      try {
-        if (appId === 'pos') {
-          await posService.savePOSSettings({
-            merchant_id: user.id,
-            setup_completed: newValue,
-          });
-        } else if (appId === 'events') {
-          await eventService.saveEventsSettings({
-            merchant_id: user.id,
-            setup_completed: newValue,
-          });
-        }
-      } catch (error) {
-        console.error('Error saving app state to database:', error);
-        // Revert local state on error
-        setEnabledApps(prev => ({
-          ...prev,
-          [appId]: !newValue,
-        }));
-      }
+    if (currentlyEnabled) {
+      // Disabling - just disable, no wizard needed
+      await disableApp(appId);
+      return false;
+    } else {
+      // Enabling - check if setup is complete
+      await enableApp(appId, setupComplete);
+      // Return true to show setup wizard if setup not complete
+      return !setupComplete;
     }
   };
 
-  const enableApp = async (appId: string) => {
+  const enableApp = async (appId: string, setupComplete: boolean = false) => {
+    if (!user?.id) return;
+
     // Update local state immediately
     setEnabledApps(prev => ({
       ...prev,
       [appId]: true,
     }));
-
-    // Update localStorage cache
-    try {
-      const newState = { ...enabledApps, [appId]: true };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
-    } catch (e) {
-      console.error('Error caching app settings:', e);
-    }
+    setAppConfigs(prev => ({
+      ...prev,
+      [appId]: {
+        ...prev[appId],
+        id: appId,
+        name: appId,
+        enabled: true,
+        setup_completed: setupComplete,
+      },
+    }));
 
     // Persist to database
-    if (user?.id) {
-      try {
-        if (appId === 'pos') {
-          await posService.savePOSSettings({
-            merchant_id: user.id,
-            setup_completed: true,
-          });
-        } else if (appId === 'events') {
-          await eventService.saveEventsSettings({
-            merchant_id: user.id,
-            setup_completed: true,
-          });
-        }
-      } catch (error) {
+    try {
+      const { error } = await supabase
+        .from('merchant_app_settings')
+        .upsert({
+          merchant_id: user.id,
+          app_id: appId,
+          enabled: true,
+          setup_completed: setupComplete,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'merchant_id,app_id',
+        });
+
+      if (error) {
         console.error('Error enabling app in database:', error);
+        // Revert local state on error
+        setEnabledApps(prev => ({
+          ...prev,
+          [appId]: false,
+        }));
       }
+    } catch (error) {
+      console.error('Error enabling app:', error);
     }
   };
 
   const disableApp = async (appId: string) => {
+    if (!user?.id) return;
+
     // Update local state immediately
     setEnabledApps(prev => ({
       ...prev,
       [appId]: false,
     }));
-
-    // Update localStorage cache
-    try {
-      const newState = { ...enabledApps, [appId]: false };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
-    } catch (e) {
-      console.error('Error caching app settings:', e);
-    }
+    setAppConfigs(prev => ({
+      ...prev,
+      [appId]: {
+        ...prev[appId],
+        enabled: false,
+      },
+    }));
 
     // Persist to database
-    if (user?.id) {
-      try {
-        if (appId === 'pos') {
-          await posService.savePOSSettings({
-            merchant_id: user.id,
-            setup_completed: false,
-          });
-        } else if (appId === 'events') {
-          await eventService.saveEventsSettings({
-            merchant_id: user.id,
-            setup_completed: false,
-          });
-        }
-      } catch (error) {
+    try {
+      const { error } = await supabase
+        .from('merchant_app_settings')
+        .upsert({
+          merchant_id: user.id,
+          app_id: appId,
+          enabled: false,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'merchant_id,app_id',
+        });
+
+      if (error) {
         console.error('Error disabling app in database:', error);
+        // Revert local state on error
+        setEnabledApps(prev => ({
+          ...prev,
+          [appId]: true,
+        }));
       }
+    } catch (error) {
+      console.error('Error disabling app:', error);
+    }
+  };
+
+  // Complete app setup - called when setup wizard finishes
+  const completeAppSetup = async (appId: string, walletId?: string, settings?: Record<string, any>) => {
+    if (!user?.id) return;
+
+    // Update local state
+    setAppConfigs(prev => ({
+      ...prev,
+      [appId]: {
+        ...prev[appId],
+        setup_completed: true,
+        wallet_id: walletId,
+        settings: settings,
+      },
+    }));
+
+    // Persist to database
+    try {
+      const updateData: any = {
+        merchant_id: user.id,
+        app_id: appId,
+        enabled: true,
+        setup_completed: true,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (walletId) {
+        updateData.wallet_id = walletId;
+      }
+
+      if (settings) {
+        updateData.settings = settings;
+      }
+
+      const { error } = await supabase
+        .from('merchant_app_settings')
+        .upsert(updateData, {
+          onConflict: 'merchant_id,app_id',
+        });
+
+      if (error) {
+        console.error('Error completing app setup:', error);
+      }
+    } catch (error) {
+      console.error('Error completing app setup:', error);
     }
   };
 
@@ -230,10 +294,13 @@ export function AppsProvider({ children }: AppsProviderProps) {
     <AppsContext.Provider
       value={{
         enabledApps,
+        appConfigs,
         isAppEnabled,
+        isAppSetupComplete,
         toggleApp,
         enableApp,
         disableApp,
+        completeAppSetup,
         isLoading,
         hasLoadedFromDB,
         refreshApps: loadAppsFromDatabase,

@@ -87,10 +87,12 @@ export const authService = {
       throw new Error('Invalid credentials');
     }
 
-    // Parse roles
+    // Parse roles - handle both array (from Postgres) and string formats
     let userRoles: string[] = ['user'];
     if (dbUser.roles) {
-      userRoles = dbUser.roles.split(',').map((r: string) => r.trim());
+      userRoles = Array.isArray(dbUser.roles)
+        ? dbUser.roles
+        : dbUser.roles.split(',').map((r: string) => r.trim());
     } else if (dbUser.role) {
       userRoles = [dbUser.role];
     }
@@ -271,7 +273,10 @@ export const authService = {
 
       let userRoles: string[] = ['user'];
       if (dbUser.roles) {
-        userRoles = dbUser.roles.split(',').map((r: string) => r.trim());
+        // Handle both array (from Postgres) and string formats
+        userRoles = Array.isArray(dbUser.roles)
+          ? dbUser.roles
+          : dbUser.roles.split(',').map((r: string) => r.trim());
       } else if (dbUser.role) {
         userRoles = [dbUser.role];
       }

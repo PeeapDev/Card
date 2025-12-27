@@ -79,10 +79,23 @@ interface ActiveSubscription {
   amount: number;
 }
 
-type TabType = 'plans' | 'business' | 'agent' | 'user-switch' | 'active';
+interface TierConfig {
+  id: string;
+  tier: string;
+  display_name: string;
+  description: string;
+  price_monthly: number;
+  price_yearly: number;
+  currency: string;
+  trial_days: number;
+  is_active: boolean;
+  features: string[];
+}
+
+type TabType = 'plans' | 'business' | 'agent' | 'user-switch' | 'active' | 'tier-config';
 
 export function SubscriptionsPage() {
-  const [activeTab, setActiveTab] = useState<TabType>('plans');
+  const [activeTab, setActiveTab] = useState<TabType>('tier-config');
   const [isEditing, setIsEditing] = useState(false);
   const [saved, setSaved] = useState(false);
   const [showAddPlan, setShowAddPlan] = useState(false);
@@ -100,10 +113,25 @@ export function SubscriptionsPage() {
   const [activeSubscriptions, setActiveSubscriptions] = useState<ActiveSubscription[]>([]);
   const [loadingSubscriptions, setLoadingSubscriptions] = useState(false);
 
+  // Tier configurations (Basic, Business, Business++)
+  const [tierConfigs, setTierConfigs] = useState<TierConfig[]>([]);
+  const [loadingTierConfigs, setLoadingTierConfigs] = useState(false);
+  const [editingTier, setEditingTier] = useState<string | null>(null);
+  const [tierSaved, setTierSaved] = useState(false);
+
+  // Global subscription settings
+  const [globalTrialDays, setGlobalTrialDays] = useState(7);
+  const [gracePeriodDays, setGracePeriodDays] = useState(3);
+  const [yearlyDiscount, setYearlyDiscount] = useState(17);
+  const [autoRenewal, setAutoRenewal] = useState(true);
+  const [savingSettings, setSavingSettings] = useState(false);
+
   useEffect(() => {
     currencyService.getDefaultCurrency().then(setDefaultCurrency);
     loadSwitchRequests();
     loadActiveSubscriptions();
+    loadTierConfigs();
+    loadGlobalSettings();
   }, []);
 
   const currencySymbol = defaultCurrency?.symbol || 'NLe';
@@ -145,29 +173,184 @@ export function SubscriptionsPage() {
   const loadActiveSubscriptions = async () => {
     setLoadingSubscriptions(true);
     try {
-      const { data, error } = await supabase
+      const allSubscriptions: ActiveSubscription[] = [];
+
+      // Load POS multivendor subscriptions
+      const { data: posData, error: posError } = await supabase
         .from('pos_multivendor_settings')
         .select('*, users:merchant_id(first_name, last_name, email)')
         .order('created_at', { ascending: false });
 
-      if (!error && data) {
-        setActiveSubscriptions(data.map(s => ({
-          id: s.id,
-          userId: s.merchant_id,
-          userName: s.users ? `${s.users.first_name} ${s.users.last_name}` : 'Unknown',
-          planId: 'pos-multivendor',
-          planName: 'POS Multivendor',
-          status: s.subscription_status,
-          startDate: s.subscription_started_at || s.trial_started_at || s.created_at,
-          endDate: s.subscription_expires_at || s.trial_ends_at || '',
-          amount: s.last_payment_amount || 0,
-        })));
+      if (!posError && posData) {
+        posData.forEach(s => {
+          allSubscriptions.push({
+            id: s.id,
+            userId: s.merchant_id,
+            userName: s.users ? `${s.users.first_name} ${s.users.last_name}` : 'Unknown',
+            planId: 'pos-multivendor',
+            planName: 'POS Multivendor',
+            status: s.subscription_status,
+            startDate: s.subscription_started_at || s.trial_started_at || s.created_at,
+            endDate: s.subscription_expires_at || s.trial_ends_at || '',
+            amount: s.last_payment_amount || 0,
+          });
+        });
       }
+
+      // Load merchant tier subscriptions (Business, Business++)
+      const { data: merchantData, error: merchantError } = await supabase
+        .from('merchant_subscriptions')
+        .select('*, users:user_id(first_name, last_name, email)')
+        .order('created_at', { ascending: false });
+
+      if (!merchantError && merchantData) {
+        merchantData.forEach(s => {
+          const tierNames: Record<string, string> = {
+            'basic': 'Basic (Free)',
+            'business': 'Business',
+            'business_plus': 'Business++'
+          };
+          allSubscriptions.push({
+            id: s.id,
+            userId: s.user_id,
+            userName: s.users ? `${s.users.first_name} ${s.users.last_name}` : 'Unknown',
+            planId: s.tier,
+            planName: tierNames[s.tier] || s.tier,
+            status: s.status === 'trialing' ? 'trial' : s.status,
+            startDate: s.trial_started_at || s.current_period_start || s.created_at,
+            endDate: s.status === 'trialing' ? s.trial_ends_at : s.current_period_end || '',
+            amount: s.price_monthly || 0,
+          });
+        });
+      }
+
+      // Sort by start date descending
+      allSubscriptions.sort((a, b) =>
+        new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
+      );
+
+      setActiveSubscriptions(allSubscriptions);
     } catch (error) {
       console.error('Error loading subscriptions:', error);
     } finally {
       setLoadingSubscriptions(false);
     }
+  };
+
+  const loadTierConfigs = async () => {
+    setLoadingTierConfigs(true);
+    try {
+      const { data, error } = await supabase
+        .from('tier_configurations')
+        .select('*')
+        .order('sort_order');
+
+      if (!error && data) {
+        setTierConfigs(data.map(t => ({
+          id: t.id,
+          tier: t.tier,
+          display_name: t.display_name,
+          description: t.description || '',
+          price_monthly: t.price_monthly || 0,
+          price_yearly: t.price_yearly || 0,
+          currency: t.currency || 'NLE',
+          trial_days: t.trial_days || 7,
+          is_active: t.is_active !== false,
+          features: t.features || [],
+        })));
+      }
+    } catch (error) {
+      console.error('Error loading tier configs:', error);
+    } finally {
+      setLoadingTierConfigs(false);
+    }
+  };
+
+  const loadGlobalSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('settings')
+        .select('key, value')
+        .in('key', ['merchant_trial_days', 'grace_period_days', 'yearly_discount', 'auto_renewal']);
+
+      if (!error && data) {
+        data.forEach(setting => {
+          switch (setting.key) {
+            case 'merchant_trial_days':
+              setGlobalTrialDays(parseInt(setting.value) || 7);
+              break;
+            case 'grace_period_days':
+              setGracePeriodDays(parseInt(setting.value) || 3);
+              break;
+            case 'yearly_discount':
+              setYearlyDiscount(parseInt(setting.value) || 17);
+              break;
+            case 'auto_renewal':
+              setAutoRenewal(setting.value === 'true');
+              break;
+          }
+        });
+      }
+    } catch (error) {
+      // Settings table may not exist yet, use defaults
+      console.log('Using default subscription settings');
+    }
+  };
+
+  const saveTierConfig = async (tierConfig: TierConfig) => {
+    try {
+      const { error } = await supabase
+        .from('tier_configurations')
+        .update({
+          display_name: tierConfig.display_name,
+          description: tierConfig.description,
+          price_monthly: tierConfig.price_monthly,
+          price_yearly: tierConfig.price_yearly,
+          trial_days: tierConfig.trial_days,
+          is_active: tierConfig.is_active,
+          features: tierConfig.features,
+        })
+        .eq('id', tierConfig.id);
+
+      if (error) throw error;
+
+      setTierSaved(true);
+      setTimeout(() => setTierSaved(false), 3000);
+      setEditingTier(null);
+    } catch (error) {
+      console.error('Error saving tier config:', error);
+    }
+  };
+
+  const saveGlobalSettings = async () => {
+    setSavingSettings(true);
+    try {
+      const settings = [
+        { key: 'merchant_trial_days', value: globalTrialDays.toString(), description: 'Default number of trial days for new merchant subscriptions', category: 'subscriptions' },
+        { key: 'grace_period_days', value: gracePeriodDays.toString(), description: 'Days before account suspension after failed payment', category: 'subscriptions' },
+        { key: 'yearly_discount', value: yearlyDiscount.toString(), description: 'Discount percentage for yearly subscriptions', category: 'subscriptions' },
+        { key: 'auto_renewal', value: autoRenewal.toString(), description: 'Enable auto-renewal by default', category: 'subscriptions' },
+      ];
+
+      for (const setting of settings) {
+        await supabase
+          .from('settings')
+          .upsert({ ...setting, id: crypto.randomUUID() }, { onConflict: 'key' });
+      }
+
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (error) {
+      console.error('Error saving global settings:', error);
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const updateTierConfig = (tierId: string, field: keyof TierConfig, value: any) => {
+    setTierConfigs(tierConfigs.map(t =>
+      t.id === tierId ? { ...t, [field]: value } : t
+    ));
   };
 
   const [plans, setPlans] = useState<SubscriptionPlan[]>([
@@ -405,6 +588,7 @@ export function SubscriptionsPage() {
   };
 
   const tabs = [
+    { id: 'tier-config' as TabType, label: 'Merchant Tiers', icon: Building2, count: tierConfigs.length },
     { id: 'plans' as TabType, label: 'POS Plans', icon: Store, count: plans.filter(p => p.category === 'pos').length },
     { id: 'business' as TabType, label: 'Business+', icon: Crown, count: plans.filter(p => p.category === 'business').length },
     { id: 'agent' as TabType, label: 'Agent Plans', icon: UserCog, count: plans.filter(p => p.category === 'agent').length },
@@ -829,6 +1013,304 @@ export function SubscriptionsPage() {
                     )}
                   </tbody>
                 </table>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* Merchant Tier Configuration Tab */}
+        {activeTab === 'tier-config' && (
+          <div className="space-y-6">
+            {/* Info Banner */}
+            <Card className="p-4 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+              <div className="flex items-start gap-3">
+                <Building2 className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-blue-800 dark:text-blue-300">Merchant Subscription Tiers</p>
+                  <p className="text-sm text-blue-700 dark:text-blue-400 mt-1">
+                    Configure the pricing and trial days for merchant subscription tiers. These settings affect what merchants see when creating a business account.
+                  </p>
+                </div>
+              </div>
+            </Card>
+
+            {/* Tier Cards */}
+            {loadingTierConfigs ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {[1, 2, 3].map(i => (
+                  <Card key={i} className="p-6 animate-pulse">
+                    <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mb-4" />
+                    <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" />
+                    <div className="space-y-2">
+                      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full" />
+                      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4" />
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            ) : tierConfigs.length === 0 ? (
+              <Card className="p-8 text-center">
+                <Building2 className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p className="text-gray-500">No tier configurations found</p>
+                <p className="text-sm text-gray-400 mt-1">Tier configurations will be loaded from the database</p>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {tierConfigs.map((tier) => {
+                  const isEditing = editingTier === tier.id;
+                  const tierIcon = tier.tier === 'basic' ? Zap : tier.tier === 'business' ? Star : Crown;
+                  const TierIcon = tierIcon;
+                  const tierColor = tier.tier === 'basic' ? 'gray' : tier.tier === 'business' ? 'blue' : 'purple';
+
+                  return (
+                    <Card
+                      key={tier.id}
+                      className={`relative overflow-hidden ${!tier.is_active ? 'opacity-60' : ''} ${
+                        tier.tier === 'business_plus' ? 'ring-2 ring-purple-500' : ''
+                      }`}
+                    >
+                      {tier.tier === 'business_plus' && (
+                        <div className="absolute top-0 right-0 bg-purple-600 text-white px-3 py-1 text-xs font-medium">
+                          Premium
+                        </div>
+                      )}
+
+                      <div className="p-6">
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-lg ${
+                              tierColor === 'gray' ? 'bg-gray-100 dark:bg-gray-700' :
+                              tierColor === 'blue' ? 'bg-blue-100 dark:bg-blue-900/30' :
+                              'bg-purple-100 dark:bg-purple-900/30'
+                            }`}>
+                              <TierIcon className={`w-5 h-5 ${
+                                tierColor === 'gray' ? 'text-gray-600 dark:text-gray-400' :
+                                tierColor === 'blue' ? 'text-blue-600 dark:text-blue-400' :
+                                'text-purple-600 dark:text-purple-400'
+                              }`} />
+                            </div>
+                            <div>
+                              {isEditing ? (
+                                <input
+                                  type="text"
+                                  value={tier.display_name}
+                                  onChange={(e) => updateTierConfig(tier.id, 'display_name', e.target.value)}
+                                  className="text-xl font-bold bg-transparent border-b border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:outline-none focus:border-primary-500"
+                                />
+                              ) : (
+                                <h3 className="text-xl font-bold text-gray-900 dark:text-white">{tier.display_name}</h3>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            {isEditing ? (
+                              <>
+                                <button
+                                  onClick={() => saveTierConfig(tier)}
+                                  className="p-2 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-lg hover:bg-green-200"
+                                  title="Save"
+                                >
+                                  <Save className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setEditingTier(null);
+                                    loadTierConfigs();
+                                  }}
+                                  className="p-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-lg hover:bg-gray-200"
+                                  title="Cancel"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() => setEditingTier(tier.id)}
+                                className="p-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-lg hover:bg-gray-200"
+                                title="Edit"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {isEditing ? (
+                          <textarea
+                            value={tier.description}
+                            onChange={(e) => updateTierConfig(tier.id, 'description', e.target.value)}
+                            className="w-full text-sm text-gray-500 dark:text-gray-400 bg-transparent border border-gray-300 dark:border-gray-600 rounded p-2 mb-4 focus:outline-none focus:border-primary-500"
+                            rows={2}
+                          />
+                        ) : (
+                          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{tier.description}</p>
+                        )}
+
+                        <div className="mb-6">
+                          {isEditing ? (
+                            <div className="space-y-3">
+                              <div>
+                                <label className="text-xs text-gray-500 dark:text-gray-400">Monthly Price</label>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-gray-500 dark:text-gray-400">{currencySymbol}</span>
+                                  <input
+                                    type="number"
+                                    value={tier.price_monthly}
+                                    onChange={(e) => updateTierConfig(tier.id, 'price_monthly', parseFloat(e.target.value) || 0)}
+                                    className="w-24 px-2 py-1 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded text-xl font-bold"
+                                  />
+                                  <span className="text-gray-500 dark:text-gray-400">/month</span>
+                                </div>
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500 dark:text-gray-400">Trial Days</label>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="number"
+                                    value={tier.trial_days}
+                                    onChange={(e) => updateTierConfig(tier.id, 'trial_days', parseInt(e.target.value) || 0)}
+                                    className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded"
+                                  />
+                                  <span className="text-gray-500 dark:text-gray-400">days</span>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex items-baseline gap-1">
+                                {tier.price_monthly === 0 ? (
+                                  <span className="text-3xl font-bold text-green-600 dark:text-green-400">Free</span>
+                                ) : (
+                                  <>
+                                    <span className="text-3xl font-bold text-gray-900 dark:text-white">{currencySymbol}{tier.price_monthly}</span>
+                                    <span className="text-gray-500 dark:text-gray-400">/month</span>
+                                  </>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1 mt-1">
+                                <Clock className="w-4 h-4 text-gray-400" />
+                                <span className="text-sm text-gray-500 dark:text-gray-400">
+                                  {tier.trial_days > 0 ? `${tier.trial_days}-day free trial` : 'No trial'}
+                                </span>
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-gray-500 dark:text-gray-400">Status</span>
+                            {isEditing ? (
+                              <label className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={tier.is_active}
+                                  onChange={(e) => updateTierConfig(tier.id, 'is_active', e.target.checked)}
+                                  className="rounded text-primary-600 focus:ring-primary-500"
+                                />
+                                <span className="text-sm text-gray-600 dark:text-gray-300">Active</span>
+                              </label>
+                            ) : (
+                              <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                                tier.is_active
+                                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                  : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400'
+                              }`}>
+                                {tier.is_active ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+                                {tier.is_active ? 'Active' : 'Inactive'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+
+            {tierSaved && (
+              <div className="fixed bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2">
+                <CheckCircle className="w-4 h-4" />
+                Tier configuration saved
+              </div>
+            )}
+
+            {/* Global Subscription Settings */}
+            <Card className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-semibold text-gray-900 dark:text-white">Global Subscription Settings</h3>
+                <button
+                  onClick={saveGlobalSettings}
+                  disabled={savingSettings}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {savingSettings ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Save Settings
+                    </>
+                  )}
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Default Trial Period</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={globalTrialDays}
+                      onChange={(e) => setGlobalTrialDays(parseInt(e.target.value) || 0)}
+                      className="w-20 px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    />
+                    <span className="text-gray-500 dark:text-gray-400">days</span>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Default free trial period for new subscribers (can be overridden per tier)</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Grace Period</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={gracePeriodDays}
+                      onChange={(e) => setGracePeriodDays(parseInt(e.target.value) || 0)}
+                      className="w-20 px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    />
+                    <span className="text-gray-500 dark:text-gray-400">days</span>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Days before account suspension after failed payment</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Yearly Discount</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={yearlyDiscount}
+                      onChange={(e) => setYearlyDiscount(parseInt(e.target.value) || 0)}
+                      className="w-20 px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    />
+                    <span className="text-gray-500 dark:text-gray-400">%</span>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Discount for yearly subscriptions</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Auto-Renewal</label>
+                  <label className="flex items-center gap-2 mt-2">
+                    <input
+                      type="checkbox"
+                      checked={autoRenewal}
+                      onChange={(e) => setAutoRenewal(e.target.checked)}
+                      className="rounded text-primary-600 focus:ring-primary-500"
+                    />
+                    <span className="text-sm text-gray-600 dark:text-gray-300">Enable auto-renewal by default</span>
+                  </label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Subscriptions will automatically renew</p>
+                </div>
               </div>
             </Card>
           </div>

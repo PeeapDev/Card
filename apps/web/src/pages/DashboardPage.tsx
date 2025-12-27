@@ -77,10 +77,14 @@ export function DashboardPage() {
     return `${symbol} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  const totalBalance = wallets?.reduce((sum, w) => sum + (w.balance || 0), 0) || 0;
-  // Get primary wallet currency (first active wallet)
-  const primaryWallet = wallets?.find(w => w.status === 'ACTIVE') || wallets?.[0];
+  // Get wallet with highest balance for main display
+  const sortedWallets = wallets?.filter(w => w.status === 'ACTIVE').sort((a, b) => (b.balance || 0) - (a.balance || 0)) || [];
+  const primaryWallet = sortedWallets[0] || wallets?.[0];
   const primaryCurrency = primaryWallet?.currency || 'SLE';
+  const primaryBalance = primaryWallet?.balance || 0;
+
+  // Get other wallets with balance for secondary display
+  const otherWalletsWithBalance = sortedWallets.filter((w, i) => i > 0 && (w.balance || 0) > 0).slice(0, 2);
   const activeCards = cards?.filter((c) => c.status === 'ACTIVE').length || 0;
 
   // Handle user selection from search - navigate to send money page with pre-selected recipient
@@ -130,10 +134,22 @@ export function DashboardPage() {
             <MotionCard glowEffect delay={0}>
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Balance</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                    {walletsLoading ? '...' : formatCurrency(totalBalance, primaryCurrency)}
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                    {primaryCurrency} Balance
                   </p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                    {walletsLoading ? '...' : formatCurrency(primaryBalance, primaryCurrency)}
+                  </p>
+                  {/* Show other wallets with balance */}
+                  {otherWalletsWithBalance.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {otherWalletsWithBalance.map(w => (
+                        <span key={w.id} className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded">
+                          {formatCurrency(w.balance || 0, w.currency)}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="w-12 h-12 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center">
                   <Wallet className="w-6 h-6 text-primary-600 dark:text-primary-400" />

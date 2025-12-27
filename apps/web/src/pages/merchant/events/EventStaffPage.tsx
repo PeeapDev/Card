@@ -14,6 +14,8 @@ import { useAuth } from '@/context/AuthContext';
 import eventService, { Event, EventStaff } from '@/services/event.service';
 import { supabase } from '@/lib/supabase';
 import { notificationService } from '@/services/notification.service';
+import { useLimitCheck } from '@/hooks/useTierLimits';
+import { UpgradeLimitPrompt } from '@/components/subscription/UpgradeLimitPrompt';
 import {
   ArrowLeft,
   Plus,
@@ -61,6 +63,19 @@ export function EventStaffPage() {
   const navigate = useNavigate();
   const { eventId } = useParams<{ eventId: string }>();
   const { user } = useAuth();
+
+  // Tier limit check for event staff
+  const {
+    tier,
+    limit: eventStaffLimit,
+    canAdd: canAddEventStaff,
+    tryAdd: tryAddEventStaff,
+    getRemaining: getRemainingEventStaff,
+    showUpgradePrompt,
+    closePrompt: closeUpgradePrompt,
+    lastCheckResult,
+  } = useLimitCheck('eventStaff');
+
   const [loading, setLoading] = useState(true);
   const [event, setEvent] = useState<Event | null>(null);
   const [staff, setStaff] = useState<EventStaff[]>([]);
@@ -135,8 +150,22 @@ export function EventStaffPage() {
     }
   };
 
+  const openInviteModal = () => {
+    // Check limits before opening modal
+    if (!tryAddEventStaff(staff.length)) {
+      // Limit reached - the hook will show the upgrade prompt
+      return;
+    }
+    setShowModal(true);
+  };
+
   const handleInvite = async (userId: string) => {
     if (!eventId || !user?.id || !event) return;
+
+    // Double-check limit before inviting
+    if (!canAddEventStaff(staff.length)) {
+      return;
+    }
 
     setInviting(true);
     try {
@@ -226,13 +255,26 @@ export function EventStaffPage() {
               <p className="text-gray-600 dark:text-gray-400">{event?.title}</p>
             </div>
           </div>
-          <Button
-            onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700"
-          >
-            <Plus className="w-4 h-4" />
-            Invite Staff
-          </Button>
+          <div className="flex items-center gap-3">
+            {/* Event staff limit indicator */}
+            {eventStaffLimit !== -1 && (
+              <div className={`text-sm px-3 py-1 rounded-full ${
+                getRemainingEventStaff(staff.length) <= 1
+                  ? 'bg-amber-100 text-amber-700'
+                  : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+              }`}>
+                {staff.length}/{eventStaffLimit} staff
+              </div>
+            )}
+            <Button
+              onClick={openInviteModal}
+              disabled={eventStaffLimit !== -1 && !canAddEventStaff(staff.length)}
+              className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700"
+            >
+              <Plus className="w-4 h-4" />
+              Invite Staff
+            </Button>
+          </div>
         </div>
 
         {/* Staff List */}
@@ -246,7 +288,8 @@ export function EventStaffPage() {
               Invite team members to help scan tickets at your event
             </p>
             <Button
-              onClick={() => setShowModal(true)}
+              onClick={openInviteModal}
+              disabled={eventStaffLimit !== -1 && !canAddEventStaff(staff.length)}
               className="bg-purple-600 hover:bg-purple-700"
             >
               Invite Your First Staff Member
@@ -475,6 +518,18 @@ export function EventStaffPage() {
             </Button>
           </Modal.Footer>
         </Modal>
+
+        {/* Upgrade Prompt Modal */}
+        {showUpgradePrompt && lastCheckResult && (
+          <UpgradeLimitPrompt
+            limitType="eventStaff"
+            currentCount={lastCheckResult.current}
+            limit={lastCheckResult.limit}
+            currentTier={tier}
+            onClose={closeUpgradePrompt}
+            variant="modal"
+          />
+        )}
       </div>
     </MerchantLayout>
   );

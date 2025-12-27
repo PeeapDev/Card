@@ -40,11 +40,17 @@ export type NotificationType =
   | 'withdrawal_completed'
   | 'withdrawal_failed'
   | 'transfer_received'
-  | 'transfer_sent';
+  | 'transfer_sent'
+  | 'dispute_filed'
+  | 'dispute_message'
+  | 'dispute_resolved'
+  | 'dispute_escalated'
+  | 'chat_message'
+  | 'chat_mention';
 
 export type NotificationPriority = 'low' | 'normal' | 'high' | 'urgent';
 
-export type SourceService = 'pos' | 'wallet' | 'kyc' | 'payment' | 'auth' | 'system' | 'payout' | 'subscription' | 'events';
+export type SourceService = 'pos' | 'wallet' | 'kyc' | 'payment' | 'auth' | 'system' | 'payout' | 'subscription' | 'events' | 'dispute' | 'chat';
 
 export interface Notification {
   id: string;
@@ -113,6 +119,11 @@ class NotificationService {
       console.error('[NotificationService] Create error:', error);
       throw error;
     }
+
+    // Broadcast for real-time delivery
+    this.broadcastNotification(params.userId, data).catch(err => {
+      console.error('[NotificationService] Broadcast error:', err);
+    });
 
     return data;
   }
@@ -967,6 +978,282 @@ ${params.businessPhone ? `Contact: ${params.businessPhone}` : ''}`;
       sourceId: params.transactionId,
       priority: 'normal',
     });
+  }
+
+  // ============================================
+  // Dispute notification helpers
+  // ============================================
+
+  /**
+   * Send dispute filed notification to merchant
+   */
+  async sendDisputeFiledNotification(params: {
+    merchantId: string;
+    disputeId: string;
+    customerName: string;
+    amount: number;
+    currency: string;
+    reason: string;
+  }): Promise<Notification> {
+    return this.create({
+      userId: params.merchantId,
+      type: 'dispute_filed',
+      title: 'New Dispute Filed',
+      message: `${params.customerName} has filed a dispute for ${params.currency} ${params.amount.toLocaleString()}. Reason: ${params.reason}. You have 7 days to respond.`,
+      icon: 'AlertTriangle',
+      actionUrl: `/merchant/disputes/${params.disputeId}`,
+      actionData: {
+        disputeId: params.disputeId,
+        customerName: params.customerName,
+        amount: params.amount,
+        currency: params.currency,
+        reason: params.reason,
+      },
+      sourceService: 'dispute',
+      sourceId: params.disputeId,
+      priority: 'high',
+    });
+  }
+
+  /**
+   * Send dispute message notification
+   */
+  async sendDisputeMessageNotification(params: {
+    userId: string;
+    disputeId: string;
+    senderName: string;
+    senderType: 'customer' | 'merchant' | 'admin';
+    preview: string;
+  }): Promise<Notification> {
+    return this.create({
+      userId: params.userId,
+      type: 'dispute_message',
+      title: 'New Dispute Message',
+      message: `${params.senderName} (${params.senderType}): ${params.preview.substring(0, 100)}${params.preview.length > 100 ? '...' : ''}`,
+      icon: 'MessageSquare',
+      actionUrl: params.senderType === 'customer' ? `/merchant/disputes/${params.disputeId}` : `/disputes/${params.disputeId}`,
+      actionData: {
+        disputeId: params.disputeId,
+        senderName: params.senderName,
+        senderType: params.senderType,
+      },
+      sourceService: 'dispute',
+      sourceId: params.disputeId,
+      priority: 'normal',
+    });
+  }
+
+  /**
+   * Send dispute resolved notification
+   */
+  async sendDisputeResolvedNotification(params: {
+    userId: string;
+    disputeId: string;
+    outcome: 'won' | 'lost' | 'resolved';
+    resolution: string;
+    amount: number;
+    currency: string;
+    refundAmount?: number;
+    userType: 'customer' | 'merchant';
+  }): Promise<Notification> {
+    const outcomeMessages = {
+      won: params.userType === 'customer'
+        ? `Your dispute has been resolved in your favor. ${params.refundAmount ? `A refund of ${params.currency} ${params.refundAmount.toLocaleString()} will be processed.` : ''}`
+        : `The dispute for ${params.currency} ${params.amount.toLocaleString()} was resolved in favor of the customer.`,
+      lost: params.userType === 'customer'
+        ? `Your dispute for ${params.currency} ${params.amount.toLocaleString()} has been closed. The decision was in favor of the merchant.`
+        : `The dispute has been resolved in your favor. No refund will be issued.`,
+      resolved: `The dispute for ${params.currency} ${params.amount.toLocaleString()} has been resolved. ${params.resolution}`,
+    };
+
+    return this.create({
+      userId: params.userId,
+      type: 'dispute_resolved',
+      title: 'Dispute Resolved',
+      message: outcomeMessages[params.outcome],
+      icon: params.outcome === 'won' && params.userType === 'customer' ? 'CheckCircle' :
+            params.outcome === 'lost' && params.userType === 'customer' ? 'XCircle' : 'Scale',
+      actionUrl: params.userType === 'customer' ? `/disputes/${params.disputeId}` : `/merchant/disputes/${params.disputeId}`,
+      actionData: {
+        disputeId: params.disputeId,
+        outcome: params.outcome,
+        resolution: params.resolution,
+        amount: params.amount,
+        currency: params.currency,
+        refundAmount: params.refundAmount,
+      },
+      sourceService: 'dispute',
+      sourceId: params.disputeId,
+      priority: 'high',
+    });
+  }
+
+  /**
+   * Send dispute escalated notification
+   */
+  async sendDisputeEscalatedNotification(params: {
+    userId: string;
+    disputeId: string;
+    reason: string;
+    userType: 'customer' | 'merchant';
+  }): Promise<Notification> {
+    return this.create({
+      userId: params.userId,
+      type: 'dispute_escalated',
+      title: 'Dispute Escalated',
+      message: `Your dispute has been escalated for urgent review. ${params.reason}`,
+      icon: 'AlertOctagon',
+      actionUrl: params.userType === 'customer' ? `/disputes/${params.disputeId}` : `/merchant/disputes/${params.disputeId}`,
+      actionData: {
+        disputeId: params.disputeId,
+        reason: params.reason,
+      },
+      sourceService: 'dispute',
+      sourceId: params.disputeId,
+      priority: 'urgent',
+    });
+  }
+
+  // ============================================
+  // Chat notification helpers
+  // ============================================
+
+  /**
+   * Send chat message notification
+   */
+  async sendChatMessageNotification(params: {
+    userId: string;
+    senderName: string;
+    senderType: 'user' | 'merchant' | 'admin' | 'support';
+    conversationId: string;
+    messagePreview: string;
+    conversationType?: string;
+  }): Promise<Notification> {
+    const senderLabel = params.senderType === 'merchant' ? 'Business' :
+                        params.senderType === 'admin' ? 'Admin' :
+                        params.senderType === 'support' ? 'Support' : '';
+
+    const title = senderLabel ? `New message from ${senderLabel}` : `New message from ${params.senderName}`;
+    const preview = params.messagePreview.length > 100
+      ? params.messagePreview.substring(0, 100) + '...'
+      : params.messagePreview;
+
+    return this.create({
+      userId: params.userId,
+      type: 'chat_message',
+      title,
+      message: `${params.senderName}: ${preview}`,
+      icon: 'MessageSquare',
+      actionUrl: `/messages/${params.conversationId}`,
+      actionData: {
+        conversationId: params.conversationId,
+        senderName: params.senderName,
+        senderType: params.senderType,
+        conversationType: params.conversationType,
+      },
+      sourceService: 'chat',
+      sourceId: params.conversationId,
+      priority: 'normal',
+    });
+  }
+
+  /**
+   * Send chat mention notification (when someone @mentions you)
+   */
+  async sendChatMentionNotification(params: {
+    userId: string;
+    mentionedByName: string;
+    conversationId: string;
+    messagePreview: string;
+  }): Promise<Notification> {
+    return this.create({
+      userId: params.userId,
+      type: 'chat_mention',
+      title: 'You were mentioned',
+      message: `${params.mentionedByName} mentioned you: ${params.messagePreview.substring(0, 80)}...`,
+      icon: 'AtSign',
+      actionUrl: `/messages/${params.conversationId}`,
+      actionData: {
+        conversationId: params.conversationId,
+        mentionedByName: params.mentionedByName,
+      },
+      sourceService: 'chat',
+      sourceId: params.conversationId,
+      priority: 'high',
+    });
+  }
+
+  /**
+   * Get unread chat message count for a user
+   */
+  async getUnreadChatCount(userId: string): Promise<number> {
+    const { count, error } = await supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('is_read', false)
+      .in('type', ['chat_message', 'chat_mention']);
+
+    if (error) {
+      console.error('[NotificationService] GetUnreadChatCount error:', error);
+      return 0;
+    }
+
+    return count || 0;
+  }
+
+  // ============================================
+  // Real-time subscription
+  // ============================================
+
+  /**
+   * Subscribe to real-time notifications for a user
+   * Uses both broadcast (for immediate delivery) and postgres_changes (for persistence)
+   */
+  subscribeToNotifications(userId: string, callback: (notification: Notification) => void): () => void {
+    const channelName = `notifications-${userId}`;
+
+    const subscription = supabase
+      .channel(channelName)
+      // Listen to broadcast events (immediate delivery)
+      .on('broadcast', { event: 'new_notification' }, (payload) => {
+        callback(payload.payload as Notification);
+      })
+      // Listen to database changes (persistence)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          callback(payload.new as Notification);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }
+
+  /**
+   * Broadcast a notification to a user (for immediate delivery)
+   */
+  async broadcastNotification(userId: string, notification: Notification): Promise<void> {
+    const channelName = `notifications-${userId}`;
+    const channel = supabase.channel(channelName);
+
+    await channel.send({
+      type: 'broadcast',
+      event: 'new_notification',
+      payload: notification,
+    });
+
+    // Clean up the channel
+    supabase.removeChannel(channel);
   }
 }
 

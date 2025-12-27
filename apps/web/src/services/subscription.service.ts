@@ -974,6 +974,7 @@ export interface TierLimits {
   staff: number;
   locations: number;
   categories: number;
+  eventStaff: number;
   customersCredit: boolean;
   loyaltyProgram: boolean;
   advancedReports: boolean;
@@ -987,15 +988,75 @@ export interface TierLimits {
   customReceipts: boolean;
   apiAccess: boolean;
   prioritySupport: boolean;
+  barcodeScanner: boolean;
+  multiCurrency: boolean;
+  supplierManagement: boolean;
+  purchaseOrders: boolean;
+  eventManagement: boolean;
+  eventAnalytics: boolean;
+  smsNotifications: boolean;
+  whatsappNotifications: boolean;
 }
 
-// Tier configurations
-export const TIER_LIMITS: Record<MerchantTier, TierLimits> = {
+// Database tier configuration
+export interface TierConfiguration {
+  id: string;
+  tier: MerchantTier;
+  display_name: string;
+  description: string;
+  color: string;
+  icon: string;
+  price_monthly: number;
+  price_yearly: number;
+  currency: string;
+  // Numeric limits
+  max_products: number;
+  max_staff: number;
+  max_locations: number;
+  max_categories: number;
+  max_event_staff: number;
+  max_customers: number;
+  max_transactions_per_month: number;
+  report_history_days: number;
+  transaction_fee_percent: number;
+  // Boolean features
+  feature_customers_credit: boolean;
+  feature_loyalty_program: boolean;
+  feature_advanced_reports: boolean;
+  feature_kitchen_display: boolean;
+  feature_table_management: boolean;
+  feature_online_ordering: boolean;
+  feature_multi_payment: boolean;
+  feature_discount_codes: boolean;
+  feature_inventory_alerts: boolean;
+  feature_export_reports: boolean;
+  feature_custom_receipts: boolean;
+  feature_api_access: boolean;
+  feature_priority_support: boolean;
+  feature_barcode_scanner: boolean;
+  feature_multi_currency: boolean;
+  feature_supplier_management: boolean;
+  feature_purchase_orders: boolean;
+  feature_event_management: boolean;
+  feature_event_analytics: boolean;
+  event_ticket_commission_percent: number;
+  feature_sms_notifications: boolean;
+  feature_whatsapp_notifications: boolean;
+  feature_email_notifications: boolean;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Default tier configurations (fallback if database not available)
+export const DEFAULT_TIER_LIMITS: Record<MerchantTier, TierLimits> = {
   basic: {
-    products: 15,
+    products: 10,
     staff: 1,
     locations: 1,
-    categories: 5,
+    categories: 3,
+    eventStaff: 0,
     customersCredit: false,
     loyaltyProgram: false,
     advancedReports: false,
@@ -1009,12 +1070,21 @@ export const TIER_LIMITS: Record<MerchantTier, TierLimits> = {
     customReceipts: false,
     apiAccess: false,
     prioritySupport: false,
+    barcodeScanner: false,
+    multiCurrency: false,
+    supplierManagement: false,
+    purchaseOrders: false,
+    eventManagement: false,
+    eventAnalytics: false,
+    smsNotifications: false,
+    whatsappNotifications: false,
   },
   business: {
-    products: 100,
-    staff: 5,
+    products: 50,
+    staff: 3,
     locations: 1,
-    categories: 20,
+    categories: 10,
+    eventStaff: 2,
     customersCredit: true,
     loyaltyProgram: true,
     advancedReports: true,
@@ -1028,12 +1098,21 @@ export const TIER_LIMITS: Record<MerchantTier, TierLimits> = {
     customReceipts: true,
     apiAccess: false,
     prioritySupport: false,
+    barcodeScanner: true,
+    multiCurrency: false,
+    supplierManagement: false,
+    purchaseOrders: false,
+    eventManagement: true,
+    eventAnalytics: false,
+    smsNotifications: true,
+    whatsappNotifications: false,
   },
   business_plus: {
     products: -1, // Unlimited
     staff: -1, // Unlimited
     locations: 5,
     categories: -1, // Unlimited
+    eventStaff: -1, // Unlimited
     customersCredit: true,
     loyaltyProgram: true,
     advancedReports: true,
@@ -1047,8 +1126,19 @@ export const TIER_LIMITS: Record<MerchantTier, TierLimits> = {
     customReceipts: true,
     apiAccess: true,
     prioritySupport: true,
+    barcodeScanner: true,
+    multiCurrency: true,
+    supplierManagement: true,
+    purchaseOrders: true,
+    eventManagement: true,
+    eventAnalytics: true,
+    smsNotifications: true,
+    whatsappNotifications: true,
   },
 };
+
+// Mutable tier limits (will be updated from database)
+export let TIER_LIMITS: Record<MerchantTier, TierLimits> = { ...DEFAULT_TIER_LIMITS };
 
 // Tier pricing (in NLE - New Leone)
 export const TIER_PRICING: Record<MerchantTier, { monthly: number; yearly: number }> = {
@@ -1127,12 +1217,15 @@ class MerchantTierService {
     trialDays: number = 7
   ): Promise<MerchantSubscription | null> {
     try {
+      // Get pricing from database
+      const pricing = await tierConfigService.getPricing(tier);
+
       const { data, error } = await supabase.rpc('start_merchant_trial', {
         p_user_id: userId,
         p_business_id: businessId,
         p_tier: tier,
         p_trial_days: trialDays,
-        p_price_monthly: TIER_PRICING[tier].monthly,
+        p_price_monthly: pricing.monthly,
       });
 
       if (error) {
@@ -1150,8 +1243,8 @@ class MerchantTierService {
               status: trialDays > 0 ? 'trialing' : 'active',
               trial_started_at: trialDays > 0 ? new Date().toISOString() : null,
               trial_ends_at: trialDays > 0 ? trialEndsAt.toISOString() : null,
-              price_monthly: TIER_PRICING[tier].monthly,
-              currency: 'NLE',
+              price_monthly: pricing.monthly,
+              currency: pricing.currency,
             }, {
               onConflict: 'user_id',
             })
@@ -1283,11 +1376,14 @@ class MerchantTierService {
    */
   async updateTier(userId: string, newTier: MerchantTier): Promise<MerchantSubscription | null> {
     try {
+      // Get pricing from database
+      const pricing = await tierConfigService.getPricing(newTier);
+
       const { data, error } = await supabase
         .from('merchant_subscriptions')
         .update({
           tier: newTier,
-          price_monthly: TIER_PRICING[newTier].monthly,
+          price_monthly: pricing.monthly,
         })
         .eq('user_id', userId)
         .select()
@@ -1416,3 +1512,411 @@ class MerchantTierService {
 }
 
 export const merchantTierService = new MerchantTierService();
+
+// =====================================================
+// TIER CONFIGURATION SERVICE (Database-backed)
+// =====================================================
+
+class TierConfigurationService {
+  private cache: Map<MerchantTier, TierConfiguration> = new Map();
+  private lastFetch: number = 0;
+  private cacheTTL: number = 5 * 60 * 1000; // 5 minutes
+
+  /**
+   * Convert database tier configuration to TierLimits
+   */
+  private configToLimits(config: TierConfiguration): TierLimits {
+    return {
+      products: config.max_products,
+      staff: config.max_staff,
+      locations: config.max_locations,
+      categories: config.max_categories,
+      eventStaff: config.max_event_staff,
+      customersCredit: config.feature_customers_credit,
+      loyaltyProgram: config.feature_loyalty_program,
+      advancedReports: config.feature_advanced_reports,
+      kitchenDisplay: config.feature_kitchen_display,
+      tableManagement: config.feature_table_management,
+      onlineOrdering: config.feature_online_ordering,
+      multiPayment: config.feature_multi_payment,
+      discountCodes: config.feature_discount_codes,
+      inventoryAlerts: config.feature_inventory_alerts,
+      exportReports: config.feature_export_reports,
+      customReceipts: config.feature_custom_receipts,
+      apiAccess: config.feature_api_access,
+      prioritySupport: config.feature_priority_support,
+      barcodeScanner: config.feature_barcode_scanner,
+      multiCurrency: config.feature_multi_currency,
+      supplierManagement: config.feature_supplier_management,
+      purchaseOrders: config.feature_purchase_orders,
+      eventManagement: config.feature_event_management,
+      eventAnalytics: config.feature_event_analytics,
+      smsNotifications: config.feature_sms_notifications,
+      whatsappNotifications: config.feature_whatsapp_notifications,
+    };
+  }
+
+  /**
+   * Fetch all tier configurations from database
+   */
+  async fetchAllConfigurations(): Promise<TierConfiguration[]> {
+    try {
+      const { data, error } = await supabase
+        .from('tier_configurations')
+        .select('*')
+        .eq('is_active', true)
+        .order('sort_order');
+
+      if (error) {
+        console.error('Error fetching tier configurations:', error);
+        return [];
+      }
+
+      // Update cache
+      this.cache.clear();
+      for (const config of data || []) {
+        this.cache.set(config.tier as MerchantTier, config);
+      }
+      this.lastFetch = Date.now();
+
+      // Update global TIER_LIMITS
+      this.updateGlobalLimits();
+
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching tier configurations:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get configuration for a specific tier
+   */
+  async getConfiguration(tier: MerchantTier): Promise<TierConfiguration | null> {
+    // Check cache
+    if (this.cache.has(tier) && Date.now() - this.lastFetch < this.cacheTTL) {
+      return this.cache.get(tier) || null;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('tier_configurations')
+        .select('*')
+        .eq('tier', tier)
+        .eq('is_active', true)
+        .single();
+
+      if (error) {
+        console.error('Error fetching tier configuration:', error);
+        return null;
+      }
+
+      if (data) {
+        this.cache.set(tier, data);
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error fetching tier configuration:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Update a tier configuration (admin only)
+   */
+  async updateConfiguration(
+    tier: MerchantTier,
+    updates: Partial<TierConfiguration>
+  ): Promise<TierConfiguration | null> {
+    try {
+      const { data, error } = await supabase
+        .from('tier_configurations')
+        .update(updates)
+        .eq('tier', tier)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating tier configuration:', error);
+        throw new Error(error.message);
+      }
+
+      // Update cache
+      if (data) {
+        this.cache.set(tier, data);
+        this.updateGlobalLimits();
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error updating tier configuration:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update global TIER_LIMITS from cache
+   */
+  private updateGlobalLimits(): void {
+    for (const [tier, config] of this.cache.entries()) {
+      TIER_LIMITS[tier] = this.configToLimits(config);
+    }
+  }
+
+  /**
+   * Get limits for a tier (from cache or database)
+   */
+  async getLimits(tier: MerchantTier): Promise<TierLimits> {
+    const config = await this.getConfiguration(tier);
+    if (config) {
+      return this.configToLimits(config);
+    }
+    return DEFAULT_TIER_LIMITS[tier];
+  }
+
+  /**
+   * Check if a user is within a specific limit
+   */
+  async checkLimit(
+    userId: string,
+    limitType: 'products' | 'staff' | 'locations' | 'categories' | 'eventStaff',
+    currentCount: number
+  ): Promise<{ allowed: boolean; current: number; limit: number; tier: MerchantTier; remaining: number }> {
+    try {
+      // Get user's subscription
+      const subscription = await merchantTierService.getSubscription(userId);
+      const tier = subscription?.tier || 'basic';
+
+      // Get limits from cache or database
+      const limits = await this.getLimits(tier);
+      const limit = limits[limitType] as number;
+
+      // -1 means unlimited
+      if (limit === -1) {
+        return {
+          allowed: true,
+          current: currentCount,
+          limit: -1,
+          tier,
+          remaining: -1,
+        };
+      }
+
+      const allowed = currentCount < limit;
+      return {
+        allowed,
+        current: currentCount,
+        limit,
+        tier,
+        remaining: Math.max(0, limit - currentCount),
+      };
+    } catch (error) {
+      console.error('Error checking limit:', error);
+      // Fallback to defaults
+      const limits = DEFAULT_TIER_LIMITS.basic;
+      const limit = limits[limitType] as number;
+      return {
+        allowed: currentCount < limit,
+        current: currentCount,
+        limit,
+        tier: 'basic',
+        remaining: Math.max(0, limit - currentCount),
+      };
+    }
+  }
+
+  /**
+   * Get pricing for a tier
+   */
+  async getPricing(tier: MerchantTier): Promise<{ monthly: number; yearly: number; currency: string }> {
+    const config = await this.getConfiguration(tier);
+    if (config) {
+      return {
+        monthly: config.price_monthly,
+        yearly: config.price_yearly,
+        currency: config.currency,
+      };
+    }
+    return { ...TIER_PRICING[tier], currency: 'NLE' };
+  }
+
+  /**
+   * Initialize by loading configurations from database
+   */
+  async initialize(): Promise<void> {
+    await this.fetchAllConfigurations();
+  }
+
+  /**
+   * Clear cache and reload
+   */
+  async refresh(): Promise<void> {
+    this.cache.clear();
+    this.lastFetch = 0;
+    await this.fetchAllConfigurations();
+  }
+
+  /**
+   * Seed default tier configurations (admin only)
+   * This should only be called if no configurations exist
+   */
+  async seedDefaultConfigurations(): Promise<TierConfiguration[]> {
+    const defaultConfigs: Partial<TierConfiguration>[] = [
+      {
+        tier: 'basic',
+        display_name: 'Basic',
+        description: 'Free tier for small merchants getting started',
+        color: '#6B7280',
+        icon: 'Store',
+        price_monthly: 0,
+        price_yearly: 0,
+        currency: 'NLE',
+        max_products: 10,
+        max_staff: 1,
+        max_locations: 1,
+        max_categories: 3,
+        max_event_staff: 0,
+        max_customers: -1,
+        max_transactions_per_month: -1,
+        report_history_days: 7,
+        transaction_fee_percent: 2.5,
+        feature_customers_credit: false,
+        feature_loyalty_program: false,
+        feature_advanced_reports: false,
+        feature_kitchen_display: false,
+        feature_table_management: false,
+        feature_online_ordering: false,
+        feature_multi_payment: false,
+        feature_discount_codes: false,
+        feature_inventory_alerts: true,
+        feature_export_reports: false,
+        feature_custom_receipts: false,
+        feature_api_access: false,
+        feature_priority_support: false,
+        feature_barcode_scanner: false,
+        feature_multi_currency: false,
+        feature_supplier_management: false,
+        feature_purchase_orders: false,
+        feature_event_management: false,
+        feature_event_analytics: false,
+        event_ticket_commission_percent: 3.0,
+        feature_sms_notifications: false,
+        feature_whatsapp_notifications: false,
+        feature_email_notifications: true,
+        is_active: true,
+        sort_order: 1,
+      },
+      {
+        tier: 'business',
+        display_name: 'Business',
+        description: 'For growing businesses with staff and advanced features',
+        color: '#F59E0B',
+        icon: 'Building2',
+        price_monthly: 150,
+        price_yearly: 1500,
+        currency: 'NLE',
+        max_products: 50,
+        max_staff: 3,
+        max_locations: 1,
+        max_categories: 10,
+        max_event_staff: 2,
+        max_customers: -1,
+        max_transactions_per_month: -1,
+        report_history_days: 30,
+        transaction_fee_percent: 1.5,
+        feature_customers_credit: true,
+        feature_loyalty_program: true,
+        feature_advanced_reports: true,
+        feature_kitchen_display: false,
+        feature_table_management: false,
+        feature_online_ordering: false,
+        feature_multi_payment: true,
+        feature_discount_codes: true,
+        feature_inventory_alerts: true,
+        feature_export_reports: true,
+        feature_custom_receipts: true,
+        feature_api_access: false,
+        feature_priority_support: false,
+        feature_barcode_scanner: true,
+        feature_multi_currency: false,
+        feature_supplier_management: false,
+        feature_purchase_orders: false,
+        feature_event_management: true,
+        feature_event_analytics: false,
+        event_ticket_commission_percent: 2.0,
+        feature_sms_notifications: true,
+        feature_whatsapp_notifications: false,
+        feature_email_notifications: true,
+        is_active: true,
+        sort_order: 2,
+      },
+      {
+        tier: 'business_plus',
+        display_name: 'Business++',
+        description: 'Full-featured plan for established businesses',
+        color: '#8B5CF6',
+        icon: 'Rocket',
+        price_monthly: 500,
+        price_yearly: 5000,
+        currency: 'NLE',
+        max_products: -1,
+        max_staff: -1,
+        max_locations: 5,
+        max_categories: -1,
+        max_event_staff: -1,
+        max_customers: -1,
+        max_transactions_per_month: -1,
+        report_history_days: -1,
+        transaction_fee_percent: 1.0,
+        feature_customers_credit: true,
+        feature_loyalty_program: true,
+        feature_advanced_reports: true,
+        feature_kitchen_display: true,
+        feature_table_management: true,
+        feature_online_ordering: true,
+        feature_multi_payment: true,
+        feature_discount_codes: true,
+        feature_inventory_alerts: true,
+        feature_export_reports: true,
+        feature_custom_receipts: true,
+        feature_api_access: true,
+        feature_priority_support: true,
+        feature_barcode_scanner: true,
+        feature_multi_currency: true,
+        feature_supplier_management: true,
+        feature_purchase_orders: true,
+        feature_event_management: true,
+        feature_event_analytics: true,
+        event_ticket_commission_percent: 1.0,
+        feature_sms_notifications: true,
+        feature_whatsapp_notifications: true,
+        feature_email_notifications: true,
+        is_active: true,
+        sort_order: 3,
+      },
+    ];
+
+    try {
+      const { data, error } = await supabase
+        .from('tier_configurations')
+        .upsert(defaultConfigs, { onConflict: 'tier' })
+        .select();
+
+      if (error) {
+        console.error('Error seeding tier configurations:', error);
+        throw new Error(error.message);
+      }
+
+      // Update cache
+      await this.refresh();
+
+      return data as TierConfiguration[];
+    } catch (error) {
+      console.error('Error seeding tier configurations:', error);
+      throw error;
+    }
+  }
+}
+
+export const tierConfigService = new TierConfigurationService();

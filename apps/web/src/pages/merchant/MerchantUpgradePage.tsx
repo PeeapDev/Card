@@ -4,7 +4,7 @@
  * Business and Business++ redirect to plus.peeap.com via database-backed SSO
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Check,
@@ -19,12 +19,15 @@ import {
   Zap,
   Shield,
   BarChart3,
+  Lock,
+  Star,
 } from 'lucide-react';
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
 import { Card } from '@/components/ui/Card';
 import { ssoService } from '@/services/sso.service';
 import { useAuth } from '@/context/AuthContext';
 import { UPGRADE_URL, isDevelopment } from '@/config/urls';
+import { supabase } from '@/lib/supabase';
 
 interface PricingPlan {
   id: string;
@@ -39,12 +42,66 @@ interface PricingPlan {
   redirectToPlus?: boolean;
 }
 
+type MerchantTier = 'basic' | 'business' | 'business_plus';
+
 export function MerchantUpgradePage() {
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentTier, setCurrentTier] = useState<MerchantTier>('basic');
+  const [loadingTier, setLoadingTier] = useState(true);
   const navigate = useNavigate();
   const { user } = useAuth();
+
+  // Fetch current subscription tier
+  useEffect(() => {
+    const fetchCurrentTier = async () => {
+      if (!user?.id) {
+        setLoadingTier(false);
+        return;
+      }
+
+      try {
+        const { data } = await supabase
+          .from('merchant_subscriptions')
+          .select('tier, status')
+          .eq('user_id', user.id)
+          .single();
+
+        if (data && (data.status === 'active' || data.status === 'trialing')) {
+          setCurrentTier(data.tier as MerchantTier);
+        }
+      } catch (err) {
+        console.error('Error fetching subscription:', err);
+      } finally {
+        setLoadingTier(false);
+      }
+    };
+
+    fetchCurrentTier();
+  }, [user?.id]);
+
+  // Check if a plan is available for upgrade based on current tier
+  const canUpgradeTo = (planId: string): boolean => {
+    if (planId === 'basic') return false; // Can't "upgrade" to basic
+    if (planId === currentTier) return false; // Already on this tier
+
+    // Tier progression: basic -> business -> business_plus
+    if (currentTier === 'basic') {
+      return planId === 'business'; // Basic can only go to Business
+    }
+    if (currentTier === 'business') {
+      return planId === 'business_plus'; // Business can only go to Business++
+    }
+    // business_plus users are at max tier
+    return false;
+  };
+
+  const getNextTier = (): string | null => {
+    if (currentTier === 'basic') return 'business';
+    if (currentTier === 'business') return 'business_plus';
+    return null; // Already at max
+  };
 
   const plans: PricingPlan[] = [
     {
@@ -54,7 +111,6 @@ export function MerchantUpgradePage() {
       currency: 'NLE',
       period: 'forever',
       description: 'For small businesses getting started',
-      highlight: 'Current Plan',
       features: [
         'Checkout links',
         'QR code payments',
@@ -71,7 +127,7 @@ export function MerchantUpgradePage() {
       currency: 'NLE',
       period: 'month',
       description: 'For growing businesses that need more tools',
-      popular: true,
+      popular: currentTier === 'basic', // Only show as popular if user is on basic
       redirectToPlus: true,
       features: [
         'Everything in Basic',
@@ -91,7 +147,8 @@ export function MerchantUpgradePage() {
       currency: 'NLE',
       period: 'month',
       description: 'For enterprises needing full control',
-      highlight: 'Corporate',
+      popular: currentTier === 'business', // Show as popular/recommended if on Business
+      highlight: currentTier !== 'business' ? 'Corporate' : undefined,
       redirectToPlus: true,
       features: [
         'Everything in Business',
@@ -243,33 +300,60 @@ export function MerchantUpgradePage() {
               {/* CTA Button */}
               <button
                 onClick={() => handleUpgrade(plan)}
-                disabled={processing && selectedPlan === plan.id}
+                disabled={(processing && selectedPlan === plan.id) || !canUpgradeTo(plan.id) || loadingTier}
                 className={`w-full py-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-all ${
-                  plan.popular
-                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 shadow-lg hover:shadow-xl'
+                  plan.id === currentTier
+                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 cursor-default'
+                    : canUpgradeTo(plan.id)
+                    ? plan.id === 'business'
+                      ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 shadow-lg hover:shadow-xl'
+                      : 'bg-gradient-to-r from-purple-500 to-indigo-500 text-white hover:from-purple-600 hover:to-indigo-600 shadow-lg hover:shadow-xl'
                     : plan.id === 'basic'
                     ? 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-default'
-                    : 'bg-gray-900 dark:bg-gray-700 text-white hover:bg-gray-800 dark:hover:bg-gray-600'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
                 }`}
               >
-                {processing && selectedPlan === plan.id ? (
+                {loadingTier ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : processing && selectedPlan === plan.id ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
                     Redirecting to Plus...
                   </>
+                ) : plan.id === currentTier ? (
+                  <>
+                    <Check className="w-4 h-4" />
+                    Current Plan
+                  </>
                 ) : plan.id === 'basic' ? (
-                  'Current Plan'
+                  'Free Plan'
+                ) : canUpgradeTo(plan.id) ? (
+                  <>
+                    Start 7-Day Free Trial
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                ) : plan.id === 'business_plus' && currentTier === 'basic' ? (
+                  <>
+                    <Lock className="w-4 h-4" />
+                    Requires Business Plan
+                  </>
                 ) : (
                   <>
-                    Upgrade to {plan.name}
-                    <ArrowRight className="w-4 h-4" />
+                    <Star className="w-4 h-4" />
+                    Max Tier
                   </>
                 )}
               </button>
 
-              {plan.redirectToPlus && (
+              {canUpgradeTo(plan.id) && (
                 <p className="text-xs text-center text-gray-400 dark:text-gray-500 mt-2">
-                  You'll be redirected to plus.peeap.com
+                  7-day free trial, then {plan.currency} {plan.price}/month
+                </p>
+              )}
+
+              {plan.id === 'business_plus' && currentTier === 'basic' && (
+                <p className="text-xs text-center text-amber-600 dark:text-amber-400 mt-2">
+                  Upgrade to Business first to unlock Business++
                 </p>
               )}
             </Card>

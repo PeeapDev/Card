@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { ArrowUpRight, ArrowDownRight, Search, Filter, Download, AlertTriangle, X, Loader2, MoreVertical, Flag } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowUpRight, ArrowDownRight, Search, Filter, Download, AlertTriangle, X, Loader2, MoreVertical, Flag, Clock } from 'lucide-react';
 import { Card, CardHeader, CardTitle, Button, Input } from '@/components/ui';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useWallets, useWalletTransactions } from '@/hooks/useWallets';
@@ -8,9 +9,11 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import type { Transaction } from '@/types';
 import { PendingSubscriptionPayments } from '@/components/subscriptions/PendingSubscriptionPayments';
+import { disputeService, DISPUTE_REASONS } from '@/services/dispute.service';
 
 export function TransactionsPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { data: wallets } = useWallets();
   const [selectedWallet, setSelectedWallet] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -107,14 +110,32 @@ export function TransactionsPage() {
       t.type.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Check if transaction can be disputed (outgoing payments only)
+  // Check if transaction can be disputed (outgoing payments only, within 2 weeks)
   const canDispute = (transaction: Transaction) => {
     const disputeableTypes = ['PAYMENT', 'PAYMENT_SENT', 'TRANSFER', 'WITHDRAWAL'];
+
+    // Check if transaction is within 2 weeks (14 days)
+    const twoWeeksAgo = new Date();
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+    const transactionDate = new Date(transaction.createdAt);
+    const isWithinTimeLimit = transactionDate >= twoWeeksAgo;
+
     // Check by type - outgoing transaction types can be disputed
     return (
       disputeableTypes.includes(transaction.type) &&
-      transaction.status === 'COMPLETED'
+      transaction.status === 'COMPLETED' &&
+      isWithinTimeLimit
     );
+  };
+
+  // Calculate days remaining to dispute
+  const getDaysToDispute = (transaction: Transaction) => {
+    const transactionDate = new Date(transaction.createdAt);
+    const deadline = new Date(transactionDate);
+    deadline.setDate(deadline.getDate() + 14);
+    const now = new Date();
+    const daysRemaining = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    return Math.max(0, daysRemaining);
   };
 
   const openDisputeModal = (transaction: Transaction) => {
@@ -130,38 +151,18 @@ export function TransactionsPage() {
 
     setDisputeLoading(true);
     try {
-      // Create dispute record
-      const { error } = await supabase.from('disputes').insert({
+      // Create dispute using the dispute service
+      const { dispute, error } = await disputeService.createDispute({
         transaction_id: selectedTransaction.id,
-        user_id: user.id,
-        status: 'OPEN',
-        reason: disputeReason,
+        reason: disputeReason as any,
         description: disputeDescription,
         amount: Math.abs(selectedTransaction.amount),
         currency: selectedTransaction.currency || 'SLE',
-        metadata: {
-          transaction_type: selectedTransaction.type,
-          transaction_date: selectedTransaction.createdAt,
-          merchant_name: selectedTransaction.merchantName,
-          reference: selectedTransaction.reference,
-        },
+        customer_name: user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : undefined,
+        customer_email: user.email,
       });
 
-      if (error) throw error;
-
-      // Send notification
-      await supabase.from('user_notifications').insert({
-        user_id: user.id,
-        type: 'dispute_created',
-        title: 'Dispute Submitted',
-        message: `Your dispute for ${selectedTransaction.currency || 'SLE'} ${Math.abs(selectedTransaction.amount).toLocaleString()} has been submitted. We will review it within 24-48 hours.`,
-        read: false,
-        metadata: {
-          transaction_id: selectedTransaction.id,
-          amount: Math.abs(selectedTransaction.amount),
-          reason: disputeReason,
-        },
-      });
+      if (error) throw new Error(error);
 
       setDisputeSuccess(true);
     } catch (err: any) {
@@ -290,10 +291,11 @@ export function TransactionsPage() {
                       {canDispute(transaction) && (
                         <button
                           onClick={() => openDisputeModal(transaction)}
-                          className="p-2 hover:bg-red-50 rounded-lg text-red-600 transition-colors"
-                          title="Dispute Transaction"
+                          className="p-2 hover:bg-red-50 rounded-lg text-red-600 transition-colors flex items-center gap-1"
+                          title={`Dispute - ${getDaysToDispute(transaction)} days left`}
                         >
                           <Flag className="w-4 h-4" />
+                          <span className="text-xs font-medium">{getDaysToDispute(transaction)}d</span>
                         </button>
                       )}
                     </div>
@@ -358,11 +360,16 @@ export function TransactionsPage() {
                 </div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Dispute Submitted</h3>
                 <p className="text-gray-500 mb-6">
-                  Your dispute has been submitted successfully. Our team will review it within 24-48 hours and contact you with an update.
+                  Your dispute has been submitted successfully. The merchant has 7 days to respond. You can track progress and communicate directly in your disputes page.
                 </p>
-                <Button onClick={() => setShowDisputeModal(false)} className="w-full">
-                  Close
-                </Button>
+                <div className="flex gap-3">
+                  <Button variant="outline" onClick={() => setShowDisputeModal(false)} className="flex-1">
+                    Close
+                  </Button>
+                  <Button onClick={() => navigate('/disputes')} className="flex-1">
+                    View My Disputes
+                  </Button>
+                </div>
               </div>
             ) : (
               <div className="p-4 space-y-4">
@@ -397,14 +404,21 @@ export function TransactionsPage() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   >
                     <option value="">Select a reason</option>
-                    <option value="unauthorized">Unauthorized Transaction</option>
-                    <option value="not_received">Goods/Service Not Received</option>
-                    <option value="wrong_amount">Wrong Amount Charged</option>
-                    <option value="duplicate">Duplicate Charge</option>
-                    <option value="fraud">Suspected Fraud</option>
-                    <option value="other">Other</option>
+                    {Object.entries(DISPUTE_REASONS).map(([key, label]) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
                   </select>
                 </div>
+
+                {/* Time remaining notice */}
+                {selectedTransaction && (
+                  <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <Clock className="w-4 h-4 text-blue-600" />
+                    <span className="text-sm text-blue-700">
+                      {getDaysToDispute(selectedTransaction)} days remaining to dispute this transaction
+                    </span>
+                  </div>
+                )}
 
                 {/* Description */}
                 <div>

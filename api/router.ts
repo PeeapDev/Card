@@ -204,6 +204,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ========== CRON ENDPOINTS ==========
     } else if (path === 'cron/keepalive' || path === 'cron/keepalive/') {
       return await handleCronKeepalive(req, res);
+    } else if (path === 'cron/subscriptions' || path === 'cron/subscriptions/') {
+      return await handleCronSubscriptions(req, res);
     // ========== ANALYTICS ENDPOINTS ==========
     } else if (path === 'analytics/pageview' || path === 'analytics/pageview/') {
       return await handleAnalyticsPageView(req, res);
@@ -567,7 +569,10 @@ function generateTokens(user: any) {
 function mapUser(dbUser: any) {
   let roles = ['user'];
   if (dbUser.roles) {
-    roles = dbUser.roles.split(',').map((r: string) => r.trim());
+    // Handle both array (from Postgres) and string formats
+    roles = Array.isArray(dbUser.roles)
+      ? dbUser.roles
+      : dbUser.roles.split(',').map((r: string) => r.trim());
   }
 
   return {
@@ -3898,30 +3903,51 @@ async function handleCheckoutSessionComplete(req: VercelRequest, res: VercelResp
     const merchantOwnerId = merchantBusiness.merchant_id;
     console.log('[CheckoutComplete] Found merchant business:', merchantBusiness.name, 'Owner:', merchantOwnerId);
 
-    // Get merchant owner's primary wallet
-    const { data: merchantWallet, error: merchantWalletError } = await supabase
+    // Get the business's dedicated wallet to credit
+    // Business wallets have external_id = 'biz_{businessId}' and wallet_type = 'business'
+    const businessWalletExternalId = 'biz_' + session.merchant_id.replace(/-/g, '');
+    let targetWallet: { id: string; balance: number; user_id: string } | null = null;
+
+    // First try to find the business-specific wallet
+    const { data: bizWallet } = await supabase
       .from('wallets')
       .select('id, balance, user_id')
-      .eq('user_id', merchantOwnerId)
-      .eq('wallet_type', 'primary')
+      .eq('external_id', businessWalletExternalId)
       .single();
 
-    if (!merchantWallet) {
-      // Fallback: Try any wallet for this user
-      const { data: anyWallet } = await supabase
+    if (bizWallet) {
+      targetWallet = bizWallet;
+      console.log('[CheckoutComplete] Found business wallet:', targetWallet.id);
+    } else {
+      // Fallback: Try user's merchant wallet
+      const { data: userMerchWallet } = await supabase
         .from('wallets')
         .select('id, balance, user_id')
         .eq('user_id', merchantOwnerId)
-        .limit(1)
+        .eq('wallet_type', 'merchant')
         .single();
 
-      if (!anyWallet) {
-        console.error('[CheckoutComplete] Merchant wallet not found for user:', merchantOwnerId);
-        return res.status(500).json({ error: 'Merchant wallet not found' });
+      if (userMerchWallet) {
+        targetWallet = userMerchWallet;
+      } else {
+        // Last fallback: Try primary wallet
+        const { data: primaryWallet } = await supabase
+          .from('wallets')
+          .select('id, balance, user_id')
+          .eq('user_id', merchantOwnerId)
+          .eq('wallet_type', 'primary')
+          .single();
+
+        targetWallet = primaryWallet;
       }
     }
 
-    const targetWallet = merchantWallet;
+    if (!targetWallet) {
+      console.error('[CheckoutComplete] Business wallet not found for business:', session.merchant_id);
+      return res.status(500).json({ error: 'Business wallet not found' });
+    }
+
+    console.log('[CheckoutComplete] Using wallet:', targetWallet.id, 'for business:', merchantBusiness.name);
     if (targetWallet) {
       const newMerchantBalance = Number(targetWallet.balance) + paymentAmount;
 
@@ -4412,37 +4438,51 @@ async function handleCheckoutScanPay(req: VercelRequest, res: VercelResponse, se
     const merchantOwnerId = merchantBusiness.merchant_id;
     console.log('[ScanPay] Found merchant business:', merchantBusiness.name, 'Owner:', merchantOwnerId);
 
-    // 4. Get merchant owner's wallet to credit
+    // 4. Get the business's dedicated wallet to credit
+    // Business wallets have external_id = 'biz_{businessId}' and wallet_type = 'business'
+    const businessWalletExternalId = 'biz_' + session.merchant_id.replace(/-/g, '');
     let merchantWallet: { id: string; balance: number; user_id: string } | null = null;
 
-    // First try to find primary wallet
-    const { data: primaryWallet } = await supabase
+    // First try to find the business-specific wallet
+    const { data: bizWallet } = await supabase
       .from('wallets')
       .select('id, balance, user_id')
-      .eq('user_id', merchantOwnerId)
-      .eq('wallet_type', 'primary')
+      .eq('external_id', businessWalletExternalId)
       .single();
 
-    if (primaryWallet) {
-      merchantWallet = primaryWallet;
+    if (bizWallet) {
+      merchantWallet = bizWallet;
+      console.log('[ScanPay] Found business wallet:', merchantWallet.id);
     } else {
-      // Fallback: Try any wallet for this user
-      const { data: anyWallet } = await supabase
+      // Fallback: Try user's merchant wallet
+      const { data: userMerchWallet } = await supabase
         .from('wallets')
         .select('id, balance, user_id')
         .eq('user_id', merchantOwnerId)
-        .limit(1)
+        .eq('wallet_type', 'merchant')
         .single();
 
-      merchantWallet = anyWallet;
+      if (userMerchWallet) {
+        merchantWallet = userMerchWallet;
+      } else {
+        // Last fallback: Try primary wallet
+        const { data: primaryWallet } = await supabase
+          .from('wallets')
+          .select('id, balance, user_id')
+          .eq('user_id', merchantOwnerId)
+          .eq('wallet_type', 'primary')
+          .single();
+
+        merchantWallet = primaryWallet;
+      }
     }
 
     if (!merchantWallet) {
-      console.error('[ScanPay] Merchant wallet not found for user:', merchantOwnerId);
-      return res.status(500).json({ error: 'Merchant wallet not found' });
+      console.error('[ScanPay] Business wallet not found for business:', session.merchant_id);
+      return res.status(500).json({ error: 'Business wallet not found' });
     }
 
-    console.log('[ScanPay] Found merchant wallet:', merchantWallet.id);
+    console.log('[ScanPay] Using wallet:', merchantWallet.id, 'for business:', merchantBusiness.name);
 
     // Prevent self-payment
     if (payerUserId === merchantWallet.user_id) {
@@ -7448,10 +7488,13 @@ async function handleSharedUser(req: VercelRequest, res: VercelResponse) {
       throw error;
     }
 
-    // Parse roles from string or single role
+    // Parse roles from array, string, or single role
     let userRoles = ['user'];
     if (user.roles) {
-      userRoles = user.roles.split(',').map((r: string) => r.trim());
+      // Handle both array (from Postgres) and string formats
+      userRoles = Array.isArray(user.roles)
+        ? user.roles
+        : user.roles.split(',').map((r: string) => r.trim());
     } else if (user.role) {
       userRoles = [user.role];
     }
@@ -7754,6 +7797,102 @@ async function handleCronKeepalive(req: VercelRequest, res: VercelResponse) {
       error: error.message,
       timestamp: new Date().toISOString()
     });
+  }
+}
+
+/**
+ * Monthly subscription billing and reminder cron job
+ * Runs on the 1st of each month
+ */
+async function handleCronSubscriptions(req: VercelRequest, res: VercelResponse) {
+  const authHeader = req.headers.authorization;
+  const cronSecret = process.env.CRON_SECRET;
+
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    console.log('[Cron Subscriptions] Starting monthly subscription processing...');
+    const now = new Date();
+    const results = { expiredTrials: 0, expiredSubscriptions: 0, remindersSent: 0, errors: [] as string[] };
+
+    // 1. Expire trials that have ended
+    const { data: expiredTrials } = await supabase
+      .from('merchant_subscriptions')
+      .update({ status: 'expired', updated_at: now.toISOString() })
+      .eq('status', 'trialing')
+      .lt('trial_ends_at', now.toISOString())
+      .select('id, user_id');
+
+    results.expiredTrials = expiredTrials?.length || 0;
+    for (const trial of expiredTrials || []) {
+      await supabase.from('notifications').insert({
+        user_id: trial.user_id, type: 'subscription', title: 'Trial Expired',
+        message: 'Your free trial has ended. Upgrade now to continue using premium features.',
+        data: { subscriptionId: trial.id, action: 'trial_expired' }
+      });
+    }
+
+    // 2. Expire subscriptions that have ended
+    const { data: expiredSubs } = await supabase
+      .from('merchant_subscriptions')
+      .update({ status: 'expired', updated_at: now.toISOString() })
+      .eq('status', 'active')
+      .lt('current_period_end', now.toISOString())
+      .select('id, user_id');
+
+    results.expiredSubscriptions = expiredSubs?.length || 0;
+    for (const sub of expiredSubs || []) {
+      await supabase.from('notifications').insert({
+        user_id: sub.user_id, type: 'subscription', title: 'Subscription Expired',
+        message: 'Your subscription has expired. Renew now to restore access.',
+        data: { subscriptionId: sub.id, action: 'subscription_expired' }
+      });
+    }
+
+    // 3. Send reminders for subscriptions expiring in 7 days
+    const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const { data: expiringSoon } = await supabase
+      .from('merchant_subscriptions')
+      .select('id, user_id, tier, current_period_end, price_monthly')
+      .eq('status', 'active')
+      .gt('current_period_end', now.toISOString())
+      .lte('current_period_end', sevenDaysFromNow.toISOString());
+
+    for (const sub of expiringSoon || []) {
+      const daysLeft = Math.ceil((new Date(sub.current_period_end).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      await supabase.from('notifications').insert({
+        user_id: sub.user_id, type: 'subscription', title: 'Subscription Expiring Soon',
+        message: `Your ${sub.tier} subscription expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}.`,
+        data: { subscriptionId: sub.id, action: 'expiring_soon', daysLeft }
+      });
+      results.remindersSent++;
+    }
+
+    // 4. Send reminders for trials ending in 3 days
+    const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+    const { data: trialsEndingSoon } = await supabase
+      .from('merchant_subscriptions')
+      .select('id, user_id, tier, trial_ends_at, price_monthly')
+      .eq('status', 'trialing')
+      .gt('trial_ends_at', now.toISOString())
+      .lte('trial_ends_at', threeDaysFromNow.toISOString());
+
+    for (const trial of trialsEndingSoon || []) {
+      const daysLeft = Math.ceil((new Date(trial.trial_ends_at).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      await supabase.from('notifications').insert({
+        user_id: trial.user_id, type: 'subscription', title: 'Trial Ending Soon',
+        message: `Your free trial ends in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}.`,
+        data: { subscriptionId: trial.id, action: 'trial_ending_soon', daysLeft }
+      });
+      results.remindersSent++;
+    }
+
+    return res.status(200).json({ success: true, message: 'Subscription cron completed', results });
+  } catch (error: any) {
+    console.error('[Cron Subscriptions] Error:', error);
+    return res.status(500).json({ success: false, error: error.message });
   }
 }
 

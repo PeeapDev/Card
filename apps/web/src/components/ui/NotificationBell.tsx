@@ -33,6 +33,8 @@ import {
   Check,
   Calendar,
   Ticket,
+  MessageSquare,
+  AtSign,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useNavigate, Link } from 'react-router-dom';
@@ -78,6 +80,14 @@ const notificationIcons: Record<NotificationType, typeof Bell> = {
   withdrawal_failed: XCircle,
   transfer_received: ArrowDownLeft,
   transfer_sent: ArrowUpRight,
+  // Chat types
+  chat_message: MessageSquare,
+  chat_mention: AtSign,
+  // Dispute types
+  dispute_filed: AlertTriangle,
+  dispute_message: MessageSquare,
+  dispute_resolved: CheckCircle,
+  dispute_escalated: AlertTriangle,
 };
 
 // Color mapping for notification types
@@ -115,6 +125,14 @@ const notificationColors: Record<NotificationType, string> = {
   withdrawal_failed: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
   transfer_received: 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400',
   transfer_sent: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
+  // Chat types
+  chat_message: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400',
+  chat_mention: 'bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400',
+  // Dispute types
+  dispute_filed: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
+  dispute_message: 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400',
+  dispute_resolved: 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400',
+  dispute_escalated: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
 };
 
 // Format relative time
@@ -399,9 +417,42 @@ export function NotificationBell() {
 
     console.log('[NotificationBell] Setting up realtime subscription for user:', user.id);
 
-    // Subscribe to new notifications in real-time
+    // Handler for new notifications
+    const handleNewNotification = (notification: AppNotification) => {
+      console.log('[NotificationBell] New notification received:', notification);
+
+      // Avoid duplicates
+      setNotifications((prev) => {
+        if (prev.some(n => n.id === notification.id)) return prev;
+        return [notification, ...prev];
+      });
+
+      // Update unread count
+      if (!notification.is_read) {
+        setUnreadCount((prev) => prev + 1);
+      }
+
+      // Show browser notification
+      try {
+        if ('Notification' in window && window.Notification.permission === 'granted') {
+          new window.Notification(notification.title, {
+            body: notification.message,
+            icon: '/favicon.ico',
+          });
+        }
+      } catch (e) {
+        // Browser notification not supported or blocked
+      }
+    };
+
+    // Subscribe to both broadcast and postgres_changes for reliable delivery
     const channel = supabase
-      .channel(`notifications:${user.id}`)
+      .channel(`notifications-${user.id}`)
+      // Broadcast channel for immediate delivery (bypasses RLS)
+      .on('broadcast', { event: 'new_notification' }, (payload) => {
+        handleNewNotification(payload.payload as AppNotification);
+      })
+      // Postgres changes as fallback
       .on(
         'postgres_changes',
         {
@@ -411,25 +462,7 @@ export function NotificationBell() {
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          console.log('[NotificationBell] New notification received:', payload);
-          // Update unread count
-          setUnreadCount((prev) => prev + 1);
-          // If panel is open, add the new notification to the list
-          if (isOpen) {
-            setNotifications((prev) => [payload.new as AppNotification, ...prev]);
-          }
-          // Optional: Play notification sound or show browser notification
-          try {
-            if ('Notification' in window && window.Notification.permission === 'granted') {
-              const notif = payload.new as AppNotification;
-              new window.Notification(notif.title, {
-                body: notif.message,
-                icon: '/favicon.ico',
-              });
-            }
-          } catch (e) {
-            // Browser notification not supported or blocked
-          }
+          handleNewNotification(payload.new as AppNotification);
         }
       )
       .subscribe((status) => {
@@ -443,7 +476,7 @@ export function NotificationBell() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id, isOpen, fetchUnreadCount]);
+  }, [user?.id, fetchUnreadCount]);
 
   // Fetch notifications when panel opens
   useEffect(() => {

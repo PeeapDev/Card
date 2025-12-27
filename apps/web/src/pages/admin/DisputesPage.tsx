@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   AlertTriangle,
   Search,
@@ -17,9 +17,25 @@ import {
   Calendar,
   User,
   Flag,
+  Bot,
+  Sparkles,
+  Loader2,
+  X,
+  ArrowRight,
+  Scale,
+  ShieldAlert,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  RefreshCw,
 } from 'lucide-react';
 import { Card, MotionCard } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { aiService, DisputeAnalysis } from '@/services/ai.service';
+import { supabase } from '@/lib/supabase';
+import { DisputeThread } from '@/components/disputes/DisputeThread';
+import { disputeService, DISPUTE_REASONS, DISPUTE_STATUSES } from '@/services/dispute.service';
+import type { Dispute as DisputeType } from '@/services/dispute.service';
 
 interface Dispute {
   id: string;
@@ -42,8 +58,22 @@ interface Dispute {
 export function DisputesPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'under_review' | 'evidence_required' | 'closed'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [disputes, setDisputes] = useState<Dispute[]>([]);
 
-  const [stats] = useState({
+  // AI Analysis state
+  const [selectedDispute, setSelectedDispute] = useState<Dispute | null>(null);
+  const [showAIModal, setShowAIModal] = useState(false);
+
+  // Detail view state
+  const [showDetailView, setShowDetailView] = useState(false);
+  const [detailDispute, setDetailDispute] = useState<DisputeType | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<DisputeAnalysis | null>(null);
+  const [analyzingDispute, setAnalyzingDispute] = useState(false);
+  const [aiConfigured, setAiConfigured] = useState(false);
+
+  const [stats, setStats] = useState({
     totalDisputes: 0,
     openDisputes: 0,
     underReview: 0,
@@ -54,7 +84,147 @@ export function DisputesPage() {
     avgResolutionTime: 0,
   });
 
-  const [disputes] = useState<Dispute[]>([]);
+  useEffect(() => {
+    fetchDisputes();
+    checkAIConfiguration();
+  }, []);
+
+  const checkAIConfiguration = async () => {
+    await aiService.initialize();
+    setAiConfigured(aiService.isConfigured());
+  };
+
+  const handleViewDispute = async (dispute: Dispute) => {
+    setLoadingDetail(true);
+    setShowDetailView(true);
+    const full = await disputeService.getDispute(dispute.id);
+    setDetailDispute(full);
+    setLoadingDetail(false);
+  };
+
+  const handleCloseDetail = () => {
+    setShowDetailView(false);
+    setDetailDispute(null);
+    fetchDisputes();
+  };
+
+  const handleResolveDispute = async (outcome: 'full_refund' | 'partial_refund' | 'favor_merchant' | 'favor_customer' | 'no_action', notes: string) => {
+    if (!detailDispute) return;
+    await disputeService.resolveDispute(detailDispute.id, { outcome, notes });
+    handleCloseDetail();
+  };
+
+  const fetchDisputes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('disputes')
+        .select(`
+          *,
+          merchant_businesses(name),
+          profiles(full_name, email)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      if (data) {
+        const formatted = data.map((d: any) => ({
+          id: d.id,
+          transactionId: d.transaction_id || '',
+          cardId: '',
+          cardLast4: '',
+          customerId: d.customer_id || '',
+          customerName: d.profiles?.full_name || d.customer_name || 'Unknown',
+          amount: d.amount || 0,
+          currency: d.currency || 'SLE',
+          reason: d.reason || 'general',
+          reasonCode: d.reason?.toUpperCase() || 'GEN',
+          status: d.status || 'open',
+          priority: (d.amount > 500000 ? 'high' : d.amount > 100000 ? 'medium' : 'low') as 'low' | 'medium' | 'high',
+          dueDate: d.due_date || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          createdAt: d.created_at,
+          merchantName: d.merchant_businesses?.name || 'Unknown Merchant',
+          description: d.description,
+          merchantResponse: d.merchant_response,
+        }));
+        setDisputes(formatted);
+
+        // Calculate stats
+        setStats({
+          totalDisputes: formatted.length,
+          openDisputes: formatted.filter(d => d.status === 'open').length,
+          underReview: formatted.filter(d => d.status === 'under_review').length,
+          evidenceRequired: formatted.filter(d => d.status === 'evidence_required').length,
+          won: formatted.filter(d => d.status === 'won').length,
+          lost: formatted.filter(d => d.status === 'lost').length,
+          disputeRate: 0,
+          avgResolutionTime: 0,
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching disputes:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAIAnalyze = async (dispute: Dispute) => {
+    setSelectedDispute(dispute);
+    setShowAIModal(true);
+    setAnalyzingDispute(true);
+    setAiAnalysis(null);
+
+    try {
+      // Check for existing analysis first
+      const existing = await aiService.getDisputeAnalysis(dispute.id);
+      if (existing) {
+        setAiAnalysis(existing);
+        setAnalyzingDispute(false);
+        return;
+      }
+
+      // Run new analysis
+      const analysis = await aiService.analyzeDisputeFull({
+        id: dispute.id,
+        transaction_id: dispute.transactionId,
+        amount: dispute.amount,
+        currency: dispute.currency,
+        transaction_date: dispute.createdAt,
+        reason: dispute.reason,
+        customer_statement: (dispute as any).description || 'No description provided',
+        merchant_response: (dispute as any).merchantResponse,
+        merchant_name: dispute.merchantName,
+        business_name: dispute.merchantName,
+        customer_email: '',
+      });
+
+      setAiAnalysis(analysis);
+    } catch (err) {
+      console.error('AI analysis failed:', err);
+    } finally {
+      setAnalyzingDispute(false);
+    }
+  };
+
+  const getRecommendationColor = (rec: string) => {
+    switch (rec) {
+      case 'favor_merchant': return 'text-green-600 bg-green-100';
+      case 'favor_customer': return 'text-blue-600 bg-blue-100';
+      case 'partial_refund': return 'text-yellow-600 bg-yellow-100';
+      case 'needs_review': return 'text-orange-600 bg-orange-100';
+      default: return 'text-gray-600 bg-gray-100';
+    }
+  };
+
+  const getRecommendationLabel = (rec: string) => {
+    switch (rec) {
+      case 'favor_merchant': return 'Favor Merchant';
+      case 'favor_customer': return 'Favor Customer';
+      case 'partial_refund': return 'Partial Refund';
+      case 'needs_review': return 'Needs Review';
+      default: return 'Insufficient Data';
+    }
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -292,12 +462,29 @@ export function DisputesPage() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
-                          <button className="p-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="View Details">
+                          <button
+                            onClick={() => handleViewDispute(dispute)}
+                            className="p-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
+                            title="View Details & Messages"
+                          >
                             <Eye className="w-4 h-4" />
                           </button>
-                          <button className="p-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="Messages">
+                          <button
+                            onClick={() => handleViewDispute(dispute)}
+                            className="p-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
+                            title="Messages"
+                          >
                             <MessageSquare className="w-4 h-4" />
                           </button>
+                          {aiConfigured && (
+                            <button
+                              onClick={() => handleAIAnalyze(dispute)}
+                              className="p-1 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded hover:bg-purple-200 dark:hover:bg-purple-900/50"
+                              title="AI Analysis"
+                            >
+                              <Bot className="w-4 h-4" />
+                            </button>
+                          )}
                           {dispute.status === 'evidence_required' && (
                             <button className="p-1 bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 rounded hover:bg-orange-200 dark:hover:bg-orange-900/50" title="Upload Evidence">
                               <Upload className="w-4 h-4" />
@@ -340,6 +527,335 @@ export function DisputesPage() {
             </div>
           </div>
         </Card>
+
+        {/* Dispute Detail View with Messaging */}
+        {showDetailView && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+              {/* Header */}
+              <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center">
+                    <MessageSquare className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Dispute Details</h2>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {detailDispute?.id?.substring(0, 8)}... &bull; 3-Way Messaging
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleCloseDetail}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+
+              {/* Content */}
+              {loadingDetail ? (
+                <div className="flex-1 flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+                </div>
+              ) : detailDispute ? (
+                <div className="flex-1 flex flex-col overflow-hidden">
+                  {/* Dispute Thread */}
+                  <div className="flex-1 overflow-hidden">
+                    <DisputeThread
+                      dispute={detailDispute}
+                      userRole="admin"
+                      showAIAnalysis={true}
+                      onStatusChange={() => {
+                        disputeService.getDispute(detailDispute.id).then(setDetailDispute);
+                      }}
+                    />
+                  </div>
+
+                  {/* Resolution Actions */}
+                  {!['resolved', 'won', 'lost', 'closed'].includes(detailDispute.status) && (
+                    <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Quick Actions</p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => handleResolveDispute('favor_customer', 'Customer claim validated - full refund issued')}
+                          className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm flex items-center gap-2"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          Favor Customer
+                        </button>
+                        <button
+                          onClick={() => handleResolveDispute('favor_merchant', 'Merchant evidence supports their position')}
+                          className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm flex items-center gap-2"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          Favor Merchant
+                        </button>
+                        <button
+                          onClick={() => handleResolveDispute('partial_refund', 'Partial refund issued as compromise')}
+                          className="px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-sm flex items-center gap-2"
+                        >
+                          <DollarSign className="w-4 h-4" />
+                          Partial Refund
+                        </button>
+                        <button
+                          onClick={() => disputeService.escalate(detailDispute.id, 'Escalated for senior review')}
+                          className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm flex items-center gap-2"
+                        >
+                          <Flag className="w-4 h-4" />
+                          Escalate
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex-1 flex items-center justify-center py-12">
+                  <p className="text-gray-500">Dispute not found</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* AI Analysis Modal */}
+        {showAIModal && selectedDispute && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-purple-600 to-indigo-600">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                    <Bot className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-white">AI Dispute Analysis</h2>
+                    <p className="text-sm text-white/70 flex items-center gap-1">
+                      <Sparkles className="w-3 h-3" />
+                      Powered by Groq
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowAIModal(false)}
+                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-white" />
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+                {analyzingDispute ? (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <div className="w-16 h-16 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center mb-4 animate-pulse">
+                      <Bot className="w-8 h-8 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <Loader2 className="w-8 h-8 animate-spin text-purple-600 mb-4" />
+                    <p className="text-gray-600 dark:text-gray-300 font-medium">Analyzing dispute...</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Evaluating evidence, history, and patterns</p>
+                  </div>
+                ) : aiAnalysis ? (
+                  <div className="space-y-6">
+                    {/* Dispute Info */}
+                    <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">Dispute ID</p>
+                          <p className="font-mono text-sm">{selectedDispute.id.substring(0, 8)}...</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm text-gray-500 dark:text-gray-400">Amount</p>
+                          <p className="font-semibold text-lg">{formatCurrency(selectedDispute.amount, selectedDispute.currency)}</p>
+                        </div>
+                      </div>
+                      <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600 flex justify-between text-sm">
+                        <span className="text-gray-500">Reason: <span className="text-gray-900 dark:text-white font-medium">{selectedDispute.reason}</span></span>
+                        <span className="text-gray-500">Merchant: <span className="text-gray-900 dark:text-white font-medium">{selectedDispute.merchantName}</span></span>
+                      </div>
+                    </div>
+
+                    {/* AI Recommendation */}
+                    <div className="text-center p-6 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-xl border border-purple-200 dark:border-purple-800">
+                      <p className="text-sm text-purple-600 dark:text-purple-400 font-medium mb-2">AI RECOMMENDATION</p>
+                      <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-lg font-bold ${getRecommendationColor(aiAnalysis.recommendation)}`}>
+                        <Scale className="w-5 h-5" />
+                        {getRecommendationLabel(aiAnalysis.recommendation)}
+                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-300 mt-3">
+                        Confidence: <span className="font-semibold">{aiAnalysis.confidence_score}%</span>
+                      </p>
+                    </div>
+
+                    {/* Likelihood Bars */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-green-800 dark:text-green-300">Merchant Wins</span>
+                          <span className="text-lg font-bold text-green-600">{aiAnalysis.merchant_likelihood}%</span>
+                        </div>
+                        <div className="w-full bg-green-200 dark:bg-green-900/50 rounded-full h-3">
+                          <div
+                            className="bg-green-600 h-3 rounded-full transition-all"
+                            style={{ width: `${aiAnalysis.merchant_likelihood}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-blue-800 dark:text-blue-300">Customer Wins</span>
+                          <span className="text-lg font-bold text-blue-600">{aiAnalysis.customer_likelihood}%</span>
+                        </div>
+                        <div className="w-full bg-blue-200 dark:bg-blue-900/50 rounded-full h-3">
+                          <div
+                            className="bg-blue-600 h-3 rounded-full transition-all"
+                            style={{ width: `${aiAnalysis.customer_likelihood}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Risk & Evidence */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                        <div className="flex items-center gap-2 mb-2">
+                          <ShieldAlert className="w-5 h-5 text-red-500" />
+                          <span className="font-medium">Fraud Risk Score</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className={`text-2xl font-bold ${
+                            aiAnalysis.fraud_risk_score > 70 ? 'text-red-600' :
+                            aiAnalysis.fraud_risk_score > 40 ? 'text-yellow-600' : 'text-green-600'
+                          }`}>{aiAnalysis.fraud_risk_score}%</span>
+                          <span className="text-sm text-gray-500">
+                            {aiAnalysis.fraud_risk_score > 70 ? 'High fraud risk' :
+                             aiAnalysis.fraud_risk_score > 40 ? 'Moderate risk' : 'Low fraud risk'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                        <div className="flex items-center gap-2 mb-2">
+                          <FileText className="w-5 h-5 text-blue-500" />
+                          <span className="font-medium">Evidence Strength</span>
+                        </div>
+                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                          aiAnalysis.evidence_strength === 'strong' ? 'bg-green-100 text-green-700' :
+                          aiAnalysis.evidence_strength === 'moderate' ? 'bg-yellow-100 text-yellow-700' :
+                          aiAnalysis.evidence_strength === 'weak' ? 'bg-orange-100 text-orange-700' :
+                          'bg-red-100 text-red-700'
+                        }`}>
+                          {aiAnalysis.evidence_strength.charAt(0).toUpperCase() + aiAnalysis.evidence_strength.slice(1)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Reasoning */}
+                    <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                      <h4 className="font-medium mb-2 flex items-center gap-2">
+                        <MessageSquare className="w-4 h-4 text-purple-500" />
+                        AI Analysis
+                      </h4>
+                      <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed">{aiAnalysis.reasoning}</p>
+                    </div>
+
+                    {/* Suggested Resolution */}
+                    <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                      <h4 className="font-medium mb-2 flex items-center gap-2 text-indigo-800 dark:text-indigo-300">
+                        <ArrowRight className="w-4 h-4" />
+                        Suggested Resolution
+                      </h4>
+                      <p className="text-indigo-700 dark:text-indigo-300 text-sm">{aiAnalysis.suggested_resolution}</p>
+                      {aiAnalysis.suggested_compensation && (
+                        <p className="mt-2 text-sm font-medium text-indigo-800 dark:text-indigo-200">
+                          Suggested Compensation: {formatCurrency(aiAnalysis.suggested_compensation, selectedDispute.currency)}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Missing Evidence */}
+                    {aiAnalysis.missing_evidence && aiAnalysis.missing_evidence.length > 0 && (
+                      <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                        <h4 className="font-medium mb-2 flex items-center gap-2 text-yellow-800 dark:text-yellow-300">
+                          <AlertTriangle className="w-4 h-4" />
+                          Missing Evidence (Would Strengthen Case)
+                        </h4>
+                        <ul className="list-disc list-inside text-sm text-yellow-700 dark:text-yellow-300 space-y-1">
+                          {aiAnalysis.missing_evidence.map((item, i) => (
+                            <li key={i}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Key Factors */}
+                    {aiAnalysis.key_factors && aiAnalysis.key_factors.length > 0 && (
+                      <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                        <h4 className="font-medium mb-3">Key Decision Factors</h4>
+                        <div className="space-y-2">
+                          {aiAnalysis.key_factors.map((factor, i) => (
+                            <div key={i} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700/50 rounded">
+                              <div className="flex items-center gap-2">
+                                {factor.favors === 'merchant' ? (
+                                  <TrendingUp className="w-4 h-4 text-green-500" />
+                                ) : factor.favors === 'customer' ? (
+                                  <TrendingDown className="w-4 h-4 text-blue-500" />
+                                ) : (
+                                  <Minus className="w-4 h-4 text-gray-400" />
+                                )}
+                                <span className="text-sm font-medium">{factor.factor}</span>
+                              </div>
+                              <span className={`text-xs px-2 py-1 rounded ${
+                                factor.favors === 'merchant' ? 'bg-green-100 text-green-700' :
+                                factor.favors === 'customer' ? 'bg-blue-100 text-blue-700' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>
+                                {factor.favors === 'merchant' ? 'Favors Merchant' :
+                                 factor.favors === 'customer' ? 'Favors Customer' : 'Neutral'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Actions */}
+                    <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                      <button
+                        onClick={() => {
+                          setAiAnalysis(null);
+                          handleAIAnalyze(selectedDispute);
+                        }}
+                        className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center justify-center gap-2"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                        Re-analyze
+                      </button>
+                      <button
+                        onClick={() => setShowAIModal(false)}
+                        className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center justify-center gap-2"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        Use Recommendation
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <AlertTriangle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
+                    <p className="text-gray-600 dark:text-gray-300 font-medium">Analysis Failed</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Please try again or contact support</p>
+                    <button
+                      onClick={() => handleAIAnalyze(selectedDispute)}
+                      className="mt-4 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                    >
+                      Retry Analysis
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </AdminLayout>
   );

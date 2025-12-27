@@ -5,13 +5,15 @@
  */
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
-import { Store, Loader2, AlertCircle, ArrowRight } from 'lucide-react';
+import { useParams, useSearchParams } from 'react-router-dom';
+import { Store, Loader2, AlertCircle, ArrowRight, CheckCircle } from 'lucide-react';
 import { paymentLinkService, PaymentLink } from '@/services/paymentLink.service';
 import { createHostedCheckoutSession } from '@/lib/hostedCheckout';
 
 export function PaymentLinkCheckoutPage() {
   const { businessSlug, linkSlug } = useParams<{ businessSlug: string; linkSlug: string }>();
+  const [searchParams] = useSearchParams();
+  const isSuccess = searchParams.get('success') === 'true';
   const [loading, setLoading] = useState(true);
   const [redirecting, setRedirecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,13 +89,14 @@ export function PaymentLinkCheckoutPage() {
       }
 
       // Create hosted checkout session and redirect
+      // Note: Amount is already in the main currency unit (e.g., Leones, not cents)
       const result = await createHostedCheckoutSession({
         publicKey,
-        amount: amount * 100,
+        amount: amount,
         currency: paymentLink.currency || 'SLE',
         description: paymentLink.description || paymentLink.name,
         reference: `plink_${paymentLink.id}_${Date.now()}`,
-        redirectUrl: paymentLink.success_url || `${window.location.origin}/payment/success`,
+        redirectUrl: paymentLink.success_url || `${window.location.href}?success=true`,
         metadata: {
           payment_link_id: paymentLink.id,
           payment_link_name: paymentLink.name,
@@ -129,6 +132,37 @@ export function PaymentLinkCheckoutPage() {
           <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h1 className="text-xl font-bold mb-2">Payment Link Unavailable</h1>
           <p className="text-gray-500">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Success state - payment completed
+  if (isSuccess) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden">
+          <div className="p-8 bg-gradient-to-br from-green-600 to-green-700 text-white text-center">
+            <CheckCircle className="w-20 h-20 mx-auto mb-4" />
+            <h1 className="text-2xl font-bold mb-2">Payment Successful!</h1>
+            <p className="text-white/80">Thank you for your payment</p>
+          </div>
+          <div className="p-8 text-center">
+            <div className="mb-6">
+              <p className="text-gray-500 text-sm">Paid to</p>
+              <p className="font-bold text-lg">{business?.name || 'Business'}</p>
+            </div>
+            {paymentLink && (
+              <div className="mb-6">
+                <p className="text-gray-500 text-sm">For</p>
+                <p className="font-medium">{paymentLink.name}</p>
+                {!paymentLink.allow_custom_amount && paymentLink.amount && (
+                  <p className="text-2xl font-bold text-green-600 mt-2">{formatAmount(paymentLink.amount)}</p>
+                )}
+              </div>
+            )}
+            <p className="text-gray-400 text-sm">You can close this page now</p>
+          </div>
         </div>
       </div>
     );

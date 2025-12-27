@@ -103,7 +103,7 @@ export function UpgradePrompt({
 
   // Handle upgrade click
   const handleUpgrade = () => {
-    navigate('/merchant/subscription');
+    navigate('/merchant/subscriptions');
     onClose?.();
   };
 

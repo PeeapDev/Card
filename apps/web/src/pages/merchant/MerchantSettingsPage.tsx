@@ -25,23 +25,73 @@ import {
   Puzzle,
   Calendar,
   Palette,
+  Nfc,
+  Wallet,
+  Link2,
+  FileText,
+  Crown,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
 import { useDeveloperMode } from '@/context/DeveloperModeContext';
 import { useApps } from '@/context/AppsContext';
+import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui';
 import { NotificationSettings } from '@/components/settings/NotificationSettings';
 import { NFCAgentSettings } from '@/components/settings/NFCAgentSettings';
 import { ThemeColorSelector } from '@/components/settings/ThemeColorSelector';
+import { AppSetupWizard } from '@/components/apps/AppSetupWizard';
+import { supabase } from '@/lib/supabase';
 
 export function MerchantSettingsPage() {
+  const { user } = useAuth();
   const { isDeveloperMode, toggleDeveloperMode } = useDeveloperMode();
-  const { isAppEnabled, toggleApp } = useApps();
+  const { isAppEnabled, toggleApp, refreshApps, completeAppSetup } = useApps();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'general');
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
+  const [setupWizardApp, setSetupWizardApp] = useState<string | null>(null);
+  const [existingWalletInfo, setExistingWalletInfo] = useState<{ id: string; balance: number } | null>(null);
+  const [wasSetupBefore, setWasSetupBefore] = useState(false);
+
+  // Handler for toggling apps - checks if wallet already exists
+  const handleToggleApp = async (appId: string) => {
+    const currentlyEnabled = isAppEnabled(appId);
+
+    if (currentlyEnabled) {
+      // Disabling - just toggle off, no wizard
+      await toggleApp(appId);
+    } else {
+      // Enabling - first check if a wallet for this app already exists
+      try {
+        const { data: existingWallet } = await supabase
+          .from('wallets')
+          .select('id, balance')
+          .eq('user_id', user?.id)
+          .eq('wallet_type', `app_${appId}`)
+          .single();
+
+        if (existingWallet) {
+          // Wallet already exists - just enable the app silently, no wizard needed
+          await completeAppSetup(appId, existingWallet.id, {
+            reactivated_date: new Date().toISOString(),
+          });
+          await refreshApps();
+          return;
+        }
+      } catch (err) {
+        // No existing wallet found - this is expected for first-time setup
+        console.log('No existing wallet, will show setup wizard');
+      }
+
+      // First time setup - show wizard
+      await toggleApp(appId);
+      setWasSetupBefore(false);
+      setExistingWalletInfo(null);
+      setSetupWizardApp(appId);
+    }
+  };
 
   // Update tab from URL params
   useEffect(() => {
@@ -80,6 +130,46 @@ export function MerchantSettingsPage() {
   // Available apps configuration - enabled state comes from AppsContext
   const availableApps = [
     {
+      id: 'terminal',
+      name: 'Payment Terminal',
+      description: 'Accept contactless payments via NFC tap-to-pay on compatible devices',
+      icon: Nfc,
+      color: 'indigo',
+      enabled: isAppEnabled('terminal'),
+      path: '/merchant/terminal',
+      features: ['NFC payments', 'Tap to pay', 'Quick checkout', 'Receipt generation'],
+    },
+    {
+      id: 'driver_wallet',
+      name: 'Driver Wallet',
+      description: 'Collect payments from drivers and manage transportation revenue',
+      icon: Wallet,
+      color: 'teal',
+      enabled: isAppEnabled('driver_wallet'),
+      path: '/merchant/driver-wallet',
+      features: ['Driver collections', 'Daily settlements', 'Revenue tracking', 'Driver management'],
+    },
+    {
+      id: 'payment_links',
+      name: 'Payment Links',
+      description: 'Create shareable payment links to collect payments from anyone',
+      icon: Link2,
+      color: 'cyan',
+      enabled: isAppEnabled('payment_links'),
+      path: '/merchant/payment-links',
+      features: ['Shareable links', 'Custom amounts', 'QR codes', 'Payment tracking'],
+    },
+    {
+      id: 'invoices',
+      name: 'Invoices',
+      description: 'Create and send professional invoices to your customers',
+      icon: FileText,
+      color: 'slate',
+      enabled: isAppEnabled('invoices'),
+      path: '/merchant/invoices',
+      features: ['Professional invoices', 'Auto reminders', 'Payment tracking', 'PDF export'],
+    },
+    {
       id: 'pos',
       name: 'Point of Sale',
       description: 'Full POS system with inventory, sales tracking, and offline support',
@@ -112,12 +202,13 @@ export function MerchantSettingsPage() {
     {
       id: 'transportation',
       name: 'Transportation',
-      description: 'Payment collection for drivers and bikers on the go',
+      description: 'Full transportation management with driver apps, route tracking, and passenger payments',
       icon: Truck,
       color: 'blue',
       enabled: isAppEnabled('transportation'),
-      comingSoon: true,
-      features: ['Quick payments', 'Route tracking', 'Driver dashboard', 'Daily reports'],
+      requiresPlus: true, // Merchant+ feature
+      path: '/merchant/apps/transportation',
+      features: ['Driver app', 'Route tracking', 'Passenger payments', 'Fleet management'],
     },
   ];
 
@@ -352,6 +443,10 @@ export function MerchantSettingsPage() {
                         purple: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400',
                         orange: 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400',
                         blue: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
+                        indigo: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400',
+                        teal: 'bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400',
+                        cyan: 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400',
+                        slate: 'bg-slate-100 dark:bg-slate-900/30 text-slate-600 dark:text-slate-400',
                       };
 
                       return (
@@ -376,7 +471,13 @@ export function MerchantSettingsPage() {
                                       Coming Soon
                                     </span>
                                   )}
-                                  {app.enabled && !app.comingSoon && (
+                                  {app.requiresPlus && (
+                                    <span className="px-2 py-0.5 bg-gradient-to-r from-amber-200 to-orange-200 dark:from-amber-900/50 dark:to-orange-900/50 text-amber-700 dark:text-amber-400 text-xs rounded-full flex items-center gap-1">
+                                      <Crown className="w-3 h-3" />
+                                      Merchant+
+                                    </span>
+                                  )}
+                                  {app.enabled && !app.comingSoon && !app.requiresPlus && (
                                     <span className="px-2 py-0.5 bg-green-200 dark:bg-green-900/50 text-green-700 dark:text-green-400 text-xs rounded-full">
                                       Active
                                     </span>
@@ -400,10 +501,10 @@ export function MerchantSettingsPage() {
 
                             {/* Actions - Toggle and Open */}
                             <div className="flex items-center gap-3 flex-shrink-0">
-                              {/* Toggle Switch */}
-                              {!app.comingSoon && (
+                              {/* Toggle Switch - not for comingSoon or requiresPlus */}
+                              {!app.comingSoon && !app.requiresPlus && (
                                 <button
-                                  onClick={() => toggleApp(app.id)}
+                                  onClick={() => handleToggleApp(app.id)}
                                   className="text-gray-600 dark:text-gray-400"
                                   title={app.enabled ? 'Disable app' : 'Enable app'}
                                 >
@@ -416,7 +517,7 @@ export function MerchantSettingsPage() {
                               )}
 
                               {/* Open App Button */}
-                              {app.enabled && app.path && !app.comingSoon ? (
+                              {app.enabled && app.path && !app.comingSoon && !app.requiresPlus ? (
                                 <Button
                                   onClick={() => navigate(app.path!)}
                                   size="sm"
@@ -427,6 +528,15 @@ export function MerchantSettingsPage() {
                               ) : app.comingSoon ? (
                                 <Button variant="outline" size="sm" disabled>
                                   Coming Soon
+                                </Button>
+                              ) : app.requiresPlus ? (
+                                <Button
+                                  onClick={() => navigate('/merchant/upgrade')}
+                                  size="sm"
+                                  className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600"
+                                >
+                                  <Crown className="w-3 h-3 mr-2" />
+                                  Upgrade
                                 </Button>
                               ) : null}
                             </div>
@@ -458,6 +568,66 @@ export function MerchantSettingsPage() {
                   <Card className="p-6">
                     <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Quick Access</h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {isAppEnabled('terminal') && (
+                        <button
+                          onClick={() => navigate('/merchant/terminal')}
+                          className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors text-left"
+                        >
+                          <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+                            <Nfc className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900 dark:text-white">Payment Terminal</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Accept NFC payments</p>
+                          </div>
+                          <ChevronRight className="w-4 h-4 ml-auto text-gray-400" />
+                        </button>
+                      )}
+                      {isAppEnabled('driver_wallet') && (
+                        <button
+                          onClick={() => navigate('/merchant/driver-wallet')}
+                          className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors text-left"
+                        >
+                          <div className="p-2 bg-teal-100 dark:bg-teal-900/30 rounded-lg">
+                            <Wallet className="w-5 h-5 text-teal-600 dark:text-teal-400" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900 dark:text-white">Driver Wallet</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Collect from drivers</p>
+                          </div>
+                          <ChevronRight className="w-4 h-4 ml-auto text-gray-400" />
+                        </button>
+                      )}
+                      {isAppEnabled('payment_links') && (
+                        <button
+                          onClick={() => navigate('/merchant/payment-links')}
+                          className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors text-left"
+                        >
+                          <div className="p-2 bg-cyan-100 dark:bg-cyan-900/30 rounded-lg">
+                            <Link2 className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900 dark:text-white">Payment Links</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Create payment links</p>
+                          </div>
+                          <ChevronRight className="w-4 h-4 ml-auto text-gray-400" />
+                        </button>
+                      )}
+                      {isAppEnabled('invoices') && (
+                        <button
+                          onClick={() => navigate('/merchant/invoices')}
+                          className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors text-left"
+                        >
+                          <div className="p-2 bg-slate-100 dark:bg-slate-900/30 rounded-lg">
+                            <FileText className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900 dark:text-white">Invoices</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Manage invoices</p>
+                          </div>
+                          <ChevronRight className="w-4 h-4 ml-auto text-gray-400" />
+                        </button>
+                      )}
                       {isAppEnabled('pos') && (
                         <button
                           onClick={() => navigate('/merchant/apps/pos')}
@@ -491,6 +661,122 @@ export function MerchantSettingsPage() {
                     </div>
                   </Card>
                 )}
+
+                {/* Merchant+ Exclusive Apps */}
+                <Card className="p-6 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border-amber-200 dark:border-amber-800">
+                  <div className="flex items-start gap-4 mb-6">
+                    <div className="p-3 bg-gradient-to-br from-amber-400 to-orange-500 rounded-xl shadow-lg shadow-orange-500/30">
+                      <Crown className="w-6 h-6 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-gray-900 dark:text-white">Merchant+ Exclusive Apps</h3>
+                        <span className="px-2 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-medium rounded-full">
+                          PRO
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                        Unlock advanced business tools with Merchant+ subscription
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    {/* Transportation */}
+                    <div className="p-4 bg-white/60 dark:bg-gray-800/60 rounded-xl border border-amber-200/50 dark:border-amber-700/50">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                          <Truck className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-900 dark:text-white">Transportation</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                            Full fleet management with driver apps
+                          </p>
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-[10px] rounded">Driver App</span>
+                            <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-[10px] rounded">Route Tracking</span>
+                            <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-[10px] rounded">Fleet Analytics</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Multi-Branch */}
+                    <div className="p-4 bg-white/60 dark:bg-gray-800/60 rounded-xl border border-amber-200/50 dark:border-amber-700/50">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                          <Building className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-900 dark:text-white">Multi-Branch Management</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                            Manage multiple business locations
+                          </p>
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-[10px] rounded">Branch Analytics</span>
+                            <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-[10px] rounded">Staff Roles</span>
+                            <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-[10px] rounded">Unified Reports</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Advanced Analytics */}
+                    <div className="p-4 bg-white/60 dark:bg-gray-800/60 rounded-xl border border-amber-200/50 dark:border-amber-700/50">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
+                          <Package className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-900 dark:text-white">Advanced Inventory</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                            Supplier management & auto-ordering
+                          </p>
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-[10px] rounded">Suppliers</span>
+                            <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-[10px] rounded">Auto-Order</span>
+                            <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-[10px] rounded">Stock Alerts</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* API Access */}
+                    <div className="p-4 bg-white/60 dark:bg-gray-800/60 rounded-xl border border-amber-200/50 dark:border-amber-700/50">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+                          <Code2 className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-900 dark:text-white">Full API Access</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                            Custom integrations & webhooks
+                          </p>
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-[10px] rounded">REST API</span>
+                            <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-[10px] rounded">Webhooks</span>
+                            <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-[10px] rounded">SDK</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-center gap-4">
+                    <Button
+                      onClick={() => window.open('https://plus.peeap.com', '_blank')}
+                      className="w-full sm:w-auto bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-lg shadow-orange-500/30"
+                    >
+                      <Crown className="w-4 h-4 mr-2" />
+                      Upgrade to Merchant+
+                      <ExternalLink className="w-4 h-4 ml-2" />
+                    </Button>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 text-center sm:text-left">
+                      Starting at Le 50,000/month. Cancel anytime.
+                    </p>
+                  </div>
+                </Card>
               </div>
             )}
 
@@ -616,6 +902,27 @@ export function MerchantSettingsPage() {
           </div>
         </div>
       </div>
+
+      {/* App Setup Wizard Modal */}
+      {setupWizardApp && (
+        <AppSetupWizard
+          appId={setupWizardApp}
+          isOpen={true}
+          onClose={() => {
+            setSetupWizardApp(null);
+            setExistingWalletInfo(null);
+            setWasSetupBefore(false);
+          }}
+          onComplete={() => {
+            setSetupWizardApp(null);
+            setExistingWalletInfo(null);
+            setWasSetupBefore(false);
+            refreshApps();
+          }}
+          existingWallet={existingWalletInfo}
+          wasSetupBefore={wasSetupBefore}
+        />
+      )}
     </MerchantLayout>
   );
 }

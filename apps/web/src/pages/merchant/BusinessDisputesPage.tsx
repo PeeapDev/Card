@@ -24,12 +24,19 @@ import {
   Send,
   XCircle,
   RefreshCw,
+  Bot,
+  Sparkles,
+  Lightbulb,
+  Copy,
 } from 'lucide-react';
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
 import { Card } from '@/components/ui/Card';
 import { MerchantBusiness } from '@/services/business.service';
 import { supabase } from '@/lib/supabase';
 import { formatCurrency } from '@/lib/currency';
+import { aiService } from '@/services/ai.service';
+import { DisputeThread } from '@/components/disputes/DisputeThread';
+import { disputeService, Dispute as DisputeType, DISPUTE_REASONS } from '@/services/dispute.service';
 
 interface Dispute {
   id: string;
@@ -60,6 +67,9 @@ export function MerchantBusinessDisputesPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedDispute, setSelectedDispute] = useState<Dispute | null>(null);
   const [showResponseModal, setShowResponseModal] = useState(false);
+  const [showMessageView, setShowMessageView] = useState(false);
+  const [detailDispute, setDetailDispute] = useState<DisputeType | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
   const [responseText, setResponseText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [stats, setStats] = useState({
@@ -71,11 +81,76 @@ export function MerchantBusinessDisputesPage() {
     totalAmount: 0,
   });
 
+  // AI Assistance state
+  const [aiConfigured, setAiConfigured] = useState(false);
+  const [generatingAiResponse, setGeneratingAiResponse] = useState(false);
+  const [aiSuggestion, setAiSuggestion] = useState<{
+    suggested_response: string;
+    evidence_to_include: string[];
+    strength_assessment: 'strong' | 'moderate' | 'weak';
+    tips: string[];
+  } | null>(null);
+
   useEffect(() => {
     if (businessId) {
       fetchData();
     }
+    checkAiConfiguration();
   }, [businessId]);
+
+  const checkAiConfiguration = async () => {
+    await aiService.initialize();
+    setAiConfigured(aiService.isConfigured());
+  };
+
+  const generateAiResponse = async (dispute: Dispute) => {
+    if (!business) return;
+
+    setGeneratingAiResponse(true);
+    setAiSuggestion(null);
+
+    try {
+      const suggestion = await aiService.generateMerchantResponse({
+        reason: dispute.reason,
+        customer_statement: dispute.description || 'No description provided',
+        amount: dispute.amount,
+        currency: dispute.currency || 'SLE',
+        transaction_date: dispute.created_at,
+        business_name: business.name,
+        transaction_details: {},
+        has_delivery_proof: false,
+        has_communication_proof: false,
+      });
+
+      setAiSuggestion(suggestion);
+    } catch (err) {
+      console.error('Failed to generate AI response:', err);
+    } finally {
+      setGeneratingAiResponse(false);
+    }
+  };
+
+  const useAiSuggestion = () => {
+    if (aiSuggestion) {
+      setResponseText(aiSuggestion.suggested_response);
+    }
+  };
+
+  const handleOpenMessageView = async (dispute: Dispute) => {
+    setLoadingDetail(true);
+    setShowMessageView(true);
+    setSelectedDispute(dispute);
+    const full = await disputeService.getDispute(dispute.id);
+    setDetailDispute(full);
+    setLoadingDetail(false);
+  };
+
+  const handleCloseMessageView = () => {
+    setShowMessageView(false);
+    setDetailDispute(null);
+    setSelectedDispute(null);
+    fetchData();
+  };
 
   const fetchData = async () => {
     if (!businessId) return;
@@ -410,124 +485,255 @@ export function MerchantBusinessDisputesPage() {
           )}
         </Card>
 
-        {/* Dispute Detail Modal */}
-        {selectedDispute && !showResponseModal && (
+        {/* Dispute Detail Modal with Messaging */}
+        {selectedDispute && !showResponseModal && !showMessageView && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">Dispute Details</h2>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Dispute Details</h2>
                 <button
                   onClick={() => setSelectedDispute(null)}
-                  className="p-2 hover:bg-gray-100 rounded-lg"
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
                 >
                   <X className="w-5 h-5 text-gray-500" />
                 </button>
               </div>
               <div className="p-4 space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-500">Status</span>
+                  <span className="text-gray-500 dark:text-gray-400">Status</span>
                   {getStatusBadge(selectedDispute.status)}
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-500">Reason</span>
-                  <span className="font-medium text-gray-900">{getReasonLabel(selectedDispute.reason)}</span>
+                  <span className="text-gray-500 dark:text-gray-400">Reason</span>
+                  <span className="font-medium text-gray-900 dark:text-white">{getReasonLabel(selectedDispute.reason)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-500">Amount</span>
-                  <span className="font-semibold text-gray-900">
+                  <span className="text-gray-500 dark:text-gray-400">Amount</span>
+                  <span className="font-semibold text-gray-900 dark:text-white">
                     {formatCurrency(selectedDispute.amount, selectedDispute.currency)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-500">Dispute ID</span>
-                  <code className="text-sm bg-gray-100 px-2 py-1 rounded font-mono">{selectedDispute.id}</code>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-500">Transaction ID</span>
-                  <code className="text-sm bg-gray-100 px-2 py-1 rounded font-mono">{selectedDispute.transaction_id}</code>
+                  <span className="text-gray-500 dark:text-gray-400">Dispute ID</span>
+                  <code className="text-sm bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded font-mono">{selectedDispute.id.substring(0, 12)}...</code>
                 </div>
                 {selectedDispute.customer_email && (
                   <div className="flex items-center justify-between">
-                    <span className="text-gray-500">Customer Email</span>
-                    <span className="text-gray-900">{selectedDispute.customer_email}</span>
-                  </div>
-                )}
-                {selectedDispute.customer_name && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-500">Customer Name</span>
-                    <span className="text-gray-900">{selectedDispute.customer_name}</span>
+                    <span className="text-gray-500 dark:text-gray-400">Customer</span>
+                    <span className="text-gray-900 dark:text-white">{selectedDispute.customer_name || selectedDispute.customer_email}</span>
                   </div>
                 )}
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-500">Created</span>
-                  <span className="text-gray-900">{formatDate(selectedDispute.created_at)}</span>
+                  <span className="text-gray-500 dark:text-gray-400">Created</span>
+                  <span className="text-gray-900 dark:text-white">{formatDate(selectedDispute.created_at)}</span>
                 </div>
-                {selectedDispute.resolved_at && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-500">Resolved</span>
-                    <span className="text-gray-900">{formatDate(selectedDispute.resolved_at)}</span>
-                  </div>
-                )}
 
                 {selectedDispute.description && (
                   <div>
-                    <span className="text-gray-500 block mb-2">Description</span>
-                    <p className="text-gray-900 bg-gray-50 p-3 rounded-lg">{selectedDispute.description}</p>
-                  </div>
-                )}
-
-                {selectedDispute.merchant_response && (
-                  <div>
-                    <span className="text-gray-500 block mb-2">Your Response</span>
-                    <p className="text-gray-900 bg-green-50 p-3 rounded-lg border border-green-200">{selectedDispute.merchant_response}</p>
+                    <span className="text-gray-500 dark:text-gray-400 block mb-2">Customer's Complaint</span>
+                    <p className="text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">{selectedDispute.description}</p>
                   </div>
                 )}
 
                 {selectedDispute.resolution && (
                   <div>
-                    <span className="text-gray-500 block mb-2">Resolution</span>
-                    <p className="text-gray-900 bg-blue-50 p-3 rounded-lg border border-blue-200">{selectedDispute.resolution}</p>
+                    <span className="text-gray-500 dark:text-gray-400 block mb-2">Resolution</span>
+                    <p className="text-gray-900 dark:text-white bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">{selectedDispute.resolution}</p>
                   </div>
                 )}
 
                 {/* Action Buttons */}
-                {(selectedDispute.status === 'open' || selectedDispute.status === 'pending') && !selectedDispute.merchant_response && (
-                  <div className="flex gap-3 pt-4 border-t border-gray-200">
+                <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <button
+                    onClick={() => handleOpenMessageView(selectedDispute)}
+                    className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    View Conversation
+                  </button>
+                  {(selectedDispute.status === 'open' || selectedDispute.status === 'pending' || selectedDispute.status === 'pending_merchant') && (
                     <button
                       onClick={() => setShowResponseModal(true)}
-                      className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
+                      className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center justify-center gap-2"
                     >
-                      <MessageSquare className="w-4 h-4" />
-                      Submit Response
+                      <Bot className="w-4 h-4" />
+                      AI Response
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Response Modal */}
+        {/* Message View Modal */}
+        {showMessageView && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+              {/* Header */}
+              <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+                    <MessageSquare className="w-5 h-5 text-green-600 dark:text-green-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Dispute Conversation</h2>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {detailDispute ? `${DISPUTE_REASONS[detailDispute.reason as keyof typeof DISPUTE_REASONS] || detailDispute.reason} - ${detailDispute.currency} ${detailDispute.amount.toLocaleString()}` : 'Loading...'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleCloseMessageView}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+
+              {/* Content */}
+              {loadingDetail ? (
+                <div className="flex-1 flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+                </div>
+              ) : detailDispute ? (
+                <div className="flex-1 overflow-hidden">
+                  <DisputeThread
+                    dispute={detailDispute}
+                    userRole="merchant"
+                    onStatusChange={() => {
+                      disputeService.getDispute(detailDispute.id).then(setDetailDispute);
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="flex-1 flex items-center justify-center py-12">
+                  <p className="text-gray-500">Dispute not found</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Response Modal with AI Assistance */}
         {showResponseModal && selectedDispute && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4">
+            <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden">
               <div className="flex items-center justify-between p-4 border-b border-gray-200">
                 <h2 className="text-lg font-semibold text-gray-900">Submit Response</h2>
                 <button
                   onClick={() => {
                     setShowResponseModal(false);
                     setResponseText('');
+                    setAiSuggestion(null);
                   }}
                   className="p-2 hover:bg-gray-100 rounded-lg"
                 >
                   <X className="w-5 h-5 text-gray-500" />
                 </button>
               </div>
-              <div className="p-4 space-y-4">
+              <div className="p-4 space-y-4 overflow-y-auto max-h-[calc(90vh-120px)]">
                 <div className="bg-gray-50 p-3 rounded-lg">
                   <p className="text-sm text-gray-500 mb-1">Dispute: {getReasonLabel(selectedDispute.reason)}</p>
                   <p className="font-semibold text-gray-900">{formatCurrency(selectedDispute.amount, selectedDispute.currency)}</p>
+                  {selectedDispute.description && (
+                    <p className="mt-2 text-sm text-gray-600 bg-white p-2 rounded border border-gray-100">
+                      <strong>Customer says:</strong> {selectedDispute.description}
+                    </p>
+                  )}
                 </div>
+
+                {/* AI Assistance Section */}
+                {aiConfigured && (
+                  <div className="border border-purple-200 rounded-lg overflow-hidden">
+                    <div className="bg-gradient-to-r from-purple-50 to-indigo-50 p-3 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Bot className="w-5 h-5 text-purple-600" />
+                        <span className="font-medium text-purple-800">AI Response Assistant</span>
+                        <Sparkles className="w-4 h-4 text-purple-500" />
+                      </div>
+                      {!aiSuggestion && !generatingAiResponse && (
+                        <button
+                          onClick={() => generateAiResponse(selectedDispute)}
+                          className="px-3 py-1 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 flex items-center gap-1"
+                        >
+                          <Lightbulb className="w-4 h-4" />
+                          Get Suggestion
+                        </button>
+                      )}
+                    </div>
+
+                    {generatingAiResponse && (
+                      <div className="p-4 flex items-center justify-center gap-3">
+                        <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
+                        <span className="text-sm text-gray-600">Generating professional response...</span>
+                      </div>
+                    )}
+
+                    {aiSuggestion && (
+                      <div className="p-4 space-y-3">
+                        {/* Strength Assessment */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-gray-500">Case Strength:</span>
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                            aiSuggestion.strength_assessment === 'strong' ? 'bg-green-100 text-green-700' :
+                            aiSuggestion.strength_assessment === 'moderate' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-red-100 text-red-700'
+                          }`}>
+                            {aiSuggestion.strength_assessment.charAt(0).toUpperCase() + aiSuggestion.strength_assessment.slice(1)}
+                          </span>
+                        </div>
+
+                        {/* Suggested Response */}
+                        <div className="bg-white border border-gray-200 rounded-lg p-3">
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap">{aiSuggestion.suggested_response}</p>
+                        </div>
+
+                        {/* Evidence to Include */}
+                        {aiSuggestion.evidence_to_include.length > 0 && (
+                          <div className="bg-blue-50 p-3 rounded-lg">
+                            <p className="text-sm font-medium text-blue-800 mb-2">Evidence to Include:</p>
+                            <ul className="list-disc list-inside text-sm text-blue-700 space-y-1">
+                              {aiSuggestion.evidence_to_include.map((item, i) => (
+                                <li key={i}>{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Tips */}
+                        {aiSuggestion.tips.length > 0 && (
+                          <div className="bg-yellow-50 p-3 rounded-lg">
+                            <p className="text-sm font-medium text-yellow-800 mb-2">Tips to Strengthen Your Case:</p>
+                            <ul className="list-disc list-inside text-sm text-yellow-700 space-y-1">
+                              {aiSuggestion.tips.map((tip, i) => (
+                                <li key={i}>{tip}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={useAiSuggestion}
+                            className="flex-1 px-3 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 flex items-center justify-center gap-1"
+                          >
+                            <Copy className="w-4 h-4" />
+                            Use This Response
+                          </button>
+                          <button
+                            onClick={() => generateAiResponse(selectedDispute)}
+                            className="px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 flex items-center justify-center gap-1"
+                          >
+                            <RefreshCw className="w-4 h-4" />
+                            Regenerate
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -551,6 +757,7 @@ export function MerchantBusinessDisputesPage() {
                     onClick={() => {
                       setShowResponseModal(false);
                       setResponseText('');
+                      setAiSuggestion(null);
                     }}
                     className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50"
                   >

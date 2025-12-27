@@ -1,4 +1,4 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import {
@@ -26,12 +26,10 @@ import {
   ShoppingBag,
   ClipboardList,
   Package,
-  Banknote,
   ChevronDown,
   ChevronRight,
   Briefcase,
   Store,
-  Headphones,
   PackagePlus,
   Puzzle,
   Mail,
@@ -43,11 +41,14 @@ import {
   ExternalLink,
   Globe,
   FileText,
+  Bot,
+  User,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { AdminNotificationBell } from '@/components/ui/AdminNotificationBell';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { NFCIndicator } from '@/components/nfc';
+import { ProfileAvatar } from '@/components/ui/ProfileAvatar';
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -130,6 +131,7 @@ const navSections: NavSection[] = [
     title: 'Settings',
     items: [
       { path: '/admin/site-settings', label: 'Site Settings', icon: Globe, badge: 'New', badgeColor: 'primary' },
+      { path: '/admin/ai-settings', label: 'AI Settings', icon: Bot, badge: 'New', badgeColor: 'primary' },
       { path: '/admin/modules', label: 'Modules', icon: Puzzle },
       { path: '/admin/roles', label: 'Role Management', icon: UserCog },
       { path: '/admin/payment-settings', label: 'Payment Settings', icon: Settings },
@@ -145,23 +147,30 @@ const navSections: NavSection[] = [
       { path: '/admin/fuel-stations', label: 'Fuel Stations', icon: Fuel, badge: 'New', badgeColor: 'primary' },
     ],
   },
-  {
-    title: 'Support',
-    items: [
-      { path: '/admin/support', label: 'Support Tickets', icon: Headphones },
-      { path: '/admin/notifications', label: 'Notifications', icon: Bell, badge: 'New', badgeColor: 'primary' },
-    ],
-  },
 ];
 
 export function AdminLayout({ children }: AdminLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
   // Track which sections are expanded (by section title) - all collapsed by default
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+
+  // Close user menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const toggleSection = (title: string) => {
     // Accordion behavior: close all others, open the clicked one
@@ -321,30 +330,6 @@ export function AdminLayout({ children }: AdminLayoutProps) {
               );
             })}
           </nav>
-
-          {/* User section */}
-          <div className="p-4 border-t border-gray-700">
-            <div className="flex items-center mb-3">
-              <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center">
-                <span className="text-white font-medium">
-                  {user?.firstName?.charAt(0)}{user?.lastName?.charAt(0)}
-                </span>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-white">
-                  {user?.firstName} {user?.lastName}
-                </p>
-                <p className="text-xs text-gray-400">Administrator</p>
-              </div>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="flex items-center w-full px-4 py-2 text-gray-300 rounded-lg hover:bg-gray-800 hover:text-white transition-colors text-sm"
-            >
-              <LogOut className="w-5 h-5 mr-3" />
-              Sign out
-            </button>
-          </div>
         </div>
       </aside>
 
@@ -386,6 +371,74 @@ export function AdminLayout({ children }: AdminLayoutProps) {
               <NFCIndicator />
               <ThemeToggle />
               <AdminNotificationBell />
+
+              {/* User Avatar Dropdown */}
+              <div className="relative" ref={userMenuRef}>
+                <button
+                  onClick={() => setUserMenuOpen(!userMenuOpen)}
+                  className="flex items-center gap-2 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                  aria-expanded={userMenuOpen}
+                  aria-haspopup="true"
+                >
+                  <ProfileAvatar
+                    firstName={user?.firstName}
+                    lastName={user?.lastName}
+                    profilePicture={user?.profilePicture}
+                    size="sm"
+                    className="w-9 h-9 border-2 border-primary-200 dark:border-primary-600"
+                  />
+                  <ChevronDown
+                    className={clsx(
+                      'w-4 h-4 text-gray-500 dark:text-gray-400 transition-transform hidden sm:block',
+                      userMenuOpen && 'rotate-180'
+                    )}
+                  />
+                </button>
+
+                {/* Dropdown Menu */}
+                {userMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-56 rounded-xl shadow-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 py-2 z-50">
+                    {/* User Info */}
+                    <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                        {user?.firstName} {user?.lastName}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                        {user?.email}
+                      </p>
+                      <span className="inline-block mt-1 px-2 py-0.5 text-xs font-medium bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 rounded">
+                        Administrator
+                      </span>
+                    </div>
+
+                    {/* Menu Items */}
+                    <div className="py-1">
+                      <Link
+                        to="/admin/site-settings"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                      >
+                        <Settings className="w-4 h-4" />
+                        Settings
+                      </Link>
+                    </div>
+
+                    {/* Logout */}
+                    <div className="border-t border-gray-100 dark:border-gray-700 pt-1">
+                      <button
+                        onClick={() => {
+                          setUserMenuOpen(false);
+                          handleLogout();
+                        }}
+                        className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        Sign out
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </header>

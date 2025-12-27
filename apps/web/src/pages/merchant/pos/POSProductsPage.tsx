@@ -28,6 +28,8 @@ import {
 } from 'lucide-react';
 import posService, { POSProduct, POSCategory } from '@/services/pos.service';
 import storageService from '@/services/storage.service';
+import { useLimitCheck } from '@/hooks/useTierLimits';
+import { UpgradeLimitPrompt } from '@/components/subscription/UpgradeLimitPrompt';
 
 // Format currency - using Le (Leone) symbol
 const formatCurrency = (amount: number) => {
@@ -40,6 +42,18 @@ export function POSProductsPage() {
 
   // Use user.id as the merchant ID (no separate business needed)
   const merchantId = user?.id;
+
+  // Tier limit check for products
+  const {
+    tier,
+    limit: productLimit,
+    canAdd: canAddProduct,
+    tryAdd: tryAddProduct,
+    getRemaining: getRemainingProducts,
+    showUpgradePrompt,
+    closePrompt: closeUpgradePrompt,
+    lastCheckResult,
+  } = useLimitCheck('products');
 
   // State
   const [loading, setLoading] = useState(true);
@@ -137,24 +151,12 @@ export function POSProductsPage() {
 
   // Product form handlers
   const openProductModal = (product?: POSProduct) => {
-    if (product) {
-      setEditingProduct(product);
-      setProductForm({
-        name: product.name,
-        description: product.description || '',
-        category_id: product.category_id || '',
-        sku: product.sku || '',
-        barcode: product.barcode || '',
-        price: product.price.toString(),
-        cost_price: product.cost_price?.toString() || '',
-        image_url: product.image_url || '',
-        track_inventory: product.track_inventory,
-        stock_quantity: product.stock_quantity.toString(),
-        low_stock_threshold: product.low_stock_threshold.toString(),
-        is_featured: product.is_featured,
-      });
-      setImagePreview(product.image_url || null);
-    } else {
+    // If adding new product, check limits first
+    if (!product) {
+      if (!tryAddProduct(products.length)) {
+        // Limit reached - the hook will show the upgrade prompt
+        return;
+      }
       setEditingProduct(null);
       setProductForm({
         name: '',
@@ -171,6 +173,24 @@ export function POSProductsPage() {
         is_featured: false,
       });
       setImagePreview(null);
+    } else {
+      // Editing existing product - no limit check needed
+      setEditingProduct(product);
+      setProductForm({
+        name: product.name,
+        description: product.description || '',
+        category_id: product.category_id || '',
+        sku: product.sku || '',
+        barcode: product.barcode || '',
+        price: product.price.toString(),
+        cost_price: product.cost_price?.toString() || '',
+        image_url: product.image_url || '',
+        track_inventory: product.track_inventory,
+        stock_quantity: product.stock_quantity.toString(),
+        low_stock_threshold: product.low_stock_threshold.toString(),
+        is_featured: product.is_featured,
+      });
+      setImagePreview(product.image_url || null);
     }
     setShowProductModal(true);
   };
@@ -371,12 +391,25 @@ export function POSProductsPage() {
               <p className="text-sm text-gray-500 dark:text-gray-400">{business?.name}</p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-3">
+            {/* Product limit indicator */}
+            {productLimit !== -1 && (
+              <div className={`text-sm px-3 py-1 rounded-full ${
+                getRemainingProducts(products.length) <= 2
+                  ? 'bg-amber-100 text-amber-700'
+                  : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+              }`}>
+                {products.length}/{productLimit} products
+              </div>
+            )}
             <Button variant="outline" onClick={() => openCategoryModal()}>
               <Tag className="w-4 h-4 mr-2" />
               Add Category
             </Button>
-            <Button onClick={() => openProductModal()}>
+            <Button
+              onClick={() => openProductModal()}
+              disabled={productLimit !== -1 && !canAddProduct(products.length)}
+            >
               <Plus className="w-4 h-4 mr-2" />
               Add Product
             </Button>
@@ -903,6 +936,18 @@ export function POSProductsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Upgrade Prompt Modal */}
+      {showUpgradePrompt && lastCheckResult && (
+        <UpgradeLimitPrompt
+          limitType="products"
+          currentCount={lastCheckResult.current}
+          limit={lastCheckResult.limit}
+          currentTier={tier}
+          onClose={closeUpgradePrompt}
+          variant="modal"
+        />
       )}
     </MerchantLayout>
   );

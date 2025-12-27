@@ -22,19 +22,23 @@ import {
   Settings,
   ChevronDown,
   ShieldAlert,
+  MessageSquare,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useUserApps } from '@/context/UserAppsContext';
 import { useThemeColor } from '@/context/ThemeColorContext';
 import { NotificationBell } from '@/components/ui/NotificationBell';
+import { MessageBell } from '@/components/ui/MessageBell';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { RoleSwitcher } from '@/components/ui/RoleSwitcher';
 import { NFCIndicator } from '@/components/nfc';
 import { supabase } from '@/lib/supabase';
 import { SkipLink } from '@/components/ui/SkipLink';
 import { ProfileAvatar } from '@/components/ui/ProfileAvatar';
+import { notificationService } from '@/services/notification.service';
 import { VerificationModal } from '@/components/kyc/VerificationModal';
 import { useVerification } from '@/hooks/useVerification';
+import { MobileFooterNav } from '@/components/ui/MobileFooterNav';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -50,12 +54,14 @@ const navItems = [
   // Cash Box is added dynamically based on user settings
   { path: '/cards', label: 'Cards', icon: CreditCard },
   { path: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
+  { path: '/messages', label: 'Messages', icon: MessageSquare },
   { path: '/support', label: 'Help & Support', icon: HelpCircle },
 ];
 
 export function MainLayout({ children }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
   const [hasStaffPositions, setHasStaffPositions] = useState(false);
   const [hasEventStaffPositions, setHasEventStaffPositions] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -144,6 +150,43 @@ export function MainLayout({ children }: MainLayoutProps) {
     };
 
     checkStaffPositions();
+  }, [user?.id]);
+
+  // Fetch unread chat message count
+  useEffect(() => {
+    const fetchUnreadChatCount = async () => {
+      if (!user?.id) return;
+      try {
+        const count = await notificationService.getUnreadChatCount(user.id);
+        setUnreadChatCount(count);
+      } catch (error) {
+        console.error('Error fetching unread chat count:', error);
+      }
+    };
+
+    fetchUnreadChatCount();
+
+    // Subscribe to notification changes for real-time updates
+    const channel = supabase
+      .channel(`chat-notifications:${user?.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user?.id}`,
+        },
+        () => {
+          // Refetch count when notifications change
+          fetchUnreadChatCount();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user?.id]);
 
   const handleLogout = async () => {
@@ -238,6 +281,8 @@ export function MainLayout({ children }: MainLayoutProps) {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
 
+              const showMessagesBadge = item.path === '/messages' && unreadChatCount > 0;
+
               return (
                 <Link
                   key={item.path}
@@ -250,8 +295,20 @@ export function MainLayout({ children }: MainLayoutProps) {
                   )}
                   aria-current={isActive ? 'page' : undefined}
                 >
-                  <Icon className="w-5 h-5 mr-3" aria-hidden="true" />
+                  <div className="relative">
+                    <Icon className="w-5 h-5 mr-3" aria-hidden="true" />
+                    {showMessagesBadge && (
+                      <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full">
+                        {unreadChatCount > 99 ? '99+' : unreadChatCount}
+                      </span>
+                    )}
+                  </div>
                   {item.label}
+                  {showMessagesBadge && (
+                    <span className="ml-auto flex items-center justify-center min-w-[20px] h-[20px] px-1.5 text-xs font-medium text-white bg-indigo-500 rounded-full">
+                      {unreadChatCount > 99 ? '99+' : unreadChatCount}
+                    </span>
+                  )}
                 </Link>
               );
             })}
@@ -319,6 +376,7 @@ export function MainLayout({ children }: MainLayoutProps) {
               <NFCIndicator />
               <RoleSwitcher compact />
               <ThemeToggle />
+              <MessageBell />
               <NotificationBell />
 
               {/* User Avatar Dropdown */}
@@ -423,26 +481,28 @@ export function MainLayout({ children }: MainLayoutProps) {
         blockedAction={blockedAction}
       />
 
-      {/* Mobile Verification Banner - Fixed at bottom for unverified users */}
+      {/* Mobile Verification Banner - Above footer nav for unverified users */}
       {!isVerified && (
-        <div className="fixed bottom-0 left-0 right-0 lg:left-64 bg-gradient-to-r from-red-600 to-red-500 text-white px-4 py-3 sm:hidden z-40 safe-area-bottom">
+        <div className="fixed bottom-16 md:bottom-0 left-0 right-0 lg:left-64 bg-gradient-to-r from-red-600 to-red-500 text-white px-4 py-2 md:hidden z-40">
           <button
             onClick={() => navigate('/verify')}
             className="flex items-center justify-between w-full"
           >
             <div className="flex items-center gap-2">
-              <ShieldAlert className="w-5 h-5" />
+              <ShieldAlert className="w-4 h-4" />
               <div>
-                <p className="font-medium text-sm">Account Not Verified</p>
-                <p className="text-xs text-red-100">Tap to unlock all features</p>
+                <p className="font-medium text-xs">Account Not Verified</p>
               </div>
             </div>
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </button>
         </div>
       )}
+
+      {/* Mobile Footer Navigation */}
+      <MobileFooterNav mode="user" />
     </div>
   );
 }

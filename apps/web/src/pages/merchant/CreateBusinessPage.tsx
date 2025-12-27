@@ -15,6 +15,11 @@ import {
   Camera,
   Tag,
   ChevronRight,
+  Crown,
+  Zap,
+  Star,
+  Check,
+  Clock,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { useAuth } from '@/context/AuthContext';
@@ -26,6 +31,15 @@ interface BusinessCategory {
   name: string;
   parent_id: string | null;
   icon: string | null;
+}
+
+interface TierConfig {
+  tier: string;
+  display_name: string;
+  description: string;
+  price_monthly: number;
+  currency: string;
+  trial_days: number;
 }
 
 interface BusinessFormData {
@@ -87,9 +101,34 @@ export function CreateBusinessPage() {
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<{ id: string; name: string; is_primary: boolean }[]>([]);
 
+  // Tier configurations from database
+  const [tierConfigs, setTierConfigs] = useState<TierConfig[]>([]);
+
   useEffect(() => {
     fetchCategories();
+    fetchTierConfigs();
   }, []);
+
+  const fetchTierConfigs = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('tier_configurations')
+        .select('tier, display_name, description, price_monthly, currency, trial_days')
+        .eq('is_active', true)
+        .order('sort_order');
+
+      if (!error && data) {
+        setTierConfigs(data);
+      }
+    } catch (err) {
+      console.error('Error fetching tier configs:', err);
+    }
+  };
+
+  // Get tier config by tier name
+  const getTierConfig = (tier: string): TierConfig | undefined => {
+    return tierConfigs.find(t => t.tier === tier);
+  };
 
   const fetchCategories = async () => {
     const { data, error } = await supabase
@@ -707,6 +746,143 @@ export function CreateBusinessPage() {
               <p className="text-sm text-gray-500 mb-4">
                 Add your bank account to receive payouts. You can skip this and add it later.
               </p>
+
+              {/* Subscription Plans Info - Dynamic from database */}
+              {tierConfigs.length > 0 && (
+                <div className="mb-6 p-4 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/10 dark:to-orange-900/10 border border-amber-200 dark:border-amber-800 rounded-xl">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Crown className="w-5 h-5 text-amber-600" />
+                    <h3 className="font-semibold text-gray-900 dark:text-white">Subscription Plans</h3>
+                  </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                    Start free and upgrade anytime to unlock more features
+                  </p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {/* Basic Plan */}
+                    {(() => {
+                      const basic = getTierConfig('basic');
+                      return (
+                        <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="w-8 h-8 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center">
+                              <Store className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm text-gray-900 dark:text-white">{basic?.display_name || 'Basic'}</p>
+                              <p className="text-xs text-green-600 font-semibold">
+                                {basic?.price_monthly === 0 ? 'Free' : `${basic?.currency || 'NLE'} ${basic?.price_monthly}/mo`}
+                              </p>
+                            </div>
+                          </div>
+                          <ul className="space-y-1">
+                            <li className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400">
+                              <Check className="w-3 h-3 text-green-500" />
+                              Payment links
+                            </li>
+                            <li className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400">
+                              <Check className="w-3 h-3 text-green-500" />
+                              QR payments
+                            </li>
+                            <li className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400">
+                              <Check className="w-3 h-3 text-green-500" />
+                              Basic history
+                            </li>
+                          </ul>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Business Plan */}
+                    {(() => {
+                      const business = getTierConfig('business');
+                      return (
+                        <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border-2 border-amber-300 dark:border-amber-700 relative">
+                          <div className="absolute -top-2 right-2 px-2 py-0.5 bg-amber-500 text-white text-[10px] font-bold rounded">
+                            RECOMMENDED
+                          </div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="w-8 h-8 bg-amber-100 dark:bg-amber-900/30 rounded-lg flex items-center justify-center">
+                              <Zap className="w-4 h-4 text-amber-600" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm text-gray-900 dark:text-white">{business?.display_name || 'Business'}</p>
+                              <p className="text-xs text-amber-600 font-semibold">
+                                {business?.currency || 'NLE'} {business?.price_monthly || 150}/mo
+                              </p>
+                            </div>
+                          </div>
+                          <ul className="space-y-1">
+                            <li className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400">
+                              <Check className="w-3 h-3 text-green-500" />
+                              Invoicing
+                            </li>
+                            <li className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400">
+                              <Check className="w-3 h-3 text-green-500" />
+                              Recurring payments
+                            </li>
+                            <li className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400">
+                              <Check className="w-3 h-3 text-green-500" />
+                              API access
+                            </li>
+                          </ul>
+                          {business?.trial_days && business.trial_days > 0 && (
+                            <div className="mt-2 pt-2 border-t border-amber-100 dark:border-amber-800">
+                              <p className="text-[10px] text-amber-600 flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                {business.trial_days}-day free trial included
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Business++ Plan */}
+                    {(() => {
+                      const businessPlus = getTierConfig('business_plus');
+                      return (
+                        <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-purple-200 dark:border-purple-800">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
+                              <Star className="w-4 h-4 text-purple-600" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm text-gray-900 dark:text-white">{businessPlus?.display_name || 'Business++'}</p>
+                              <p className="text-xs text-purple-600 font-semibold">
+                                {businessPlus?.currency || 'NLE'} {businessPlus?.price_monthly || 500}/mo
+                              </p>
+                            </div>
+                          </div>
+                          <ul className="space-y-1">
+                            <li className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400">
+                              <Check className="w-3 h-3 text-green-500" />
+                              Employee cards
+                            </li>
+                            <li className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400">
+                              <Check className="w-3 h-3 text-green-500" />
+                              Multi-user access
+                            </li>
+                            <li className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400">
+                              <Check className="w-3 h-3 text-green-500" />
+                              Advanced analytics
+                            </li>
+                          </ul>
+                          <div className="mt-2 pt-2 border-t border-purple-100 dark:border-purple-800">
+                            <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                              Requires Business plan first
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-3 text-center">
+                    You'll start on the free Basic plan. Upgrade anytime from your dashboard.
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">

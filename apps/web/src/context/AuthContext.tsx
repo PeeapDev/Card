@@ -39,8 +39,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [activeRole, setActiveRole] = useState<UserRole>('user');
 
-  // Get available roles from user
-  const availableRoles: UserRole[] = user?.roles || ['user'];
+  // Get available roles from user - always include 'user' role for personal account
+  const availableRoles: UserRole[] = user?.roles
+    ? (user.roles.includes('user') ? user.roles : ['user', ...user.roles])
+    : ['user'];
 
   // Get dashboard route for a role
   const getRoleDashboard = useCallback((role: UserRole): string => {

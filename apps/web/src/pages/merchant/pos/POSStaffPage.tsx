@@ -32,6 +32,8 @@ import {
   CloudOff,
 } from 'lucide-react';
 import posService, { POSStaff } from '@/services/pos.service';
+import { useLimitCheck } from '@/hooks/useTierLimits';
+import { UpgradeLimitPrompt } from '@/components/subscription/UpgradeLimitPrompt';
 
 // Role badges
 const RoleBadge = ({ role }: { role: string }) => {
@@ -85,6 +87,18 @@ export function POSStaffPage() {
   // Use offline sync hook for offline-first data access
   const offlineSync = useOfflineSync(merchantId);
 
+  // Tier limit check for staff
+  const {
+    tier,
+    limit: staffLimit,
+    canAdd: canAddStaff,
+    tryAdd: tryAddStaff,
+    getRemaining: getRemainingStaff,
+    showUpgradePrompt,
+    closePrompt: closeUpgradePrompt,
+    lastCheckResult,
+  } = useLimitCheck('staff');
+
   const [loading, setLoading] = useState(true);
   const [staff, setStaff] = useState<POSStaff[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -125,18 +139,12 @@ export function POSStaffPage() {
   };
 
   const openModal = (staffMember?: POSStaff) => {
-    if (staffMember) {
-      setEditingStaff(staffMember);
-      setForm({
-        name: staffMember.name,
-        email: staffMember.email || '',
-        phone: staffMember.phone || '',
-        pin: staffMember.pin || '',
-        role: staffMember.role,
-        permissions: staffMember.permissions || [],
-        is_active: staffMember.is_active,
-      });
-    } else {
+    // If adding new staff, check limits first
+    if (!staffMember) {
+      if (!tryAddStaff(staff.length)) {
+        // Limit reached - the hook will show the upgrade prompt
+        return;
+      }
       setEditingStaff(null);
       const defaultPerms = posService.DEFAULT_PERMISSIONS['cashier'];
       setForm({
@@ -147,6 +155,18 @@ export function POSStaffPage() {
         role: 'cashier',
         permissions: defaultPerms,
         is_active: true,
+      });
+    } else {
+      // Editing existing staff - no limit check needed
+      setEditingStaff(staffMember);
+      setForm({
+        name: staffMember.name,
+        email: staffMember.email || '',
+        phone: staffMember.phone || '',
+        pin: staffMember.pin || '',
+        role: staffMember.role,
+        permissions: staffMember.permissions || [],
+        is_active: staffMember.is_active,
       });
     }
     setShowModal(true);
@@ -292,6 +312,16 @@ export function POSStaffPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {/* Staff limit indicator */}
+            {staffLimit !== -1 && (
+              <div className={`text-sm px-3 py-1 rounded-full ${
+                getRemainingStaff(staff.length) <= 1
+                  ? 'bg-amber-100 text-amber-700'
+                  : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+              }`}>
+                {staff.length}/{staffLimit} staff
+              </div>
+            )}
             {/* Offline Status Indicator */}
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${
               offlineSync.isOnline
@@ -310,7 +340,10 @@ export function POSStaffPage() {
                 </>
               )}
             </div>
-            <Button onClick={() => openModal()}>
+            <Button
+              onClick={() => openModal()}
+              disabled={staffLimit !== -1 && !canAddStaff(staff.length)}
+            >
               <Plus className="w-4 h-4 mr-2" />
               Add Staff
             </Button>
@@ -682,6 +715,18 @@ export function POSStaffPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Upgrade Prompt Modal */}
+      {showUpgradePrompt && lastCheckResult && (
+        <UpgradeLimitPrompt
+          limitType="staff"
+          currentCount={lastCheckResult.current}
+          limit={lastCheckResult.limit}
+          currentTier={tier}
+          onClose={closeUpgradePrompt}
+          variant="modal"
+        />
       )}
     </MerchantLayout>
   );

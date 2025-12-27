@@ -50,10 +50,12 @@ async function validateTokenFromMyPeeap(token: string): Promise<{ valid: boolean
 
     const dbUser = users[0];
 
-    // Parse roles
+    // Parse roles - handle both array (from Postgres) and string formats
     let userRoles: string[] = ["user"];
     if (dbUser.roles) {
-      userRoles = dbUser.roles.split(",").map((r: string) => r.trim());
+      userRoles = Array.isArray(dbUser.roles)
+        ? dbUser.roles
+        : dbUser.roles.split(",").map((r: string) => r.trim());
     } else if (dbUser.role) {
       userRoles = [dbUser.role];
     }

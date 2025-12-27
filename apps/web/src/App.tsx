@@ -7,12 +7,14 @@ import { NFCProvider } from '@/hooks/useNFC';
 import { DeveloperModeProvider } from '@/context/DeveloperModeContext';
 import { AppsProvider } from '@/context/AppsContext';
 import { UserAppsProvider } from '@/context/UserAppsContext';
+import { BusinessProvider } from '@/context/BusinessContext';
 import { NotificationProvider } from '@/context/NotificationContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { ThemeColorProvider } from '@/context/ThemeColorContext';
 import { NotificationWrapper } from '@/components/ui/NotificationWrapper';
 import { AnalyticsTracker } from '@/components/AnalyticsTracker';
 import { InactivityTracker } from '@/components/InactivityTracker';
+import { AIChatbot } from '@/components/ai/AIChatbot';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { RoleBasedRoute } from '@/components/RoleBasedRoute';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -66,6 +68,9 @@ import { CardOrdersPage } from '@/pages/admin/CardOrdersPage';
 import { NFCPaymentPage as AdminNFCPaymentPage } from '@/pages/admin/NFCPaymentPage';
 import { TransactionsPage as AdminTransactionsPage } from '@/pages/admin/TransactionsPage';
 import { DisputesPage } from '@/pages/admin/DisputesPage';
+import { UserDisputesPage } from '@/pages/DisputesPage';
+import MessagesPage from '@/pages/MessagesPage';
+import SupportInboxPage from '@/pages/admin/SupportInboxPage';
 import Modules from '@/pages/admin/Modules';
 import CardProducts from '@/pages/admin/CardProducts';
 import { DevelopersPage } from '@/pages/admin/DevelopersPage';
@@ -89,6 +94,7 @@ import { FuelStationsPage } from '@/pages/admin/FuelStationsPage';
 import { SupportTicketsPage } from '@/pages/admin/SupportTicketsPage';
 import { AdminNotificationsPage } from '@/pages/admin/AdminNotificationsPage';
 import { SmtpSettingsPage } from '@/pages/admin/SmtpSettingsPage';
+import { AISettingsPage } from '@/pages/admin/AISettingsPage';
 import { PushNotificationsPage } from '@/pages/admin/PushNotificationsPage';
 import SsoSettingsPage from '@/pages/admin/SsoSettingsPage';
 import { WebsiteAnalyticsPage } from '@/pages/admin/WebsiteAnalyticsPage';
@@ -129,12 +135,16 @@ import { MerchantRefundsPage } from '@/pages/merchant/MerchantRefundsPage';
 import { MerchantReportsPage } from '@/pages/merchant/MerchantReportsPage';
 import { MerchantPaymentLinksPage } from '@/pages/merchant/MerchantPaymentLinksPage';
 import { MerchantSubscriptionsPage } from '@/pages/merchant/MerchantSubscriptionsPage';
+import MerchantInvoicesPage from '@/pages/merchant/MerchantInvoicesPage';
+import NewInvoicePage from '@/pages/merchant/NewInvoicePage';
+import InvoiceDetailsPage from '@/pages/merchant/InvoiceDetailsPage';
+import InvoiceSettingsPage from '@/pages/merchant/InvoiceSettingsPage';
 import { MerchantProfilePage } from '@/pages/merchant/MerchantProfilePage';
 import { CreateBusinessPage } from '@/pages/merchant/CreateBusinessPage';
 import { CreateDeveloperBusinessPage } from '@/pages/merchant/CreateDeveloperBusinessPage';
 import { MerchantBusinessesPage } from '@/pages/merchant/MerchantBusinessesPage';
 import { MerchantUpgradePage } from '@/pages/merchant/MerchantUpgradePage';
-import { MerchantSubscriptionPage } from '@/pages/merchant/MerchantSubscriptionPage';
+// MerchantSubscriptionPage has been merged into MerchantSubscriptionsPage
 import { CollectPaymentPage } from '@/pages/merchant/CollectPaymentPage';
 import { DriverWalletPage } from '@/pages/merchant/DriverWalletPage';
 import { MerchantPaymentTerminalPage } from '@/pages/merchant/MerchantPaymentTerminalPage';
@@ -205,6 +215,7 @@ function App() {
                 <DeveloperModeProvider>
                   <AppsProvider>
                     <UserAppsProvider>
+                      <BusinessProvider>
                   <NotificationWrapper />
                   <AnalyticsTracker />
                   <Analytics />
@@ -221,7 +232,6 @@ function App() {
 
                   {/* Payment Checkout Routes (NFC/QR) */}
                   <Route path="/t/:token" element={<PaymentCheckoutPage />} />
-                  <Route path="/pay/:token" element={<PaymentCheckoutPage />} />
                   <Route path="/i/:intentId" element={<PaymentIntentPage />} />
 
                   {/* Payment Link Route (query params) */}
@@ -230,8 +240,9 @@ function App() {
                   {/* Secure NFC Payment Route */}
                   <Route path="/pay/nfc/:shortCode" element={<NFCPaymentPage />} />
 
-                  {/* Payment Link Checkout Route */}
+                  {/* Payment Link Checkout Route - must come before single param route */}
                   <Route path="/pay/:businessSlug/:linkSlug" element={<PaymentLinkCheckoutPage />} />
+                  <Route path="/pay/:token" element={<PaymentCheckoutPage />} />
 
                   {/* Payment Success/Cancel Routes */}
                   <Route path="/payment/success" element={<PaymentSuccessPage />} />
@@ -284,9 +295,11 @@ function App() {
                   <Route path="/checkout/:businessId" element={<BusinessCheckoutPage />} />
                   <Route path="/checkout/success" element={<CheckoutSuccessPage />} />
                   <Route path="/t/:token" element={<PaymentCheckoutPage />} />
-                  <Route path="/pay/:token" element={<PaymentCheckoutPage />} />
                   <Route path="/i/:intentId" element={<PaymentIntentPage />} />
                   <Route path="/pay" element={<PayPage />} />
+                  <Route path="/pay/nfc/:shortCode" element={<NFCPaymentPage />} />
+                  <Route path="/pay/:businessSlug/:linkSlug" element={<PaymentLinkCheckoutPage />} />
+                  <Route path="/pay/:token" element={<PaymentCheckoutPage />} />
                   <Route path="/app/pay/:paymentId" element={<AppPaymentRedirectPage />} />
 
               {/* Onboarding Route */}
@@ -491,6 +504,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <SupportPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/disputes"
+                element={
+                  <ProtectedRoute>
+                    <UserDisputesPage />
                   </ProtectedRoute>
                 }
               />
@@ -830,6 +851,38 @@ function App() {
                 }
               />
               <Route
+                path="/admin/smtp-settings"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <SmtpSettingsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/admin/ai-settings"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <AISettingsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/admin/push-notifications"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <PushNotificationsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
+                path="/admin/site-settings"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <SiteSettingsPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
                 path="/admin/settings/sso"
                 element={
                   <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
@@ -1164,11 +1217,7 @@ function App() {
               />
               <Route
                 path="/merchant/subscription"
-                element={
-                  <RoleBasedRoute allowedRoles={['merchant']}>
-                    <MerchantSubscriptionPage />
-                  </RoleBasedRoute>
-                }
+                element={<Navigate to="/merchant/subscriptions" replace />}
               />
               <Route
                 path="/merchant/driver-wallet"
@@ -1363,11 +1412,11 @@ function App() {
 
                   {/* Payment Checkout Routes (NFC/QR) */}
                   <Route path="/t/:token" element={<PaymentCheckoutPage />} />
-                  <Route path="/pay/:token" element={<PaymentCheckoutPage />} />
                   <Route path="/i/:intentId" element={<PaymentIntentPage />} />
                   <Route path="/pay" element={<PayPage />} />
                   <Route path="/pay/nfc/:shortCode" element={<NFCPaymentPage />} />
                   <Route path="/pay/:businessSlug/:linkSlug" element={<PaymentLinkCheckoutPage />} />
+                  <Route path="/pay/:token" element={<PaymentCheckoutPage />} />
                   <Route path="/payment/success" element={<PaymentSuccessPage />} />
                   <Route path="/payment/cancel" element={<PaymentCancelPage />} />
                   <Route path="/deposit/success" element={<DepositSuccessPage />} />
@@ -1407,6 +1456,8 @@ function App() {
                   <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
                   <Route path="/cashbox/setup" element={<ProtectedRoute><CashBoxSetupWizard /></ProtectedRoute>} />
                   <Route path="/support" element={<ProtectedRoute><SupportPage /></ProtectedRoute>} />
+                  <Route path="/disputes" element={<ProtectedRoute><UserDisputesPage /></ProtectedRoute>} />
+                  <Route path="/verify" element={<ProtectedRoute><VerifyPage /></ProtectedRoute>} />
 
                   {/* Marketplace Routes */}
                   <Route path="/marketplace" element={<MarketplacePage />} />
@@ -1448,8 +1499,10 @@ function App() {
                   <Route path="/admin/compliance" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><CompliancePage /></RoleBasedRoute>} />
                   <Route path="/admin/developers" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><DevelopersPage /></RoleBasedRoute>} />
                   <Route path="/admin/support" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><SupportTicketsPage /></RoleBasedRoute>} />
+                  <Route path="/admin/support-inbox" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><SupportInboxPage /></RoleBasedRoute>} />
                   <Route path="/admin/notifications" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><AdminNotificationsPage /></RoleBasedRoute>} />
                   <Route path="/admin/smtp-settings" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><SmtpSettingsPage /></RoleBasedRoute>} />
+                  <Route path="/admin/ai-settings" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><AISettingsPage /></RoleBasedRoute>} />
                   <Route path="/admin/push-notifications" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><PushNotificationsPage /></RoleBasedRoute>} />
                   <Route path="/admin/site-settings" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><SiteSettingsPage /></RoleBasedRoute>} />
                   <Route path="/admin/settings/sso" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><SsoSettingsPage /></RoleBasedRoute>} />
@@ -1464,6 +1517,9 @@ function App() {
 
                   {/* User Notifications Route */}
                   <Route path="/notifications" element={<ProtectedRoute><UserNotificationsPage /></ProtectedRoute>} />
+
+                  {/* Messages Route */}
+                  <Route path="/messages" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
 
                   {/* Staff POS Route - For users who are staff at a merchant's POS */}
                   <Route path="/dashboard/pos" element={<ProtectedRoute><StaffPOSPage /></ProtectedRoute>} />
@@ -1483,6 +1539,10 @@ function App() {
                   <Route path="/merchant/refunds" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantRefundsPage /></RoleBasedRoute>} />
                   <Route path="/merchant/reports" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantReportsPage /></RoleBasedRoute>} />
                   <Route path="/merchant/payment-links" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantPaymentLinksPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/invoices" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantInvoicesPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/invoices/new" element={<RoleBasedRoute allowedRoles={['merchant']}><NewInvoicePage /></RoleBasedRoute>} />
+                  <Route path="/merchant/invoices/settings" element={<RoleBasedRoute allowedRoles={['merchant']}><InvoiceSettingsPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/invoices/:invoiceId" element={<RoleBasedRoute allowedRoles={['merchant']}><InvoiceDetailsPage /></RoleBasedRoute>} />
                   <Route path="/merchant/subscriptions" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantSubscriptionsPage /></RoleBasedRoute>} />
                   <Route path="/merchant/profile" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantProfilePage /></RoleBasedRoute>} />
                   <Route path="/merchant/create-business" element={<RoleBasedRoute allowedRoles={['merchant']}><CreateBusinessPage /></RoleBasedRoute>} />
@@ -1494,7 +1554,7 @@ function App() {
                   <Route path="/merchant/driver-wallet" element={<RoleBasedRoute allowedRoles={['merchant']}><DriverWalletPage /></RoleBasedRoute>} />
                   <Route path="/merchant/terminal" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantPaymentTerminalPage /></RoleBasedRoute>} />
                   <Route path="/merchant/upgrade" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantUpgradePage /></RoleBasedRoute>} />
-                  <Route path="/merchant/subscription" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantSubscriptionPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/subscription" element={<Navigate to="/merchant/subscriptions" replace />} />
                   <Route path="/merchant/businesses/:businessId" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantBusinessDetailPage /></RoleBasedRoute>} />
                   <Route path="/merchant/businesses/:businessId/transactions" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantBusinessTransactionsPage /></RoleBasedRoute>} />
                   <Route path="/merchant/businesses/:businessId/disputes" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantBusinessDisputesPage /></RoleBasedRoute>} />
@@ -1554,6 +1614,8 @@ function App() {
               {/* Global 404 fallback for all modes */}
               <Route path="*" element={<NotFoundPage />} />
                 </Routes>
+                <AIChatbot />
+                      </BusinessProvider>
                     </UserAppsProvider>
                 </AppsProvider>
                 </DeveloperModeProvider>

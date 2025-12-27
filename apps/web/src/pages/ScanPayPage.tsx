@@ -32,6 +32,9 @@ import {
   Lock,
   Eye,
   EyeOff,
+  ChevronDown,
+  Car,
+  CreditCard,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -129,11 +132,17 @@ export function ScanPayPage() {
   const [step, setStep] = useState<PaymentStep>('loading');
   const [session, setSession] = useState<CheckoutSession | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [walletBalance, setWalletBalance] = useState(0);
-  const [walletId, setWalletId] = useState<string | null>(null);
+  const [wallets, setWallets] = useState<Array<{ id: string; name: string; balance: number; wallet_type: string }>>([]);
+  const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
+  const [walletSelectorOpen, setWalletSelectorOpen] = useState(false);
   const [pin, setPin] = useState('');
   const [showPin, setShowPin] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
+
+  // Get selected wallet info
+  const selectedWallet = wallets.find(w => w.id === selectedWalletId);
+  const walletBalance = selectedWallet?.balance || 0;
+  const walletId = selectedWalletId;
 
   // Format amount with currency
   const formatAmount = (amt: number, curr: string): string => {
@@ -152,7 +161,7 @@ export function ScanPayPage() {
   // Check wallet when user authenticates
   useEffect(() => {
     if (isAuthenticated && user?.id && session) {
-      fetchWallet();
+      fetchWallets();
       setStep('confirm');
     }
   }, [isAuthenticated, user?.id, session]);
@@ -238,7 +247,7 @@ export function ScanPayPage() {
 
       // If user is already logged in, go to confirm
       if (isAuthenticated && user?.id) {
-        fetchWallet();
+        fetchWallets();
         setStep('confirm');
       } else {
         setStep('login');
@@ -249,20 +258,66 @@ export function ScanPayPage() {
     }
   };
 
-  const fetchWallet = async () => {
+  const fetchWallets = async () => {
     if (!user?.id) return;
 
-    const { data: wallet } = await supabase
+    // Fetch all active wallets for the user
+    const { data: userWallets, error: walletsError } = await supabase
       .from('wallets')
-      .select('id, balance')
+      .select('id, name, balance, wallet_type')
       .eq('user_id', user.id)
-      .eq('wallet_type', 'primary')
-      .single();
+      .eq('status', 'active')
+      .order('wallet_type', { ascending: true });
 
-    if (wallet) {
-      setWalletId(wallet.id);
-      setWalletBalance(wallet.balance);
+    if (walletsError) {
+      console.error('Error fetching wallets:', walletsError);
+      return;
     }
+
+    if (userWallets && userWallets.length > 0) {
+      // Map wallet types to friendly names if name is missing
+      const walletsWithNames = userWallets.map(w => ({
+        ...w,
+        name: w.name || getWalletName(w.wallet_type),
+      }));
+
+      setWallets(walletsWithNames);
+
+      // Select wallet with highest balance that can cover the payment, or default to primary
+      const paymentAmount = session?.amount || 0;
+      const affordableWallet = walletsWithNames
+        .filter(w => w.balance >= paymentAmount)
+        .sort((a, b) => {
+          // Prefer primary wallet if it can afford the payment
+          if (a.wallet_type === 'primary') return -1;
+          if (b.wallet_type === 'primary') return 1;
+          return 0;
+        })[0];
+
+      // If no wallet can afford, just select primary
+      const primaryWallet = walletsWithNames.find(w => w.wallet_type === 'primary');
+      setSelectedWalletId(affordableWallet?.id || primaryWallet?.id || walletsWithNames[0].id);
+    }
+  };
+
+  // Get friendly wallet name from type
+  const getWalletName = (type: string): string => {
+    const names: Record<string, string> = {
+      primary: 'Main Wallet',
+      driver: 'Driver Wallet',
+      business: 'Business Wallet',
+      savings: 'Savings',
+      app_driver_wallet: 'Driver Wallet',
+      app_terminal: 'Terminal Wallet',
+    };
+    return names[type] || type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  };
+
+  // Get wallet icon
+  const getWalletIcon = (type: string) => {
+    if (type.includes('driver')) return Car;
+    if (type.includes('business')) return CreditCard;
+    return Wallet;
   };
 
   // Proceed to PIN entry step
@@ -913,22 +968,80 @@ export function ScanPayPage() {
             </div>
           </div>
 
-          {/* Your Wallet */}
-          <div className="p-4 bg-blue-50 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Wallet className="w-5 h-5 text-blue-600" />
-              <span className="text-sm text-blue-700">Your wallet balance</span>
+          {/* Wallet Selector */}
+          <div className="p-4 border-b border-gray-100">
+            <p className="text-sm text-gray-500 mb-2">Pay from</p>
+            <div className="relative">
+              <button
+                onClick={() => setWalletSelectorOpen(!walletSelectorOpen)}
+                className={`w-full p-3 bg-gray-50 dark:bg-gray-800 rounded-xl flex items-center justify-between ${
+                  insufficientBalance ? 'border-2 border-red-300' : 'border border-gray-200 dark:border-gray-700'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  {selectedWallet && (() => {
+                    const WalletIcon = getWalletIcon(selectedWallet.wallet_type);
+                    return <WalletIcon className="w-5 h-5 text-blue-600" />;
+                  })()}
+                  <div className="text-left">
+                    <p className="font-medium text-gray-900 dark:text-white">
+                      {selectedWallet?.name || 'Select wallet'}
+                    </p>
+                    <p className={`text-sm ${insufficientBalance ? 'text-red-600' : 'text-gray-500'}`}>
+                      Balance: {formatAmount(walletBalance, session.currencyCode)}
+                    </p>
+                  </div>
+                </div>
+                <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${walletSelectorOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {/* Dropdown */}
+              {walletSelectorOpen && wallets.length > 1 && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 z-10 overflow-hidden">
+                  {wallets.map((wallet) => {
+                    const WalletIcon = getWalletIcon(wallet.wallet_type);
+                    const canAfford = wallet.balance >= session.amount;
+                    return (
+                      <button
+                        key={wallet.id}
+                        onClick={() => {
+                          setSelectedWalletId(wallet.id);
+                          setWalletSelectorOpen(false);
+                        }}
+                        className={`w-full p-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 ${
+                          wallet.id === selectedWalletId ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                        }`}
+                      >
+                        <WalletIcon className={`w-5 h-5 ${canAfford ? 'text-blue-600' : 'text-gray-400'}`} />
+                        <div className="flex-1 text-left">
+                          <p className={`font-medium ${canAfford ? 'text-gray-900 dark:text-white' : 'text-gray-500'}`}>
+                            {wallet.name}
+                          </p>
+                          <p className={`text-sm ${canAfford ? 'text-green-600' : 'text-red-500'}`}>
+                            {formatAmount(wallet.balance, session.currencyCode)}
+                            {!canAfford && ' (insufficient)'}
+                          </p>
+                        </div>
+                        {wallet.id === selectedWalletId && (
+                          <CheckCircle className="w-5 h-5 text-blue-600" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-            <span className={`font-bold ${insufficientBalance ? 'text-red-600' : 'text-blue-700'}`}>
-              {formatAmount(walletBalance, session.currencyCode)}
-            </span>
           </div>
 
           {/* Insufficient balance warning */}
           {insufficientBalance && (
             <div className="p-4 bg-red-50 flex items-center gap-2 text-red-700">
               <AlertCircle className="w-5 h-5 flex-shrink-0" />
-              <span className="text-sm">Insufficient balance. Please top up your wallet first.</span>
+              <span className="text-sm">
+                {wallets.some(w => w.balance >= session.amount)
+                  ? 'Select a wallet with sufficient balance'
+                  : 'Insufficient balance in all wallets. Please top up first.'}
+              </span>
             </div>
           )}
 
