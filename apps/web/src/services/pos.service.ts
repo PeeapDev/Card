@@ -446,7 +446,7 @@ export const deleteProduct = async (id: string): Promise<void> => {
 export const createSale = async (sale: Omit<POSSale, 'id' | 'sale_number' | 'created_at'>, items: POSSaleItem[]): Promise<POSSale> => {
   // Generate sale number
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  const { count } = await supabase
+  const { count } = await supabaseAdmin
     .from('pos_sales')
     .select('*', { count: 'exact', head: true })
     .eq('merchant_id', sale.merchant_id)
@@ -454,8 +454,8 @@ export const createSale = async (sale: Omit<POSSale, 'id' | 'sale_number' | 'cre
 
   const saleNumber = `S${today}-${String((count || 0) + 1).padStart(4, '0')}`;
 
-  // Create sale
-  const { data: saleData, error: saleError } = await supabase
+  // Create sale - use supabaseAdmin to bypass RLS
+  const { data: saleData, error: saleError } = await supabaseAdmin
     .from('pos_sales')
     .insert({
       ...sale,
@@ -472,7 +472,7 @@ export const createSale = async (sale: Omit<POSSale, 'id' | 'sale_number' | 'cre
     sale_id: saleData.id,
   }));
 
-  const { error: itemsError } = await supabase
+  const { error: itemsError } = await supabaseAdmin
     .from('pos_sale_items')
     .insert(itemsWithSaleId);
 
@@ -480,14 +480,14 @@ export const createSale = async (sale: Omit<POSSale, 'id' | 'sale_number' | 'cre
 
   // Update inventory for tracked products
   for (const item of items) {
-    const { data: product } = await supabase
+    const { data: product } = await supabaseAdmin
       .from('pos_products')
       .select('track_inventory, stock_quantity')
       .eq('id', item.product_id)
       .single();
 
     if (product?.track_inventory) {
-      await supabase
+      await supabaseAdmin
         .from('pos_products')
         .update({
           stock_quantity: product.stock_quantity - item.quantity,
@@ -496,16 +496,15 @@ export const createSale = async (sale: Omit<POSSale, 'id' | 'sale_number' | 'cre
         .eq('id', item.product_id);
 
       // Log inventory change
-      await supabase
+      await supabaseAdmin
         .from('pos_inventory_log')
         .insert({
           merchant_id: sale.merchant_id,
           product_id: item.product_id,
           type: 'sale',
           quantity_change: -item.quantity,
-          quantity_before: product.stock_quantity,
-          quantity_after: product.stock_quantity - item.quantity,
-          reference_type: 'sale',
+          previous_quantity: product.stock_quantity,
+          new_quantity: product.stock_quantity - item.quantity,
           reference_id: saleData.id,
         });
     }

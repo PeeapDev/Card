@@ -1492,11 +1492,6 @@ export function POSTerminalPage() {
             </div>
           </div>
 
-          {/* POS Wallet Section */}
-          <div className="p-3 border-b border-gray-100 dark:border-gray-700">
-            <POSWallet compact />
-          </div>
-
           {/* Cart Items */}
           <div className="flex-1 overflow-y-auto p-4">
             {cart.length === 0 ? (
