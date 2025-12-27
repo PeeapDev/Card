@@ -134,7 +134,7 @@ export function ScanPayPage() {
   const [step, setStep] = useState<PaymentStep>('loading');
   const [session, setSession] = useState<CheckoutSession | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [wallets, setWallets] = useState<Array<{ id: string; name: string; balance: number; wallet_type: string }>>([]);
+  const [wallets, setWallets] = useState<Array<{ id: string; name: string; balance: number; wallet_type: string; currency?: string; status?: string }>>([]);
   const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
   const [currentWalletIndex, setCurrentWalletIndex] = useState(0);
   const [slideProgress, setSlideProgress] = useState(0);
