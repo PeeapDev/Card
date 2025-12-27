@@ -137,18 +137,39 @@ export function DriverWalletPage() {
     try {
       setLoadingTransactions(true);
 
-      const { data, error } = await supabase
+      // Query transactions where driver wallet is recipient (incoming payments)
+      const { data: incomingData, error: incomingError } = await supabase
         .from('transactions')
         .select('*')
-        .eq('wallet_id', driverWallet.id)
+        .eq('recipient_wallet_id', driverWallet.id)
         .order('created_at', { ascending: false })
         .limit(20);
 
-      if (error) throw error;
+      // Also query transactions where driver wallet is sender (outgoing transfers)
+      const { data: outgoingData, error: outgoingError } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('sender_wallet_id', driverWallet.id)
+        .order('created_at', { ascending: false })
+        .limit(20);
 
-      setTransactions(data || []);
+      if (incomingError) throw incomingError;
+      if (outgoingError) throw outgoingError;
 
-      // Calculate earnings
+      // Merge and sort by date
+      const allData = [...(incomingData || []), ...(outgoingData || [])]
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 20);
+
+      // Mark incoming as positive, outgoing as negative for display
+      const processedData = allData.map(t => ({
+        ...t,
+        amount: t.recipient_wallet_id === driverWallet.id ? Math.abs(t.amount) : -Math.abs(t.amount),
+      }));
+
+      setTransactions(processedData);
+
+      // Calculate earnings from incoming payments only
       const now = new Date();
       const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const startOfWeek = new Date(now);
@@ -156,20 +177,20 @@ export function DriverWalletPage() {
       startOfWeek.setHours(0, 0, 0, 0);
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-      const allTransactions = data || [];
-      const credits = allTransactions.filter(t => t.amount > 0 && t.status === 'COMPLETED');
+      // Use incoming payments for earnings (where driver is recipient)
+      const incomingPayments = (incomingData || []).filter(t => t.status === 'COMPLETED');
 
       setEarnings({
-        today: credits
+        today: incomingPayments
           .filter(t => new Date(t.created_at) >= startOfDay)
-          .reduce((sum, t) => sum + t.amount, 0),
-        thisWeek: credits
+          .reduce((sum, t) => sum + Math.abs(t.amount), 0),
+        thisWeek: incomingPayments
           .filter(t => new Date(t.created_at) >= startOfWeek)
-          .reduce((sum, t) => sum + t.amount, 0),
-        thisMonth: credits
+          .reduce((sum, t) => sum + Math.abs(t.amount), 0),
+        thisMonth: incomingPayments
           .filter(t => new Date(t.created_at) >= startOfMonth)
-          .reduce((sum, t) => sum + t.amount, 0),
-        totalTrips: credits.length,
+          .reduce((sum, t) => sum + Math.abs(t.amount), 0),
+        totalTrips: incomingPayments.length,
       });
     } catch (err: any) {
       console.error('Error loading transactions:', err);
