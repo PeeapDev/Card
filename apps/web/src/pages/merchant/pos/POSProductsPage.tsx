@@ -427,25 +427,20 @@ export function POSProductsPage() {
 
     setSaving(true);
     try {
+      // Match exactly what's in the database schema (migration 063)
       const productData: any = {
         merchant_id: merchantId!,
         name: productForm.name,
-        description: productForm.description || undefined,
-        category_id: productForm.category_id || undefined,
-        sku: productForm.sku || undefined,
-        barcode: productForm.barcode || undefined,
-        price: parseFloat(productForm.price),
+        description: productForm.description || null,
+        category_id: productForm.category_id || null,
+        sku: productForm.sku || null,
+        barcode: productForm.barcode || null,
+        price: parseFloat(productForm.price) || 0,
         cost_price: productForm.cost_price ? parseFloat(productForm.cost_price) : 0,
-        image_url: productForm.image_url || undefined,
+        image_url: productForm.image_url || null,
         track_inventory: productForm.track_inventory,
         stock_quantity: parseInt(productForm.stock_quantity) || 0,
-        low_stock_threshold: parseInt(productForm.low_stock_threshold) || 10,
-        is_featured: productForm.is_featured,
-        is_on_sale: productForm.is_on_sale,
-        sale_price: productForm.is_on_sale && productForm.sale_price ? parseFloat(productForm.sale_price) : null,
-        is_variant: productForm.is_variant,
-        parent_product_id: productForm.is_variant && productForm.parent_product_id ? productForm.parent_product_id : null,
-        variant_name: productForm.is_variant && productForm.variant_name ? productForm.variant_name : null,
+        low_stock_alert: parseInt(productForm.low_stock_threshold) || 10,
       };
 
       if (editingProduct) {
