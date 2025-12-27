@@ -100,6 +100,7 @@ import SsoSettingsPage from '@/pages/admin/SsoSettingsPage';
 import { WebsiteAnalyticsPage } from '@/pages/admin/WebsiteAnalyticsPage';
 import { ExchangeRatesPage } from '@/pages/admin/ExchangeRatesPage';
 import { AdminVirtualCardsPage } from '@/pages/admin/AdminVirtualCardsPage';
+import { NRRDashboardPage } from '@/pages/admin/NRRDashboardPage';
 import { SiteSettingsPage } from '@/pages/admin/SiteSettingsPage';
 import { PagesManagementPage } from '@/pages/admin/PagesManagementPage';
 import { PageEditorPage } from '@/pages/admin/PageEditorPage';
@@ -772,6 +773,14 @@ function App() {
                 }
               />
               <Route
+                path="/admin/nrr"
+                element={
+                  <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
+                    <NRRDashboardPage />
+                  </RoleBasedRoute>
+                }
+              />
+              <Route
                 path="/admin/roles"
                 element={
                   <RoleBasedRoute allowedRoles={['admin', 'superadmin']}>
@@ -1261,6 +1270,14 @@ function App() {
                 }
               />
               <Route
+                path="/messages"
+                element={
+                  <ProtectedRoute>
+                    <MessagesPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/merchant/subscriptions"
                 element={
                   <RoleBasedRoute allowedRoles={['merchant']}>
@@ -1543,6 +1560,7 @@ function App() {
                   <Route path="/admin/payment-settings" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><PaymentSettingsPage /></RoleBasedRoute>} />
                   <Route path="/admin/deposits" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><DepositsPage /></RoleBasedRoute>} />
                   <Route path="/admin/subscriptions" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><SubscriptionsPage /></RoleBasedRoute>} />
+                  <Route path="/admin/nrr" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><NRRDashboardPage /></RoleBasedRoute>} />
                   <Route path="/admin/roles" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><RolesManagementPage /></RoleBasedRoute>} />
                   <Route path="/admin/pots" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><PotsManagementPage /></RoleBasedRoute>} />
                   <Route path="/admin/business-categories" element={<RoleBasedRoute allowedRoles={['admin', 'superadmin']}><BusinessCategoriesPage /></RoleBasedRoute>} />
