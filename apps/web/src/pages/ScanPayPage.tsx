@@ -32,9 +32,11 @@ import {
   Lock,
   Eye,
   EyeOff,
-  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Car,
   CreditCard,
+  ArrowRight,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -134,7 +136,10 @@ export function ScanPayPage() {
   const [error, setError] = useState<string | null>(null);
   const [wallets, setWallets] = useState<Array<{ id: string; name: string; balance: number; wallet_type: string }>>([]);
   const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
-  const [walletSelectorOpen, setWalletSelectorOpen] = useState(false);
+  const [currentWalletIndex, setCurrentWalletIndex] = useState(0);
+  const [slideProgress, setSlideProgress] = useState(0);
+  const [isSliding, setIsSliding] = useState(false);
+  const slideRef = useRef<HTMLDivElement>(null);
   const [pin, setPin] = useState('');
   const [showPin, setShowPin] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
@@ -296,9 +301,66 @@ export function ScanPayPage() {
 
       // If no wallet can afford, just select primary
       const primaryWallet = walletsWithNames.find(w => w.wallet_type === 'primary');
-      setSelectedWalletId(affordableWallet?.id || primaryWallet?.id || walletsWithNames[0].id);
+      const selectedId = affordableWallet?.id || primaryWallet?.id || walletsWithNames[0].id;
+      setSelectedWalletId(selectedId);
+
+      // Set the index for the carousel
+      const selectedIndex = walletsWithNames.findIndex(w => w.id === selectedId);
+      setCurrentWalletIndex(selectedIndex >= 0 ? selectedIndex : 0);
     }
   };
+
+  // Handle wallet carousel navigation
+  const handlePrevWallet = () => {
+    if (currentWalletIndex > 0) {
+      const newIndex = currentWalletIndex - 1;
+      setCurrentWalletIndex(newIndex);
+      setSelectedWalletId(wallets[newIndex].id);
+    }
+  };
+
+  const handleNextWallet = () => {
+    if (currentWalletIndex < wallets.length - 1) {
+      const newIndex = currentWalletIndex + 1;
+      setCurrentWalletIndex(newIndex);
+      setSelectedWalletId(wallets[newIndex].id);
+    }
+  };
+
+  // Handle slide to pay gesture
+  const handleSlideStart = (e: React.TouchEvent | React.MouseEvent) => {
+    if (insufficientBalance) return;
+    setIsSliding(true);
+    setSlideProgress(0);
+  };
+
+  const handleSlideMove = (e: React.TouchEvent | React.MouseEvent) => {
+    if (!isSliding || !slideRef.current) return;
+
+    const rect = slideRef.current.getBoundingClientRect();
+    let clientX: number;
+
+    if ('touches' in e) {
+      clientX = e.touches[0].clientX;
+    } else {
+      clientX = e.clientX;
+    }
+
+    const progress = Math.max(0, Math.min(1, (clientX - rect.left - 30) / (rect.width - 60)));
+    setSlideProgress(progress);
+  };
+
+  const handleSlideEnd = () => {
+    if (slideProgress > 0.85) {
+      // Completed slide - proceed to PIN
+      handleProceedToPin();
+    }
+    setIsSliding(false);
+    setSlideProgress(0);
+  };
+
+  // Check if current wallet has insufficient balance
+  const insufficientBalance = selectedWallet ? selectedWallet.balance < (session?.amount || 0) : true;
 
   // Get friendly wallet name from type
   const getWalletName = (type: string): string => {
@@ -968,76 +1030,121 @@ export function ScanPayPage() {
             </div>
           </div>
 
-          {/* Wallet Selector */}
+          {/* Wallet Carousel Selector */}
           <div className="p-4 border-b border-gray-100">
-            <p className="text-sm text-gray-500 mb-2">Pay from</p>
-            <div className="relative">
+            <p className="text-sm text-gray-500 mb-3 text-center">Select wallet to pay from</p>
+
+            {/* Balance Display */}
+            <div className="text-center mb-4">
+              <p className={`text-3xl font-bold ${insufficientBalance ? 'text-red-500' : 'text-green-600'}`}>
+                {formatAmount(walletBalance, session.currencyCode)}
+              </p>
+              <p className="text-sm text-gray-500">Available Balance</p>
+            </div>
+
+            {/* Wallet Carousel */}
+            <div className="flex items-center justify-center gap-2">
+              {/* Left Arrow */}
               <button
-                onClick={() => setWalletSelectorOpen(!walletSelectorOpen)}
-                className={`w-full p-3 bg-gray-50 dark:bg-gray-800 rounded-xl flex items-center justify-between ${
-                  insufficientBalance ? 'border-2 border-red-300' : 'border border-gray-200 dark:border-gray-700'
+                onClick={handlePrevWallet}
+                disabled={currentWalletIndex === 0}
+                className={`p-2 rounded-full transition-all ${
+                  currentWalletIndex === 0
+                    ? 'text-gray-300 cursor-not-allowed'
+                    : 'text-gray-600 hover:bg-gray-100 active:scale-95'
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  {selectedWallet && (() => {
-                    const WalletIcon = getWalletIcon(selectedWallet.wallet_type);
-                    return <WalletIcon className="w-5 h-5 text-blue-600" />;
-                  })()}
-                  <div className="text-left">
-                    <p className="font-medium text-gray-900 dark:text-white">
-                      {selectedWallet?.name || 'Select wallet'}
-                    </p>
-                    <p className={`text-sm ${insufficientBalance ? 'text-red-600' : 'text-gray-500'}`}>
-                      Balance: {formatAmount(walletBalance, session.currencyCode)}
-                    </p>
-                  </div>
-                </div>
-                <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${walletSelectorOpen ? 'rotate-180' : ''}`} />
+                <ChevronLeft className="w-6 h-6" />
               </button>
 
-              {/* Dropdown */}
-              {walletSelectorOpen && wallets.length > 1 && (
-                <>
-                  {/* Backdrop to close dropdown */}
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setWalletSelectorOpen(false)}
-                  />
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden max-h-60 overflow-y-auto">
-                  {wallets.map((wallet) => {
+              {/* Wallet Cards Container */}
+              <div className="flex-1 overflow-hidden">
+                <div
+                  className="flex transition-transform duration-300 ease-out"
+                  style={{ transform: `translateX(calc(50% - ${currentWalletIndex * 100}% - 50%))` }}
+                >
+                  {wallets.map((wallet, index) => {
                     const WalletIcon = getWalletIcon(wallet.wallet_type);
+                    const isActive = index === currentWalletIndex;
                     const canAfford = wallet.balance >= session.amount;
+
                     return (
-                      <button
+                      <div
                         key={wallet.id}
                         onClick={() => {
+                          setCurrentWalletIndex(index);
                           setSelectedWalletId(wallet.id);
-                          setWalletSelectorOpen(false);
                         }}
-                        className={`w-full p-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 ${
-                          wallet.id === selectedWalletId ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                        className={`flex-shrink-0 w-full px-2 transition-all duration-300 ${
+                          isActive ? 'scale-100 opacity-100' : 'scale-90 opacity-50'
                         }`}
                       >
-                        <WalletIcon className={`w-5 h-5 ${canAfford ? 'text-blue-600' : 'text-gray-400'}`} />
-                        <div className="flex-1 text-left">
-                          <p className={`font-medium ${canAfford ? 'text-gray-900 dark:text-white' : 'text-gray-500'}`}>
-                            {wallet.name}
-                          </p>
-                          <p className={`text-sm ${canAfford ? 'text-green-600' : 'text-red-500'}`}>
-                            {formatAmount(wallet.balance, session.currencyCode)}
-                            {!canAfford && ' (insufficient)'}
-                          </p>
+                        <div
+                          className={`p-4 rounded-2xl border-2 transition-all cursor-pointer ${
+                            isActive
+                              ? canAfford
+                                ? 'border-green-500 bg-green-50'
+                                : 'border-red-400 bg-red-50'
+                              : 'border-gray-200 bg-gray-50'
+                          }`}
+                        >
+                          <div className="flex items-center justify-center gap-3">
+                            <div className={`p-2 rounded-full ${
+                              isActive && canAfford ? 'bg-green-100' : isActive ? 'bg-red-100' : 'bg-gray-100'
+                            }`}>
+                              <WalletIcon className={`w-6 h-6 ${
+                                isActive && canAfford ? 'text-green-600' : isActive ? 'text-red-500' : 'text-gray-500'
+                              }`} />
+                            </div>
+                            <div className="text-center">
+                              <p className={`font-semibold ${isActive ? 'text-gray-900' : 'text-gray-500'}`}>
+                                {wallet.name}
+                              </p>
+                              {!canAfford && isActive && (
+                                <p className="text-xs text-red-500">Insufficient</p>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        {wallet.id === selectedWalletId && (
-                          <CheckCircle className="w-5 h-5 text-blue-600" />
-                        )}
-                      </button>
+                      </div>
                     );
                   })}
-                  </div>
-                </>
-              )}
+                </div>
+              </div>
+
+              {/* Right Arrow */}
+              <button
+                onClick={handleNextWallet}
+                disabled={currentWalletIndex === wallets.length - 1}
+                className={`p-2 rounded-full transition-all ${
+                  currentWalletIndex === wallets.length - 1
+                    ? 'text-gray-300 cursor-not-allowed'
+                    : 'text-gray-600 hover:bg-gray-100 active:scale-95'
+                }`}
+              >
+                <ChevronRight className="w-6 h-6" />
+              </button>
             </div>
+
+            {/* Wallet Dots Indicator */}
+            {wallets.length > 1 && (
+              <div className="flex justify-center gap-2 mt-3">
+                {wallets.map((_, index) => (
+                  <button
+                    key={index}
+                    onClick={() => {
+                      setCurrentWalletIndex(index);
+                      setSelectedWalletId(wallets[index].id);
+                    }}
+                    className={`w-2 h-2 rounded-full transition-all ${
+                      index === currentWalletIndex
+                        ? 'w-6 bg-indigo-600'
+                        : 'bg-gray-300 hover:bg-gray-400'
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Insufficient balance warning */}
@@ -1046,21 +1153,73 @@ export function ScanPayPage() {
               <AlertCircle className="w-5 h-5 flex-shrink-0" />
               <span className="text-sm">
                 {wallets.some(w => w.balance >= session.amount)
-                  ? 'Select a wallet with sufficient balance'
+                  ? 'Swipe to select a wallet with sufficient balance'
                   : 'Insufficient balance in all wallets. Please top up first.'}
               </span>
             </div>
           )}
 
-          {/* Pay Button */}
+          {/* Slide to Pay */}
           <div className="p-6">
+            <div
+              ref={slideRef}
+              onMouseDown={handleSlideStart}
+              onMouseMove={handleSlideMove}
+              onMouseUp={handleSlideEnd}
+              onMouseLeave={handleSlideEnd}
+              onTouchStart={handleSlideStart}
+              onTouchMove={handleSlideMove}
+              onTouchEnd={handleSlideEnd}
+              className={`relative h-16 rounded-2xl overflow-hidden select-none ${
+                insufficientBalance
+                  ? 'bg-gray-200 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-green-500 to-green-600 cursor-grab active:cursor-grabbing'
+              }`}
+            >
+              {/* Progress fill */}
+              <div
+                className="absolute inset-y-0 left-0 bg-green-700/30 transition-all"
+                style={{ width: `${slideProgress * 100}%` }}
+              />
+
+              {/* Slider thumb */}
+              <div
+                className={`absolute top-1 bottom-1 left-1 w-14 rounded-xl flex items-center justify-center transition-transform ${
+                  insufficientBalance ? 'bg-gray-400' : 'bg-white shadow-lg'
+                }`}
+                style={{
+                  transform: `translateX(${slideProgress * (slideRef.current?.clientWidth ? slideRef.current.clientWidth - 64 : 0)}px)`,
+                }}
+              >
+                {insufficientBalance ? (
+                  <Lock className="w-6 h-6 text-gray-500" />
+                ) : (
+                  <ArrowRight className={`w-6 h-6 text-green-600 transition-transform ${isSliding ? 'scale-110' : ''}`} />
+                )}
+              </div>
+
+              {/* Text */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <span className={`font-bold text-lg ${
+                  insufficientBalance ? 'text-gray-500' : 'text-white'
+                } ${slideProgress > 0.3 ? 'opacity-0' : 'opacity-100'} transition-opacity`}>
+                  {insufficientBalance ? 'Insufficient Balance' : 'Slide to Pay'}
+                </span>
+                <span className={`font-bold text-lg text-white absolute ${
+                  slideProgress > 0.7 ? 'opacity-100' : 'opacity-0'
+                } transition-opacity`}>
+                  Release to Confirm
+                </span>
+              </div>
+            </div>
+
+            {/* Fallback button for desktop */}
             <button
               onClick={handleProceedToPin}
               disabled={insufficientBalance}
-              className="w-full py-4 bg-green-600 text-white rounded-xl font-bold text-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full mt-3 py-3 text-sm text-gray-500 hover:text-gray-700 disabled:text-gray-300"
             >
-              <Lock className="w-6 h-6" />
-              Continue to Pay
+              Or tap here to continue
             </button>
           </div>
 
