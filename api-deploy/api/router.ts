@@ -121,7 +121,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handlePaymentsInitialize(req, res);
     } else if (path.match(/^payments\/[^/]+$/)) {
       return await handlePaymentsId(req, res);
-    } else if (path.startsWith('monime/deposit')) {
+    } else if (path === 'monime/deposit' || path === 'monime/deposit/') {
       return await handleMonimeDeposit(req, res);
     } else if (path === 'checkout/quick' || path.startsWith('checkout/quick')) {
       return await handleCheckoutQuick(req, res);
