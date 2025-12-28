@@ -79,7 +79,7 @@ class MerchantService {
   }
 
   /**
-   * Fetch merchant transactions
+   * Fetch merchant transactions via API (bypasses RLS)
    */
   async getTransactions(
     merchantId: string,
@@ -91,47 +91,34 @@ class MerchantService {
       endDate?: string;
     }
   ): Promise<{ transactions: MerchantTransaction[]; total: number }> {
-    const walletId = await this.getMerchantWalletId(merchantId);
-    if (!walletId) {
-      return { transactions: [], total: 0 };
-    }
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
+      const params = new URLSearchParams({
+        merchantId,
+        limit: String(options?.limit || 100),
+        offset: String(options?.offset || 0),
+      });
 
-    let query = supabase
-      .from('transactions')
-      .select('*', { count: 'exact' })
-      .or(`wallet_id.eq.${walletId},recipient_id.eq.${merchantId}`)
-      .order('created_at', { ascending: false });
+      if (options?.status && options.status !== 'all') {
+        params.append('status', options.status);
+      }
 
-    if (options?.status && options.status !== 'all') {
-      query = query.eq('status', options.status);
-    }
+      const response = await fetch(`${API_URL}/merchant/transactions?${params}`);
 
-    if (options?.startDate) {
-      query = query.gte('created_at', options.startDate);
-    }
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}`);
+      }
 
-    if (options?.endDate) {
-      query = query.lte('created_at', options.endDate);
-    }
+      const data = await response.json();
 
-    if (options?.limit) {
-      query = query.limit(options.limit);
-    }
-
-    if (options?.offset) {
-      query = query.range(options.offset, options.offset + (options.limit || 50) - 1);
-    }
-
-    const { data, count, error } = await query;
-
-    if (error) {
+      return {
+        transactions: (data.transactions || []) as MerchantTransaction[],
+        total: data.total || 0,
+      };
+    } catch (error) {
+      console.error('Error fetching merchant transactions:', error);
       throw error;
     }
-
-    return {
-      transactions: (data || []) as MerchantTransaction[],
-      total: count || 0,
-    };
   }
 
   /**

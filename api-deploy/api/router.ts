@@ -187,6 +187,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handlePayoutBanks(req, res);
     } else if (path === 'monime/deposits' || path === 'monime/deposits/') {
       return await handleMonimeDeposits(req, res);
+    } else if (path === 'merchant/transactions' || path === 'merchant/transactions/') {
+      return await handleMerchantTransactions(req, res);
     } else if (path === 'float/summary' || path === 'float/summary/') {
       return await handleFloatSummary(req, res);
     } else if (path === 'float/today' || path === 'float/today/') {
@@ -1663,6 +1665,118 @@ async function handleMonimeDeposits(req: VercelRequest, res: VercelResponse) {
   } catch (error: any) {
     console.error('[Monime Deposits] Error:', error);
     return res.status(500).json({ error: error.message || 'Failed to fetch deposits' });
+  }
+}
+
+/**
+ * GET /merchant/transactions - Get merchant transactions (bypasses RLS)
+ * Used by merchant dashboard to view all their transactions
+ */
+async function handleMerchantTransactions(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const merchantId = req.query.merchantId as string;
+    const limit = parseInt(req.query.limit as string) || 100;
+    const offset = parseInt(req.query.offset as string) || 0;
+    const status = req.query.status as string;
+
+    if (!merchantId) {
+      return res.status(400).json({ error: 'merchantId is required' });
+    }
+
+    // First get the merchant's wallet ID
+    const { data: wallet } = await supabase
+      .from('wallets')
+      .select('id')
+      .eq('user_id', merchantId)
+      .eq('wallet_type', 'primary')
+      .single();
+
+    const walletId = wallet?.id;
+
+    // Build query for transactions - service role bypasses RLS
+    let query = supabase
+      .from('transactions')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false });
+
+    // Filter by wallet_id OR recipient_id
+    if (walletId) {
+      query = query.or(`wallet_id.eq.${walletId},recipient_id.eq.${merchantId}`);
+    } else {
+      query = query.eq('recipient_id', merchantId);
+    }
+
+    if (status && status !== 'all') {
+      query = query.eq('status', status);
+    }
+
+    query = query.range(offset, offset + limit - 1);
+
+    const { data: transactions, count, error } = await query;
+
+    if (error) {
+      console.error('[Merchant Transactions] Database error:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    // Get user info for customers
+    const userIds = [...new Set((transactions || [])
+      .map(t => t.user_id || t.recipient_id)
+      .filter(Boolean)
+      .filter(id => id !== merchantId))];
+
+    let users: Record<string, any> = {};
+    if (userIds.length > 0) {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, email, phone')
+        .in('id', userIds);
+
+      if (userData) {
+        users = userData.reduce((acc: any, u: any) => {
+          acc[u.id] = u;
+          return acc;
+        }, {});
+      }
+    }
+
+    // Calculate stats
+    const allTxns = transactions || [];
+    const stats = {
+      total: count || 0,
+      completed: allTxns.filter(t => t.status === 'completed').length,
+      pending: allTxns.filter(t => t.status === 'pending').length,
+      failed: allTxns.filter(t => t.status === 'failed').length,
+      totalVolume: allTxns.reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0),
+    };
+
+    // Map transactions with customer info
+    const mappedTransactions = allTxns.map(t => {
+      const customerId = t.user_id !== merchantId ? t.user_id : t.recipient_id;
+      const customer = users[customerId];
+      return {
+        ...t,
+        customerId,
+        customerName: customer ? `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || customer.email : null,
+        customerEmail: customer?.email || null,
+        customerPhone: customer?.phone || null,
+      };
+    });
+
+    return res.status(200).json({
+      transactions: mappedTransactions,
+      total: count || 0,
+      stats,
+      limit,
+      offset,
+    });
+  } catch (error: any) {
+    console.error('[Merchant Transactions] Error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to fetch transactions' });
   }
 }
 
