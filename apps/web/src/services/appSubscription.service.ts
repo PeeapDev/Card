@@ -123,7 +123,7 @@ class AppSubscriptionService {
   private appCache: Map<string, AppWithPricing> = new Map();
   private bundleCache: SubscriptionBundle[] = [];
   private lastCacheFetch: number = 0;
-  private cacheTTL = 5 * 60 * 1000; // 5 minutes
+  private cacheTTL = 30 * 1000; // 30 seconds - short cache for fresh pricing data
 
   // =====================================================
   // CATALOG (Public Read)

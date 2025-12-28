@@ -98,6 +98,14 @@ export function AppSubscriptionPage() {
     return `${currency} ${new Intl.NumberFormat('en-SL').format(price)}`;
   };
 
+  // Calculate yearly savings
+  const calculateYearlySavings = (monthlyPrice: number, yearlyPrice: number) => {
+    const fullYearPrice = monthlyPrice * 12;
+    const savings = fullYearPrice - yearlyPrice;
+    const percentage = fullYearPrice > 0 ? Math.round((savings / fullYearPrice) * 100) : 0;
+    return { savings, percentage, fullYearPrice };
+  };
+
   // Handle app selection for bundle
   const toggleAppSelection = (slug: string) => {
     if (selectedApps.includes(slug)) {
@@ -207,23 +215,57 @@ export function AppSubscriptionPage() {
 
         {/* Pricing */}
         <div className="grid grid-cols-2 gap-2 mb-4">
-          <div className={`p-3 rounded-lg text-center ${
+          {/* Starter Pricing */}
+          <div className={`p-3 rounded-lg ${
             selectedTier === 'starter' && !hasAccess ? 'bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-700' : 'bg-gray-50 dark:bg-gray-800'
           }`}>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Starter</p>
-            <p className="font-bold text-gray-900 dark:text-white">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1 text-center">Starter</p>
+            <p className="font-bold text-gray-900 dark:text-white text-center">
               {formatPrice(app.pricing.starter.price_monthly)}
             </p>
-            <p className="text-xs text-gray-400">/month</p>
+            <p className="text-xs text-gray-400 text-center">/month</p>
+            {(() => {
+              const { savings, percentage } = calculateYearlySavings(
+                app.pricing.starter.price_monthly,
+                app.pricing.starter.price_yearly
+              );
+              return savings > 0 ? (
+                <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                  <p className="text-xs text-gray-500 text-center">
+                    {formatPrice(app.pricing.starter.price_yearly)}/year
+                  </p>
+                  <p className="text-xs text-green-600 dark:text-green-400 font-medium text-center">
+                    Save {formatPrice(savings)} ({percentage}%)
+                  </p>
+                </div>
+              ) : null;
+            })()}
           </div>
-          <div className={`p-3 rounded-lg text-center ${
+          {/* Pro Pricing */}
+          <div className={`p-3 rounded-lg ${
             selectedTier === 'pro' && !hasAccess ? 'bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700' : 'bg-gray-50 dark:bg-gray-800'
           }`}>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Pro</p>
-            <p className="font-bold text-gray-900 dark:text-white">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1 text-center">Pro</p>
+            <p className="font-bold text-gray-900 dark:text-white text-center">
               {formatPrice(app.pricing.pro.price_monthly)}
             </p>
-            <p className="text-xs text-gray-400">/month</p>
+            <p className="text-xs text-gray-400 text-center">/month</p>
+            {(() => {
+              const { savings, percentage } = calculateYearlySavings(
+                app.pricing.pro.price_monthly,
+                app.pricing.pro.price_yearly
+              );
+              return savings > 0 ? (
+                <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                  <p className="text-xs text-gray-500 text-center">
+                    {formatPrice(app.pricing.pro.price_yearly)}/year
+                  </p>
+                  <p className="text-xs text-green-600 dark:text-green-400 font-medium text-center">
+                    Save {formatPrice(savings)} ({percentage}%)
+                  </p>
+                </div>
+              ) : null;
+            })()}
           </div>
         </div>
 
