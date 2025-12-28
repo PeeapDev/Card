@@ -215,8 +215,6 @@ class MerchantService {
    * Get merchant statistics
    */
   async getStats(merchantId: string): Promise<MerchantStats> {
-    const walletId = await this.getMerchantWalletId(merchantId);
-
     // Get wallet balance
     const { data: wallet } = await supabase
       .from('wallets')
@@ -225,39 +223,37 @@ class MerchantService {
       .eq('wallet_type', 'primary')
       .single();
 
-    // Get transaction counts
-    const { data: transactions } = await supabase
-      .from('transactions')
+    // Get checkout session counts (primary source for merchant transactions)
+    const { data: sessions } = await supabase
+      .from('checkout_sessions')
       .select('status, amount')
-      .or(`wallet_id.eq.${walletId},recipient_id.eq.${merchantId}`);
+      .eq('merchant_id', merchantId);
 
+    const allSessions = sessions || [];
     const stats: MerchantStats = {
-      totalTransactions: transactions?.length || 0,
-      totalVolume: transactions?.reduce((sum, t) => sum + (t.amount || 0), 0) || 0,
-      completedTransactions: transactions?.filter(t => t.status === 'completed').length || 0,
-      pendingTransactions: transactions?.filter(t => t.status === 'pending').length || 0,
-      failedTransactions: transactions?.filter(t => t.status === 'failed').length || 0,
+      totalTransactions: allSessions.length,
+      totalVolume: allSessions
+        .filter(s => s.status === 'PAID')
+        .reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0),
+      completedTransactions: allSessions.filter(s => s.status === 'PAID').length,
+      pendingTransactions: allSessions.filter(s => s.status === 'OPEN').length,
+      failedTransactions: allSessions.filter(s => s.status === 'CANCELLED' || s.status === 'EXPIRED').length,
       availableBalance: wallet?.balance || 0,
       pendingBalance: wallet?.pending_balance || 0,
       totalPayouts: 0,
       totalRefunds: 0,
     };
 
-    // Get payout count
-    const { count: payoutCount } = await supabase
-      .from('payouts')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', merchantId);
-
-    stats.totalPayouts = payoutCount || 0;
-
-    // Get refund count
-    const { count: refundCount } = await supabase
-      .from('refunds')
-      .select('*', { count: 'exact', head: true })
-      .eq('merchant_id', merchantId);
-
-    stats.totalRefunds = refundCount || 0;
+    // Get payout count (ignore if table doesn't exist)
+    try {
+      const { count: payoutCount } = await supabase
+        .from('payouts')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', merchantId);
+      stats.totalPayouts = payoutCount || 0;
+    } catch {
+      stats.totalPayouts = 0;
+    }
 
     return stats;
   }
