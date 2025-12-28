@@ -30,6 +30,18 @@ import {
   TrendingUp,
   Calendar,
   Building2,
+  Grid3X3,
+  ShoppingCart,
+  FileText,
+  Truck,
+  Link as LinkIcon,
+  Repeat,
+  Package,
+  BarChart,
+  Gift,
+  MapPin,
+  ChevronRight,
+  Loader2,
 } from 'lucide-react';
 import { Card, MotionCard } from '@/components/ui/Card';
 import { AdminLayout } from '@/components/layout/AdminLayout';
@@ -92,10 +104,25 @@ interface TierConfig {
   features: string[];
 }
 
-type TabType = 'plans' | 'business' | 'agent' | 'user-switch' | 'active' | 'tier-config';
+interface AppWithPricing {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: string;
+  is_active: boolean;
+  sort_order: number;
+  pricing: {
+    starter: { id?: string; price_monthly: number; price_yearly: number; trial_days: number };
+    pro: { id?: string; price_monthly: number; price_yearly: number; trial_days: number };
+  };
+}
+
+type TabType = 'plans' | 'business' | 'agent' | 'user-switch' | 'active' | 'tier-config' | 'app-pricing';
 
 export function SubscriptionsPage() {
-  const [activeTab, setActiveTab] = useState<TabType>('tier-config');
+  const [activeTab, setActiveTab] = useState<TabType>('app-pricing');
   const [isEditing, setIsEditing] = useState(false);
   const [saved, setSaved] = useState(false);
   const [showAddPlan, setShowAddPlan] = useState(false);
@@ -119,6 +146,13 @@ export function SubscriptionsPage() {
   const [editingTier, setEditingTier] = useState<string | null>(null);
   const [tierSaved, setTierSaved] = useState(false);
 
+  // App pricing state
+  const [apps, setApps] = useState<AppWithPricing[]>([]);
+  const [loadingApps, setLoadingApps] = useState(false);
+  const [editingApp, setEditingApp] = useState<string | null>(null);
+  const [appSaved, setAppSaved] = useState(false);
+  const [savingApp, setSavingApp] = useState(false);
+
   // Global subscription settings
   const [globalTrialDays, setGlobalTrialDays] = useState(7);
   const [gracePeriodDays, setGracePeriodDays] = useState(3);
@@ -132,6 +166,7 @@ export function SubscriptionsPage() {
     loadActiveSubscriptions();
     loadTierConfigs();
     loadGlobalSettings();
+    loadApps();
   }, []);
 
   const currencySymbol = defaultCurrency?.symbol || 'NLe';
@@ -264,6 +299,132 @@ export function SubscriptionsPage() {
     } finally {
       setLoadingTierConfigs(false);
     }
+  };
+
+  const loadApps = async () => {
+    setLoadingApps(true);
+    try {
+      // Load apps
+      const { data: appsData, error: appsError } = await supabase
+        .from('apps')
+        .select('*')
+        .order('sort_order');
+
+      if (appsError) throw appsError;
+
+      // Load pricing
+      const { data: pricingData, error: pricingError } = await supabase
+        .from('app_pricing')
+        .select('*');
+
+      if (pricingError) throw pricingError;
+
+      // Combine apps with pricing
+      const appsWithPricing: AppWithPricing[] = (appsData || []).map(app => {
+        const starterPricing = pricingData?.find(p => p.app_id === app.id && p.tier === 'starter');
+        const proPricing = pricingData?.find(p => p.app_id === app.id && p.tier === 'pro');
+
+        return {
+          ...app,
+          pricing: {
+            starter: {
+              id: starterPricing?.id,
+              price_monthly: starterPricing?.price_monthly || 0,
+              price_yearly: starterPricing?.price_yearly || 0,
+              trial_days: starterPricing?.trial_days || 7,
+            },
+            pro: {
+              id: proPricing?.id,
+              price_monthly: proPricing?.price_monthly || 0,
+              price_yearly: proPricing?.price_yearly || 0,
+              trial_days: proPricing?.trial_days || 7,
+            },
+          },
+        };
+      });
+
+      setApps(appsWithPricing);
+    } catch (error) {
+      console.error('Error loading apps:', error);
+    } finally {
+      setLoadingApps(false);
+    }
+  };
+
+  const saveAppPricing = async (app: AppWithPricing) => {
+    setSavingApp(true);
+    try {
+      // Update or insert starter pricing
+      if (app.pricing.starter.id) {
+        await supabase
+          .from('app_pricing')
+          .update({
+            price_monthly: app.pricing.starter.price_monthly,
+            price_yearly: app.pricing.starter.price_yearly,
+            trial_days: app.pricing.starter.trial_days,
+          })
+          .eq('id', app.pricing.starter.id);
+      } else {
+        await supabase
+          .from('app_pricing')
+          .insert({
+            app_id: app.id,
+            tier: 'starter',
+            price_monthly: app.pricing.starter.price_monthly,
+            price_yearly: app.pricing.starter.price_yearly,
+            trial_days: app.pricing.starter.trial_days,
+          });
+      }
+
+      // Update or insert pro pricing
+      if (app.pricing.pro.id) {
+        await supabase
+          .from('app_pricing')
+          .update({
+            price_monthly: app.pricing.pro.price_monthly,
+            price_yearly: app.pricing.pro.price_yearly,
+            trial_days: app.pricing.pro.trial_days,
+          })
+          .eq('id', app.pricing.pro.id);
+      } else {
+        await supabase
+          .from('app_pricing')
+          .insert({
+            app_id: app.id,
+            tier: 'pro',
+            price_monthly: app.pricing.pro.price_monthly,
+            price_yearly: app.pricing.pro.price_yearly,
+            trial_days: app.pricing.pro.trial_days,
+          });
+      }
+
+      setAppSaved(true);
+      setTimeout(() => setAppSaved(false), 3000);
+      setEditingApp(null);
+      await loadApps(); // Reload to get updated IDs
+    } catch (error) {
+      console.error('Error saving app pricing:', error);
+    } finally {
+      setSavingApp(false);
+    }
+  };
+
+  const updateAppPricing = (appId: string, tier: 'starter' | 'pro', field: string, value: number) => {
+    setApps(apps.map(app => {
+      if (app.id === appId) {
+        return {
+          ...app,
+          pricing: {
+            ...app.pricing,
+            [tier]: {
+              ...app.pricing[tier],
+              [field]: value,
+            },
+          },
+        };
+      }
+      return app;
+    }));
   };
 
   const loadGlobalSettings = async () => {
@@ -588,6 +749,7 @@ export function SubscriptionsPage() {
   };
 
   const tabs = [
+    { id: 'app-pricing' as TabType, label: 'App Pricing', icon: Grid3X3, count: apps.length },
     { id: 'tier-config' as TabType, label: 'Merchant Tiers', icon: Building2, count: tierConfigs.length },
     { id: 'plans' as TabType, label: 'POS Plans', icon: Store, count: plans.filter(p => p.category === 'pos').length },
     { id: 'business' as TabType, label: 'Business+', icon: Crown, count: plans.filter(p => p.category === 'business').length },
@@ -595,6 +757,20 @@ export function SubscriptionsPage() {
     { id: 'user-switch' as TabType, label: 'User Switch', icon: ArrowRightLeft, count: stats.pendingSwitchRequests },
     { id: 'active' as TabType, label: 'Active Subscriptions', icon: CheckCircle, count: stats.totalSubscribers },
   ];
+
+  // Icon mapping for apps
+  const APP_ICONS: Record<string, React.ElementType> = {
+    'shopping-cart': ShoppingCart,
+    'file-text': FileText,
+    calendar: Calendar,
+    truck: Truck,
+    link: LinkIcon,
+    repeat: Repeat,
+    package: Package,
+    'bar-chart': BarChart,
+    gift: Gift,
+    'map-pin': MapPin,
+  };
 
   return (
     <AdminLayout>
@@ -733,6 +909,220 @@ export function SubscriptionsPage() {
               </div>
             </div>
           </Card>
+        )}
+
+        {/* App Pricing Tab */}
+        {activeTab === 'app-pricing' && (
+          <div className="space-y-6">
+            {/* Info Banner */}
+            <Card className="p-4 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+              <div className="flex items-start gap-3">
+                <Grid3X3 className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-blue-800 dark:text-blue-300">App Subscription Pricing</p>
+                  <p className="text-sm text-blue-700 dark:text-blue-400 mt-1">
+                    Configure pricing for individual apps. Merchants can subscribe to apps individually or through bundles.
+                    Click on an app to edit its Starter and Pro tier pricing.
+                  </p>
+                </div>
+              </div>
+            </Card>
+
+            {appSaved && (
+              <div className="fixed bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 z-50">
+                <CheckCircle className="w-4 h-4" />
+                App pricing saved successfully
+              </div>
+            )}
+
+            {/* Apps Grid */}
+            {loadingApps ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
+              </div>
+            ) : apps.length === 0 ? (
+              <Card className="p-8 text-center">
+                <Grid3X3 className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p className="text-gray-500">No apps found</p>
+                <p className="text-sm text-gray-400 mt-1">Apps will appear here once the migration is run</p>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {apps.map((app) => {
+                  const Icon = APP_ICONS[app.icon] || Package;
+                  const isEditing = editingApp === app.id;
+
+                  return (
+                    <Card
+                      key={app.id}
+                      className={`overflow-hidden transition-all ${
+                        isEditing ? 'ring-2 ring-primary-500' : 'hover:shadow-lg'
+                      }`}
+                    >
+                      <div className="p-5">
+                        {/* App Header */}
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded-xl flex items-center justify-center">
+                              <Icon className="w-6 h-6 text-gray-600 dark:text-gray-400" />
+                            </div>
+                            <div>
+                              <h3 className="font-semibold text-gray-900 dark:text-white">{app.name}</h3>
+                              <span className="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded capitalize">
+                                {app.category}
+                              </span>
+                            </div>
+                          </div>
+                          {!isEditing ? (
+                            <button
+                              onClick={() => setEditingApp(app.id)}
+                              className="p-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
+                              title="Edit Pricing"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                          ) : (
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => saveAppPricing(app)}
+                                disabled={savingApp}
+                                className="p-2 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-lg hover:bg-green-200 disabled:opacity-50"
+                                title="Save"
+                              >
+                                {savingApp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingApp(null);
+                                  loadApps();
+                                }}
+                                className="p-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-lg hover:bg-gray-200"
+                                title="Cancel"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 line-clamp-2">{app.description}</p>
+
+                        {/* Pricing */}
+                        <div className="grid grid-cols-2 gap-3">
+                          {/* Starter Tier */}
+                          <div className={`p-3 rounded-lg ${isEditing ? 'bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700' : 'bg-gray-50 dark:bg-gray-800'}`}>
+                            <div className="flex items-center gap-1 mb-2">
+                              <Zap className="w-3.5 h-3.5 text-gray-500" />
+                              <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Starter</span>
+                            </div>
+                            {isEditing ? (
+                              <div className="space-y-2">
+                                <div>
+                                  <label className="text-xs text-gray-400">Monthly</label>
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-xs text-gray-400">{currencySymbol}</span>
+                                    <input
+                                      type="number"
+                                      value={app.pricing.starter.price_monthly}
+                                      onChange={(e) => updateAppPricing(app.id, 'starter', 'price_monthly', parseFloat(e.target.value) || 0)}
+                                      className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded"
+                                    />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="text-xs text-gray-400">Yearly</label>
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-xs text-gray-400">{currencySymbol}</span>
+                                    <input
+                                      type="number"
+                                      value={app.pricing.starter.price_yearly}
+                                      onChange={(e) => updateAppPricing(app.id, 'starter', 'price_yearly', parseFloat(e.target.value) || 0)}
+                                      className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div>
+                                <p className="text-lg font-bold text-gray-900 dark:text-white">
+                                  {currencySymbol}{app.pricing.starter.price_monthly}
+                                </p>
+                                <p className="text-xs text-gray-400">/month</p>
+                                <p className="text-xs text-gray-400 mt-1">
+                                  {currencySymbol}{app.pricing.starter.price_yearly}/year
+                                </p>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Pro Tier */}
+                          <div className={`p-3 rounded-lg ${isEditing ? 'bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700' : 'bg-purple-50 dark:bg-purple-900/20'}`}>
+                            <div className="flex items-center gap-1 mb-2">
+                              <Star className="w-3.5 h-3.5 text-purple-500" />
+                              <span className="text-xs font-medium text-purple-600 dark:text-purple-400">Pro</span>
+                            </div>
+                            {isEditing ? (
+                              <div className="space-y-2">
+                                <div>
+                                  <label className="text-xs text-gray-400">Monthly</label>
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-xs text-gray-400">{currencySymbol}</span>
+                                    <input
+                                      type="number"
+                                      value={app.pricing.pro.price_monthly}
+                                      onChange={(e) => updateAppPricing(app.id, 'pro', 'price_monthly', parseFloat(e.target.value) || 0)}
+                                      className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded"
+                                    />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="text-xs text-gray-400">Yearly</label>
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-xs text-gray-400">{currencySymbol}</span>
+                                    <input
+                                      type="number"
+                                      value={app.pricing.pro.price_yearly}
+                                      onChange={(e) => updateAppPricing(app.id, 'pro', 'price_yearly', parseFloat(e.target.value) || 0)}
+                                      className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div>
+                                <p className="text-lg font-bold text-gray-900 dark:text-white">
+                                  {currencySymbol}{app.pricing.pro.price_monthly}
+                                </p>
+                                <p className="text-xs text-gray-400">/month</p>
+                                <p className="text-xs text-gray-400 mt-1">
+                                  {currencySymbol}{app.pricing.pro.price_yearly}/year
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Status */}
+                        <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                            app.is_active
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                              : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400'
+                          }`}>
+                            {app.is_active ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+                            {app.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                          <span className="text-xs text-gray-400">
+                            Trial: {app.pricing.starter.trial_days} days
+                          </span>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         )}
 
         {/* User Switch Tab */}
