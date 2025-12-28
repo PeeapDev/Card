@@ -196,7 +196,8 @@ export function IdCardScanner({ onComplete, onCancel, expectedName }: IdCardScan
   const callOcrApi = async (imageBase64: string): Promise<OcrResult> => {
     try {
       // Try backend API first
-      const response = await fetch('/api/kyc/process-document', {
+      const API_URL = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
+      const response = await fetch(`${API_URL}/kyc/process-document`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

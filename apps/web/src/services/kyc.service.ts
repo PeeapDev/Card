@@ -178,7 +178,8 @@ export const kycService = {
     // For now, we'll call the backend API if available
     // Otherwise, do basic validation
     try {
-      const response = await fetch('/api/kyc/verify-document', {
+      const API_URL = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
+      const response = await fetch(`${API_URL}/kyc/verify-document`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -459,7 +459,8 @@ export function WalletsPage() {
     try {
       // Send display amount - backend handles conversion to Monime format
       // Call our API endpoint to create Monime checkout session
-      const response = await fetch('/api/monime/deposit', {
+      const API_URL = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
+      const response = await fetch(`${API_URL}/monime/deposit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

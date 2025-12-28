@@ -932,7 +932,8 @@ function MobileMoneyCheckout({
     setStatus('processing');
 
     try {
-      const response = await fetch('/api/monime/checkout', {
+      const API_URL = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
+      const response = await fetch(`${API_URL}/monime/checkout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
