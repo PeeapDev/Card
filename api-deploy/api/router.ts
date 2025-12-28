@@ -10871,6 +10871,10 @@ async function handleKycVerificationStatus(req: VercelRequest, res: VercelRespon
   try {
     const { userId, user } = auth;
 
+    // Check if user is already approved/verified by admin
+    const kycStatus = user.kyc_status?.toUpperCase();
+    const isAdminApproved = kycStatus === 'APPROVED' || kycStatus === 'VERIFIED';
+
     // Get the latest KYC application
     const { data: kycApplication } = await supabase
       .from('kyc_applications')
@@ -10883,19 +10887,21 @@ async function handleKycVerificationStatus(req: VercelRequest, res: VercelRespon
     const metadata = user.metadata || {};
     const slVerification = kycApplication?.verification_result?.slVerification;
 
-    const hasIdVerification = !!(
+    const hasIdVerification = isAdminApproved || !!(
       slVerification?.nin ||
       kycApplication?.verification_result?.extractedData?.documentNumber ||
       metadata.nin
     );
 
-    const hasPhoneVerification = !!(
+    const hasPhoneVerification = isAdminApproved || !!(
       slVerification?.phoneVerified ||
       metadata.phoneVerifiedAt
     );
 
-    const hasNameMatch = (slVerification?.nameMatchScore || 0) >= 70;
-    const overallVerified = hasIdVerification && hasPhoneVerification && hasNameMatch;
+    const hasNameMatch = isAdminApproved || (slVerification?.nameMatchScore || 0) >= 70;
+
+    // User is verified if admin approved OR all checks pass
+    const overallVerified = isAdminApproved || (hasIdVerification && hasPhoneVerification && hasNameMatch);
 
     // Calculate verification percentage
     let percentage = 0;
@@ -11400,18 +11406,26 @@ async function handleKycSierraLeoneVerification(req: VercelRequest, res: VercelR
       kycApplicationId = newApp?.id || '';
     }
 
-    // If phone verified, update user metadata
+    // Update user kyc_status to PENDING and metadata
+    const updateData: Record<string, any> = {
+      kyc_status: 'PENDING',
+    };
+
     if (phoneVerified) {
-      await supabase
-        .from('users')
-        .update({
-          metadata: {
-            ...user.metadata,
-            phoneVerifiedAt: new Date().toISOString(),
-            phoneVerifiedNumber: normalized,
-          },
-        })
-        .eq('id', userId);
+      updateData.metadata = {
+        ...user.metadata,
+        phoneVerifiedAt: new Date().toISOString(),
+        phoneVerifiedNumber: normalized,
+      };
+    }
+
+    const { error: userUpdateError } = await supabase
+      .from('users')
+      .update(updateData)
+      .eq('id', userId);
+
+    if (userUpdateError) {
+      console.error('[KYC] Error updating user kyc_status:', userUpdateError);
     }
 
     return res.status(200).json({
