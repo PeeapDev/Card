@@ -185,6 +185,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } else if (path === 'monime/banks' || path === 'monime/banks/') {
       // Alias for /payouts/banks - for backwards compatibility with bankAccountService
       return await handlePayoutBanks(req, res);
+    } else if (path === 'monime/deposits' || path === 'monime/deposits/') {
+      return await handleMonimeDeposits(req, res);
     } else if (path === 'float/summary' || path === 'float/summary/') {
       return await handleFloatSummary(req, res);
     } else if (path === 'float/today' || path === 'float/today/') {
@@ -1586,6 +1588,81 @@ async function handleMonimeBalance(req: VercelRequest, res: VercelResponse) {
     }
 
     return res.status(500).json({ error: error.message || 'Failed to fetch balance' });
+  }
+}
+
+/**
+ * GET /monime/deposits - List all deposit transactions for admin
+ * Returns deposits from the transactions table with type DEPOSIT
+ */
+async function handleMonimeDeposits(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const limit = parseInt(req.query.limit as string) || 50;
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    // Get deposit transactions from local database
+    const { data: deposits, count, error } = await supabase
+      .from('transactions')
+      .select('*', { count: 'exact' })
+      .in('type', ['DEPOSIT', 'deposit', 'TOP_UP', 'top_up'])
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) {
+      console.error('[Monime Deposits] Database error:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    // Get user info for each deposit
+    const userIds = [...new Set((deposits || []).map(d => d.user_id).filter(Boolean))];
+    let users: Record<string, any> = {};
+
+    if (userIds.length > 0) {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, email, phone')
+        .in('id', userIds);
+
+      if (userData) {
+        users = userData.reduce((acc: any, u: any) => {
+          acc[u.id] = u;
+          return acc;
+        }, {});
+      }
+    }
+
+    // Map to MonimeTransaction format expected by frontend
+    const mappedDeposits = (deposits || []).map(d => ({
+      id: d.id,
+      type: 'DEPOSIT',
+      status: d.status?.toUpperCase() || 'PENDING',
+      monimeReference: d.reference || d.external_id || null,
+      walletId: d.wallet_id,
+      userId: d.user_id,
+      amount: parseFloat(d.amount) || 0,
+      currency: d.currency || 'SLE',
+      fee: parseFloat(d.fee) || 0,
+      netAmount: (parseFloat(d.amount) || 0) - (parseFloat(d.fee) || 0),
+      depositMethod: d.metadata?.paymentMethod || d.metadata?.depositMethod || null,
+      createdAt: d.created_at,
+      completedAt: d.completed_at || d.updated_at,
+      user: users[d.user_id] || null,
+      metadata: d.metadata || {},
+    }));
+
+    return res.status(200).json({
+      data: mappedDeposits,
+      total: count || 0,
+      limit,
+      offset,
+    });
+  } catch (error: any) {
+    console.error('[Monime Deposits] Error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to fetch deposits' });
   }
 }
 

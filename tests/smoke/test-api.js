@@ -89,6 +89,24 @@ async function runTests() {
     }
   });
 
+  console.log('\n📍 Admin Transactions');
+  console.log('─'.repeat(40));
+
+  await test('Deposits endpoint returns data', async () => {
+    const { status, data } = await fetchJson('/monime/deposits?limit=10');
+    if (status !== 200) throw new Error(`Status: ${status}`);
+    if (!data.data) throw new Error('Missing data array');
+    if (!Array.isArray(data.data)) throw new Error('data is not an array');
+    console.log(`     Found ${data.total || 0} deposits`);
+  });
+
+  await test('Payouts endpoint returns data', async () => {
+    const { status, data } = await fetchJson('/payouts?limit=10');
+    if (status !== 200) throw new Error(`Status: ${status}`);
+    if (!data.payouts) throw new Error('Missing payouts array');
+    console.log(`     Found ${data.total || 0} payouts`);
+  });
+
   console.log('\n📍 Checkout Flow');
   console.log('─'.repeat(40));
 

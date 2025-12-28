@@ -49,3 +49,50 @@ pre {
 .method-delete {
   @apply bg-red-100 text-red-700;
 }
+
+/* Syntax Highlighting - Tokyo Night Theme */
+.code-keyword {
+  color: #bb9af7; /* Purple - keywords */
+}
+
+.code-string {
+  color: #9ece6a; /* Green - strings */
+}
+
+.code-template {
+  color: #9ece6a; /* Green - template literals */
+}
+
+.code-comment {
+  color: #565f89; /* Gray - comments */
+  font-style: italic;
+}
+
+.code-function {
+  color: #7aa2f7; /* Blue - functions */
+}
+
+.code-component {
+  color: #2ac3de; /* Cyan - React components */
+}
+
+.code-prop {
+  color: #73daca; /* Teal - props/attributes */
+}
+
+.code-number {
+  color: #ff9e64; /* Orange - numbers */
+}
+
+.code-operator {
+  color: #89ddff; /* Light blue - operators */
+}
+
+/* Code block container */
+.code-block-container pre {
+  @apply bg-transparent p-0 m-0;
+}
+
+.code-block-container code {
+  @apply bg-transparent p-0 text-inherit;
+}
