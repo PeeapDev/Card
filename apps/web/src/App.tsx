@@ -130,12 +130,14 @@ import { MerchantDashboard } from '@/pages/merchant/MerchantDashboard';
 import { MerchantSettingsPage } from '@/pages/merchant/MerchantSettingsPage';
 import { MerchantDeveloperPage } from '@/pages/merchant/MerchantDeveloperPage';
 import { BusinessIntegrationPage } from '@/pages/merchant/BusinessIntegrationPage';
+import { MerchantApiKeysPage } from '@/pages/merchant/MerchantApiKeysPage';
 import { MerchantTransactionsPage } from '@/pages/merchant/MerchantTransactionsPage';
 import { MerchantPayoutsPage } from '@/pages/merchant/MerchantPayoutsPage';
 import { MerchantRefundsPage } from '@/pages/merchant/MerchantRefundsPage';
 import { MerchantReportsPage } from '@/pages/merchant/MerchantReportsPage';
 import { MerchantPaymentLinksPage } from '@/pages/merchant/MerchantPaymentLinksPage';
 import { MerchantSubscriptionsPage } from '@/pages/merchant/MerchantSubscriptionsPage';
+import { AppSubscriptionPage } from '@/pages/merchant/AppSubscriptionPage';
 import MerchantInvoicesPage from '@/pages/merchant/MerchantInvoicesPage';
 import NewInvoicePage from '@/pages/merchant/NewInvoicePage';
 import InvoiceDetailsPage from '@/pages/merchant/InvoiceDetailsPage';
@@ -1089,6 +1091,10 @@ function App() {
                 }
               />
               <Route
+                path="/merchant/api-keys"
+                element={<MerchantApiKeysPage />}
+              />
+              <Route
                 path="/merchant/developer/create-business"
                 element={
                   <RoleBasedRoute allowedRoles={['merchant']}>
@@ -1615,6 +1621,7 @@ function App() {
                   <Route path="/merchant/invoices/settings" element={<RoleBasedRoute allowedRoles={['merchant']}><InvoiceSettingsPage /></RoleBasedRoute>} />
                   <Route path="/merchant/invoices/:invoiceId" element={<RoleBasedRoute allowedRoles={['merchant']}><InvoiceDetailsPage /></RoleBasedRoute>} />
                   <Route path="/merchant/subscriptions" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantSubscriptionsPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/apps" element={<RoleBasedRoute allowedRoles={['merchant']}><AppSubscriptionPage /></RoleBasedRoute>} />
                   <Route path="/merchant/profile" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantProfilePage /></RoleBasedRoute>} />
                   <Route path="/merchant/create-business" element={<RoleBasedRoute allowedRoles={['merchant']}><CreateBusinessPage /></RoleBasedRoute>} />
                   <Route path="/merchant/settings" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantSettingsPage /></RoleBasedRoute>} />
@@ -1630,6 +1637,7 @@ function App() {
                   <Route path="/merchant/businesses/:businessId/transactions" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantBusinessTransactionsPage /></RoleBasedRoute>} />
                   <Route path="/merchant/businesses/:businessId/disputes" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantBusinessDisputesPage /></RoleBasedRoute>} />
                   <Route path="/merchant/businesses/:businessId/settings" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantBusinessSettingsPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/api-keys" element={<MerchantApiKeysPage />} />
                   <Route path="/merchant/developer/create-business" element={<RoleBasedRoute allowedRoles={['merchant']}><CreateDeveloperBusinessPage /></RoleBasedRoute>} />
                   <Route path="/merchant/developer/:businessId" element={<RoleBasedRoute allowedRoles={['merchant']}><BusinessIntegrationPage /></RoleBasedRoute>} />
                   <Route path="/merchant/developer/*" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantDeveloperPage /></RoleBasedRoute>} />
