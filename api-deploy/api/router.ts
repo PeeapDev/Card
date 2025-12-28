@@ -1687,7 +1687,7 @@ async function handleMerchantTransactions(req: VercelRequest, res: VercelRespons
       return res.status(400).json({ error: 'merchantId is required' });
     }
 
-    // First get the merchant's wallet ID
+    // Get merchant's wallet ID for wallet transactions
     const { data: wallet } = await supabase
       .from('wallets')
       .select('id')
@@ -1697,79 +1697,105 @@ async function handleMerchantTransactions(req: VercelRequest, res: VercelRespons
 
     const walletId = wallet?.id;
 
-    // Build query for transactions - service role bypasses RLS
-    let query = supabase
-      .from('transactions')
+    // Query checkout_sessions for merchant payments (incoming payments)
+    let checkoutQuery = supabase
+      .from('checkout_sessions')
       .select('*', { count: 'exact' })
+      .eq('merchant_id', merchantId)
       .order('created_at', { ascending: false });
 
-    // Filter by wallet_id OR recipient_id
-    if (walletId) {
-      query = query.or(`wallet_id.eq.${walletId},recipient_id.eq.${merchantId}`);
-    } else {
-      query = query.eq('recipient_id', merchantId);
-    }
-
     if (status && status !== 'all') {
-      query = query.eq('status', status);
+      // Map frontend status to checkout_session status
+      const statusMap: Record<string, string> = {
+        'completed': 'PAID',
+        'pending': 'OPEN',
+        'failed': 'CANCELLED',
+      };
+      const mappedStatus = statusMap[status.toLowerCase()] || status.toUpperCase();
+      checkoutQuery = checkoutQuery.eq('status', mappedStatus);
     }
 
-    query = query.range(offset, offset + limit - 1);
+    checkoutQuery = checkoutQuery.range(offset, offset + limit - 1);
 
-    const { data: transactions, count, error } = await query;
+    const { data: sessions, count: sessionCount, error: sessionError } = await checkoutQuery;
 
-    if (error) {
-      console.error('[Merchant Transactions] Database error:', error);
-      return res.status(500).json({ error: error.message });
+    if (sessionError) {
+      console.error('[Merchant Transactions] Session query error:', sessionError);
     }
 
-    // Get user info for customers
-    const userIds = [...new Set((transactions || [])
-      .map(t => t.user_id || t.recipient_id)
-      .filter(Boolean)
-      .filter(id => id !== merchantId))];
+    // Also get wallet transactions if wallet exists
+    let walletTxns: any[] = [];
+    let walletCount = 0;
+    if (walletId) {
+      const { data: txns, count, error: txnError } = await supabase
+        .from('transactions')
+        .select('*', { count: 'exact' })
+        .eq('wallet_id', walletId)
+        .order('created_at', { ascending: false })
+        .range(0, 50);
 
-    let users: Record<string, any> = {};
-    if (userIds.length > 0) {
-      const { data: userData } = await supabase
-        .from('users')
-        .select('id, first_name, last_name, email, phone')
-        .in('id', userIds);
-
-      if (userData) {
-        users = userData.reduce((acc: any, u: any) => {
-          acc[u.id] = u;
-          return acc;
-        }, {});
+      if (!txnError && txns) {
+        walletTxns = txns;
+        walletCount = count || 0;
       }
     }
 
-    // Calculate stats
-    const allTxns = transactions || [];
+    // Map checkout sessions to transaction format
+    const checkoutTransactions = (sessions || []).map(s => ({
+      id: s.id,
+      external_id: s.external_id,
+      type: 'PAYMENT',
+      status: s.status === 'PAID' ? 'completed' : s.status === 'OPEN' ? 'pending' : 'failed',
+      amount: parseFloat(s.amount) || 0,
+      currency: s.currency_code || 'SLE',
+      description: s.description || 'Checkout payment',
+      customer_email: s.metadata?.customer_email || null,
+      customer_name: s.metadata?.customer_name || null,
+      payment_method: s.payment_method || null,
+      reference: s.reference || s.payment_reference || null,
+      created_at: s.created_at,
+      completed_at: s.completed_at,
+      metadata: s.metadata,
+    }));
+
+    // Map wallet transactions
+    const mappedWalletTxns = walletTxns.map(t => ({
+      id: t.id,
+      external_id: t.external_id,
+      type: t.type,
+      status: t.status?.toLowerCase() || 'pending',
+      amount: parseFloat(t.amount) || 0,
+      currency: t.currency || 'SLE',
+      description: t.description,
+      customer_email: null,
+      customer_name: t.metadata?.recipient_name || null,
+      payment_method: null,
+      reference: t.reference,
+      created_at: t.created_at,
+      completed_at: t.updated_at,
+      metadata: t.metadata,
+    }));
+
+    // Combine and sort by date
+    const allTransactions = [...checkoutTransactions, ...mappedWalletTxns]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, limit);
+
+    // Calculate stats from checkout sessions (primary source for merchant revenue)
+    const allSessions = sessions || [];
     const stats = {
-      total: count || 0,
-      completed: allTxns.filter(t => t.status === 'completed').length,
-      pending: allTxns.filter(t => t.status === 'pending').length,
-      failed: allTxns.filter(t => t.status === 'failed').length,
-      totalVolume: allTxns.reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0),
+      total: (sessionCount || 0) + walletCount,
+      completed: allSessions.filter(s => s.status === 'PAID').length,
+      pending: allSessions.filter(s => s.status === 'OPEN').length,
+      failed: allSessions.filter(s => s.status === 'CANCELLED' || s.status === 'EXPIRED').length,
+      totalVolume: allSessions
+        .filter(s => s.status === 'PAID')
+        .reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0),
     };
 
-    // Map transactions with customer info
-    const mappedTransactions = allTxns.map(t => {
-      const customerId = t.user_id !== merchantId ? t.user_id : t.recipient_id;
-      const customer = users[customerId];
-      return {
-        ...t,
-        customerId,
-        customerName: customer ? `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || customer.email : null,
-        customerEmail: customer?.email || null,
-        customerPhone: customer?.phone || null,
-      };
-    });
-
     return res.status(200).json({
-      transactions: mappedTransactions,
-      total: count || 0,
+      transactions: allTransactions,
+      total: (sessionCount || 0) + walletCount,
       stats,
       limit,
       offset,
