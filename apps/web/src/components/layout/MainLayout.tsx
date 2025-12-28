@@ -481,20 +481,18 @@ export function MainLayout({ children }: MainLayoutProps) {
         blockedAction={blockedAction}
       />
 
-      {/* Mobile Verification Banner - Above footer nav for unverified users */}
+      {/* Mobile Verification Banner - Compact notice that doesn't block navigation */}
       {!isVerified && (
-        <div className="fixed bottom-16 md:bottom-0 left-0 right-0 lg:left-64 bg-gradient-to-r from-red-600 to-red-500 text-white px-4 py-2 md:hidden z-40">
+        <div className="fixed bottom-20 left-2 right-2 md:hidden z-30">
           <button
             onClick={() => navigate('/verify')}
-            className="flex items-center justify-between w-full"
+            className="flex items-center justify-between w-full bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg shadow-lg text-xs"
           >
-            <div className="flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4" />
-              <div>
-                <p className="font-medium text-xs">Account Not Verified</p>
-              </div>
+            <div className="flex items-center gap-1.5">
+              <ShieldAlert className="w-3.5 h-3.5" />
+              <span className="font-medium">Verify Account</span>
             </div>
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </button>
