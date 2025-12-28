@@ -1,9 +1,8 @@
 {
   "version": 2,
-  "name": "peeap-api",
   "buildCommand": "",
-  "outputDirectory": "public",
   "framework": null,
+  "ignoreCommand": "git diff HEAD^ HEAD --quiet -- api-deploy/",
   "functions": {
     "api/**/*.ts": {
       "memory": 1024,

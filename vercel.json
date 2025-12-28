@@ -4,7 +4,11 @@
   "buildCommand": "cd apps/web && npm install --legacy-peer-deps && npm run build",
   "outputDirectory": "apps/web/dist",
   "installCommand": "npm install --legacy-peer-deps",
+  "ignoreCommand": "git diff HEAD^ HEAD --quiet -- apps/web/ package.json vercel.json",
   "rewrites": [
+    { "source": "/api/router/:path*", "destination": "https://api.peeap.com/:path*" },
+    { "source": "/api/v1/:path*", "destination": "https://api.peeap.com/:path*" },
+    { "source": "/api/:path*", "destination": "https://api.peeap.com/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

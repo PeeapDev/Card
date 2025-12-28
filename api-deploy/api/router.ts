@@ -6,6 +6,25 @@ import { sendEmailWithConfig, SmtpConfig } from './services/email';
 import { sendNotification, storeNotification, getNotificationHistory, getUsersWithTokens, getTokenStats, SendNotificationRequest } from './services/push-notification';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+// Public API handlers for third-party integrations
+import {
+  handlePosProducts,
+  handlePosProductById,
+  handlePosCategories,
+  handlePosCategoryById,
+  handlePosSales,
+  handlePosSaleById,
+  handlePosSaleVoid,
+  handlePosInventory,
+  handlePosInventoryAdjust,
+  handleInvoices,
+  handleInvoiceById,
+  handleInvoiceSend,
+  handleEvents,
+  handleEventById,
+  handleEventTickets,
+  handleEventTicketScan,
+} from './handlers/public-api';
 
 const supabaseUrl = process.env.SUPABASE_URL || 'https://akiecgwcxadcpqlvntmf.supabase.co';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFraWVjZ3djeGFkY3BxbHZudG1mIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDI4MzMzMiwiZXhwIjoyMDc5ODU5MzMyfQ.q8R8t_aHiMReEIpeJIV-m0RCEA-n0_RDOtTX8bLJgYs';
@@ -27,7 +46,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Always allow the requesting origin (or * if no origin header)
   res.setHeader('Access-Control-Allow-Origin', origin || '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Business-Id, X-Mode, X-User-Id, X-Requested-With');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Business-Id, X-Mode, X-User-Id, X-Requested-With, X-API-Key, Idempotency-Key');
   res.setHeader('Access-Control-Max-Age', '86400'); // Cache preflight for 24 hours
 
   // Only set credentials header if there's a specific origin (not wildcard)
@@ -56,7 +75,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         endpoints: {
           checkout: '/api/checkout/*',
           payments: '/api/payments/*',
-          webhooks: '/api/webhooks/*'
+          webhooks: '/api/webhooks/*',
+          public_api: {
+            pos: '/api/v1/pos/*',
+            invoices: '/api/v1/invoices/*',
+            events: '/api/v1/events/*',
+            authentication: 'Use X-API-Key header or Authorization: Bearer sk_*'
+          }
         }
       });
     }
@@ -157,6 +182,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleMonimeSetupWebhook(req, res);
     } else if (path === 'monime/balance' || path === 'monime/balance/') {
       return await handleMonimeBalance(req, res);
+    } else if (path === 'monime/banks' || path === 'monime/banks/') {
+      // Alias for /payouts/banks - for backwards compatibility with bankAccountService
+      return await handlePayoutBanks(req, res);
     } else if (path === 'float/summary' || path === 'float/summary/') {
       return await handleFloatSummary(req, res);
     } else if (path === 'float/today' || path === 'float/today/') {
@@ -386,7 +414,66 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } else if (path.match(/^v1\/payment-intents\/[^/]+\/qr$/)) {
       const intentId = path.split('/')[2];
       return await handlePaymentIntentQr(req, res, intentId);
-    } else {
+    }
+
+    // ==================== PUBLIC API - Third Party Integration ====================
+    // POS Products
+    else if (path === 'v1/pos/products' || path === 'v1/pos/products/') {
+      return await handlePosProducts(req, res);
+    } else if (path.match(/^v1\/pos\/products\/[^/]+$/)) {
+      const productId = path.split('/')[3];
+      return await handlePosProductById(req, res, productId);
+    }
+    // POS Categories
+    else if (path === 'v1/pos/categories' || path === 'v1/pos/categories/') {
+      return await handlePosCategories(req, res);
+    } else if (path.match(/^v1\/pos\/categories\/[^/]+$/)) {
+      const categoryId = path.split('/')[3];
+      return await handlePosCategoryById(req, res, categoryId);
+    }
+    // POS Sales
+    else if (path === 'v1/pos/sales' || path === 'v1/pos/sales/') {
+      return await handlePosSales(req, res);
+    } else if (path.match(/^v1\/pos\/sales\/[^/]+\/void$/)) {
+      const saleId = path.split('/')[3];
+      return await handlePosSaleVoid(req, res, saleId);
+    } else if (path.match(/^v1\/pos\/sales\/[^/]+$/)) {
+      const saleId = path.split('/')[3];
+      return await handlePosSaleById(req, res, saleId);
+    }
+    // POS Inventory
+    else if (path === 'v1/pos/inventory' || path === 'v1/pos/inventory/') {
+      return await handlePosInventory(req, res);
+    } else if (path.match(/^v1\/pos\/inventory\/[^/]+\/adjust$/)) {
+      const productId = path.split('/')[3];
+      return await handlePosInventoryAdjust(req, res, productId);
+    }
+    // Invoices
+    else if (path === 'v1/invoices' || path === 'v1/invoices/') {
+      return await handleInvoices(req, res);
+    } else if (path.match(/^v1\/invoices\/[^/]+\/send$/)) {
+      const invoiceId = path.split('/')[2];
+      return await handleInvoiceSend(req, res, invoiceId);
+    } else if (path.match(/^v1\/invoices\/[^/]+$/)) {
+      const invoiceId = path.split('/')[2];
+      return await handleInvoiceById(req, res, invoiceId);
+    }
+    // Events
+    else if (path === 'v1/events' || path === 'v1/events/') {
+      return await handleEvents(req, res);
+    } else if (path.match(/^v1\/events\/[^/]+\/tickets$/)) {
+      const eventId = path.split('/')[2];
+      return await handleEventTickets(req, res, eventId);
+    } else if (path.match(/^v1\/events\/tickets\/[^/]+\/scan$/)) {
+      const ticketId = path.split('/')[3];
+      return await handleEventTicketScan(req, res, ticketId);
+    } else if (path.match(/^v1\/events\/[^/]+$/)) {
+      const eventId = path.split('/')[2];
+      return await handleEventById(req, res, eventId);
+    }
+    // ==================== END PUBLIC API ====================
+
+    else {
       return res.status(404).json({ error: 'Not found', path });
     }
   } catch (error: any) {
@@ -7803,172 +7890,96 @@ async function handleCronKeepalive(req: VercelRequest, res: VercelResponse) {
 /**
  * Monthly subscription billing and reminder cron job
  * Runs on the 1st of each month
- * - Processes subscription renewals
- * - Expires trials that have ended
- * - Sends reminder notifications for upcoming expirations
  */
 async function handleCronSubscriptions(req: VercelRequest, res: VercelResponse) {
-  // Verify this is a cron request
   const authHeader = req.headers.authorization;
   const cronSecret = process.env.CRON_SECRET;
 
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    console.log('[Cron Subscriptions] Unauthorized attempt');
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
   try {
     console.log('[Cron Subscriptions] Starting monthly subscription processing...');
     const now = new Date();
-    const results = {
-      expiredTrials: 0,
-      expiredSubscriptions: 0,
-      renewalsProcessed: 0,
-      remindersSent: 0,
-      errors: [] as string[]
-    };
+    const results = { expiredTrials: 0, expiredSubscriptions: 0, remindersSent: 0, errors: [] as string[] };
 
     // 1. Expire trials that have ended
-    const { data: expiredTrials, error: trialsError } = await supabase
+    const { data: expiredTrials } = await supabase
       .from('merchant_subscriptions')
-      .update({
-        status: 'expired',
-        updated_at: now.toISOString()
-      })
+      .update({ status: 'expired', updated_at: now.toISOString() })
       .eq('status', 'trialing')
       .lt('trial_ends_at', now.toISOString())
       .select('id, user_id');
 
-    if (trialsError) {
-      results.errors.push(`Trials expiration error: ${trialsError.message}`);
-    } else {
-      results.expiredTrials = expiredTrials?.length || 0;
-      console.log(`[Cron Subscriptions] Expired ${results.expiredTrials} trials`);
-
-      // Notify users about expired trials
-      for (const trial of expiredTrials || []) {
-        await supabase.from('notifications').insert({
-          user_id: trial.user_id,
-          type: 'subscription',
-          title: 'Trial Expired',
-          message: 'Your free trial has ended. Upgrade now to continue using premium features.',
-          data: { subscriptionId: trial.id, action: 'trial_expired' }
-        });
-      }
+    results.expiredTrials = expiredTrials?.length || 0;
+    for (const trial of expiredTrials || []) {
+      await supabase.from('notifications').insert({
+        user_id: trial.user_id, type: 'subscription', title: 'Trial Expired',
+        message: 'Your free trial has ended. Upgrade now to continue using premium features.',
+        data: { subscriptionId: trial.id, action: 'trial_expired' }
+      });
     }
 
-    // 2. Mark subscriptions as expired if period has ended and not renewed
-    const { data: expiredSubs, error: subsError } = await supabase
+    // 2. Expire subscriptions that have ended
+    const { data: expiredSubs } = await supabase
       .from('merchant_subscriptions')
-      .update({
-        status: 'expired',
-        updated_at: now.toISOString()
-      })
+      .update({ status: 'expired', updated_at: now.toISOString() })
       .eq('status', 'active')
       .lt('current_period_end', now.toISOString())
       .select('id, user_id');
 
-    if (subsError) {
-      results.errors.push(`Subscription expiration error: ${subsError.message}`);
-    } else {
-      results.expiredSubscriptions = expiredSubs?.length || 0;
-      console.log(`[Cron Subscriptions] Expired ${results.expiredSubscriptions} subscriptions`);
-
-      // Notify users about expired subscriptions
-      for (const sub of expiredSubs || []) {
-        await supabase.from('notifications').insert({
-          user_id: sub.user_id,
-          type: 'subscription',
-          title: 'Subscription Expired',
-          message: 'Your subscription has expired. Renew now to restore access to premium features.',
-          data: { subscriptionId: sub.id, action: 'subscription_expired' }
-        });
-      }
+    results.expiredSubscriptions = expiredSubs?.length || 0;
+    for (const sub of expiredSubs || []) {
+      await supabase.from('notifications').insert({
+        user_id: sub.user_id, type: 'subscription', title: 'Subscription Expired',
+        message: 'Your subscription has expired. Renew now to restore access.',
+        data: { subscriptionId: sub.id, action: 'subscription_expired' }
+      });
     }
 
     // 3. Send reminders for subscriptions expiring in 7 days
     const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const { data: expiringSoon, error: expiringError } = await supabase
+    const { data: expiringSoon } = await supabase
       .from('merchant_subscriptions')
       .select('id, user_id, tier, current_period_end, price_monthly')
       .eq('status', 'active')
       .gt('current_period_end', now.toISOString())
       .lte('current_period_end', sevenDaysFromNow.toISOString());
 
-    if (expiringError) {
-      results.errors.push(`Expiring soon query error: ${expiringError.message}`);
-    } else {
-      for (const sub of expiringSoon || []) {
-        const daysLeft = Math.ceil(
-          (new Date(sub.current_period_end).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-        );
-
-        // Send notification
-        await supabase.from('notifications').insert({
-          user_id: sub.user_id,
-          type: 'subscription',
-          title: 'Subscription Expiring Soon',
-          message: `Your ${sub.tier} subscription expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}. Ensure your payment method is up to date.`,
-          data: {
-            subscriptionId: sub.id,
-            action: 'expiring_soon',
-            daysLeft,
-            tier: sub.tier,
-            amount: sub.price_monthly
-          }
-        });
-        results.remindersSent++;
-      }
-      console.log(`[Cron Subscriptions] Sent ${results.remindersSent} expiration reminders`);
+    for (const sub of expiringSoon || []) {
+      const daysLeft = Math.ceil((new Date(sub.current_period_end).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      await supabase.from('notifications').insert({
+        user_id: sub.user_id, type: 'subscription', title: 'Subscription Expiring Soon',
+        message: `Your ${sub.tier} subscription expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}.`,
+        data: { subscriptionId: sub.id, action: 'expiring_soon', daysLeft }
+      });
+      results.remindersSent++;
     }
 
     // 4. Send reminders for trials ending in 3 days
     const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
-    const { data: trialsEndingSoon, error: trialsEndingError } = await supabase
+    const { data: trialsEndingSoon } = await supabase
       .from('merchant_subscriptions')
       .select('id, user_id, tier, trial_ends_at, price_monthly')
       .eq('status', 'trialing')
       .gt('trial_ends_at', now.toISOString())
       .lte('trial_ends_at', threeDaysFromNow.toISOString());
 
-    if (!trialsEndingError && trialsEndingSoon) {
-      for (const trial of trialsEndingSoon) {
-        const daysLeft = Math.ceil(
-          (new Date(trial.trial_ends_at).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-        );
-
-        await supabase.from('notifications').insert({
-          user_id: trial.user_id,
-          type: 'subscription',
-          title: 'Trial Ending Soon',
-          message: `Your free trial ends in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}. Subscribe now to keep your premium features.`,
-          data: {
-            subscriptionId: trial.id,
-            action: 'trial_ending_soon',
-            daysLeft,
-            tier: trial.tier,
-            amount: trial.price_monthly
-          }
-        });
-        results.remindersSent++;
-      }
+    for (const trial of trialsEndingSoon || []) {
+      const daysLeft = Math.ceil((new Date(trial.trial_ends_at).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      await supabase.from('notifications').insert({
+        user_id: trial.user_id, type: 'subscription', title: 'Trial Ending Soon',
+        message: `Your free trial ends in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}.`,
+        data: { subscriptionId: trial.id, action: 'trial_ending_soon', daysLeft }
+      });
+      results.remindersSent++;
     }
 
-    console.log('[Cron Subscriptions] Processing complete:', results);
-    return res.status(200).json({
-      success: true,
-      message: 'Subscription cron job completed',
-      timestamp: now.toISOString(),
-      results,
-      nextRun: 'Next month, 1st day at midnight UTC'
-    });
+    return res.status(200).json({ success: true, message: 'Subscription cron completed', results });
   } catch (error: any) {
     console.error('[Cron Subscriptions] Error:', error);
-    return res.status(500).json({
-      success: false,
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
+    return res.status(500).json({ success: false, error: error.message });
   }
 }
 

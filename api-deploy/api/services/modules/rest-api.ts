@@ -539,6 +539,30 @@ export class RestApiModule {
       { permission: 'users.read', description: 'View user details', category: 'Users' },
       { permission: 'users.create', description: 'Create users', category: 'Users' },
 
+      // POS
+      { permission: 'pos:products:read', description: 'View POS products', category: 'POS' },
+      { permission: 'pos:products:write', description: 'Manage POS products', category: 'POS' },
+      { permission: 'pos:categories:read', description: 'View POS categories', category: 'POS' },
+      { permission: 'pos:categories:write', description: 'Manage POS categories', category: 'POS' },
+      { permission: 'pos:sales:read', description: 'View POS sales', category: 'POS' },
+      { permission: 'pos:sales:write', description: 'Create and manage POS sales', category: 'POS' },
+      { permission: 'pos:inventory:read', description: 'View inventory levels', category: 'POS' },
+      { permission: 'pos:inventory:write', description: 'Adjust inventory', category: 'POS' },
+      { permission: 'pos:customers:read', description: 'View POS customers', category: 'POS' },
+      { permission: 'pos:customers:write', description: 'Manage POS customers', category: 'POS' },
+
+      // Invoices
+      { permission: 'invoices:read', description: 'View invoices', category: 'Invoices' },
+      { permission: 'invoices:write', description: 'Create and update invoices', category: 'Invoices' },
+      { permission: 'invoices:send', description: 'Send invoices to customers', category: 'Invoices' },
+
+      // Events
+      { permission: 'events:read', description: 'View events', category: 'Events' },
+      { permission: 'events:write', description: 'Manage events', category: 'Events' },
+      { permission: 'events:tickets:read', description: 'View event tickets', category: 'Events' },
+      { permission: 'events:tickets:write', description: 'Manage event tickets', category: 'Events' },
+      { permission: 'events:scanning', description: 'Scan and validate tickets', category: 'Events' },
+
       // Webhooks
       { permission: 'webhooks.manage', description: 'Manage webhooks', category: 'Webhooks' },
 

@@ -15,9 +15,22 @@ if [ -z "$PROJECT" ]; then
   echo "  checkout - checkout.peeap.com"
   echo "  plus     - plus.peeap.com"
   echo "  api      - api.peeap.com"
-  echo "  all      - deploy all (4 deployments)"
+  echo "  docs     - docs.peeap.com"
+  echo "  all      - deploy all (5 deployments)"
   exit 1
 fi
+
+run_smoke_tests() {
+  echo "🧪 Running smoke tests..."
+  if node "$BASE_DIR/tests/smoke/test-api.js" prod; then
+    echo "✓ Smoke tests passed"
+  else
+    echo ""
+    echo "❌ Smoke tests failed - deployment blocked!"
+    echo "Fix the API before deploying."
+    exit 1
+  fi
+}
 
 deploy_web() {
   echo "🚀 Deploying web (my.peeap.com)..."
@@ -52,7 +65,26 @@ deploy_plus() {
 
 deploy_api() {
   echo "🚀 Deploying api (api.peeap.com)..."
+  echo ""
+  echo "Running pre-deployment validation..."
+  # ZERO TOLERANCE: Validate before any API deployment
+  if ! node "$BASE_DIR/scripts/validate-api-deploy.js"; then
+    echo ""
+    echo "❌ API deployment blocked due to validation errors!"
+    echo "See DEPLOYMENT_RULES.ts for requirements."
+    exit 1
+  fi
+  echo ""
   cd "$BASE_DIR/api-deploy"
+  npx vercel --prod --yes
+  echo ""
+  # Run smoke tests after deployment to verify API is working
+  run_smoke_tests
+}
+
+deploy_docs() {
+  echo "🚀 Deploying docs (docs.peeap.com)..."
+  cd "$BASE_DIR/docs"
   npx vercel --prod --yes
 }
 
@@ -69,13 +101,17 @@ case $PROJECT in
   api)
     deploy_api
     ;;
+  docs)
+    deploy_docs
+    ;;
   all)
     deploy_web
     deploy_checkout
     deploy_plus
     deploy_api
+    deploy_docs
     echo ""
-    echo "⚠️  Used 4 deployments!"
+    echo "⚠️  Used 5 deployments!"
     ;;
   *)
     echo "Unknown project: $PROJECT"

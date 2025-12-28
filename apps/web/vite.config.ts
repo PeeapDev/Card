@@ -19,9 +19,11 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/monime-api/, ''),
         secure: true,
       },
+      // Proxy /api/* to the actual API server
       '/api': {
-        target: 'https://my.peeap.com',
+        target: 'https://api.peeap.com',
         changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/router/, '').replace(/^\/api/, ''),
         secure: true,
       },
     },

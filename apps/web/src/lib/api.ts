@@ -1,12 +1,11 @@
 /**
  * API client utility for making requests to the backend
+ *
+ * Uses api.peeap.com for all API calls - no /api/v1 prefix needed
  */
 
-// Ensure API_BASE_URL ends with /api/v1 for proper routing to NestJS backend
-const envApiUrl = import.meta.env.VITE_API_URL;
-const API_BASE_URL = envApiUrl
-  ? (envApiUrl.includes('/api/v1') ? envApiUrl : `${envApiUrl.replace(/\/api\/?$/, '')}/api/v1`)
-  : '/api/v1';
+// API base URL - defaults to api.peeap.com in production
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
 
 interface RequestOptions extends RequestInit {
   params?: Record<string, string>;

@@ -38,3 +38,4 @@ coverage/
 
 # NX
 .nx/cache
+apps/docs/.next/

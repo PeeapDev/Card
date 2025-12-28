@@ -7,13 +7,9 @@
 
 import { supabase } from '@/lib/supabase';
 
-// API base URL - uses the same domain as the current page
+// API base URL - always use api.peeap.com
 const getApiUrl = () => {
-  if (typeof window !== 'undefined') {
-    // Always use current origin to handle any port
-    return `${window.location.origin}/api`;
-  }
-  return import.meta.env.VITE_API_URL || '/api';
+  return import.meta.env.VITE_API_URL || 'https://api.peeap.com';
 };
 
 export interface MobileMoneyFloatSummary {
