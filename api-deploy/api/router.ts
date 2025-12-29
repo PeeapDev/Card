@@ -12344,3 +12344,4 @@ async function handlePaymentIntentQr(req: VercelRequest, res: VercelResponse, in
     return res.status(500).json({ error: error.message || 'Internal server error' });
   }
 }
+// Deployed: 2025-12-29T00:48:29Z
