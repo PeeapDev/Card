@@ -1,12 +1,12 @@
 {
   "manifest_version": 3,
   "name": "PeeAP NFC Reader",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Enable NFC card reading for PeeAP POS systems",
   "author": "PeeAP",
   "permissions": [
-    "usb",
-    "storage"
+    "storage",
+    "offscreen"
   ],
   "host_permissions": [
     "https://*.peeap.com/*",

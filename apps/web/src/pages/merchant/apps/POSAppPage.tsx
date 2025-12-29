@@ -52,7 +52,11 @@ import {
   Globe,
   PieChart as PieChartIcon,
   ArrowDownRight,
+  Download,
+  Smartphone,
 } from 'lucide-react';
+import { usePWA } from '@/hooks/usePWA';
+import { PWAInstallBanner } from '@/components/pwa/PWAInstallBanner';
 import posService, { POSCashSession } from '@/services/pos.service';
 import { POSWallet } from '@/components/pos/POSWallet';
 import {
@@ -125,8 +129,16 @@ interface QuickLink {
 export function POSAppPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const pwa = usePWA();
   const [loading, setLoading] = useState(true);
   const [checkingSetup, setCheckingSetup] = useState(true);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+
+  // Generate POS number from merchant ID (last 6 chars uppercase)
+  const posNumber = user?.id ? `POS-${user.id.slice(-6).toUpperCase()}` : '';
+
+  // Check if mobile device for auto-showing install banner
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   const [stats, setStats] = useState<POSStats>({
     totalProducts: 0,
     totalSales: 0,
@@ -298,6 +310,15 @@ export function POSAppPage() {
       href: '/merchant/pos/settings?tab=receipts',
       color: 'text-teal-600',
       bgColor: 'bg-teal-100 dark:bg-teal-900/30',
+      category: 'settings',
+    },
+    {
+      title: 'Download App',
+      description: 'Install POS app',
+      icon: Download,
+      href: '#install-pwa',
+      color: 'text-blue-600',
+      bgColor: 'bg-blue-100 dark:bg-blue-900/30',
       category: 'settings',
     },
     // Online Sales
@@ -551,7 +572,14 @@ export function POSAppPage() {
                 <ShoppingCart className="w-8 h-8 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">POS Dashboard</h1>
+                <div className="flex items-center gap-3">
+                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white">POS Dashboard</h1>
+                  {posNumber && (
+                    <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs font-mono rounded">
+                      {posNumber}
+                    </span>
+                  )}
+                </div>
                 <p className="text-gray-500 dark:text-gray-400">Manage your point of sale system</p>
               </div>
             </div>
@@ -1126,27 +1154,79 @@ export function POSAppPage() {
                   System Settings
                 </h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {quickLinks.filter(l => l.category === 'settings').map(link => (
-                    <button
-                      key={link.href}
-                      onClick={() => navigate(link.href)}
-                      className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:shadow-lg hover:border-primary-300 transition-all text-left"
-                    >
-                      <div className={`p-3 rounded-xl ${link.bgColor}`}>
-                        <link.icon className={`w-6 h-6 ${link.color}`} />
-                      </div>
-                      <div>
-                        <p className="font-semibold text-gray-900 dark:text-white">{link.title}</p>
-                        <p className="text-xs text-gray-500">{link.description}</p>
-                      </div>
-                    </button>
-                  ))}
+                  {quickLinks.filter(l => l.category === 'settings').map(link => {
+                    // Special handling for Download App link
+                    if (link.href === '#install-pwa') {
+                      // Show different states based on PWA status
+                      if (pwa.isInstalled) {
+                        // Already installed - show success state
+                        return (
+                          <div
+                            key={link.href}
+                            className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-800 text-left"
+                          >
+                            <div className="p-3 rounded-xl bg-green-100 dark:bg-green-900/30">
+                              <Smartphone className="w-6 h-6 text-green-600" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-green-700 dark:text-green-400">App Installed</p>
+                              <p className="text-xs text-green-600 dark:text-green-500">Offline ready</p>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // Show install button - triggers install banner
+                      return (
+                        <button
+                          key={link.href}
+                          onClick={() => setShowInstallBanner(true)}
+                          className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:shadow-lg hover:border-blue-300 transition-all text-left relative overflow-hidden"
+                        >
+                          <div className="absolute top-0 right-0 px-1.5 py-0.5 bg-blue-500 text-white text-[10px] font-medium rounded-bl">
+                            NEW
+                          </div>
+                          <div className={`p-3 rounded-xl ${link.bgColor}`}>
+                            <link.icon className={`w-6 h-6 ${link.color}`} />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-gray-900 dark:text-white">{link.title}</p>
+                            <p className="text-xs text-gray-500">{link.description}</p>
+                          </div>
+                        </button>
+                      );
+                    }
+
+                    return (
+                      <button
+                        key={link.href}
+                        onClick={() => navigate(link.href)}
+                        className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:shadow-lg hover:border-primary-300 transition-all text-left"
+                      >
+                        <div className={`p-3 rounded-xl ${link.bgColor}`}>
+                          <link.icon className={`w-6 h-6 ${link.color}`} />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-900 dark:text-white">{link.title}</p>
+                          <p className="text-xs text-gray-500">{link.description}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
           </>
         )}
       </div>
+
+      {/* PWA Install Banner - shows on mobile or when triggered */}
+      {(showInstallBanner || (isMobile && !pwa.isInstalled && !loading && !checkingSetup)) && (
+        <PWAInstallBanner
+          forceShow={showInstallBanner}
+          onDismiss={() => setShowInstallBanner(false)}
+        />
+      )}
     </MerchantLayout>
   );
 }

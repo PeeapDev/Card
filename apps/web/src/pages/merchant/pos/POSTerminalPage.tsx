@@ -11,7 +11,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
 import { Button } from '@/components/ui';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseAdmin } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import {
   Search,
@@ -91,6 +91,9 @@ export function POSTerminalPage() {
 
   // Use user.id as the merchant ID (no separate business needed)
   const merchantId = user?.id;
+
+  // Generate POS number from merchant ID (last 6 chars uppercase)
+  const posNumber = merchantId ? `POS-${merchantId.slice(-6).toUpperCase()}` : '';
 
   // Offline sync hook
   const offlineSync = useOfflineSync(merchantId);
@@ -176,8 +179,8 @@ export function POSTerminalPage() {
   const [qrPaymentReceived, setQrPaymentReceived] = useState(false);
   const [qrPayerInfo, setQrPayerInfo] = useState<{ payerId?: string; payerName?: string } | null>(null);
 
-  // Deposit Fee (from admin settings)
-  const [depositFee, setDepositFee] = useState({ percent: 0, flat: 0 });
+  // Mobile Money Fee (gateway fee from admin settings - only for mobile money)
+  const [mobileMoneyFeePercent, setMobileMoneyFeePercent] = useState(1.5); // Default 1.5% Monime fee
 
   // Mobile Money Payment
   const [mobileMoneyPhone, setMobileMoneyPhone] = useState('');
@@ -310,23 +313,27 @@ export function POSTerminalPage() {
         console.error('Error loading merchant wallet:', err);
       }
 
-      // Load deposit fee from payment settings
+      // Load mobile money gateway fee from payment settings (Monime charges this)
+      // Use supabaseAdmin to bypass RLS
       try {
-        const { data: paymentSettings } = await supabase
+        const { data: paymentSettings, error: settingsError } = await supabaseAdmin
           .from('payment_settings')
-          .select('deposit_fee_percent, deposit_fee_flat')
+          .select('gateway_deposit_fee_percent')
           .eq('id', '00000000-0000-0000-0000-000000000001')
           .single();
 
-        if (paymentSettings) {
-          setDepositFee({
-            percent: parseFloat(paymentSettings.deposit_fee_percent?.toString() || '0'),
-            flat: parseFloat(paymentSettings.deposit_fee_flat?.toString() || '0'),
-          });
-          console.log('[POS] Deposit fee loaded:', paymentSettings);
+        if (settingsError) {
+          console.error('[POS] Error loading payment settings:', settingsError);
+        } else if (paymentSettings?.gateway_deposit_fee_percent) {
+          const feePercent = parseFloat(paymentSettings.gateway_deposit_fee_percent.toString());
+          setMobileMoneyFeePercent(feePercent);
+          console.log('[POS] Mobile money fee loaded:', feePercent, '%');
+        } else {
+          console.log('[POS] No gateway fee configured, using default 1.5%');
         }
       } catch (err) {
-        console.error('Error loading deposit fee:', err);
+        console.error('Error loading mobile money fee:', err);
+        // Keep default 1.5% if fetch fails
       }
 
       // Check for today's cash session
@@ -1145,8 +1152,8 @@ export function POSTerminalPage() {
     setProcessing(true);
 
     try {
-      // Calculate total with deposit fee
-      const feeAmount = Math.round((totalAmount * depositFee.percent / 100) + depositFee.flat);
+      // Calculate total with mobile money fee (Monime gateway fee - only for mobile money)
+      const feeAmount = Math.ceil(totalAmount * mobileMoneyFeePercent / 100);
       const totalWithFee = totalAmount + feeAmount;
 
       // Generate a unique sale ID for tracking
@@ -1299,7 +1306,14 @@ export function POSTerminalPage() {
             </button>
           )}
           <div>
-            <h1 className="text-lg font-semibold text-gray-900 dark:text-white">POS Terminal</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-semibold text-gray-900 dark:text-white">POS Terminal</h1>
+              {posNumber && (
+                <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-xs font-mono rounded">
+                  {posNumber}
+                </span>
+              )}
+            </div>
             <p className="text-sm text-gray-500 dark:text-gray-400">{business?.name}</p>
           </div>
         </div>
@@ -2486,10 +2500,10 @@ export function POSTerminalPage() {
                     </div>
                   )}
 
-                  {/* Mobile Money - Direct to Monime Checkout */}
+                  {/* Mobile Money - Direct to Monime (with fee) */}
                   {paymentMethod === 'mobile_money' && (() => {
-                    // Calculate deposit fee
-                    const feeAmount = Math.round((totalAmount * depositFee.percent / 100) + depositFee.flat);
+                    // Calculate mobile money fee (Monime gateway fee - only for mobile money)
+                    const feeAmount = Math.ceil(totalAmount * mobileMoneyFeePercent / 100);
                     const totalWithFee = totalAmount + feeAmount;
 
                     return (
@@ -2516,9 +2530,9 @@ export function POSTerminalPage() {
                               <Loader2 className="w-20 h-20 text-blue-500 animate-spin" />
                               <Smartphone className="w-8 h-8 text-blue-600 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
                             </div>
-                            <p className="text-lg font-semibold text-blue-700">Redirecting to Mobile Money...</p>
+                            <p className="text-lg font-semibold text-blue-700">Creating Payment...</p>
                             <p className="text-sm text-blue-600 mt-2">
-                              Please wait while we connect you to the payment page
+                              Please wait while we generate the payment code
                             </p>
                           </div>
                         ) : (
@@ -2535,12 +2549,10 @@ export function POSTerminalPage() {
                                   <span>Cart Total:</span>
                                   <span>{formatCurrency(totalAmount)}</span>
                                 </div>
-                                {feeAmount > 0 && (
-                                  <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                                    <span>Transaction Fee:</span>
-                                    <span>+ {formatCurrency(feeAmount)}</span>
-                                  </div>
-                                )}
+                                <div className="flex justify-between text-gray-600 dark:text-gray-400">
+                                  <span>Mobile Money Fee ({mobileMoneyFeePercent}%):</span>
+                                  <span>+ {formatCurrency(feeAmount)}</span>
+                                </div>
                                 <div className="border-t border-orange-200 dark:border-orange-700 pt-2 mt-2">
                                   <div className="flex justify-between font-bold text-orange-800 dark:text-orange-200">
                                     <span>Customer Pays:</span>
@@ -2550,7 +2562,7 @@ export function POSTerminalPage() {
                               </div>
 
                               <p className="text-xs text-orange-500 dark:text-orange-400 mt-4 text-center">
-                                Customer will enter their mobile money number on the next screen
+                                Customer will receive a short code to dial on their phone
                               </p>
                             </div>
 

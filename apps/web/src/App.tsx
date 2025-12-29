@@ -14,6 +14,8 @@ import { ThemeColorProvider } from '@/context/ThemeColorContext';
 import { NotificationWrapper } from '@/components/ui/NotificationWrapper';
 import { AnalyticsTracker } from '@/components/AnalyticsTracker';
 import { InactivityTracker } from '@/components/InactivityTracker';
+import { POSManifestSwitcher } from '@/components/pwa/POSManifestSwitcher';
+import { POSAppGuard } from '@/components/pwa/POSAppGuard';
 import { AIChatbot } from '@/components/ai/AIChatbot';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { RoleBasedRoute } from '@/components/RoleBasedRoute';
@@ -224,6 +226,8 @@ function App() {
                   <NotificationWrapper />
                   <AnalyticsTracker />
                   <Analytics />
+                  <POSManifestSwitcher />
+                <POSAppGuard>
                 <Routes>
               {/* Checkout App - Only show checkout and payment routes */}
               {isCheckoutMode && (
@@ -1697,6 +1701,7 @@ function App() {
               {/* Global 404 fallback for all modes */}
               <Route path="*" element={<NotFoundPage />} />
                 </Routes>
+                </POSAppGuard>
                 <AIChatbot />
                       </BusinessProvider>
                     </UserAppsProvider>

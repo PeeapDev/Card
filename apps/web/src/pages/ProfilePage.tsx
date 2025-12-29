@@ -1039,28 +1039,52 @@ export function ProfilePage() {
         </motion.div>
         </div>
 
-        {/* Settings Link Card */}
-        <motion.div variants={itemVariants}>
-          <MotionCard className="p-6" delay={0.28} glowEffect>
-            <Link
-              to="/settings"
-              className="flex items-center justify-between group"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
-                  <ChevronRight className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+        {/* Settings & Statement Links */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <motion.div variants={itemVariants}>
+            <MotionCard className="p-6 h-full" delay={0.28} glowEffect>
+              <Link
+                to="/settings"
+                className="flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+                    <ChevronRight className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-white">Settings</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Manage apps, preferences & security
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white">Settings</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Manage apps, payment preferences, notifications, and security
-                  </p>
+                <ChevronRight className="w-6 h-6 text-gray-400 group-hover:text-primary-600 transition-colors" />
+              </Link>
+            </MotionCard>
+          </motion.div>
+
+          <motion.div variants={itemVariants}>
+            <MotionCard className="p-6 h-full" delay={0.30} glowEffect>
+              <Link
+                to="/merchant/statements"
+                className="flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
+                    <FileText className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-white">Statements</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      View monthly financial statements
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <ChevronRight className="w-6 h-6 text-gray-400 group-hover:text-primary-600 transition-colors" />
-            </Link>
-          </MotionCard>
-        </motion.div>
+                <ChevronRight className="w-6 h-6 text-gray-400 group-hover:text-emerald-600 transition-colors" />
+              </Link>
+            </MotionCard>
+          </motion.div>
+        </div>
 
         {/* Account Limits - Full Width */}
         <motion.div variants={itemVariants}>

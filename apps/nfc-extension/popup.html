@@ -48,6 +48,88 @@
       color: rgba(255,255,255,0.6);
     }
 
+    /* Connection Lights - Main Feature */
+    .connection-lights {
+      display: flex;
+      justify-content: space-between;
+      background: rgba(255,255,255,0.05);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    .light-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+    }
+
+    .light {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.2);
+      transition: all 0.3s ease;
+    }
+
+    .light.off {
+      background: #333;
+      box-shadow: none;
+    }
+
+    .light.connected {
+      background: #10b981;
+      border-color: #10b981;
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.6);
+      animation: pulse 2s infinite;
+    }
+
+    .light.active {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.6);
+      animation: blink 0.5s infinite;
+    }
+
+    .light.warning {
+      background: #f59e0b;
+      border-color: #f59e0b;
+      box-shadow: 0 0 20px rgba(245, 158, 11, 0.6);
+    }
+
+    .light.error {
+      background: #ef4444;
+      border-color: #ef4444;
+      box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
+    }
+
+    .light-label {
+      font-size: 10px;
+      color: rgba(255,255,255,0.6);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      text-align: center;
+    }
+
+    .light-status {
+      font-size: 11px;
+      color: rgba(255,255,255,0.8);
+      font-weight: 500;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* Status Details */
     .status-card {
       background: rgba(255,255,255,0.05);
       border-radius: 12px;
@@ -72,39 +154,8 @@
     }
 
     .status-value {
-      display: flex;
-      align-items: center;
-      gap: 8px;
       font-size: 13px;
       font-weight: 500;
-    }
-
-    .status-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      animation: pulse 2s infinite;
-    }
-
-    .status-dot.connected {
-      background: #10b981;
-      box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
-    }
-
-    .status-dot.disconnected {
-      background: #ef4444;
-      box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
-      animation: none;
-    }
-
-    .status-dot.scanning {
-      background: #3b82f6;
-      box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
     }
 
     .btn {
@@ -180,6 +231,12 @@
       word-break: break-all;
     }
 
+    .last-card-time {
+      font-size: 11px;
+      color: rgba(255,255,255,0.4);
+      margin-top: 6px;
+    }
+
     .hidden {
       display: none;
     }
@@ -190,6 +247,16 @@
       text-align: center;
       margin-top: 16px;
       line-height: 1.5;
+    }
+
+    .error-message {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 12px;
+      font-size: 12px;
+      color: #ef4444;
     }
 
     .footer {
@@ -216,47 +283,59 @@
     <div class="logo">📶</div>
     <div>
       <div class="title">PeeAP NFC Reader</div>
-      <div class="subtitle">v1.0.0</div>
+      <div class="subtitle">v1.0.1</div>
     </div>
   </div>
 
+  <!-- 3 Connection Indicator Lights -->
+  <div class="connection-lights">
+    <div class="light-item">
+      <div id="platformLight" class="light off"></div>
+      <span class="light-label">Platform</span>
+      <span id="platformStatus" class="light-status">-</span>
+    </div>
+    <div class="light-item">
+      <div id="readerLight" class="light off"></div>
+      <span class="light-label">USB Reader</span>
+      <span id="readerStatus" class="light-status">-</span>
+    </div>
+    <div class="light-item">
+      <div id="cardLight" class="light off"></div>
+      <span class="light-label">Card</span>
+      <span id="cardStatus" class="light-status">-</span>
+    </div>
+  </div>
+
+  <!-- Device Info -->
   <div class="status-card">
     <div class="status-row">
-      <span class="status-label">Reader Status</span>
-      <span class="status-value">
-        <span id="readerDot" class="status-dot disconnected"></span>
-        <span id="readerStatus">Not Connected</span>
-      </span>
-    </div>
-    <div class="status-row">
       <span class="status-label">Device</span>
-      <span class="status-value" id="deviceName">-</span>
-    </div>
-    <div class="status-row">
-      <span class="status-label">Scanning</span>
-      <span class="status-value">
-        <span id="scanDot" class="status-dot disconnected"></span>
-        <span id="scanStatus">Inactive</span>
-      </span>
+      <span class="status-value" id="deviceName">Not connected</span>
     </div>
   </div>
 
+  <!-- Action Buttons -->
   <button id="connectBtn" class="btn btn-primary">
     <span>🔌</span> Connect NFC Reader
   </button>
 
   <button id="disconnectBtn" class="btn btn-danger hidden">
-    <span>⏏️</span> Disconnect
+    <span>⏏️</span> Disconnect Reader
   </button>
 
+  <!-- Error Message -->
+  <div id="errorMessage" class="error-message hidden"></div>
+
+  <!-- Last Card Detected -->
   <div id="lastCard" class="last-card hidden">
     <div class="last-card-label">Last Card Detected</div>
     <div id="lastCardUid" class="last-card-uid">-</div>
+    <div id="lastCardTime" class="last-card-time">-</div>
   </div>
 
   <div class="instructions">
-    Keep this extension active while using<br>
-    NFC features on PeeAP
+    Keep PeeAP open in Chrome to use<br>
+    NFC card payments at POS
   </div>
 
   <div class="footer">

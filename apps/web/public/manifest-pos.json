@@ -1,9 +1,9 @@
 {
   "name": "Peeap POS Terminal",
-  "short_name": "Peeap POS",
+  "short_name": "POS",
   "description": "Point of Sale Terminal with offline support",
   "start_url": "/merchant/pos/terminal",
-  "scope": "/",
+  "scope": "/merchant/pos/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#10B981",
