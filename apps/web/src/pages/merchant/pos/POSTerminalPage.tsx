@@ -176,6 +176,9 @@ export function POSTerminalPage() {
   const [qrPaymentReceived, setQrPaymentReceived] = useState(false);
   const [qrPayerInfo, setQrPayerInfo] = useState<{ payerId?: string; payerName?: string } | null>(null);
 
+  // Deposit Fee (from admin settings)
+  const [depositFee, setDepositFee] = useState({ percent: 0, flat: 0 });
+
   // Mobile Money Payment
   const [mobileMoneyPhone, setMobileMoneyPhone] = useState('');
   const [mobileMoneyTransactionId, setMobileMoneyTransactionId] = useState<string | null>(null);
@@ -305,6 +308,25 @@ export function POSTerminalPage() {
         }
       } catch (err) {
         console.error('Error loading merchant wallet:', err);
+      }
+
+      // Load deposit fee from payment settings
+      try {
+        const { data: paymentSettings } = await supabase
+          .from('payment_settings')
+          .select('deposit_fee_percent, deposit_fee_flat')
+          .eq('id', '00000000-0000-0000-0000-000000000001')
+          .single();
+
+        if (paymentSettings) {
+          setDepositFee({
+            percent: parseFloat(paymentSettings.deposit_fee_percent?.toString() || '0'),
+            flat: parseFloat(paymentSettings.deposit_fee_flat?.toString() || '0'),
+          });
+          console.log('[POS] Deposit fee loaded:', paymentSettings);
+        }
+      } catch (err) {
+        console.error('Error loading deposit fee:', err);
       }
 
       // Check for today's cash session
@@ -1123,6 +1145,10 @@ export function POSTerminalPage() {
     setProcessing(true);
 
     try {
+      // Calculate total with deposit fee
+      const feeAmount = Math.round((totalAmount * depositFee.percent / 100) + depositFee.flat);
+      const totalWithFee = totalAmount + feeAmount;
+
       // Generate a unique sale ID for tracking
       const pendingSaleId = `pos_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
@@ -1136,6 +1162,8 @@ export function POSTerminalPage() {
         id: pendingSaleId,
         cart: cart,
         totalAmount: totalAmount,
+        feeAmount: feeAmount,
+        totalWithFee: totalWithFee,
         taxAmount: taxAmount,
         discountAmount: discountAmount,
         paymentMethod: 'mobile_money',
@@ -1144,13 +1172,13 @@ export function POSTerminalPage() {
       };
       sessionStorage.setItem(`pos_pending_sale_${pendingSaleId}`, JSON.stringify(pendingSaleData));
 
-      // Create checkout session with Monime
+      // Create checkout session with Monime - send total with fee
       const response = await monimeService.initiateDeposit({
         walletId: merchantWalletId,
-        amount: totalAmount,
+        amount: totalWithFee, // Customer pays cart total + fee
         currency: 'SLE',
         method: 'CHECKOUT_SESSION', // Use checkout session for redirect flow
-        description: `POS Sale - ${cart.length} item(s) - ${formatCurrency(totalAmount)}`,
+        description: `POS Sale - ${cart.length} item(s) - ${formatCurrency(totalAmount)} + ${formatCurrency(feeAmount)} fee`,
         successUrl: successUrl,
         cancelUrl: cancelUrl,
       });
@@ -2459,69 +2487,94 @@ export function POSTerminalPage() {
                   )}
 
                   {/* Mobile Money - Direct to Monime Checkout */}
-                  {paymentMethod === 'mobile_money' && (
-                    <div className="space-y-4 mb-6">
-                      {mobileMoneyStatus === 'completed' ? (
-                        <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
-                          <Check className="w-16 h-16 mx-auto text-green-500 mb-4" />
-                          <p className="text-lg font-semibold text-green-600">Payment Received!</p>
-                        </div>
-                      ) : mobileMoneyStatus === 'failed' ? (
-                        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-                          <AlertCircle className="w-16 h-16 mx-auto text-red-500 mb-4" />
-                          <p className="text-lg font-semibold text-red-600">Payment Failed</p>
-                          <button
-                            onClick={() => setMobileMoneyStatus('idle')}
-                            className="mt-4 px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-sm font-medium"
-                          >
-                            Try Again
-                          </button>
-                        </div>
-                      ) : processing ? (
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
-                          <div className="relative w-20 h-20 mx-auto mb-4">
-                            <Loader2 className="w-20 h-20 text-blue-500 animate-spin" />
-                            <Smartphone className="w-8 h-8 text-blue-600 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-                          </div>
-                          <p className="text-lg font-semibold text-blue-700">Redirecting to Mobile Money...</p>
-                          <p className="text-sm text-blue-600 mt-2">
-                            Please wait while we connect you to the payment page
-                          </p>
-                        </div>
-                      ) : (
-                        <>
-                          {/* Amount Display */}
-                          <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-6 text-center">
-                            <Smartphone className="w-12 h-12 mx-auto text-orange-600 mb-3" />
-                            <p className="text-sm text-orange-600 dark:text-orange-400 mb-2">Amount to Pay</p>
-                            <p className="text-3xl font-bold text-orange-800 dark:text-orange-200">
-                              {formatCurrency(totalAmount)}
-                            </p>
-                            <p className="text-xs text-orange-500 dark:text-orange-400 mt-2">
-                              Customer will enter their mobile money number on the next screen
-                            </p>
-                          </div>
+                  {paymentMethod === 'mobile_money' && (() => {
+                    // Calculate deposit fee
+                    const feeAmount = Math.round((totalAmount * depositFee.percent / 100) + depositFee.flat);
+                    const totalWithFee = totalAmount + feeAmount;
 
-                          {/* Pay with Mobile Money Button */}
-                          <button
-                            onClick={initiateMobileMoneyPayment}
-                            disabled={!merchantWalletId || processing}
-                            className="w-full py-4 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:from-gray-400 disabled:to-gray-500 text-white rounded-xl font-semibold flex items-center justify-center gap-2 transition-all"
-                          >
-                            <Smartphone className="w-5 h-5" />
-                            Pay with Mobile Money
-                          </button>
-
-                          {!merchantWalletId && (
-                            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-center">
-                              <AlertCircle className="w-5 h-5 inline text-yellow-600 mr-1" />
-                              <span className="text-sm text-yellow-700">Wallet not configured for mobile payments</span>
+                    return (
+                      <div className="space-y-4 mb-6">
+                        {mobileMoneyStatus === 'completed' ? (
+                          <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
+                            <Check className="w-16 h-16 mx-auto text-green-500 mb-4" />
+                            <p className="text-lg font-semibold text-green-600">Payment Received!</p>
+                          </div>
+                        ) : mobileMoneyStatus === 'failed' ? (
+                          <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+                            <AlertCircle className="w-16 h-16 mx-auto text-red-500 mb-4" />
+                            <p className="text-lg font-semibold text-red-600">Payment Failed</p>
+                            <button
+                              onClick={() => setMobileMoneyStatus('idle')}
+                              className="mt-4 px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-sm font-medium"
+                            >
+                              Try Again
+                            </button>
+                          </div>
+                        ) : processing ? (
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
+                            <div className="relative w-20 h-20 mx-auto mb-4">
+                              <Loader2 className="w-20 h-20 text-blue-500 animate-spin" />
+                              <Smartphone className="w-8 h-8 text-blue-600 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
                             </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
+                            <p className="text-lg font-semibold text-blue-700">Redirecting to Mobile Money...</p>
+                            <p className="text-sm text-blue-600 mt-2">
+                              Please wait while we connect you to the payment page
+                            </p>
+                          </div>
+                        ) : (
+                          <>
+                            {/* Amount Display with Fee Breakdown */}
+                            <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-6">
+                              <div className="flex items-center justify-center mb-4">
+                                <Smartphone className="w-10 h-10 text-orange-600" />
+                              </div>
+
+                              {/* Fee Breakdown */}
+                              <div className="space-y-2 text-sm">
+                                <div className="flex justify-between text-gray-600 dark:text-gray-400">
+                                  <span>Cart Total:</span>
+                                  <span>{formatCurrency(totalAmount)}</span>
+                                </div>
+                                {feeAmount > 0 && (
+                                  <div className="flex justify-between text-gray-600 dark:text-gray-400">
+                                    <span>Transaction Fee:</span>
+                                    <span>+ {formatCurrency(feeAmount)}</span>
+                                  </div>
+                                )}
+                                <div className="border-t border-orange-200 dark:border-orange-700 pt-2 mt-2">
+                                  <div className="flex justify-between font-bold text-orange-800 dark:text-orange-200">
+                                    <span>Customer Pays:</span>
+                                    <span className="text-xl">{formatCurrency(totalWithFee)}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <p className="text-xs text-orange-500 dark:text-orange-400 mt-4 text-center">
+                                Customer will enter their mobile money number on the next screen
+                              </p>
+                            </div>
+
+                            {/* Pay with Mobile Money Button */}
+                            <button
+                              onClick={initiateMobileMoneyPayment}
+                              disabled={!merchantWalletId || processing}
+                              className="w-full py-4 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:from-gray-400 disabled:to-gray-500 text-white rounded-xl font-semibold flex items-center justify-center gap-2 transition-all"
+                            >
+                              <Smartphone className="w-5 h-5" />
+                              Pay {formatCurrency(totalWithFee)} with Mobile Money
+                            </button>
+
+                            {!merchantWalletId && (
+                              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-center">
+                                <AlertCircle className="w-5 h-5 inline text-yellow-600 mr-1" />
+                                <span className="text-sm text-yellow-700">Wallet not configured for mobile payments</span>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* NFC Tap to Pay */}
                   {paymentMethod === 'nfc' && (

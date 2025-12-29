@@ -535,7 +535,7 @@ export function WalletsPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Wallets</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Wallets</h1>
             <p className="text-gray-500 mt-1">Manage your digital wallets</p>
           </div>
 
@@ -556,7 +556,7 @@ export function WalletsPage() {
                   className="fixed inset-0 z-10"
                   onClick={() => setShowCreateDropdown(false)}
                 />
-                <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-20">
+                <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-2 z-20">
                   <button
                     onClick={() => {
                       setShowCreateDropdown(false);
@@ -568,7 +568,7 @@ export function WalletsPage() {
                       <Wallet className="w-5 h-5 text-primary-600" />
                     </div>
                     <div className="text-left">
-                      <p className="font-medium text-gray-900">Wallet</p>
+                      <p className="font-medium text-gray-900 dark:text-white">Wallet</p>
                       <p className="text-xs text-gray-500">Regular spending wallet</p>
                     </div>
                   </button>
@@ -583,7 +583,7 @@ export function WalletsPage() {
                       <Package className="w-5 h-5 text-green-600" />
                     </div>
                     <div className="text-left">
-                      <p className="font-medium text-gray-900">Cash Box</p>
+                      <p className="font-medium text-gray-900 dark:text-white">Cash Box</p>
                       <p className="text-xs text-gray-500">Locked savings goal</p>
                     </div>
                   </button>
@@ -1044,8 +1044,8 @@ export function WalletsPage() {
                   <ArrowDownRight className="w-5 h-5 text-green-600" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Add Funds</h2>
-                  <p className="text-sm text-gray-500">Deposit to {selectedWallet.currency} Wallet</p>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add Funds</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Deposit to {selectedWallet.currency} Wallet</p>
                 </div>
               </div>
               <button
@@ -1055,26 +1055,26 @@ export function WalletsPage() {
                   setDepositError('');
                   setSelectedWallet(null);
                 }}
-                className="p-2 hover:bg-gray-100 rounded-lg"
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
               >
-                <X className="w-5 h-5 text-gray-500" />
+                <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               </button>
             </div>
 
             <div className="space-y-4">
               {/* Current Balance */}
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <p className="text-sm text-gray-500">Current Balance</p>
-                <p className="text-2xl font-bold text-gray-900">
+              <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                <p className="text-sm text-gray-500 dark:text-gray-400">Current Balance</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">
                   Le {selectedWallet.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
               </div>
 
               {/* Amount Input */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Amount to Deposit</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amount to Deposit</label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">Le</span>
+                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 dark:text-gray-400">Le</span>
                   <input
                     type="number"
                     min="1"
@@ -1084,7 +1084,7 @@ export function WalletsPage() {
                       setDepositAmount(e.target.value);
                       setDepositError('');
                     }}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                     placeholder="0.00"
                     disabled={depositLoading}
                   />
@@ -1095,7 +1095,7 @@ export function WalletsPage() {
                     <button
                       key={amount}
                       onClick={() => setDepositAmount(amount.toString())}
-                      className="flex-1 px-2 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded text-gray-700"
+                      className="flex-1 px-2 py-1 text-sm bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-gray-700 dark:text-gray-300"
                       disabled={depositLoading}
                     >
                       Le {amount}
@@ -1170,8 +1170,8 @@ export function WalletsPage() {
                   <Send className="w-5 h-5 text-primary-600" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Send Money</h2>
-                  <p className="text-sm text-gray-500">Transfer from {selectedWallet.currency} Wallet</p>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Send Money</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Transfer from {selectedWallet.currency} Wallet</p>
                 </div>
               </div>
               <button
@@ -1179,19 +1179,19 @@ export function WalletsPage() {
                   setShowTransferModal(false);
                   resetTransferState();
                 }}
-                className="p-2 hover:bg-gray-100 rounded-lg"
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
               >
-                <X className="w-5 h-5 text-gray-500" />
+                <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               </button>
             </div>
 
             {transferSuccess ? (
               <div className="text-center py-8">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                   <CheckCircle className="w-8 h-8 text-green-600" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Transfer Successful!</h3>
-                <p className="text-gray-500">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Transfer Successful!</h3>
+                <p className="text-gray-500 dark:text-gray-400">
                   {getCurrencySymbol(selectedWallet.currency)}{transferAmount} has been sent to {selectedRecipient?.firstName} {selectedRecipient?.lastName}
                 </p>
               </div>
@@ -1199,7 +1199,7 @@ export function WalletsPage() {
               <div className="space-y-4">
                 {/* Wallet Selector */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Send from Wallet
                   </label>
                   <select
@@ -1208,7 +1208,7 @@ export function WalletsPage() {
                       const wallet = wallets?.find(w => w.id === e.target.value);
                       if (wallet) setSelectedWallet(wallet);
                     }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   >
                     {wallets?.filter(w => w.status === 'ACTIVE').map((wallet) => (
                       <option key={wallet.id} value={wallet.id}>
@@ -1219,16 +1219,16 @@ export function WalletsPage() {
                 </div>
 
                 {/* Available Balance */}
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-500">Available Balance</p>
-                  <p className="text-2xl font-bold text-gray-900">
+                <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Available Balance</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
                     {formatCurrency(selectedWallet.balance, selectedWallet.currency)}
                   </p>
                 </div>
 
                 {/* Recipient Search */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Send to (Email or Phone)
                   </label>
                   {selectedRecipient ? (
