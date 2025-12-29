@@ -64,23 +64,37 @@ class NFCExtensionService {
    * Detect if the PeeAP NFC extension is installed
    */
   async detectExtension(): Promise<boolean> {
-    // First check if we already detected via content script message
+    // First check if browser supports Chrome extension API
+    if (!this.isChromeBrowser()) {
+      console.log('[NFC Extension] Not a Chrome-based browser, extension not supported');
+      this.updateStatus({ available: false });
+      return false;
+    }
+
+    // Check if already detected via content script message
     if (this.extensionId && this.status.available) {
+      console.log('[NFC Extension] Already detected, using cached status');
       return true;
     }
 
     // Try stored extension ID first
     const storedId = localStorage.getItem('peeap_nfc_extension_id');
     if (storedId) {
+      console.log('[NFC Extension] Trying stored extension ID:', storedId);
       const detected = await this.tryExtensionId(storedId);
-      if (detected) return true;
+      if (detected) {
+        console.log('[NFC Extension] Extension detected via stored ID');
+        return true;
+      }
     }
 
     // Wait a bit for content script to announce itself
+    console.log('[NFC Extension] Waiting for content script announcement...');
     await new Promise(resolve => setTimeout(resolve, 500));
 
     // Check again if detected via content script
     if (this.extensionId && this.status.available) {
+      console.log('[NFC Extension] Extension detected via content script');
       return true;
     }
 
@@ -92,11 +106,45 @@ class NFCExtensionService {
 
     for (const id of knownIds) {
       const detected = await this.tryExtensionId(id);
-      if (detected) return true;
+      if (detected) {
+        console.log('[NFC Extension] Extension detected via known ID:', id);
+        return true;
+      }
     }
 
+    console.log('[NFC Extension] Extension not detected');
     this.updateStatus({ available: false });
     return false;
+  }
+
+  /**
+   * Check if extension is required but not installed
+   * Returns info for showing install prompts
+   */
+  getInstallStatus(): {
+    isChromeBrowser: boolean;
+    isInstalled: boolean;
+    installUrl: string;
+    message: string;
+  } {
+    const isChrome = this.isChromeBrowser();
+    const isInstalled = this.status.available;
+
+    let message = '';
+    if (!isChrome) {
+      message = 'NFC Extension requires Chrome or Edge browser';
+    } else if (!isInstalled) {
+      message = 'Install the PeeAP NFC Extension to use NFC card readers';
+    } else {
+      message = 'NFC Extension installed and ready';
+    }
+
+    return {
+      isChromeBrowser: isChrome,
+      isInstalled,
+      installUrl: this.getInstallUrl(),
+      message,
+    };
   }
 
   /**

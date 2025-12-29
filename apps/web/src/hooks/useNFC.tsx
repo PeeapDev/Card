@@ -816,27 +816,47 @@ export function NFCProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     checkStatus();
 
-    // Try to connect to local NFC Agent
-    const connectToAgent = async () => {
-      console.log('[NFC] Attempting to connect to local NFC Agent...');
-      const connected = await nfcAgentService.connect();
-      if (connected) {
+    // Initialize NFC readers with Chrome Extension check FIRST
+    const initializeNFC = async () => {
+      // Step 1: Check Chrome Extension FIRST (most common setup)
+      console.log('[NFC] Step 1: Checking for Chrome Extension...');
+      const extensionAvailable = await nfcExtensionService.detectExtension();
+
+      if (extensionAvailable) {
+        console.log('[NFC] Chrome Extension detected! Using extension for NFC.');
+        // Extension found - this is the preferred method for desktop
+        setStatus(prev => ({
+          ...prev,
+          extension: {
+            ...prev.extension,
+            available: true,
+          },
+        }));
+        checkStatus();
+        return; // Extension found, no need to check other methods
+      }
+
+      console.log('[NFC] Chrome Extension not found.');
+
+      // Step 2: Try Local NFC Agent (for advanced setups)
+      console.log('[NFC] Step 2: Checking for Local NFC Agent...');
+      const agentConnected = await nfcAgentService.connect();
+
+      if (agentConnected) {
         console.log('[NFC] Connected to local NFC Agent');
         agentConnectedRef.current = true;
         checkStatus();
-      } else {
-        console.log('[NFC] NFC Agent not available, will try Chrome Extension...');
-        // Try Chrome Extension as fallback
-        const extensionAvailable = await nfcExtensionService.detectExtension();
-        if (extensionAvailable) {
-          console.log('[NFC] Chrome Extension detected');
-        } else {
-          console.log('[NFC] Chrome Extension not available, will use other fallback methods');
-        }
+        return;
       }
+
+      console.log('[NFC] NFC Agent not available.');
+
+      // Step 3: Log available fallback methods
+      console.log('[NFC] Step 3: Will use fallback methods (Bluetooth, Web NFC, USB)');
+      checkStatus();
     };
 
-    connectToAgent();
+    initializeNFC();
 
     // Listen for card detection from agent
     const unsubscribeCard = nfcAgentService.onCardDetected((agentCard: NFCAgentCardData) => {
