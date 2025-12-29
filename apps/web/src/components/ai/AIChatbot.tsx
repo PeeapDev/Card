@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { MessageCircle, X, Send, Loader2, Bot, User, Minimize2, Maximize2, Sparkles, AlertTriangle } from 'lucide-react';
 import { aiService, ChatMessage, ChatSession } from '@/services/ai.service';
 import { useAuth } from '@/context/AuthContext';
@@ -39,8 +40,17 @@ const DISPUTE_QUESTIONS = [
   'Can I add more evidence?',
 ];
 
+// Routes where AI chatbot should be hidden (POS pages need full screen space)
+const HIDDEN_ROUTES = [
+  '/dashboard/pos',
+  '/merchant/pos',
+  '/pos/',
+  '/collect-payment',
+];
+
 export function AIChatbot() {
   const { user } = useAuth();
+  const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -50,6 +60,9 @@ export function AIChatbot() {
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<ChatSession | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Check if we should hide on current route (POS pages)
+  const shouldHide = HIDDEN_ROUTES.some(route => location.pathname.startsWith(route));
 
   useEffect(() => {
     checkConfiguration();
@@ -151,8 +164,8 @@ export function AIChatbot() {
     }
   };
 
-  // Don't render if AI is not configured
-  if (!isConfigured) {
+  // Don't render if AI is not configured or on hidden routes (POS pages)
+  if (!isConfigured || shouldHide) {
     return null;
   }
 

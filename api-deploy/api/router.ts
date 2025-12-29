@@ -158,7 +158,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const url = new URL(req.url || '', `http://${req.headers.host}`);
-    const path = url.pathname.replace('/api/router', '').replace('/api', '').replace(/^\//, '');
+    // Handle various URL prefixes: /api/router/*, /api/*, /router/*, or just /*
+    const path = url.pathname
+      .replace('/api/router', '')
+      .replace('/api', '')
+      .replace(/^\/router/, '')  // Handle /router/checkout/sessions from api.peeap.com
+      .replace(/^\//, '');
 
     console.log('[Router] Path:', path, 'Method:', req.method);
 
