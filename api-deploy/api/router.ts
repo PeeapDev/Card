@@ -67,6 +67,7 @@ const CACHE_TTL = {
   BANKS: 3600,        // 1 hour - bank list rarely changes
   PROVIDERS: 3600,    // 1 hour - mobile money providers rarely change
   FLOAT_SUMMARY: 60,  // 1 minute - float data updates frequently
+  FLOAT_TODAY: 30,    // 30 seconds - today's movements update frequently
   MONIME_BALANCE: 60, // 1 minute - balance updates with transactions
 };
 
@@ -1548,6 +1549,13 @@ async function handleMonimeBalance(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // Check cache first
+    const cacheKey = 'monime_balance';
+    const cached = getCached<any>(cacheKey);
+    if (cached) {
+      return res.status(200).json({ ...cached, fromCache: true });
+    }
+
     // Get Monime credentials using the shared modular function
     // No auth required - matches other float endpoints (handleFloatSummary, handleFloatToday)
     const credentials = await getMonimeCredentials(supabase, SETTINGS_ID);
@@ -1616,13 +1624,18 @@ async function handleMonimeBalance(req: VercelRequest, res: VercelResponse) {
     const primaryCurrency = 'SLE';
     const primaryBalance = balancesByCurrency[primaryCurrency]?.totalBalance || 0;
 
-    return res.status(200).json({
+    const response = {
       success: true,
       balance: primaryBalance,
       balancesByCurrency,
       accountCount: accounts.length,
       updatedAt: new Date().toISOString(),
-    });
+    };
+
+    // Cache the response
+    setCache(cacheKey, response, CACHE_TTL.MONIME_BALANCE);
+
+    return res.status(200).json(response);
   } catch (error: any) {
     console.error('[Monime Balance] Error:', error);
 
@@ -1856,6 +1869,13 @@ async function handleFloatSummary(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // Check cache first
+    const cacheKey = 'float_summary';
+    const cached = getCached<any>(cacheKey);
+    if (cached) {
+      return res.status(200).json({ ...cached, fromCache: true });
+    }
+
     // Get float data with service role (bypasses RLS)
     const { data: floats, error: floatError } = await supabase
       .from('system_float')
@@ -1867,10 +1887,15 @@ async function handleFloatSummary(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: floatError.message });
     }
 
-    return res.status(200).json({
+    const response = {
       success: true,
       floats: floats || [],
-    });
+    };
+
+    // Cache the response
+    setCache(cacheKey, response, CACHE_TTL.FLOAT_SUMMARY);
+
+    return res.status(200).json(response);
   } catch (error: any) {
     console.error('[Float Summary] Error:', error);
     return res.status(500).json({ error: error.message || 'Failed to fetch float summary' });
@@ -1886,6 +1911,13 @@ async function handleFloatToday(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // Check cache first
+    const cacheKey = 'float_today';
+    const cached = getCached<any>(cacheKey);
+    if (cached) {
+      return res.status(200).json({ ...cached, fromCache: true });
+    }
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -1914,13 +1946,18 @@ async function handleFloatToday(req: VercelRequest, res: VercelResponse) {
       }
     });
 
-    return res.status(200).json({
+    const response = {
       success: true,
       deposits,
       payouts,
       fees: 0,
       movementCount: (movements || []).length,
-    });
+    };
+
+    // Cache the response
+    setCache(cacheKey, response, CACHE_TTL.FLOAT_TODAY);
+
+    return res.status(200).json(response);
   } catch (error: any) {
     console.error('[Float Today] Error:', error);
     return res.status(500).json({ error: error.message || 'Failed to fetch today movements' });
