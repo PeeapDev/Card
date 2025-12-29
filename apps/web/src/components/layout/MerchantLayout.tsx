@@ -85,7 +85,6 @@ const baseNavItems: NavItem[] = [
   { id: 'reports', path: '/merchant/reports', label: 'Reports', icon: BarChart3 },
   { id: 'statements', path: '/merchant/statements', label: 'Statements', icon: FileText },
   { id: 'subscriptions', path: '/merchant/subscriptions', label: 'Subscriptions', icon: Repeat },
-  { id: 'apps', path: '/merchant/apps', label: 'App Marketplace', icon: Grid3X3 },
   { id: 'messages', path: '/messages', label: 'Messages', icon: MessageSquare },
 ];
 

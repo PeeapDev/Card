@@ -1,10 +1,12 @@
 /**
- * NFC Extension Settings Component
+ * Tap-to-Pay Settings Component
  *
- * Displays Chrome Extension status and provides install link.
+ * Displays NFC reader connection options:
+ * - Chrome Extension (for USB readers)
+ * - Bluetooth NFC readers
+ * - Web NFC (mobile devices)
+ *
  * Shows real-time connection status with live indicator lights.
- *
- * Usage: Add this component to any settings/profile page
  */
 
 import { useState, useEffect } from 'react';
@@ -26,6 +28,8 @@ import {
   Check,
   X,
   Puzzle,
+  Bluetooth,
+  Smartphone,
 } from 'lucide-react';
 import { useNFC } from '@/hooks/useNFC';
 import nfcExtensionService, { NFCExtensionStatus } from '@/services/nfc-extension.service';
@@ -36,7 +40,15 @@ interface NFCAgentSettingsProps {
 }
 
 export function NFCAgentSettings({ className = '', compact = false }: NFCAgentSettingsProps) {
-  const { status, lastCardRead, checkStatus } = useNFC();
+  const {
+    status,
+    lastCardRead,
+    checkStatus,
+    pairBluetoothReader,
+    connectBluetoothReader,
+    disconnectBluetoothReader,
+    unpairBluetoothReader,
+  } = useNFC();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
   const [extensionStatus, setExtensionStatus] = useState<NFCExtensionStatus>({
@@ -46,6 +58,9 @@ export function NFCAgentSettings({ className = '', compact = false }: NFCAgentSe
     deviceName: null,
   });
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isBluetoothPairing, setIsBluetoothPairing] = useState(false);
+  const [isBluetoothConnecting, setIsBluetoothConnecting] = useState(false);
+  const [bluetoothError, setBluetoothError] = useState<string | null>(null);
 
   // Listen for extension status changes
   useEffect(() => {
@@ -71,8 +86,50 @@ export function NFCAgentSettings({ className = '', compact = false }: NFCAgentSe
   const usbConnected = status.usbReader.connected;
   const webNFCSupported = status.webNFC.supported;
 
+  // Bluetooth states
+  const bluetoothSupported = status.bluetooth.supported;
+  const bluetoothPaired = status.bluetooth.paired;
+  const bluetoothConnected = status.bluetooth.connected;
+  const bluetoothDeviceName = status.bluetooth.deviceName;
+
   // Overall connection
-  const anyConnected = readerConnected || usbConnected || status.webNFC.scanning;
+  const anyConnected = readerConnected || bluetoothConnected || usbConnected || status.webNFC.scanning;
+
+  // Bluetooth handlers
+  const handlePairBluetooth = async () => {
+    setIsBluetoothPairing(true);
+    setBluetoothError(null);
+    try {
+      const result = await pairBluetoothReader();
+      if (!result.success) {
+        setBluetoothError(result.error || 'Failed to pair');
+      }
+    } finally {
+      setIsBluetoothPairing(false);
+    }
+  };
+
+  const handleConnectBluetooth = async () => {
+    setIsBluetoothConnecting(true);
+    setBluetoothError(null);
+    try {
+      const result = await connectBluetoothReader();
+      if (!result.success) {
+        setBluetoothError(result.error || 'Failed to connect');
+      }
+    } finally {
+      setIsBluetoothConnecting(false);
+    }
+  };
+
+  const handleDisconnectBluetooth = () => {
+    disconnectBluetoothReader();
+  };
+
+  const handleUnpairBluetooth = () => {
+    unpairBluetoothReader();
+    setBluetoothError(null);
+  };
 
   // Card detection (show for 3 seconds after detection)
   const [cardDetected, setCardDetected] = useState(false);
@@ -189,7 +246,7 @@ export function NFCAgentSettings({ className = '', compact = false }: NFCAgentSe
       {/* Status Section */}
       <div className="p-6">
         {/* Connection Status Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           {/* Extension Status */}
           <div className={`p-4 rounded-xl border-2 transition-all ${
             extensionAvailable
@@ -208,14 +265,14 @@ export function NFCAgentSettings({ className = '', compact = false }: NFCAgentSe
                   transition={{ repeat: Infinity, duration: 2 }}
                 />
               </div>
-              <span className="font-medium text-gray-900 dark:text-white">Extension</span>
+              <span className="font-medium text-gray-900 dark:text-white text-sm">Extension</span>
             </div>
             <p className={`text-sm ${extensionAvailable ? 'text-green-600 dark:text-green-400' : 'text-gray-500'}`}>
               {extensionAvailable ? 'Installed' : 'Not Installed'}
             </p>
           </div>
 
-          {/* Reader Status */}
+          {/* USB Reader Status */}
           <div className={`p-4 rounded-xl border-2 transition-all ${
             readerConnected
               ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
@@ -232,7 +289,7 @@ export function NFCAgentSettings({ className = '', compact = false }: NFCAgentSe
                   transition={{ repeat: Infinity, duration: 2 }}
                 />
               </div>
-              <span className="font-medium text-gray-900 dark:text-white">NFC Reader</span>
+              <span className="font-medium text-gray-900 dark:text-white text-sm">USB</span>
             </div>
             <p className={`text-sm ${readerConnected ? 'text-green-600 dark:text-green-400' : 'text-gray-500'}`}>
               {readerConnected ? 'Connected' : 'Not Connected'}
@@ -240,6 +297,44 @@ export function NFCAgentSettings({ className = '', compact = false }: NFCAgentSe
             {readerConnected && readerName && (
               <p className="text-xs text-gray-500 mt-1 truncate" title={readerName}>
                 {readerName}
+              </p>
+            )}
+          </div>
+
+          {/* Bluetooth Status */}
+          <div className={`p-4 rounded-xl border-2 transition-all ${
+            bluetoothConnected
+              ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+              : bluetoothPaired
+              ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+              : 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50'
+          }`}>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="relative">
+                <Bluetooth className={`w-6 h-6 ${
+                  bluetoothConnected ? 'text-green-600 dark:text-green-400' :
+                  bluetoothPaired ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400'
+                }`} />
+                <motion.div
+                  className={`absolute -top-1 -right-1 w-3 h-3 rounded-full ${
+                    bluetoothConnected ? 'bg-green-500' :
+                    bluetoothPaired ? 'bg-blue-500' : 'bg-gray-400'
+                  }`}
+                  animate={bluetoothConnected ? { scale: [1, 1.2, 1] } : {}}
+                  transition={{ repeat: Infinity, duration: 2 }}
+                />
+              </div>
+              <span className="font-medium text-gray-900 dark:text-white text-sm">Bluetooth</span>
+            </div>
+            <p className={`text-sm ${
+              bluetoothConnected ? 'text-green-600 dark:text-green-400' :
+              bluetoothPaired ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500'
+            }`}>
+              {bluetoothConnected ? 'Connected' : bluetoothPaired ? 'Paired' : bluetoothSupported ? 'Available' : 'Not Supported'}
+            </p>
+            {bluetoothDeviceName && (
+              <p className="text-xs text-gray-500 mt-1 truncate" title={bluetoothDeviceName}>
+                {bluetoothDeviceName}
               </p>
             )}
           </div>
@@ -261,7 +356,7 @@ export function NFCAgentSettings({ className = '', compact = false }: NFCAgentSe
                   transition={{ repeat: Infinity, duration: 0.5 }}
                 />
               </div>
-              <span className="font-medium text-gray-900 dark:text-white">Card</span>
+              <span className="font-medium text-gray-900 dark:text-white text-sm">Card</span>
             </div>
             <p className={`text-sm ${cardDetected ? 'text-green-600 dark:text-green-400' : 'text-gray-500'}`}>
               {cardDetected ? 'Card Detected!' : 'Waiting...'}
@@ -384,6 +479,116 @@ export function NFCAgentSettings({ className = '', compact = false }: NFCAgentSe
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Bluetooth NFC Reader Section */}
+        {bluetoothSupported && (
+          <div className="mt-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-5">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 bg-blue-100 dark:bg-blue-800 rounded-xl flex items-center justify-center flex-shrink-0">
+                <Bluetooth className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div className="flex-1">
+                <h4 className="font-semibold text-gray-900 dark:text-white mb-1">
+                  Bluetooth NFC Reader
+                </h4>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  {!bluetoothPaired
+                    ? 'Pair a Bluetooth NFC reader (like ACR1255U) for wireless card reading.'
+                    : bluetoothConnected
+                    ? `Connected to ${bluetoothDeviceName || 'Bluetooth Reader'}`
+                    : `${bluetoothDeviceName || 'Reader'} is paired. Click to connect.`}
+                </p>
+
+                {bluetoothError && (
+                  <p className="text-sm text-red-600 dark:text-red-400 mb-3">
+                    {bluetoothError}
+                  </p>
+                )}
+
+                <div className="flex flex-wrap gap-2">
+                  {!bluetoothPaired ? (
+                    <button
+                      onClick={handlePairBluetooth}
+                      disabled={isBluetoothPairing}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                    >
+                      {isBluetoothPairing ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Scanning...
+                        </>
+                      ) : (
+                        <>
+                          <Bluetooth className="w-4 h-4" />
+                          Pair Reader
+                        </>
+                      )}
+                    </button>
+                  ) : !bluetoothConnected ? (
+                    <>
+                      <button
+                        onClick={handleConnectBluetooth}
+                        disabled={isBluetoothConnecting}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                      >
+                        {isBluetoothConnecting ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Connecting...
+                          </>
+                        ) : (
+                          <>
+                            <Bluetooth className="w-4 h-4" />
+                            Connect
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={handleUnpairBluetooth}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors"
+                      >
+                        Forget Device
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={handleDisconnectBluetooth}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors"
+                    >
+                      Disconnect
+                    </button>
+                  )}
+                </div>
+
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+                  Supported: ACR1255U, ACR1252U (Bluetooth), and similar readers
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Mobile NFC Section */}
+        {webNFCSupported && (
+          <div className="mt-6 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-xl p-5">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 bg-purple-100 dark:bg-purple-800 rounded-xl flex items-center justify-center flex-shrink-0">
+                <Smartphone className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div className="flex-1">
+                <h4 className="font-semibold text-gray-900 dark:text-white mb-1">
+                  Mobile NFC Ready
+                </h4>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Your device supports NFC. You can tap NFC cards directly on your phone to read them.
+                </p>
+              </div>
+              <div className="flex items-center">
+                <CheckCircle2 className="w-6 h-6 text-green-500" />
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Instructions Modal */}
         {showInstructions && (

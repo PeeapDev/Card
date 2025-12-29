@@ -17,6 +17,7 @@
 import { useState, useEffect, useCallback, useRef, createContext, useContext, ReactNode } from 'react';
 import { nfcAgentService, NFCAgentCardData, NFCAgentStatus } from '@/services/nfc-agent.service';
 import nfcExtensionService, { NFCExtensionStatus, NFCCardData as ExtensionCardData } from '@/services/nfc-extension.service';
+import bluetoothNFCService, { BluetoothNFCStatus, CardReadEvent as BluetoothCardRead } from '@/services/bluetooth-nfc.service';
 
 // Types
 export interface NFCReaderStatus {
@@ -31,6 +32,15 @@ export interface NFCReaderStatus {
   // Chrome Extension (uses WebUSB in extension context)
   extension: {
     available: boolean;
+    connected: boolean;
+    deviceName: string | null;
+    scanning: boolean;
+    error?: string;
+  };
+  // Bluetooth NFC Reader (ACR1255U, etc.)
+  bluetooth: {
+    supported: boolean;
+    paired: boolean;
     connected: boolean;
     deviceName: string | null;
     scanning: boolean;
@@ -79,6 +89,12 @@ export interface NFCContextValue {
   startUSBScanning: () => Promise<void> | void;
   stopUSBScanning: () => void;
 
+  // Bluetooth NFC actions
+  pairBluetoothReader: () => Promise<{ success: boolean; error?: string }>;
+  connectBluetoothReader: () => Promise<{ success: boolean; error?: string }>;
+  disconnectBluetoothReader: () => void;
+  unpairBluetoothReader: () => void;
+
   // Write to NFC card
   writeToCard: (data: string) => Promise<boolean>;
 
@@ -122,6 +138,13 @@ const initialStatus: NFCReaderStatus = {
   },
   extension: {
     available: false,
+    connected: false,
+    deviceName: null,
+    scanning: false,
+  },
+  bluetooth: {
+    supported: false,
+    paired: false,
     connected: false,
     deviceName: null,
     scanning: false,
@@ -200,6 +223,19 @@ export function NFCProvider({ children }: { children: ReactNode }) {
       console.log('[NFC] Extension check error:', err);
     }
 
+    // Check Bluetooth NFC Reader (third priority)
+    try {
+      const btStatus = bluetoothNFCService.getStatus();
+      newStatus.bluetooth.supported = btStatus.supported;
+      newStatus.bluetooth.paired = btStatus.paired;
+      newStatus.bluetooth.connected = btStatus.connected;
+      newStatus.bluetooth.deviceName = btStatus.deviceName;
+      newStatus.bluetooth.scanning = btStatus.connected; // Scanning when connected
+      newStatus.bluetooth.error = btStatus.error || undefined;
+    } catch (err) {
+      console.log('[NFC] Bluetooth check error:', err);
+    }
+
     // Check Web NFC support (mobile)
     if ('NDEFReader' in window) {
       newStatus.webNFC.supported = true;
@@ -238,12 +274,14 @@ export function NFCProvider({ children }: { children: ReactNode }) {
     newStatus.anyReaderAvailable =
       newStatus.agent.connected ||
       newStatus.extension.connected ||
+      newStatus.bluetooth.connected ||
       newStatus.webNFC.available ||
       newStatus.usbReader.connected;
 
     newStatus.isScanning =
       newStatus.agent.scanning ||
       newStatus.extension.scanning ||
+      newStatus.bluetooth.scanning ||
       newStatus.webNFC.scanning ||
       newStatus.usbReader.scanning;
 
@@ -476,6 +514,49 @@ export function NFCProvider({ children }: { children: ReactNode }) {
       },
       isScanning: prev.webNFC.scanning,
       anyReaderAvailable: prev.webNFC.available,
+    }));
+  }, []);
+
+  // Bluetooth NFC Reader methods
+  const pairBluetoothReader = useCallback(async () => {
+    return await bluetoothNFCService.requestDevice();
+  }, []);
+
+  const connectBluetoothReader = useCallback(async () => {
+    const result = await bluetoothNFCService.connect();
+    if (result.success) {
+      checkStatus();
+    }
+    return result;
+  }, [checkStatus]);
+
+  const disconnectBluetoothReader = useCallback(() => {
+    bluetoothNFCService.disconnect();
+    setStatus(prev => ({
+      ...prev,
+      bluetooth: {
+        ...prev.bluetooth,
+        connected: false,
+        scanning: false,
+      },
+      isScanning: prev.agent.scanning || prev.extension.scanning || prev.webNFC.scanning || prev.usbReader.scanning,
+      anyReaderAvailable: prev.agent.connected || prev.extension.connected || prev.webNFC.available || prev.usbReader.connected,
+    }));
+  }, []);
+
+  const unpairBluetoothReader = useCallback(() => {
+    bluetoothNFCService.unpair();
+    setStatus(prev => ({
+      ...prev,
+      bluetooth: {
+        ...prev.bluetooth,
+        paired: false,
+        connected: false,
+        deviceName: null,
+        scanning: false,
+      },
+      isScanning: prev.agent.scanning || prev.extension.scanning || prev.webNFC.scanning || prev.usbReader.scanning,
+      anyReaderAvailable: prev.agent.connected || prev.extension.connected || prev.webNFC.available || prev.usbReader.connected,
     }));
   }, []);
 
@@ -820,8 +901,41 @@ export function NFCProvider({ children }: { children: ReactNode }) {
           deviceName: extStatus.deviceName,
           scanning: extStatus.scanning,
         },
-        anyReaderAvailable: prev.agent.connected || extStatus.connected || prev.webNFC.available || prev.usbReader.connected,
-        isScanning: prev.agent.scanning || extStatus.scanning || prev.webNFC.scanning || prev.usbReader.scanning,
+        anyReaderAvailable: prev.agent.connected || extStatus.connected || prev.bluetooth.connected || prev.webNFC.available || prev.usbReader.connected,
+        isScanning: prev.agent.scanning || extStatus.scanning || prev.bluetooth.scanning || prev.webNFC.scanning || prev.usbReader.scanning,
+      }));
+    });
+
+    // Listen for card detection from Bluetooth NFC Reader
+    const unsubscribeBluetoothCard = bluetoothNFCService.onCardRead((btCard: BluetoothCardRead) => {
+      console.log('[NFC] Card detected via Bluetooth:', btCard);
+
+      const isUUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(btCard.uid);
+
+      const cardData: NFCCardData = {
+        uid: btCard.uid,
+        type: isUUID ? 'wallet' : 'unknown',
+        data: btCard.uid,
+        rawData: btCard.raw,
+      };
+
+      notifyCardDetected(cardData);
+    });
+
+    // Listen for Bluetooth status changes
+    const unsubscribeBluetoothStatus = bluetoothNFCService.onStatusChange((btStatus: BluetoothNFCStatus) => {
+      setStatus(prev => ({
+        ...prev,
+        bluetooth: {
+          supported: btStatus.supported,
+          paired: btStatus.paired,
+          connected: btStatus.connected,
+          deviceName: btStatus.deviceName,
+          scanning: btStatus.connected,
+          error: btStatus.error || undefined,
+        },
+        anyReaderAvailable: prev.agent.connected || prev.extension.connected || btStatus.connected || prev.webNFC.available || prev.usbReader.connected,
+        isScanning: prev.agent.scanning || prev.extension.scanning || btStatus.connected || prev.webNFC.scanning || prev.usbReader.scanning,
       }));
     });
 
@@ -859,6 +973,9 @@ export function NFCProvider({ children }: { children: ReactNode }) {
       // Cleanup extension subscriptions
       unsubscribeExtensionCard();
       unsubscribeExtensionStatus();
+      // Cleanup Bluetooth subscriptions
+      unsubscribeBluetoothCard();
+      unsubscribeBluetoothStatus();
     };
   }, [checkStatus, stopWebNFC, notifyCardDetected]);
 
@@ -874,6 +991,10 @@ export function NFCProvider({ children }: { children: ReactNode }) {
     disconnectUSBReader,
     startUSBScanning,
     stopUSBScanning,
+    pairBluetoothReader,
+    connectBluetoothReader,
+    disconnectBluetoothReader,
+    unpairBluetoothReader,
     writeToCard,
     onCardDetected,
   };
@@ -897,6 +1018,7 @@ export function useNFC() {
         ...initialStatus,
         agent: { available: false, connected: false, readerName: null, scanning: false },
         extension: { available: false, connected: false, deviceName: null, scanning: false },
+        bluetooth: { supported: false, paired: false, connected: false, deviceName: null, scanning: false },
       },
       isChecking: false,
       lastCardRead: null,
@@ -908,6 +1030,10 @@ export function useNFC() {
       disconnectUSBReader: async () => {},
       startUSBScanning: () => {},
       stopUSBScanning: () => {},
+      pairBluetoothReader: async () => ({ success: false, error: 'No provider' }),
+      connectBluetoothReader: async () => ({ success: false, error: 'No provider' }),
+      disconnectBluetoothReader: () => {},
+      unpairBluetoothReader: () => {},
       writeToCard: async () => false,
       onCardDetected: () => () => {},
     } as NFCContextValue;
