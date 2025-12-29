@@ -1561,7 +1561,7 @@ async function handleMonimeBalance(req: VercelRequest, res: VercelResponse) {
     const credentials = await getMonimeCredentials(supabase, SETTINGS_ID);
 
     // Fetch financial accounts directly from Monime API
-    const response = await fetch('https://api.monime.io/v1/financial-accounts?withBalance=true', {
+    const monimeRes = await fetch('https://api.monime.io/v1/financial-accounts?withBalance=true', {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${credentials.accessToken}`,
@@ -1570,16 +1570,16 @@ async function handleMonimeBalance(req: VercelRequest, res: VercelResponse) {
       },
     });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error('[Monime Balance] Monime API error:', response.status, errorData);
-      return res.status(response.status).json({
-        error: errorData.message || `Monime API error: ${response.status}`,
+    if (!monimeRes.ok) {
+      const errorData = await monimeRes.json().catch(() => ({}));
+      console.error('[Monime Balance] Monime API error:', monimeRes.status, errorData);
+      return res.status(monimeRes.status).json({
+        error: errorData.message || `Monime API error: ${monimeRes.status}`,
         code: 'MONIME_API_ERROR'
       });
     }
 
-    const data = await response.json();
+    const data = await monimeRes.json();
     const accounts = data.result || [];
 
     // Calculate total balance per currency
@@ -5114,10 +5114,7 @@ async function handleNotificationSend(req: VercelRequest, res: VercelResponse) {
       // Store notification history
       await storeNotification(userData.id, request, result);
 
-      return res.status(200).json({
-        success: true,
-        ...result,
-      });
+      return res.status(200).json(result);
     }
 
     // Check if user is admin (via Supabase auth)
@@ -5154,10 +5151,7 @@ async function handleNotificationSend(req: VercelRequest, res: VercelResponse) {
     // Store notification history
     await storeNotification(userData.id, request, result);
 
-    return res.status(200).json({
-      success: true,
-      ...result,
-    });
+    return res.status(200).json(result);
   } catch (error: any) {
     console.error('[NotificationSend] Error:', error);
     return res.status(500).json({ error: error.message || 'Failed to send notification' });
