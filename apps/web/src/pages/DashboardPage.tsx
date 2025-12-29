@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Wallet, CreditCard, ArrowUpRight, ArrowDownRight, TrendingUp, Send, Users, QrCode, Smartphone, Building2, ShoppingBag } from 'lucide-react';
+import { Wallet, CreditCard, ArrowUpRight, ArrowDownRight, TrendingUp, Send, Users, QrCode, Smartphone, Building2, ShoppingBag, Store, ChevronRight, Sparkles } from 'lucide-react';
 import { MotionCard, CardHeader, CardTitle, CardDescription } from '@/components/ui';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useAuth } from '@/context/AuthContext';
@@ -17,6 +17,7 @@ import { ProductCarousel } from '@/components/marketplace/ProductCarousel';
 import { RecentOrdersCompact } from '@/components/marketplace/RecentOrders';
 import { clsx } from 'clsx';
 import { currencyService, Currency } from '@/services/currency.service';
+import { supabase } from '@/lib/supabase';
 
 // Animation variants
 const containerVariants = {
@@ -49,6 +50,9 @@ export function DashboardPage() {
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [defaultCurrency, setDefaultCurrency] = useState<Currency | null>(null);
 
+  // Staff POS access
+  const [staffPositions, setStaffPositions] = useState<Array<{ id: string; merchantName: string; role: string }>>([]);
+
   // Modal states
   const [showScanToPay, setShowScanToPay] = useState(false);
   const [showSendToMobileMoney, setShowSendToMobileMoney] = useState(false);
@@ -64,6 +68,41 @@ export function DashboardPage() {
     };
     loadCurrencies();
   }, []);
+
+  // Check if user has staff POS positions
+  useEffect(() => {
+    const checkStaffPositions = async () => {
+      if (!user?.id) return;
+      try {
+        const { data: staffData, error } = await supabase
+          .from('pos_staff')
+          .select('id, merchant_id, role')
+          .eq('user_id', user.id)
+          .eq('invitation_status', 'accepted')
+          .eq('is_active', true);
+
+        if (!error && staffData && staffData.length > 0) {
+          // Get merchant names
+          const positions = await Promise.all(
+            staffData.map(async (staff) => {
+              let merchantName = 'Business';
+              const { data: merchant } = await supabase
+                .from('merchant_businesses')
+                .select('name')
+                .eq('merchant_id', staff.merchant_id)
+                .single();
+              if (merchant?.name) merchantName = merchant.name;
+              return { id: staff.id, merchantName, role: staff.role };
+            })
+          );
+          setStaffPositions(positions);
+        }
+      } catch (error) {
+        console.error('Error checking staff positions:', error);
+      }
+    };
+    checkStaffPositions();
+  }, [user?.id]);
 
   // Get currency symbol by code
   const getCurrencySymbol = (code?: string): string => {
@@ -122,6 +161,44 @@ export function DashboardPage() {
             />
           </div>
         </motion.div>
+
+        {/* Staff POS Access Banner */}
+        {staffPositions.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.2 }}
+          >
+            <Link
+              to="/dashboard/pos"
+              className="block bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 rounded-2xl p-4 md:p-5 shadow-lg hover:shadow-xl transition-all hover:scale-[1.01] group"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                    <Store className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-lg font-bold text-white">Open Staff POS</h3>
+                      <span className="px-2 py-0.5 bg-white/20 rounded-full text-xs font-medium text-white flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" />
+                        {staffPositions.length} {staffPositions.length === 1 ? 'position' : 'positions'}
+                      </span>
+                    </div>
+                    <p className="text-white/80 text-sm mt-0.5">
+                      {staffPositions.map(p => p.merchantName).join(', ')} - {staffPositions[0]?.role}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 text-white">
+                  <span className="hidden sm:block text-sm font-medium">Start Selling</span>
+                  <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </div>
+              </div>
+            </Link>
+          </motion.div>
+        )}
 
         {/* Stats grid */}
         <motion.div
