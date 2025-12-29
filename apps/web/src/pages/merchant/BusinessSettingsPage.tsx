@@ -27,6 +27,9 @@ import {
   Shield,
   Key,
   RefreshCw,
+  Code,
+  ToggleLeft,
+  ToggleRight,
 } from 'lucide-react';
 import { MerchantLayout } from '@/components/layout/MerchantLayout';
 import { Card } from '@/components/ui/Card';
@@ -52,7 +55,9 @@ export function MerchantBusinessSettingsPage() {
     callback_url: '',
     webhook_url: '',
     is_live_mode: false,
+    developer_mode_enabled: false,
   });
+  const [togglingDeveloperMode, setTogglingDeveloperMode] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
 
@@ -86,6 +91,7 @@ export function MerchantBusinessSettingsPage() {
         callback_url: data.callback_url || '',
         webhook_url: data.webhook_url || '',
         is_live_mode: data.is_live_mode || false,
+        developer_mode_enabled: data.developer_mode_enabled || false,
       });
     } catch (error) {
       console.error('Error fetching business:', error);
@@ -167,6 +173,34 @@ export function MerchantBusinessSettingsPage() {
     } catch (error) {
       console.error('Error regenerating API key:', error);
       alert('Failed to regenerate API key. Please try again.');
+    }
+  };
+
+  const toggleDeveloperMode = async () => {
+    if (!businessId) return;
+
+    setTogglingDeveloperMode(true);
+    try {
+      const newValue = !formData.developer_mode_enabled;
+      const { error } = await supabase
+        .from('merchant_businesses')
+        .update({
+          developer_mode_enabled: newValue,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', businessId);
+
+      if (error) throw error;
+
+      setFormData(prev => ({ ...prev, developer_mode_enabled: newValue }));
+      setBusiness(prev => prev ? { ...prev, developer_mode_enabled: newValue } : null);
+      setSuccessMessage(newValue ? 'Developer mode enabled!' : 'Developer mode disabled');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (error) {
+      console.error('Error toggling developer mode:', error);
+      alert('Failed to toggle developer mode. Please try again.');
+    } finally {
+      setTogglingDeveloperMode(false);
     }
   };
 
@@ -490,6 +524,54 @@ export function MerchantBusinessSettingsPage() {
           </div>
           <p className="text-xs text-gray-500 mt-2">
             Mode can only be changed from the Developer Portal when your business is approved.
+          </p>
+        </Card>
+
+        {/* Developer Mode */}
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <Code className="w-5 h-5" />
+            Developer Mode
+          </h2>
+          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+            <div className="flex-1">
+              <h3 className="font-medium text-gray-900">
+                {formData.developer_mode_enabled ? 'Developer Mode Enabled' : 'Developer Mode Disabled'}
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">
+                {formData.developer_mode_enabled
+                  ? 'You have access to API keys, webhooks, and can integrate Peeap into your applications.'
+                  : 'Enable to access API keys, webhooks, and integrate Peeap into your applications.'}
+              </p>
+              {formData.developer_mode_enabled && (
+                <Link
+                  to={`/merchant/developer/${businessId}`}
+                  className="inline-flex items-center gap-1 mt-2 text-sm text-green-600 hover:text-green-700"
+                >
+                  <Key className="w-4 h-4" />
+                  View API Keys & Documentation
+                </Link>
+              )}
+            </div>
+            <button
+              onClick={toggleDeveloperMode}
+              disabled={togglingDeveloperMode}
+              className={`p-2 rounded-lg transition-colors ${
+                togglingDeveloperMode ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-200'
+              }`}
+              title={formData.developer_mode_enabled ? 'Disable Developer Mode' : 'Enable Developer Mode'}
+            >
+              {togglingDeveloperMode ? (
+                <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+              ) : formData.developer_mode_enabled ? (
+                <ToggleRight className="w-10 h-10 text-green-600" />
+              ) : (
+                <ToggleLeft className="w-10 h-10 text-gray-400" />
+              )}
+            </button>
+          </div>
+          <p className="text-xs text-gray-500 mt-2">
+            Developer mode gives you access to API keys for payment integration. You can disable it at any time.
           </p>
         </Card>
 

@@ -135,6 +135,7 @@ import { MerchantTransactionsPage } from '@/pages/merchant/MerchantTransactionsP
 import { MerchantPayoutsPage } from '@/pages/merchant/MerchantPayoutsPage';
 import { MerchantRefundsPage } from '@/pages/merchant/MerchantRefundsPage';
 import { MerchantReportsPage } from '@/pages/merchant/MerchantReportsPage';
+import { MerchantStatementPage } from '@/pages/merchant/MerchantStatementPage';
 import { MerchantPaymentLinksPage } from '@/pages/merchant/MerchantPaymentLinksPage';
 import { MerchantSubscriptionsPage } from '@/pages/merchant/MerchantSubscriptionsPage';
 import { AppSubscriptionPage } from '@/pages/merchant/AppSubscriptionPage';
@@ -1615,6 +1616,7 @@ function App() {
                   <Route path="/merchant/payouts" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantPayoutsPage /></RoleBasedRoute>} />
                   <Route path="/merchant/refunds" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantRefundsPage /></RoleBasedRoute>} />
                   <Route path="/merchant/reports" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantReportsPage /></RoleBasedRoute>} />
+                  <Route path="/merchant/statements" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantStatementPage /></RoleBasedRoute>} />
                   <Route path="/merchant/payment-links" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantPaymentLinksPage /></RoleBasedRoute>} />
                   <Route path="/merchant/invoices" element={<RoleBasedRoute allowedRoles={['merchant']}><MerchantInvoicesPage /></RoleBasedRoute>} />
                   <Route path="/merchant/invoices/new" element={<RoleBasedRoute allowedRoles={['merchant']}><NewInvoicePage /></RoleBasedRoute>} />

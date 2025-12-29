@@ -22,10 +22,10 @@ export function MerchantApiKeysPage() {
       }
 
       try {
-        // Check if user has any developer businesses
+        // Check if user has any businesses with developer mode enabled
         const { data: businesses, error } = await supabase
-          .from('developer_businesses')
-          .select('id, name')
+          .from('merchant_businesses')
+          .select('id, name, developer_mode_enabled')
           .eq('user_id', user.id)
           .limit(1);
 
@@ -39,8 +39,11 @@ export function MerchantApiKeysPage() {
         if (!businesses || businesses.length === 0) {
           // No business - redirect to create one
           navigate('/merchant/developer/create-business');
+        } else if (!businesses[0].developer_mode_enabled) {
+          // Business exists but developer mode not enabled - redirect to enable it
+          navigate(`/merchant/businesses/${businesses[0].id}/settings`);
         } else {
-          // Has business - redirect to business API keys page
+          // Has business with developer mode - redirect to business API keys page
           navigate(`/merchant/developer/${businesses[0].id}`);
         }
       } catch (err) {

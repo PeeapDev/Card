@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS pos_terminals (
 
     -- Merchant linkage
     merchant_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    business_id UUID REFERENCES developer_businesses(id) ON DELETE SET NULL,
+    business_id UUID REFERENCES merchant_businesses(id) ON DELETE SET NULL,
 
     -- Terminal details
     location VARCHAR(200), -- e.g., 'Main Store - Counter 1'
@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS merchant_staff (
 
     -- Merchant linkage
     merchant_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    business_id UUID REFERENCES developer_businesses(id) ON DELETE SET NULL,
+    business_id UUID REFERENCES merchant_businesses(id) ON DELETE SET NULL,
 
     -- Authentication
     pin_hash VARCHAR(255), -- Hashed 8-digit PIN
