@@ -34,6 +34,42 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const supabaseAnon = createClient(supabaseUrl, supabaseAnonKey);
 const SETTINGS_ID = '00000000-0000-0000-0000-000000000001';
 
+// ============================================================================
+// IN-MEMORY CACHE - Reduces database calls for frequently accessed data
+// ============================================================================
+interface CacheEntry<T> {
+  data: T;
+  expiry: number;
+}
+
+const cache = new Map<string, CacheEntry<any>>();
+
+function getCached<T>(key: string): T | null {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiry) {
+    cache.delete(key);
+    return null;
+  }
+  return entry.data as T;
+}
+
+function setCache<T>(key: string, data: T, ttlSeconds: number): void {
+  cache.set(key, {
+    data,
+    expiry: Date.now() + (ttlSeconds * 1000),
+  });
+}
+
+// Cache TTLs in seconds
+const CACHE_TTL = {
+  SETTINGS: 300,      // 5 minutes - settings rarely change
+  BANKS: 3600,        // 1 hour - bank list rarely changes
+  PROVIDERS: 3600,    // 1 hour - mobile money providers rarely change
+  FLOAT_SUMMARY: 60,  // 1 minute - float data updates frequently
+  MONIME_BALANCE: 60, // 1 minute - balance updates with transactions
+};
+
 /**
  * Unified API Router
  * Consolidates all API endpoints into a single serverless function to stay within Vercel's 12 function limit
@@ -698,6 +734,12 @@ async function handleSettings(req: VercelRequest, res: VercelResponse) {
 }
 
 async function handleGetSettings(res: VercelResponse) {
+  // Check cache first
+  const cached = getCached<any>('settings');
+  if (cached) {
+    return res.status(200).json(cached);
+  }
+
   let { data: settings, error } = await supabase
     .from('payment_settings')
     .select('*')
@@ -745,7 +787,7 @@ async function handleGetSettings(res: VercelResponse) {
     }
   }
 
-  return res.status(200).json({
+  const response = {
     monimeConfig: {
       accessToken: settings.monime_access_token || '',
       spaceId: settings.monime_space_id || '',
@@ -774,26 +816,25 @@ async function handleGetSettings(res: VercelResponse) {
       minDepositAmount: Number(settings.min_deposit_amount),
       maxDepositAmount: Number(settings.max_deposit_amount),
     },
-    // All fee settings for the Fees page
     feeSettings: {
-      // Withdrawal fees
       withdrawalFeePercent: Number(settings.withdrawal_fee_percent || 2),
       withdrawalFeeFlat: Number(settings.withdrawal_fee_flat || 0),
-      // P2P transfer fees
       p2pFeePercent: Number(settings.p2p_fee_percent || 0),
       p2pFeeFlat: Number(settings.p2p_fee_flat || 0),
-      // Card fees
       cardTxnFeePercent: Number(settings.card_txn_fee_percent || 1.5),
       cardTxnFeeFlat: Number(settings.card_txn_fee_flat || 0),
       virtualCardFee: Number(settings.virtual_card_fee || 1),
       physicalCardFee: Number(settings.physical_card_fee || 10),
-      // Checkout/merchant fees
       checkoutFeePercent: Number(settings.checkout_fee_percent || 2.9),
       checkoutFeeFlat: Number(settings.checkout_fee_flat || 0.30),
       merchantPayoutFeePercent: Number(settings.merchant_payout_fee_percent || 0.25),
       merchantPayoutFeeFlat: Number(settings.merchant_payout_fee_flat || 0),
     },
-  });
+  };
+
+  // Cache the response for 5 minutes
+  setCache('settings', response, CACHE_TTL.SETTINGS);
+  return res.status(200).json(response);
 }
 
 async function handleUpdateSettings(req: VercelRequest, res: VercelResponse) {
@@ -5169,6 +5210,13 @@ async function handleMobileMoneyProviders(req: VercelRequest, res: VercelRespons
   try {
     const country = (req.query.country as string) || 'SL';
 
+    // Check cache first - providers rarely change
+    const cacheKey = `providers_${country}`;
+    const cached = getCached<any>(cacheKey);
+    if (cached) {
+      return res.status(200).json(cached);
+    }
+
     // Create Monime service
     const monimeService = await createMonimeService(supabase, SETTINGS_ID);
 
@@ -5180,7 +5228,7 @@ async function handleMobileMoneyProviders(req: VercelRequest, res: VercelRespons
       p => p.status?.active && p.featureSet?.payout?.canPayTo
     );
 
-    return res.status(200).json({
+    const response = {
       success: true,
       providers: activeProviders.map(p => ({
         providerId: p.providerId,
@@ -5189,7 +5237,11 @@ async function handleMobileMoneyProviders(req: VercelRequest, res: VercelRespons
         canPayout: p.featureSet?.payout?.canPayTo || false,
         canPayment: p.featureSet?.payment?.canPayFrom || false,
       })),
-    });
+    };
+
+    // Cache for 1 hour
+    setCache(cacheKey, response, CACHE_TTL.PROVIDERS);
+    return res.status(200).json(response);
   } catch (error: any) {
     console.error('[MobileMoneyProviders] Error:', error);
     if (error instanceof MonimeError) {
@@ -6865,18 +6917,24 @@ async function handlePayoutBanks(req: VercelRequest, res: VercelResponse) {
     const url = new URL(req.url || '', `http://${req.headers.host}`);
     const country = url.searchParams.get('country') || 'SL';
 
+    // Check cache first - banks rarely change
+    const cacheKey = `banks_${country}`;
+    const cached = getCached<any>(cacheKey);
+    if (cached) {
+      return res.status(200).json(cached);
+    }
+
     let monimeService;
     try {
       monimeService = await createMonimeService(supabase, SETTINGS_ID);
     } catch (err: any) {
-      // If Monime is not configured, return empty banks list
       console.log('[PayoutBanks] Monime not configured, returning empty banks list');
       return res.status(200).json({ banks: [] });
     }
 
     const banks = await monimeService.getBanks(country);
 
-    return res.status(200).json({
+    const response = {
       banks: banks.map((b: any) => ({
         providerId: b.providerId || b.id,
         name: b.name,
@@ -6888,7 +6946,11 @@ async function handlePayoutBanks(req: VercelRequest, res: VercelResponse) {
           kycVerification: { canVerifyAccount: false },
         },
       })),
-    });
+    };
+
+    // Cache for 1 hour
+    setCache(cacheKey, response, CACHE_TTL.BANKS);
+    return res.status(200).json(response);
   } catch (error: any) {
     console.error('[PayoutBanks] Error:', error);
     if (error instanceof MonimeError) {
