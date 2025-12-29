@@ -173,7 +173,7 @@ export function usePaymentReceiver(config: PaymentReceiverConfig): PaymentReceiv
     onError,
     onExpired,
     autoStart = true,
-    pollingInterval = 2000,
+    pollingInterval = 5000, // 5 seconds - balances responsiveness with API load
     strictVerification = true,
   } = config;
 

@@ -1,3 +1,7 @@
+'use client'
+
+import { CodeBlock } from '@/components/ui/CodeBlock'
+
 export default function EventsPage() {
   return (
     <div className="max-w-4xl mx-auto px-8 py-12">
@@ -52,14 +56,16 @@ export default function EventsPage() {
         </div>
 
         <h3 className="text-lg font-semibold text-gray-900 mb-3">Request</h3>
-        <pre className="mb-4">
-{`curl -X GET "https://api.peeap.com/api/v1/events?upcoming=true" \\
+        <CodeBlock
+          language="bash"
+          code={`curl -X GET "https://api.peeap.com/api/v1/events?upcoming=true" \\
   -H "X-API-Key: sk_live_your_api_key"`}
-        </pre>
+        />
 
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">Response</h3>
-        <pre>
-{`{
+        <h3 className="text-lg font-semibold text-gray-900 mb-3 mt-6">Response</h3>
+        <CodeBlock
+          language="json"
+          code={`{
   "success": true,
   "data": [
     {
@@ -67,7 +73,7 @@ export default function EventsPage() {
       "name": "Tech Conference 2025",
       "description": "Annual technology conference",
       "venue": "Convention Center",
-      "address": "123 Main St, City",
+      "address": "123 Main St, Freetown",
       "start_date": "2025-03-15T09:00:00.000Z",
       "end_date": "2025-03-15T18:00:00.000Z",
       "status": "published",
@@ -98,7 +104,7 @@ export default function EventsPage() {
     "has_next_page": false
   }
 }`}
-        </pre>
+        />
       </section>
 
       {/* Create Event */}
@@ -142,22 +148,10 @@ export default function EventsPage() {
                 <td className="py-2 px-3 text-gray-600">End date/time (ISO 8601)</td>
               </tr>
               <tr className="border-b border-gray-100">
-                <td className="py-2 px-3"><code>description</code></td>
-                <td className="py-2 px-3 text-gray-600">string</td>
-                <td className="py-2 px-3 text-gray-600">No</td>
-                <td className="py-2 px-3 text-gray-600">Event description</td>
-              </tr>
-              <tr className="border-b border-gray-100">
                 <td className="py-2 px-3"><code>venue</code></td>
                 <td className="py-2 px-3 text-gray-600">string</td>
                 <td className="py-2 px-3 text-gray-600">No</td>
                 <td className="py-2 px-3 text-gray-600">Venue name</td>
-              </tr>
-              <tr className="border-b border-gray-100">
-                <td className="py-2 px-3"><code>address</code></td>
-                <td className="py-2 px-3 text-gray-600">string</td>
-                <td className="py-2 px-3 text-gray-600">No</td>
-                <td className="py-2 px-3 text-gray-600">Event address</td>
               </tr>
               <tr className="border-b border-gray-100">
                 <td className="py-2 px-3"><code>ticket_types</code></td>
@@ -170,15 +164,16 @@ export default function EventsPage() {
         </div>
 
         <h3 className="text-lg font-semibold text-gray-900 mb-3">Request</h3>
-        <pre>
-{`curl -X POST "https://api.peeap.com/api/v1/events" \\
+        <CodeBlock
+          language="bash"
+          code={`curl -X POST "https://api.peeap.com/api/v1/events" \\
   -H "X-API-Key: sk_live_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{
     "name": "Summer Music Festival",
     "description": "A day of live music and entertainment",
-    "venue": "City Park Amphitheater",
-    "address": "456 Park Ave, City",
+    "venue": "National Stadium",
+    "address": "Freetown, Sierra Leone",
     "start_date": "2025-07-20T14:00:00.000Z",
     "end_date": "2025-07-20T23:00:00.000Z",
     "ticket_types": [
@@ -194,7 +189,7 @@ export default function EventsPage() {
       }
     ]
   }'`}
-        </pre>
+        />
       </section>
 
       {/* Get Event */}
@@ -206,10 +201,11 @@ export default function EventsPage() {
         <p className="text-gray-600 mb-4">
           Retrieve a single event by ID.
         </p>
-        <pre>
-{`curl -X GET "https://api.peeap.com/api/v1/events/evt_abc123" \\
+        <CodeBlock
+          language="bash"
+          code={`curl -X GET "https://api.peeap.com/api/v1/events/evt_abc123" \\
   -H "X-API-Key: sk_live_your_api_key"`}
-        </pre>
+        />
       </section>
 
       {/* Update Event */}
@@ -221,15 +217,16 @@ export default function EventsPage() {
         <p className="text-gray-600 mb-4">
           Update an existing event.
         </p>
-        <pre>
-{`curl -X PATCH "https://api.peeap.com/api/v1/events/evt_abc123" \\
+        <CodeBlock
+          language="bash"
+          code={`curl -X PATCH "https://api.peeap.com/api/v1/events/evt_abc123" \\
   -H "X-API-Key: sk_live_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{
     "venue": "New Location Arena",
     "status": "published"
   }'`}
-        </pre>
+        />
       </section>
     </div>
   )

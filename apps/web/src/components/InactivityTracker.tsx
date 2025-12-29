@@ -164,7 +164,7 @@ export function InactivityTracker({ children }: InactivityTrackerProps) {
     };
   }, [isAuthenticated, timeoutMinutes, checkInactivity]);
 
-  // Fetch settings on mount and periodically refresh
+  // Fetch settings on mount and periodically refresh (visibility-aware)
   useEffect(() => {
     if (!isAuthenticated) {
       return;
@@ -173,14 +173,36 @@ export function InactivityTracker({ children }: InactivityTrackerProps) {
     // Initial fetch
     fetchTimeoutSetting();
 
-    // Refresh settings periodically
-    settingsIntervalRef.current = setInterval(fetchTimeoutSetting, SETTINGS_REFRESH_INTERVAL);
+    const startPolling = () => {
+      if (settingsIntervalRef.current) return;
+      settingsIntervalRef.current = setInterval(fetchTimeoutSetting, SETTINGS_REFRESH_INTERVAL);
+    };
 
-    return () => {
+    const stopPolling = () => {
       if (settingsIntervalRef.current) {
         clearInterval(settingsIntervalRef.current);
         settingsIntervalRef.current = null;
       }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopPolling();
+      } else {
+        startPolling();
+      }
+    };
+
+    // Start polling only if visible
+    if (!document.hidden) {
+      startPolling();
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [isAuthenticated, fetchTimeoutSetting]);
 

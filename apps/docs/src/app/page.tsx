@@ -1,3 +1,7 @@
+'use client'
+
+import { CodeBlock } from '@/components/ui/CodeBlock'
+
 export default function IntroductionPage() {
   return (
     <div className="max-w-4xl mx-auto px-8 py-12">
@@ -66,7 +70,7 @@ export default function IntroductionPage() {
 
       <section className="mb-12">
         <h2 className="text-2xl font-bold text-gray-900 mb-4">Quick Start</h2>
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div className="flex items-start gap-4">
             <div className="w-8 h-8 bg-primary-600 text-white rounded-full flex items-center justify-center flex-shrink-0 font-semibold">
               1
@@ -84,15 +88,16 @@ export default function IntroductionPage() {
             <div className="w-8 h-8 bg-primary-600 text-white rounded-full flex items-center justify-center flex-shrink-0 font-semibold">
               2
             </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">Make your first request</h3>
-              <p className="text-gray-600 mb-2">
+            <div className="flex-1">
+              <h3 className="font-semibold text-gray-900 mb-2">Make your first request</h3>
+              <p className="text-gray-600 mb-3">
                 Test your API key by fetching your products:
               </p>
-              <pre className="text-sm">
-{`curl -X GET "https://api.peeap.com/api/v1/pos/products" \\
+              <CodeBlock
+                language="bash"
+                code={`curl -X GET "https://api.peeap.com/api/v1/pos/products" \\
   -H "X-API-Key: sk_live_your_api_key"`}
-              </pre>
+              />
             </div>
           </div>
 
@@ -115,8 +120,9 @@ export default function IntroductionPage() {
         <p className="text-gray-600 mb-4">
           All API responses follow a consistent JSON format:
         </p>
-        <pre>
-{`// Success response
+        <CodeBlock
+          language="json"
+          code={`// Success response
 {
   "success": true,
   "data": { ... },
@@ -143,7 +149,7 @@ export default function IntroductionPage() {
     "message": "Invalid API key"
   }
 }`}
-        </pre>
+        />
       </section>
     </div>
   )

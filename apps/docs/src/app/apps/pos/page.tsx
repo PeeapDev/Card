@@ -1,4 +1,7 @@
+'use client'
+
 import { POSDemo } from '@/components/demos/POSDemo'
+import { CodeBlock } from '@/components/ui/CodeBlock'
 
 export default function POSAppPage() {
   return (
@@ -33,10 +36,10 @@ export default function POSAppPage() {
           </p>
         </div>
 
-        <div className="bg-gray-900 text-gray-100 rounded-lg p-6 mb-6">
-          <p className="text-gray-400 text-sm mb-3">Prompt for AI Assistant:</p>
-          <pre className="text-sm whitespace-pre-wrap text-green-400">
-{`I want to add a Peeap POS Terminal to my app. Here are the details:
+        <CodeBlock
+          language="bash"
+          title="Prompt for AI Assistant"
+          code={`I want to add a Peeap POS Terminal to my app. Here are the details:
 
 ## Installation
 npm install @peeap/widgets
@@ -61,27 +64,13 @@ function MyPOS() {
 - showInventory: boolean (default: true) - Show stock levels
 - showCategories: boolean (default: true) - Show category filters
 - allowDiscounts: boolean (default: true) - Enable discount input
-- taxRate: number (default: 0) - Tax percentage (e.g., 10 for 10%)
-- currency: string (default: 'USD') - Currency code
+- taxRate: number (default: 0) - Tax percentage (e.g., 15 for 15%)
+- currency: string (default: 'SLE') - Currency code
 - onSaleComplete: (sale: Sale) => void - Callback when sale is completed
 - onError: (error: Error) => void - Error callback
-- className: string - Additional CSS classes
-- style: React.CSSProperties - Inline styles
-
-## Customization
-<POSTerminal
-  apiKey="pk_live_xxx"
-  merchantId="xxx"
-  theme="dark"
-  taxRate={15}
-  currency="SLL"
-  showInventory={false}
-  className="rounded-xl shadow-2xl"
-/>
 
 Please integrate this into my app with [describe your requirements].`}
-          </pre>
-        </div>
+        />
       </section>
 
       {/* Component Props */}
@@ -123,27 +112,15 @@ Please integrate this into my app with [describe your requirements].`}
                 <td className="py-3 px-4 text-gray-600">Show product stock levels</td>
               </tr>
               <tr className="border-b border-gray-100">
-                <td className="py-3 px-4"><code>showCategories</code></td>
-                <td className="py-3 px-4 text-gray-600">boolean</td>
-                <td className="py-3 px-4 text-gray-600">true</td>
-                <td className="py-3 px-4 text-gray-600">Show category filter tabs</td>
-              </tr>
-              <tr className="border-b border-gray-100">
-                <td className="py-3 px-4"><code>allowDiscounts</code></td>
-                <td className="py-3 px-4 text-gray-600">boolean</td>
-                <td className="py-3 px-4 text-gray-600">true</td>
-                <td className="py-3 px-4 text-gray-600">Enable discount input field</td>
-              </tr>
-              <tr className="border-b border-gray-100">
                 <td className="py-3 px-4"><code>taxRate</code></td>
                 <td className="py-3 px-4 text-gray-600">number</td>
                 <td className="py-3 px-4 text-gray-600">0</td>
-                <td className="py-3 px-4 text-gray-600">Tax percentage (e.g., 10 for 10%)</td>
+                <td className="py-3 px-4 text-gray-600">Tax percentage (e.g., 15 for 15%)</td>
               </tr>
               <tr className="border-b border-gray-100">
                 <td className="py-3 px-4"><code>currency</code></td>
                 <td className="py-3 px-4 text-gray-600">string</td>
-                <td className="py-3 px-4 text-gray-600">'USD'</td>
+                <td className="py-3 px-4 text-gray-600">'SLE'</td>
                 <td className="py-3 px-4 text-gray-600">Currency code for display</td>
               </tr>
               <tr className="border-b border-gray-100">
@@ -151,12 +128,6 @@ Please integrate this into my app with [describe your requirements].`}
                 <td className="py-3 px-4 text-gray-600">function</td>
                 <td className="py-3 px-4 text-gray-600">-</td>
                 <td className="py-3 px-4 text-gray-600">Callback when sale is completed</td>
-              </tr>
-              <tr className="border-b border-gray-100">
-                <td className="py-3 px-4"><code>onError</code></td>
-                <td className="py-3 px-4 text-gray-600">function</td>
-                <td className="py-3 px-4 text-gray-600">-</td>
-                <td className="py-3 px-4 text-gray-600">Error callback function</td>
               </tr>
             </tbody>
           </table>
@@ -169,9 +140,10 @@ Please integrate this into my app with [describe your requirements].`}
 
         <div className="space-y-6">
           <div>
-            <h3 className="font-semibold text-gray-900 mb-2">Basic Integration</h3>
-            <pre>
-{`import { POSTerminal } from '@peeap/widgets'
+            <h3 className="font-semibold text-gray-900 mb-3">Basic Integration</h3>
+            <CodeBlock
+              language="tsx"
+              code={`import { POSTerminal } from '@peeap/widgets'
 
 export default function StorePage() {
   return (
@@ -184,13 +156,14 @@ export default function StorePage() {
     </div>
   )
 }`}
-            </pre>
+            />
           </div>
 
           <div>
-            <h3 className="font-semibold text-gray-900 mb-2">With Sale Handling</h3>
-            <pre>
-{`import { POSTerminal, Sale } from '@peeap/widgets'
+            <h3 className="font-semibold text-gray-900 mb-3">With Sale Handling</h3>
+            <CodeBlock
+              language="tsx"
+              code={`import { POSTerminal, Sale } from '@peeap/widgets'
 
 export default function StorePage() {
   const handleSaleComplete = (sale: Sale) => {
@@ -210,22 +183,23 @@ export default function StorePage() {
     />
   )
 }`}
-            </pre>
+            />
           </div>
 
           <div>
-            <h3 className="font-semibold text-gray-900 mb-2">Customized for Sierra Leone</h3>
-            <pre>
-{`<POSTerminal
+            <h3 className="font-semibold text-gray-900 mb-3">Customized for Sierra Leone</h3>
+            <CodeBlock
+              language="tsx"
+              code={`<POSTerminal
   apiKey="pk_live_your_key"
   merchantId="your_merchant_id"
-  currency="SLL"
+  currency="SLE"
   taxRate={15}
   theme="light"
   showInventory={true}
   allowDiscounts={true}
 />`}
-            </pre>
+            />
           </div>
         </div>
       </section>
@@ -237,37 +211,37 @@ export default function StorePage() {
           <div className="border border-gray-200 rounded-lg p-4">
             <h3 className="font-semibold text-gray-900 mb-2">Product Display</h3>
             <ul className="text-sm text-gray-600 space-y-1">
-              <li>• Category tabs - <code>showCategories</code></li>
-              <li>• Stock levels - <code>showInventory</code></li>
-              <li>• Product images - <code>showImages</code></li>
-              <li>• Product search - <code>showSearch</code></li>
+              <li>- Category tabs - <code>showCategories</code></li>
+              <li>- Stock levels - <code>showInventory</code></li>
+              <li>- Product images - <code>showImages</code></li>
+              <li>- Product search - <code>showSearch</code></li>
             </ul>
           </div>
           <div className="border border-gray-200 rounded-lg p-4">
             <h3 className="font-semibold text-gray-900 mb-2">Cart & Checkout</h3>
             <ul className="text-sm text-gray-600 space-y-1">
-              <li>• Discount input - <code>allowDiscounts</code></li>
-              <li>• Tax calculation - <code>taxRate</code></li>
-              <li>• Customer name - <code>captureCustomer</code></li>
-              <li>• Receipt printing - <code>enablePrint</code></li>
+              <li>- Discount input - <code>allowDiscounts</code></li>
+              <li>- Tax calculation - <code>taxRate</code></li>
+              <li>- Customer name - <code>captureCustomer</code></li>
+              <li>- Receipt printing - <code>enablePrint</code></li>
             </ul>
           </div>
           <div className="border border-gray-200 rounded-lg p-4">
             <h3 className="font-semibold text-gray-900 mb-2">Payment Methods</h3>
             <ul className="text-sm text-gray-600 space-y-1">
-              <li>• Cash payments - <code>allowCash</code></li>
-              <li>• Card payments - <code>allowCard</code></li>
-              <li>• Mobile money - <code>allowMobileMoney</code></li>
-              <li>• Split payments - <code>allowSplitPayment</code></li>
+              <li>- Cash payments - <code>allowCash</code></li>
+              <li>- QR payments - <code>allowQR</code></li>
+              <li>- NFC payments - <code>allowNFC</code></li>
+              <li>- Mobile money - <code>allowMobileMoney</code></li>
             </ul>
           </div>
           <div className="border border-gray-200 rounded-lg p-4">
             <h3 className="font-semibold text-gray-900 mb-2">Appearance</h3>
             <ul className="text-sm text-gray-600 space-y-1">
-              <li>• Light/dark theme - <code>theme</code></li>
-              <li>• Primary color - <code>primaryColor</code></li>
-              <li>• Border radius - <code>borderRadius</code></li>
-              <li>• Custom CSS - <code>className</code></li>
+              <li>- Light/dark theme - <code>theme</code></li>
+              <li>- Primary color - <code>primaryColor</code></li>
+              <li>- Border radius - <code>borderRadius</code></li>
+              <li>- Custom CSS - <code>className</code></li>
             </ul>
           </div>
         </div>

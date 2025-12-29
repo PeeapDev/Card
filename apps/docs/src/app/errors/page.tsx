@@ -1,3 +1,7 @@
+'use client'
+
+import { CodeBlock } from '@/components/ui/CodeBlock'
+
 export default function ErrorsPage() {
   return (
     <div className="max-w-4xl mx-auto px-8 py-12">
@@ -12,15 +16,16 @@ export default function ErrorsPage() {
           When an error occurs, the API returns a JSON response with <code>success: false</code> and
           an <code>error</code> object containing the error code and message.
         </p>
-        <pre>
-{`{
+        <CodeBlock
+          language="json"
+          code={`{
   "success": false,
   "error": {
     "code": "VALIDATION_ERROR",
     "message": "Product name is required"
   }
 }`}
-        </pre>
+        />
       </section>
 
       <section className="mb-12">
@@ -132,8 +137,10 @@ export default function ErrorsPage() {
         <p className="text-gray-600 mb-4">
           Always check the <code>success</code> field in the response to determine if the request succeeded.
         </p>
-        <pre>
-{`// JavaScript example
+        <CodeBlock
+          language="javascript"
+          title="Error Handling Example"
+          code={`// JavaScript example
 async function fetchProducts(apiKey) {
   const response = await fetch('https://api.peeap.com/api/v1/pos/products', {
     headers: {
@@ -163,7 +170,7 @@ async function fetchProducts(apiKey) {
 
   return data.data;
 }`}
-        </pre>
+        />
       </section>
     </div>
   )

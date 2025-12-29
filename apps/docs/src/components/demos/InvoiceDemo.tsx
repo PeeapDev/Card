@@ -40,12 +40,16 @@ export function InvoiceDemo() {
   const total = subtotal + tax
   const invoiceNumber = `INV-2025-${String(Math.floor(Math.random() * 1000)).padStart(4, '0')}`
 
-  const generatePaymentQR = () => {
+  // Generate QR URL dynamically based on current total
+  const getPaymentQRUrl = () => {
     const paymentData = `PEEAP_INVOICE_${invoiceNumber}_${Date.now()}`
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(
-      `https://pay.peeap.com/invoice/${paymentData}?amount=${total}&currency=SLE`
+    return `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(
+      `https://pay.peeap.com/invoice/${paymentData}?amount=${total.toFixed(2)}&currency=SLE`
     )}`
-    setPaymentQR(qrUrl)
+  }
+
+  const generatePaymentQR = () => {
+    setPaymentQR(getPaymentQRUrl())
   }
 
   const handleSend = () => {
@@ -74,7 +78,10 @@ export function InvoiceDemo() {
             {paymentQR && (
               <div className="mt-6">
                 <p className="text-sm text-gray-500 mb-2">Payment QR Code (included in email)</p>
-                <img src={paymentQR} alt="Payment QR" className="mx-auto rounded-lg" />
+                <div className="bg-gray-50 p-3 rounded-lg inline-block">
+                  <img src={paymentQR} alt="Payment QR" className="mx-auto rounded-lg" />
+                  <p className="text-sm font-semibold text-gray-700 mt-2">Amount: {formatCurrency(total)}</p>
+                </div>
               </div>
             )}
 
@@ -128,8 +135,22 @@ export function InvoiceDemo() {
               </tbody>
             </table>
 
-            {/* Totals */}
-            <div className="flex justify-end">
+            {/* Totals and Payment QR */}
+            <div className="flex justify-between items-end gap-8">
+              {/* QR Code */}
+              <div className="text-center">
+                <p className="text-sm text-gray-500 mb-2">Scan to Pay</p>
+                <div className="bg-white p-2 rounded-lg border border-gray-200 inline-block">
+                  <img
+                    src={getPaymentQRUrl()}
+                    alt="Payment QR Code"
+                    className="w-32 h-32"
+                  />
+                </div>
+                <p className="text-xs text-gray-400 mt-1">Amount: {formatCurrency(total)}</p>
+              </div>
+
+              {/* Totals */}
               <div className="w-64">
                 <div className="flex justify-between py-2">
                   <span className="text-gray-500">Subtotal</span>

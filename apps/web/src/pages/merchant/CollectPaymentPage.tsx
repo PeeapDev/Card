@@ -212,8 +212,8 @@ export function CollectPaymentPage() {
       }
     };
 
-    // Check every 3 seconds as backup (DriverCollectionView handles faster checks)
-    const pollInterval = setInterval(checkTransaction, 3000);
+    // Check every 6 seconds as backup (realtime channel handles instant updates)
+    const pollInterval = setInterval(checkTransaction, 6000);
 
     return () => {
       supabase.removeChannel(channel);

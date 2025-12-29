@@ -1,3 +1,7 @@
+'use client'
+
+import { CodeBlock } from '@/components/ui/CodeBlock'
+
 export default function PosProductsPage() {
   return (
     <div className="max-w-4xl mx-auto px-8 py-12">
@@ -52,14 +56,16 @@ export default function PosProductsPage() {
         </div>
 
         <h3 className="text-lg font-semibold text-gray-900 mb-3">Request</h3>
-        <pre className="mb-4">
-{`curl -X GET "https://api.peeap.com/api/v1/pos/products?page=1&limit=20" \\
+        <CodeBlock
+          language="bash"
+          code={`curl -X GET "https://api.peeap.com/api/v1/pos/products?page=1&limit=20" \\
   -H "X-API-Key: sk_live_your_api_key"`}
-        </pre>
+        />
 
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">Response</h3>
-        <pre>
-{`{
+        <h3 className="text-lg font-semibold text-gray-900 mb-3 mt-6">Response</h3>
+        <CodeBlock
+          language="json"
+          code={`{
   "success": true,
   "data": [
     {
@@ -85,7 +91,7 @@ export default function PosProductsPage() {
     "has_next_page": true
   }
 }`}
-        </pre>
+        />
       </section>
 
       {/* Create Product */}
@@ -141,12 +147,6 @@ export default function PosProductsPage() {
                 <td className="py-2 px-3 text-gray-600">Stock keeping unit</td>
               </tr>
               <tr className="border-b border-gray-100">
-                <td className="py-2 px-3"><code>barcode</code></td>
-                <td className="py-2 px-3 text-gray-600">string</td>
-                <td className="py-2 px-3 text-gray-600">No</td>
-                <td className="py-2 px-3 text-gray-600">Product barcode</td>
-              </tr>
-              <tr className="border-b border-gray-100">
                 <td className="py-2 px-3"><code>category_id</code></td>
                 <td className="py-2 px-3 text-gray-600">string</td>
                 <td className="py-2 px-3 text-gray-600">No</td>
@@ -169,8 +169,9 @@ export default function PosProductsPage() {
         </div>
 
         <h3 className="text-lg font-semibold text-gray-900 mb-3">Request</h3>
-        <pre className="mb-4">
-{`curl -X POST "https://api.peeap.com/api/v1/pos/products" \\
+        <CodeBlock
+          language="bash"
+          code={`curl -X POST "https://api.peeap.com/api/v1/pos/products" \\
   -H "X-API-Key: sk_live_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -181,7 +182,7 @@ export default function PosProductsPage() {
     "track_inventory": true,
     "stock_quantity": 50
   }'`}
-        </pre>
+        />
       </section>
 
       {/* Get Product */}
@@ -193,10 +194,11 @@ export default function PosProductsPage() {
         <p className="text-gray-600 mb-4">
           Retrieve a single product by ID.
         </p>
-        <pre>
-{`curl -X GET "https://api.peeap.com/api/v1/pos/products/prod_abc123" \\
+        <CodeBlock
+          language="bash"
+          code={`curl -X GET "https://api.peeap.com/api/v1/pos/products/prod_abc123" \\
   -H "X-API-Key: sk_live_your_api_key"`}
-        </pre>
+        />
       </section>
 
       {/* Update Product */}
@@ -208,15 +210,16 @@ export default function PosProductsPage() {
         <p className="text-gray-600 mb-4">
           Update an existing product. Only include fields you want to change.
         </p>
-        <pre>
-{`curl -X PATCH "https://api.peeap.com/api/v1/pos/products/prod_abc123" \\
+        <CodeBlock
+          language="bash"
+          code={`curl -X PATCH "https://api.peeap.com/api/v1/pos/products/prod_abc123" \\
   -H "X-API-Key: sk_live_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{
     "price": 5.50,
     "is_active": false
   }'`}
-        </pre>
+        />
       </section>
 
       {/* Delete Product */}
@@ -228,10 +231,11 @@ export default function PosProductsPage() {
         <p className="text-gray-600 mb-4">
           Delete a product. This action cannot be undone.
         </p>
-        <pre>
-{`curl -X DELETE "https://api.peeap.com/api/v1/pos/products/prod_abc123" \\
+        <CodeBlock
+          language="bash"
+          code={`curl -X DELETE "https://api.peeap.com/api/v1/pos/products/prod_abc123" \\
   -H "X-API-Key: sk_live_your_api_key"`}
-        </pre>
+        />
       </section>
     </div>
   )

@@ -48,14 +48,36 @@ function highlightCode(code: string, language: string): string {
     // Numbers
     highlighted = highlighted.replace(/\b(\d+\.?\d*)\b/g, '<span class="code-number">$1</span>')
   } else if (language === 'json') {
+    // Comments (common in examples even though not valid JSON)
+    highlighted = highlighted.replace(/(\/\/.*$)/gm, '<span class="code-comment">$1</span>')
     // Keys
     highlighted = highlighted.replace(/"([^"]+)":/g, '<span class="code-prop">"$1"</span>:')
     // String values
     highlighted = highlighted.replace(/:\s*"([^"]*)"/g, ': <span class="code-string">"$1"</span>')
+    // Array string values
+    highlighted = highlighted.replace(/\[\s*"([^"]*)"/g, '[ <span class="code-string">"$1"</span>')
     // Numbers
     highlighted = highlighted.replace(/:\s*(\d+\.?\d*)/g, ': <span class="code-number">$1</span>')
-    // Booleans
+    // Booleans and null
     highlighted = highlighted.replace(/:\s*(true|false|null)/g, ': <span class="code-keyword">$1</span>')
+    // Standalone booleans in arrays
+    highlighted = highlighted.replace(/\[\s*(true|false|null)/g, '[ <span class="code-keyword">$1</span>')
+  } else if (language === 'env') {
+    // Comments
+    highlighted = highlighted.replace(/(#.*)$/gm, '<span class="code-comment">$1</span>')
+    // Keys
+    highlighted = highlighted.replace(/^([A-Z_][A-Z0-9_]*)=/gm, '<span class="code-prop">$1</span>=')
+    // Values
+    highlighted = highlighted.replace(/=(.*)$/gm, '=<span class="code-string">$1</span>')
+  } else if (language === 'css') {
+    // Comments
+    highlighted = highlighted.replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="code-comment">$1</span>')
+    // Selectors
+    highlighted = highlighted.replace(/^(\.[a-zA-Z-_]+)/gm, '<span class="code-component">$1</span>')
+    // Properties
+    highlighted = highlighted.replace(/\s+([a-z-]+):/g, ' <span class="code-prop">$1</span>:')
+    // Values with units
+    highlighted = highlighted.replace(/:\s*([#a-zA-Z0-9]+)/g, ': <span class="code-string">$1</span>')
   }
 
   return highlighted

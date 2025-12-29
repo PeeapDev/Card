@@ -1064,7 +1064,7 @@ export function POSTerminalPage() {
       } catch (error) {
         console.error('Error checking mobile money status:', error);
       }
-    }, 3000);
+    }, 5000); // 5 seconds - mobile money typically takes 10-30s to process
   };
 
   // Cleanup mobile money polling

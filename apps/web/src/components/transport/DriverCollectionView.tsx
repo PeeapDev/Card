@@ -213,8 +213,8 @@ export function DriverCollectionView({
     // Check once on mount after a short delay
     const initialCheck = setTimeout(checkExistingPayment, 500);
 
-    // Light polling as backup - check every 2 seconds
-    const pollInterval = setInterval(checkExistingPayment, 2000);
+    // Light polling as backup - check every 8 seconds (realtime handles instant updates)
+    const pollInterval = setInterval(checkExistingPayment, 8000);
 
     return () => {
       clearTimeout(initialCheck);

@@ -335,7 +335,7 @@ export function NFCPaymentTerminal({
       }
     };
 
-    pollingRef.current = setInterval(poll, 2000);
+    pollingRef.current = setInterval(poll, 4000); // 4 seconds
   };
 
   const stopPolling = () => {

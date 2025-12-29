@@ -73,6 +73,9 @@ export interface Invoice {
   // Status
   status: InvoiceStatus;
 
+  // Invoice Type
+  invoice_type_code?: string;
+
   // Payment
   payment_method?: PaymentMethod;
   payment_reference?: string;

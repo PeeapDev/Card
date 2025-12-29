@@ -71,6 +71,66 @@ const CACHE_TTL = {
   MONIME_BALANCE: 60, // 1 minute - balance updates with transactions
 };
 
+// ============================================================================
+// FEE CALCULATION HELPERS - Monime charges 1.5% on mobile money transactions
+// ============================================================================
+interface FeeBreakdown {
+  grossAmount: number;      // What customer paid
+  monimeFeePercent: number; // Monime's fee percentage (default 1.5%)
+  monimeFee: number;        // Monime's cut
+  peeapFeePercent: number;  // Platform fee percentage
+  peeapFeeFlat: number;     // Platform flat fee
+  peeapFee: number;         // Platform's profit
+  totalFees: number;        // Total fees deducted
+  netAmount: number;        // What gets credited to wallet
+  floatAmount: number;      // What actually comes into our float (after Monime)
+}
+
+/**
+ * Calculate fees for mobile money transactions
+ * Monime charges their fee on the gross amount before we receive it
+ * We optionally charge our platform fee on top
+ */
+async function calculateMobileMoneyFees(grossAmount: number, applyPlatformFee: boolean = false): Promise<FeeBreakdown> {
+  // Get fee settings from database
+  const { data: feeSettings } = await supabase
+    .from('payment_settings')
+    .select('gateway_deposit_fee_percent, deposit_fee_percent, deposit_fee_flat, checkout_fee_percent, checkout_fee_flat')
+    .eq('id', SETTINGS_ID)
+    .single();
+
+  // Monime (gateway) fee - defaults to 1.5%
+  const monimeFeePercent = parseFloat(feeSettings?.gateway_deposit_fee_percent?.toString() || '1.5');
+  const monimeFee = grossAmount * (monimeFeePercent / 100);
+
+  // Platform fee (Peeap's profit) - only applied if requested
+  let peeapFeePercent = 0;
+  let peeapFeeFlat = 0;
+  let peeapFee = 0;
+
+  if (applyPlatformFee) {
+    peeapFeePercent = parseFloat(feeSettings?.deposit_fee_percent?.toString() || '0');
+    peeapFeeFlat = parseFloat(feeSettings?.deposit_fee_flat?.toString() || '0');
+    peeapFee = (grossAmount * (peeapFeePercent / 100)) + peeapFeeFlat;
+  }
+
+  const totalFees = monimeFee + peeapFee;
+  const netAmount = grossAmount - totalFees;
+  const floatAmount = grossAmount - monimeFee; // What we actually receive from Monime
+
+  return {
+    grossAmount,
+    monimeFeePercent,
+    monimeFee,
+    peeapFeePercent,
+    peeapFeeFlat,
+    peeapFee,
+    totalFees,
+    netAmount,
+    floatAmount,
+  };
+}
+
 /**
  * Unified API Router
  * Consolidates all API endpoints into a single serverless function to stay within Vercel's 12 function limit
@@ -1151,18 +1211,25 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
         });
 
         if (pendingTx) {
-          amount = parseFloat(pendingTx.amount?.toString() || '0');
+          const grossAmount = parseFloat(pendingTx.amount?.toString() || '0');
           currency = pendingTx.currency || 'SLE';
 
-          // No fees on deposits - we charge fees on withdrawals/payouts only
-          console.log('[Deposit Success] Processing deposit:', {
+          // Calculate Monime fees - they charge 1.5% on mobile money
+          // For deposits, we don't charge platform fees (applyPlatformFee = false)
+          const fees = await calculateMobileMoneyFees(grossAmount, false);
+          amount = fees.netAmount; // This is what gets credited after Monime fee
+
+          console.log('[Deposit Success] Processing deposit with fee calculation:', {
             transactionId: pendingTx.id,
-            amount,
+            grossAmount: fees.grossAmount,
+            monimeFee: fees.monimeFee.toFixed(2),
+            netAmount: fees.netAmount.toFixed(2),
+            floatAmount: fees.floatAmount.toFixed(2),
             currency,
             walletId
           });
 
-          // Credit the wallet with full amount (no deposit fees)
+          // Credit the wallet with NET amount (after Monime fee)
           const { data: wallet, error: walletError } = await supabase
             .from('wallets')
             .select('balance')
@@ -1175,15 +1242,17 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
 
           if (wallet) {
             const currentBalance = parseFloat(wallet.balance?.toString() || '0');
-            newBalance = currentBalance + amount; // Credit full amount
+            newBalance = currentBalance + fees.netAmount; // Credit NET amount after Monime fee
 
             console.log('[Deposit Success] Updating wallet balance:', {
               currentBalance,
-              depositAmount: amount,
-              newBalance
+              grossAmount: fees.grossAmount,
+              monimeFee: fees.monimeFee.toFixed(2),
+              netDeposit: fees.netAmount.toFixed(2),
+              newBalance: newBalance.toFixed(2)
             });
 
-            // Update wallet balance
+            // Update wallet balance with net amount
             const { error: updateError } = await supabase
               .from('wallets')
               .update({
@@ -1198,15 +1267,24 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
               console.log('[Deposit Success] Wallet balance updated successfully');
             }
 
-            // Update transaction status (no fees on deposits)
+            // Update transaction status with fee breakdown
             const { error: txUpdateError } = await supabase
               .from('transactions')
               .update({
                 status: 'COMPLETED',
+                fee: fees.monimeFee, // Track gateway fee
                 metadata: {
                   ...pendingTx.metadata,
                   completedAt: new Date().toISOString(),
+                  completedVia: 'callback',
                   monimeStatus: sessionStatus.status,
+                  grossAmount: fees.grossAmount,
+                  monimeFee: fees.monimeFee,
+                  netAmount: fees.netAmount,
+                  feeBreakdown: {
+                    gateway: { percent: fees.monimeFeePercent, amount: fees.monimeFee },
+                    platform: { percent: fees.peeapFeePercent, flat: fees.peeapFeeFlat, amount: fees.peeapFee },
+                  },
                 }
               })
               .eq('id', pendingTx.id);
@@ -1215,36 +1293,48 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
               console.error('[Deposit Success] Failed to update transaction:', txUpdateError);
             }
 
-            console.log('[Deposit Success] Wallet credited:', { walletId, amount, newBalance });
+            console.log('[Deposit Success] Wallet credited:', {
+              walletId,
+              grossAmount: fees.grossAmount,
+              monimeFee: fees.monimeFee.toFixed(2),
+              netAmount: fees.netAmount.toFixed(2),
+              newBalance: newBalance.toFixed(2)
+            });
 
-            // Credit the system float - money came into the platform via mobile money
+            // Credit the system float with what we ACTUALLY received (after Monime fee)
             try {
               const { error: floatError } = await supabase.rpc('credit_system_float', {
                 p_currency: currency,
-                p_amount: amount,
+                p_amount: fees.floatAmount, // Only credit what Monime actually sent us
                 p_transaction_id: pendingTx.id,
-                p_description: `Mobile Money Deposit - ${pendingTx.description || 'User deposit'}`,
+                p_description: `Mobile Money Deposit - Gross: ${fees.grossAmount.toFixed(2)}, Monime Fee: ${fees.monimeFee.toFixed(2)}, Net: ${fees.floatAmount.toFixed(2)}`,
               });
               if (floatError) {
                 console.error('[Deposit Success] Float RPC error:', floatError);
               } else {
-                console.log('[Deposit Success] System float credited:', { amount, currency });
+                console.log('[Deposit Success] System float credited:', { floatAmount: fees.floatAmount.toFixed(2), currency });
               }
             } catch (floatErr) {
               console.error('[Deposit Success] Failed to credit system float:', floatErr);
               // Don't fail the deposit if float update fails
             }
 
-            // Create notification for the user
+            // Create notification for the user - show net amount they received
             try {
               await supabase.from('notifications').insert({
                 user_id: pendingTx.user_id,
                 type: 'deposit',
                 title: 'Deposit Successful',
-                message: `Your deposit of Le ${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} has been credited to your wallet.`,
+                message: `Your deposit of Le ${fees.netAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} has been credited to your wallet (Le ${fees.monimeFee.toFixed(2)} gateway fee deducted from Le ${fees.grossAmount.toFixed(2)}).`,
                 icon: 'wallet',
                 action_url: '/wallets',
-                action_data: { amount, currency, transactionId: pendingTx.id },
+                action_data: {
+                  grossAmount: fees.grossAmount,
+                  netAmount: fees.netAmount,
+                  monimeFee: fees.monimeFee,
+                  currency,
+                  transactionId: pendingTx.id
+                },
                 source_service: 'deposit',
                 source_id: pendingTx.id,
                 is_read: false,
@@ -1255,7 +1345,7 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
               console.error('[Deposit Success] Failed to create notification:', notifErr);
             }
 
-            // Create admin notification for the deposit
+            // Create admin notification for the deposit with fee details
             try {
               const { data: userData } = await supabase
                 .from('users')
@@ -1267,17 +1357,19 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
               await supabase.from('admin_notifications').insert({
                 type: 'deposit',
                 title: 'New Deposit Received',
-                message: `${userName} deposited Le ${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} via Mobile Money`,
-                priority: amount >= 1000 ? 'high' : 'medium',
+                message: `${userName} deposited Le ${fees.grossAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} via Mobile Money (Fee: ${fees.monimeFee.toFixed(2)}, Net: ${fees.netAmount.toFixed(2)})`,
+                priority: fees.grossAmount >= 1000 ? 'high' : 'medium',
                 related_entity_type: 'transaction',
                 related_entity_id: pendingTx.id,
                 action_url: `/admin/transactions?id=${pendingTx.id}`,
                 metadata: {
                   userId: pendingTx.user_id,
                   userName,
-                  amount,
+                  grossAmount: fees.grossAmount,
+                  monimeFee: fees.monimeFee,
+                  netAmount: fees.netAmount,
                   currency,
-                  method: 'Mobile Money',
+                  method: 'Mobile Money (Callback)',
                 },
               });
               console.log('[Deposit Success] Admin notification created');
@@ -2556,10 +2648,23 @@ async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse
       }
 
       if (merchantWallet) {
-        const paymentAmount = parseFloat(session.amount);
-        const newMerchantBalance = Number(merchantWallet.balance) + paymentAmount;
+        const grossAmount = parseFloat(session.amount);
 
-        // Credit merchant's wallet
+        // Calculate Monime fees - they charge 1.5% on mobile money
+        // For checkout payments, we don't charge additional platform fees (customer pays what they see)
+        const fees = await calculateMobileMoneyFees(grossAmount, false);
+        const netAmount = fees.netAmount; // What merchant actually receives after Monime fee
+
+        console.log('[CheckoutPay] Fee calculation:', {
+          grossAmount: fees.grossAmount,
+          monimeFee: fees.monimeFee.toFixed(2),
+          netAmount: fees.netAmount.toFixed(2),
+          floatAmount: fees.floatAmount.toFixed(2),
+        });
+
+        const newMerchantBalance = Number(merchantWallet.balance) + netAmount;
+
+        // Credit merchant's wallet with NET amount (after Monime fee)
         const { error: creditError } = await supabase
           .from('wallets')
           .update({ balance: newMerchantBalance, updated_at: new Date().toISOString() })
@@ -2574,7 +2679,8 @@ async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse
             external_id: merchantTxExternalId,
             wallet_id: merchantWallet.id,
             type: 'PAYMENT_RECEIVED',
-            amount: paymentAmount,
+            amount: netAmount, // Store net amount received
+            fee: fees.monimeFee, // Track the gateway fee
             currency: session.currency_code || 'SLE',
             status: 'COMPLETED',
             description: session.description || `Mobile payment received`,
@@ -2586,37 +2692,51 @@ async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse
               paymentMethod: 'monime_mobile',
               payerName: session.metadata?.payerName || 'Mobile Money Customer',
               payerEmail: session.metadata?.payerEmail,
+              grossAmount: fees.grossAmount,
+              monimeFee: fees.monimeFee,
+              netAmount: fees.netAmount,
+              feeBreakdown: {
+                gateway: { percent: fees.monimeFeePercent, amount: fees.monimeFee },
+              },
             },
           });
 
           if (txError) {
             console.error('[CheckoutPay] Transaction insert error:', txError);
           }
-          console.log('[CheckoutPay] Merchant wallet credited:', { merchantOwnerId, amount: paymentAmount, ref: transactionRef });
+          console.log('[CheckoutPay] Merchant wallet credited:', {
+            merchantOwnerId,
+            grossAmount: fees.grossAmount,
+            monimeFee: fees.monimeFee.toFixed(2),
+            netAmount: fees.netAmount.toFixed(2),
+            ref: transactionRef
+          });
 
-          // Credit system float - money came into the platform via mobile money checkout
+          // Credit system float with what we ACTUALLY received (after Monime fee)
           try {
             await supabase.rpc('credit_system_float', {
               p_currency: session.currency_code || 'SLE',
-              p_amount: paymentAmount,
+              p_amount: fees.floatAmount, // Only credit what Monime actually sent us
               p_transaction_id: null,
-              p_description: `Mobile Money Checkout - ${session.merchant_name} - ${session.description || 'Payment'}`,
+              p_description: `Mobile Money Checkout - ${session.merchant_name} - Gross: ${fees.grossAmount.toFixed(2)}, Fee: ${fees.monimeFee.toFixed(2)}, Net: ${fees.floatAmount.toFixed(2)}`,
             });
-            console.log('[CheckoutPay] System float credited:', { amount: paymentAmount });
+            console.log('[CheckoutPay] System float credited:', { floatAmount: fees.floatAmount.toFixed(2) });
           } catch (floatErr) {
             console.error('[CheckoutPay] Failed to credit system float:', floatErr);
             // Don't fail the payment if float update fails
           }
 
-          // Send notification to merchant (use owner's user_id)
+          // Send notification to merchant with fee details
           await supabase.from('user_notifications').insert({
             user_id: merchantOwnerId,
             type: 'payment_received',
             title: 'Payment Received',
-            message: `You received a payment of ${currency} ${paymentAmount.toLocaleString()} via mobile money for "${session.description || 'Purchase'}"`,
+            message: `You received ${currency} ${netAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} via mobile money for "${session.description || 'Purchase'}" (${currency} ${fees.monimeFee.toFixed(2)} gateway fee on ${currency} ${fees.grossAmount.toFixed(2)})`,
             read: false,
             metadata: {
-              amount: paymentAmount,
+              grossAmount: fees.grossAmount,
+              netAmount: fees.netAmount,
+              monimeFee: fees.monimeFee,
               currency: currency,
               reference: transactionRef,
               session_id: session.external_id,
@@ -2653,14 +2773,14 @@ async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse
             }
 
             if (payerWallet) {
-              // Create payer's outgoing transaction record (for their transaction history) - MUST include external_id
+              // Create payer's outgoing transaction record - show gross amount paid
               const payerTxExternalId = `tx_payer_${randomUUID().replace(/-/g, '').substring(0, 24)}`;
 
               const { error: payerTxError } = await supabase.from('transactions').insert({
                 external_id: payerTxExternalId,
                 wallet_id: payerWallet.id,
                 type: 'PAYMENT_SENT',
-                amount: -paymentAmount, // Negative to show as outgoing
+                amount: -grossAmount, // Negative, and show what customer actually paid
                 currency: session.currency_code || 'SLE',
                 status: 'COMPLETED',
                 description: `Payment to ${session.merchant_name || 'Merchant'} - ${session.description || 'Purchase'}`,
@@ -2670,23 +2790,25 @@ async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse
                   merchantId: session.merchant_id,
                   merchantName: session.merchant_name,
                   paymentMethod: 'monime_mobile',
+                  grossAmount: fees.grossAmount,
+                  monimeFee: fees.monimeFee,
                 },
               });
 
               if (payerTxError) {
                 console.error('[CheckoutPay] Payer transaction insert error:', payerTxError);
               }
-              console.log('[CheckoutPay] Payer transaction created:', { payerId, amount: paymentAmount, ref: transactionRef });
+              console.log('[CheckoutPay] Payer transaction created:', { payerId, grossAmount: fees.grossAmount, ref: transactionRef });
 
-              // Send notification to payer
+              // Send notification to payer (show gross amount they paid)
               await supabase.from('user_notifications').insert({
                 user_id: payerId,
                 type: 'payment_sent',
                 title: 'Payment Successful',
-                message: `You paid ${currency} ${paymentAmount.toLocaleString()} to ${session.merchant_name || 'Merchant'} for "${session.description || 'Purchase'}"`,
+                message: `You paid ${currency} ${grossAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} to ${session.merchant_name || 'Merchant'} for "${session.description || 'Purchase'}"`,
                 read: false,
                 metadata: {
-                  amount: paymentAmount,
+                  amount: grossAmount,
                   currency: currency,
                   reference: transactionRef,
                   session_id: session.external_id,

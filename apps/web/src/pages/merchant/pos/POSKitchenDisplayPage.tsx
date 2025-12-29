@@ -216,7 +216,7 @@ export function POSKitchenDisplayPage() {
   useEffect(() => {
     if (!autoRefresh) return;
 
-    const interval = setInterval(loadOrders, 10000); // Refresh every 10 seconds
+    const interval = setInterval(loadOrders, 30000); // Refresh every 30 seconds (realtime handles immediate updates)
     return () => clearInterval(interval);
   }, [autoRefresh, loadOrders]);
 

@@ -1,3 +1,7 @@
+'use client'
+
+import { CodeBlock } from '@/components/ui/CodeBlock'
+
 export default function AuthenticationPage() {
   return (
     <div className="max-w-4xl mx-auto px-8 py-12">
@@ -66,16 +70,18 @@ export default function AuthenticationPage() {
         </p>
 
         <h3 className="text-lg font-semibold text-gray-900 mb-3">Using X-API-Key Header</h3>
-        <pre className="mb-6">
-{`curl -X GET "https://api.peeap.com/api/v1/pos/products" \\
+        <CodeBlock
+          language="bash"
+          code={`curl -X GET "https://api.peeap.com/api/v1/pos/products" \\
   -H "X-API-Key: sk_live_your_api_key"`}
-        </pre>
+        />
 
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">Using Authorization Header</h3>
-        <pre className="mb-6">
-{`curl -X GET "https://api.peeap.com/api/v1/pos/products" \\
+        <h3 className="text-lg font-semibold text-gray-900 mb-3 mt-6">Using Authorization Header</h3>
+        <CodeBlock
+          language="bash"
+          code={`curl -X GET "https://api.peeap.com/api/v1/pos/products" \\
   -H "Authorization: Bearer sk_live_your_api_key"`}
-        </pre>
+        />
       </section>
 
       <section className="mb-12">
@@ -195,11 +201,13 @@ export default function AuthenticationPage() {
           your live data. Test mode requests will only access test data and won't process
           real transactions.
         </p>
-        <pre>
-{`# Test mode request
+        <CodeBlock
+          language="bash"
+          title="Test Mode Request"
+          code={`# Test mode request
 curl -X GET "https://api.peeap.com/api/v1/pos/products" \\
   -H "X-API-Key: sk_test_your_test_api_key"`}
-        </pre>
+        />
       </section>
     </div>
   )

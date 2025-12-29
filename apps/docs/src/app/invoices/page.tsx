@@ -1,3 +1,7 @@
+'use client'
+
+import { CodeBlock } from '@/components/ui/CodeBlock'
+
 export default function InvoicesPage() {
   return (
     <div className="max-w-4xl mx-auto px-8 py-12">
@@ -52,14 +56,16 @@ export default function InvoicesPage() {
         </div>
 
         <h3 className="text-lg font-semibold text-gray-900 mb-3">Request</h3>
-        <pre className="mb-4">
-{`curl -X GET "https://api.peeap.com/api/v1/invoices?status=sent" \\
+        <CodeBlock
+          language="bash"
+          code={`curl -X GET "https://api.peeap.com/api/v1/invoices?status=sent" \\
   -H "X-API-Key: sk_live_your_api_key"`}
-        </pre>
+        />
 
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">Response</h3>
-        <pre>
-{`{
+        <h3 className="text-lg font-semibold text-gray-900 mb-3 mt-6">Response</h3>
+        <CodeBlock
+          language="json"
+          code={`{
   "success": true,
   "data": [
     {
@@ -71,7 +77,7 @@ export default function InvoicesPage() {
       "subtotal": 1000.00,
       "tax_amount": 100.00,
       "total": 1100.00,
-      "currency": "USD",
+      "currency": "SLE",
       "due_date": "2025-02-15",
       "items": [
         {
@@ -92,7 +98,7 @@ export default function InvoicesPage() {
     "has_next_page": true
   }
 }`}
-        </pre>
+        />
       </section>
 
       {/* Create Invoice */}
@@ -136,24 +142,6 @@ export default function InvoicesPage() {
                 <td className="py-2 px-3 text-gray-600">Array of invoice line items</td>
               </tr>
               <tr className="border-b border-gray-100">
-                <td className="py-2 px-3"><code>items[].description</code></td>
-                <td className="py-2 px-3 text-gray-600">string</td>
-                <td className="py-2 px-3 text-gray-600">Yes</td>
-                <td className="py-2 px-3 text-gray-600">Line item description</td>
-              </tr>
-              <tr className="border-b border-gray-100">
-                <td className="py-2 px-3"><code>items[].quantity</code></td>
-                <td className="py-2 px-3 text-gray-600">number</td>
-                <td className="py-2 px-3 text-gray-600">Yes</td>
-                <td className="py-2 px-3 text-gray-600">Quantity</td>
-              </tr>
-              <tr className="border-b border-gray-100">
-                <td className="py-2 px-3"><code>items[].unit_price</code></td>
-                <td className="py-2 px-3 text-gray-600">number</td>
-                <td className="py-2 px-3 text-gray-600">Yes</td>
-                <td className="py-2 px-3 text-gray-600">Price per unit</td>
-              </tr>
-              <tr className="border-b border-gray-100">
                 <td className="py-2 px-3"><code>due_date</code></td>
                 <td className="py-2 px-3 text-gray-600">string</td>
                 <td className="py-2 px-3 text-gray-600">No</td>
@@ -163,27 +151,22 @@ export default function InvoicesPage() {
                 <td className="py-2 px-3"><code>tax_rate</code></td>
                 <td className="py-2 px-3 text-gray-600">number</td>
                 <td className="py-2 px-3 text-gray-600">No</td>
-                <td className="py-2 px-3 text-gray-600">Tax percentage</td>
+                <td className="py-2 px-3 text-gray-600">Tax percentage (default: 15 for GST)</td>
               </tr>
               <tr className="border-b border-gray-100">
                 <td className="py-2 px-3"><code>currency</code></td>
                 <td className="py-2 px-3 text-gray-600">string</td>
                 <td className="py-2 px-3 text-gray-600">No</td>
-                <td className="py-2 px-3 text-gray-600">Currency code (default: USD)</td>
-              </tr>
-              <tr className="border-b border-gray-100">
-                <td className="py-2 px-3"><code>notes</code></td>
-                <td className="py-2 px-3 text-gray-600">string</td>
-                <td className="py-2 px-3 text-gray-600">No</td>
-                <td className="py-2 px-3 text-gray-600">Notes shown on invoice</td>
+                <td className="py-2 px-3 text-gray-600">Currency code (default: SLE)</td>
               </tr>
             </tbody>
           </table>
         </div>
 
         <h3 className="text-lg font-semibold text-gray-900 mb-3">Request</h3>
-        <pre>
-{`curl -X POST "https://api.peeap.com/api/v1/invoices" \\
+        <CodeBlock
+          language="bash"
+          code={`curl -X POST "https://api.peeap.com/api/v1/invoices" \\
   -H "X-API-Key: sk_live_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -202,10 +185,10 @@ export default function InvoicesPage() {
       }
     ],
     "due_date": "2025-02-15",
-    "tax_rate": 10,
+    "tax_rate": 15,
     "notes": "Thank you for your business!"
   }'`}
-        </pre>
+        />
       </section>
 
       {/* Get Invoice */}
@@ -217,10 +200,11 @@ export default function InvoicesPage() {
         <p className="text-gray-600 mb-4">
           Retrieve a single invoice by ID.
         </p>
-        <pre>
-{`curl -X GET "https://api.peeap.com/api/v1/invoices/inv_abc123" \\
+        <CodeBlock
+          language="bash"
+          code={`curl -X GET "https://api.peeap.com/api/v1/invoices/inv_abc123" \\
   -H "X-API-Key: sk_live_your_api_key"`}
-        </pre>
+        />
       </section>
 
       {/* Update Invoice */}
@@ -232,15 +216,16 @@ export default function InvoicesPage() {
         <p className="text-gray-600 mb-4">
           Update a draft invoice. Sent invoices cannot be modified.
         </p>
-        <pre>
-{`curl -X PATCH "https://api.peeap.com/api/v1/invoices/inv_abc123" \\
+        <CodeBlock
+          language="bash"
+          code={`curl -X PATCH "https://api.peeap.com/api/v1/invoices/inv_abc123" \\
   -H "X-API-Key: sk_live_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{
     "due_date": "2025-02-28",
     "notes": "Updated payment terms"
   }'`}
-        </pre>
+        />
       </section>
 
       {/* Send Invoice */}
@@ -278,15 +263,16 @@ export default function InvoicesPage() {
           </table>
         </div>
 
-        <pre>
-{`curl -X POST "https://api.peeap.com/api/v1/invoices/inv_abc123/send" \\
+        <CodeBlock
+          language="bash"
+          code={`curl -X POST "https://api.peeap.com/api/v1/invoices/inv_abc123/send" \\
   -H "X-API-Key: sk_live_your_api_key" \\
   -H "Content-Type: application/json" \\
   -d '{
     "cc": ["accounting@yourcompany.com"],
     "message": "Please find attached your invoice for January services."
   }'`}
-        </pre>
+        />
       </section>
     </div>
   )

@@ -113,14 +113,42 @@ export function MobileMoneyFloatCard({ onReplenish, onViewHistory }: MobileMoney
       )
       .subscribe();
 
-    // Refresh Monime balance every 60 seconds
-    const monimeInterval = setInterval(() => {
-      loadMonimeBalance();
-    }, 60000);
+    // Visibility-aware polling for Monime balance (every 2 minutes when visible)
+    let monimeInterval: NodeJS.Timeout | null = null;
+
+    const startPolling = () => {
+      if (monimeInterval) return;
+      monimeInterval = setInterval(() => {
+        loadMonimeBalance();
+      }, 120000); // 2 minutes
+    };
+
+    const stopPolling = () => {
+      if (monimeInterval) {
+        clearInterval(monimeInterval);
+        monimeInterval = null;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopPolling();
+      } else {
+        loadMonimeBalance(); // Refresh when tab becomes visible
+        startPolling();
+      }
+    };
+
+    if (!document.hidden) {
+      startPolling();
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       floatSubscription.unsubscribe();
-      clearInterval(monimeInterval);
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 

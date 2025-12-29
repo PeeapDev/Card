@@ -1,4 +1,7 @@
+'use client'
+
 import { EventTicketDemo } from '@/components/demos/EventTicketDemo'
+import { CodeBlock } from '@/components/ui/CodeBlock'
 
 export default function EventsAppPage() {
   return (
@@ -35,10 +38,10 @@ export default function EventsAppPage() {
           </p>
         </div>
 
-        <div className="bg-gray-900 text-gray-100 rounded-lg p-6 mb-6">
-          <p className="text-gray-400 text-sm mb-3">Prompt for AI Assistant:</p>
-          <pre className="text-sm whitespace-pre-wrap text-green-400">
-{`I want to add Peeap Event Tickets to my app. Here are the details:
+        <CodeBlock
+          language="bash"
+          title="Prompt for AI Assistant"
+          code={`I want to add Peeap Event Tickets to my app. Here are the details:
 
 ## Installation
 npm install @peeap/widgets
@@ -78,11 +81,8 @@ function DoorScannerPage({ eventId }) {
 ## EventTicketSales Props
 - apiKey (required): Your Peeap public API key
 - eventId (required): The event ID to sell tickets for
-- theme: 'light' | 'dark' (default: 'light')
-- showEventHeader: boolean (default: true) - Show event name/date
 - maxTicketsPerOrder: number (default: 10)
 - onPurchaseComplete: (tickets) => void
-- onError: (error) => void
 
 ## TicketScanner Props
 - apiKey (required): Your Peeap public API key
@@ -90,11 +90,9 @@ function DoorScannerPage({ eventId }) {
 - scanMode: 'camera' | 'manual' | 'both' (default: 'both')
 - onScanSuccess: (ticket) => void
 - onScanError: (error) => void
-- showStats: boolean (default: true) - Show scan statistics
 
 Please integrate this into my app with [describe your requirements].`}
-          </pre>
-        </div>
+        />
       </section>
 
       {/* Two Widget Types */}
@@ -107,13 +105,14 @@ Please integrate this into my app with [describe your requirements].`}
             <p className="text-gray-600 text-sm mb-4">
               Embed on your event page to let customers browse ticket types, select quantities, and complete purchases.
             </p>
-            <pre className="text-sm">
-{`<EventTicketSales
+            <CodeBlock
+              language="tsx"
+              code={`<EventTicketSales
   apiKey="pk_live_xxx"
   eventId="evt_123"
   maxTicketsPerOrder={10}
 />`}
-            </pre>
+            />
           </div>
           <div className="border border-gray-200 rounded-lg p-6">
             <div className="text-3xl mb-3">📷</div>
@@ -121,13 +120,14 @@ Please integrate this into my app with [describe your requirements].`}
             <p className="text-gray-600 text-sm mb-4">
               Use at event entrance to scan and validate ticket QR codes. Shows attendee info and prevents duplicate entry.
             </p>
-            <pre className="text-sm">
-{`<TicketScanner
+            <CodeBlock
+              language="tsx"
+              code={`<TicketScanner
   apiKey="pk_live_xxx"
   eventId="evt_123"
   scanMode="camera"
 />`}
-            </pre>
+            />
           </div>
         </div>
       </section>
@@ -138,9 +138,10 @@ Please integrate this into my app with [describe your requirements].`}
 
         <div className="space-y-6">
           <div>
-            <h3 className="font-semibold text-gray-900 mb-2">Complete Event Page</h3>
-            <pre>
-{`import { EventTicketSales } from '@peeap/widgets'
+            <h3 className="font-semibold text-gray-900 mb-3">Complete Event Page</h3>
+            <CodeBlock
+              language="tsx"
+              code={`import { EventTicketSales } from '@peeap/widgets'
 
 export default function EventPage({ params }) {
   const handlePurchase = (tickets) => {
@@ -159,13 +160,14 @@ export default function EventPage({ params }) {
     </div>
   )
 }`}
-            </pre>
+            />
           </div>
 
           <div>
-            <h3 className="font-semibold text-gray-900 mb-2">Door Scanner with Audio Feedback</h3>
-            <pre>
-{`import { TicketScanner } from '@peeap/widgets'
+            <h3 className="font-semibold text-gray-900 mb-3">Door Scanner with Audio Feedback</h3>
+            <CodeBlock
+              language="tsx"
+              code={`import { TicketScanner } from '@peeap/widgets'
 import { useRef } from 'react'
 
 export default function ScannerPage({ eventId }) {
@@ -189,13 +191,14 @@ export default function ScannerPage({ eventId }) {
     />
   )
 }`}
-            </pre>
+            />
           </div>
 
           <div>
-            <h3 className="font-semibold text-gray-900 mb-2">Event Dashboard for Organizers</h3>
-            <pre>
-{`import { EventDashboard } from '@peeap/widgets'
+            <h3 className="font-semibold text-gray-900 mb-3">Event Dashboard for Organizers</h3>
+            <CodeBlock
+              language="tsx"
+              code={`import { EventDashboard } from '@peeap/widgets'
 
 // Full event management with sales analytics
 <EventDashboard
@@ -203,7 +206,7 @@ export default function ScannerPage({ eventId }) {
   merchantId="your_merchant_id"
   features={['sales', 'attendees', 'checkin-stats', 'revenue']}
 />`}
-            </pre>
+            />
           </div>
         </div>
       </section>

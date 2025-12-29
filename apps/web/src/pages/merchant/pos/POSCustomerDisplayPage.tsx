@@ -189,8 +189,8 @@ export function POSCustomerDisplayPage() {
     };
     loadSettings();
 
-    // Reload settings periodically
-    const interval = setInterval(loadSettings, 5000);
+    // Reload settings periodically (60s - settings rarely change)
+    const interval = setInterval(loadSettings, 60000);
     return () => clearInterval(interval);
   }, [merchantId]);
 

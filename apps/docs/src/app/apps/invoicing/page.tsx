@@ -1,4 +1,7 @@
+'use client'
+
 import { InvoiceDemo } from '@/components/demos/InvoiceDemo'
+import { CodeBlock } from '@/components/ui/CodeBlock'
 
 export default function InvoicingAppPage() {
   return (
@@ -19,7 +22,7 @@ export default function InvoicingAppPage() {
       <section className="mb-12">
         <h2 className="text-xl font-bold text-gray-900 mb-4">Interactive Demo</h2>
         <p className="text-gray-600 mb-6">
-          Create an invoice below. Add line items, preview the invoice, and see how it would be sent to customers.
+          Create an invoice below. Add line items, preview the invoice, and see the payment QR code that includes the exact invoice total.
         </p>
         <InvoiceDemo />
       </section>
@@ -33,10 +36,10 @@ export default function InvoicingAppPage() {
           </p>
         </div>
 
-        <div className="bg-gray-900 text-gray-100 rounded-lg p-6 mb-6">
-          <p className="text-gray-400 text-sm mb-3">Prompt for AI Assistant:</p>
-          <pre className="text-sm whitespace-pre-wrap text-green-400">
-{`I want to add a Peeap Invoice Creator to my app. Here are the details:
+        <CodeBlock
+          language="bash"
+          title="Prompt for AI Assistant"
+          code={`I want to add a Peeap Invoice Creator to my app. Here are the details:
 
 ## Installation
 npm install @peeap/widgets
@@ -59,33 +62,17 @@ function MyInvoices() {
 - apiKey (required): Your Peeap public API key
 - merchantId (required): Your merchant business ID
 - theme: 'light' | 'dark' (default: 'light')
-- currency: string (default: 'USD')
-- taxRate: number (default: 0) - Default tax percentage
+- currency: string (default: 'SLE')
+- taxRate: number (default: 15) - Default tax percentage (GST)
 - defaultDueDays: number (default: 30) - Days until due
 - showPreview: boolean (default: true) - Show invoice preview
-- allowRecurring: boolean (default: false) - Enable recurring invoices
 - companyInfo: { name, address, logo } - Your company details
-- onInvoiceCreated: (invoice) => void - Callback when invoice is created
-- onInvoiceSent: (invoice) => void - Callback when invoice is sent
-- onError: (error) => void - Error callback
-
-## Customization
-<InvoiceCreator
-  apiKey="pk_live_xxx"
-  merchantId="xxx"
-  currency="SLL"
-  taxRate={15}
-  defaultDueDays={14}
-  companyInfo={{
-    name: "My Business",
-    address: "123 Main St, Freetown",
-    logo: "/logo.png"
-  }}
-/>
+- onInvoiceCreated: (invoice) => void
+- onInvoiceSent: (invoice) => void
+- onError: (error) => void
 
 Please integrate this into my app with [describe your requirements].`}
-          </pre>
-        </div>
+        />
       </section>
 
       {/* Component Props */}
@@ -117,14 +104,14 @@ Please integrate this into my app with [describe your requirements].`}
               <tr className="border-b border-gray-100">
                 <td className="py-3 px-4"><code>currency</code></td>
                 <td className="py-3 px-4 text-gray-600">string</td>
-                <td className="py-3 px-4 text-gray-600">'USD'</td>
+                <td className="py-3 px-4 text-gray-600">'SLE'</td>
                 <td className="py-3 px-4 text-gray-600">Invoice currency</td>
               </tr>
               <tr className="border-b border-gray-100">
                 <td className="py-3 px-4"><code>taxRate</code></td>
                 <td className="py-3 px-4 text-gray-600">number</td>
-                <td className="py-3 px-4 text-gray-600">0</td>
-                <td className="py-3 px-4 text-gray-600">Default tax percentage</td>
+                <td className="py-3 px-4 text-gray-600">15</td>
+                <td className="py-3 px-4 text-gray-600">Default tax percentage (GST)</td>
               </tr>
               <tr className="border-b border-gray-100">
                 <td className="py-3 px-4"><code>defaultDueDays</code></td>
@@ -133,28 +120,10 @@ Please integrate this into my app with [describe your requirements].`}
                 <td className="py-3 px-4 text-gray-600">Days until invoice is due</td>
               </tr>
               <tr className="border-b border-gray-100">
-                <td className="py-3 px-4"><code>showPreview</code></td>
-                <td className="py-3 px-4 text-gray-600">boolean</td>
-                <td className="py-3 px-4 text-gray-600">true</td>
-                <td className="py-3 px-4 text-gray-600">Show preview before sending</td>
-              </tr>
-              <tr className="border-b border-gray-100">
-                <td className="py-3 px-4"><code>allowRecurring</code></td>
-                <td className="py-3 px-4 text-gray-600">boolean</td>
-                <td className="py-3 px-4 text-gray-600">false</td>
-                <td className="py-3 px-4 text-gray-600">Enable recurring invoice option</td>
-              </tr>
-              <tr className="border-b border-gray-100">
                 <td className="py-3 px-4"><code>companyInfo</code></td>
                 <td className="py-3 px-4 text-gray-600">object</td>
                 <td className="py-3 px-4 text-gray-600">-</td>
                 <td className="py-3 px-4 text-gray-600">Your company name, address, logo</td>
-              </tr>
-              <tr className="border-b border-gray-100">
-                <td className="py-3 px-4"><code>onInvoiceCreated</code></td>
-                <td className="py-3 px-4 text-gray-600">function</td>
-                <td className="py-3 px-4 text-gray-600">-</td>
-                <td className="py-3 px-4 text-gray-600">Callback when invoice is created</td>
               </tr>
               <tr className="border-b border-gray-100">
                 <td className="py-3 px-4"><code>onInvoiceSent</code></td>
@@ -173,9 +142,10 @@ Please integrate this into my app with [describe your requirements].`}
 
         <div className="space-y-6">
           <div>
-            <h3 className="font-semibold text-gray-900 mb-2">Basic Invoice Creator</h3>
-            <pre>
-{`import { InvoiceCreator } from '@peeap/widgets'
+            <h3 className="font-semibold text-gray-900 mb-3">Basic Invoice Creator</h3>
+            <CodeBlock
+              language="tsx"
+              code={`import { InvoiceCreator } from '@peeap/widgets'
 
 export default function InvoicesPage() {
   return (
@@ -188,13 +158,14 @@ export default function InvoicesPage() {
     </div>
   )
 }`}
-            </pre>
+            />
           </div>
 
           <div>
-            <h3 className="font-semibold text-gray-900 mb-2">With Company Branding</h3>
-            <pre>
-{`<InvoiceCreator
+            <h3 className="font-semibold text-gray-900 mb-3">With Company Branding</h3>
+            <CodeBlock
+              language="tsx"
+              code={`<InvoiceCreator
   apiKey="pk_live_your_key"
   merchantId="your_merchant_id"
   companyInfo={{
@@ -204,17 +175,18 @@ export default function InvoicesPage() {
     email: "billing@abc.sl",
     phone: "+232 76 123 456"
   }}
-  currency="SLL"
+  currency="SLE"
   taxRate={15}
   defaultDueDays={14}
 />`}
-            </pre>
+            />
           </div>
 
           <div>
-            <h3 className="font-semibold text-gray-900 mb-2">Invoice List View</h3>
-            <pre>
-{`import { InvoiceList } from '@peeap/widgets'
+            <h3 className="font-semibold text-gray-900 mb-3">Invoice List View</h3>
+            <CodeBlock
+              language="tsx"
+              code={`import { InvoiceList } from '@peeap/widgets'
 
 // Display all invoices with status filters
 <InvoiceList
@@ -223,7 +195,7 @@ export default function InvoicesPage() {
   filters={['all', 'draft', 'sent', 'paid', 'overdue']}
   onInvoiceClick={(invoice) => router.push(\`/invoices/\${invoice.id}\`)}
 />`}
-            </pre>
+            />
           </div>
         </div>
       </section>

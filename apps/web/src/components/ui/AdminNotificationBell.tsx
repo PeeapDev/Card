@@ -296,17 +296,47 @@ export function AdminNotificationBell() {
     }
   };
 
-  // Initial fetch and polling
+  // Initial fetch and visibility-aware polling
   useEffect(() => {
     fetchNotifications();
     fetchSpecialCounts();
 
-    // Poll for updates every 30 seconds
-    const interval = setInterval(() => {
-      fetchUnreadCount();
-      fetchSpecialCounts();
-    }, 30000);
-    return () => clearInterval(interval);
+    let interval: NodeJS.Timeout | null = null;
+
+    const startPolling = () => {
+      if (interval) return;
+      interval = setInterval(() => {
+        fetchUnreadCount();
+        fetchSpecialCounts();
+      }, 30000);
+    };
+
+    const stopPolling = () => {
+      if (interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopPolling();
+      } else {
+        fetchUnreadCount(); // Refresh when tab becomes visible
+        startPolling();
+      }
+    };
+
+    // Start polling only if tab is visible
+    if (!document.hidden) {
+      startPolling();
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [fetchNotifications, fetchUnreadCount, fetchSpecialCounts]);
 
   // Subscribe to real-time notifications
