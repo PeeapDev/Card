@@ -557,6 +557,9 @@ async function handleMobileAuth(req: VercelRequest, res: VercelResponse) {
       return await handleGetCards(data, res);
     case 'transactions':
       return await handleGetTransactions(data, res);
+    case 'userData':
+      // Batch endpoint: fetch profile, wallets, cards, and transactions in parallel
+      return await handleGetUserData(data, res);
     default:
       return res.status(400).json({ error: 'Invalid action' });
   }
@@ -672,6 +675,44 @@ async function handleGetTransactions(data: { userId: string; limit?: number }, r
     .order('created_at', { ascending: false })
     .limit(limit);
   return res.status(200).json({ transactions: transactions || [] });
+}
+
+/**
+ * Batch endpoint to fetch all user data in parallel
+ * Reduces 4 API calls to 1 for app initialization
+ */
+async function handleGetUserData(data: { userId: string; transactionLimit?: number }, res: VercelResponse) {
+  const { userId, transactionLimit = 20 } = data;
+
+  try {
+    // Fetch all data in parallel
+    const [userResult, walletsResult, cardsResult, transactionsResult] = await Promise.all([
+      supabaseAnon.from('users').select('*').eq('id', userId).limit(1),
+      supabaseAnon.from('wallets').select('*').eq('user_id', userId),
+      supabaseAnon.from('cards').select('*').eq('user_id', userId),
+      supabaseAnon
+        .from('transactions')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(transactionLimit),
+    ]);
+
+    const users = userResult.data;
+    if (!users || users.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    return res.status(200).json({
+      user: mapUser(users[0]),
+      wallets: walletsResult.data || [],
+      cards: cardsResult.data || [],
+      transactions: transactionsResult.data || [],
+    });
+  } catch (error: any) {
+    console.error('[GetUserData] Error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to fetch user data' });
+  }
 }
 
 function generateTokens(user: any) {
