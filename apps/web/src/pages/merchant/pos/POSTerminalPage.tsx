@@ -1114,13 +1114,12 @@ export function POSTerminalPage() {
     }
   }, [paymentMethod, nfcSupported, showPayment, nfcReading, startNfcReading, stopNfcReading]);
 
-  // Mobile Money Payment handlers - Redirect to Monime for payment
+  // Mobile Money Payment handlers - Redirect to Monime checkout
   const initiateMobileMoneyPayment = async () => {
     if (!merchantWalletId || !merchantId) {
       return;
     }
 
-    setMobileMoneyStatus('pending');
     setProcessing(true);
 
     try {
@@ -1140,7 +1139,6 @@ export function POSTerminalPage() {
         taxAmount: taxAmount,
         discountAmount: discountAmount,
         paymentMethod: 'mobile_money',
-        customerPhone: mobileMoneyPhone,
         merchantId: merchantId,
         createdAt: new Date().toISOString(),
       };
@@ -1163,17 +1161,11 @@ export function POSTerminalPage() {
       const updatedPendingSaleData = { ...pendingSaleData, monimeTransactionId: response.id };
       sessionStorage.setItem(`pos_pending_sale_${pendingSaleId}`, JSON.stringify(updatedPendingSaleData));
 
-      // If we have a payment URL, redirect to Monime
+      // Redirect to Monime checkout page
       if (response.paymentUrl) {
-        // Redirect to Monime payment page
         window.location.href = response.paymentUrl;
-      } else if (response.ussdCode) {
-        // Fallback to USSD if no redirect URL available
-        setMobileMoneyUssdCode(response.ussdCode);
-        setMobileMoneyStatus('processing');
-        startMobileMoneyPolling(response.id, pendingSaleId);
       } else {
-        throw new Error('No payment URL or USSD code received');
+        throw new Error('No payment URL received from Monime');
       }
     } catch (error: any) {
       console.error('Mobile money payment error:', error);
@@ -2466,7 +2458,7 @@ export function POSTerminalPage() {
                     </div>
                   )}
 
-                  {/* Mobile Money - Phone Number */}
+                  {/* Mobile Money - Direct to Monime Checkout */}
                   {paymentMethod === 'mobile_money' && (
                     <div className="space-y-4 mb-6">
                       {mobileMoneyStatus === 'completed' ? (
@@ -2485,81 +2477,39 @@ export function POSTerminalPage() {
                             Try Again
                           </button>
                         </div>
-                      ) : mobileMoneyStatus === 'processing' ? (
+                      ) : processing ? (
                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
                           <div className="relative w-20 h-20 mx-auto mb-4">
                             <Loader2 className="w-20 h-20 text-blue-500 animate-spin" />
                             <Smartphone className="w-8 h-8 text-blue-600 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
                           </div>
-                          <p className="text-lg font-semibold text-blue-700">Waiting for Payment</p>
+                          <p className="text-lg font-semibold text-blue-700">Redirecting to Mobile Money...</p>
                           <p className="text-sm text-blue-600 mt-2">
-                            Customer will receive a payment prompt on their phone
+                            Please wait while we connect you to the payment page
                           </p>
-                          {mobileMoneyUssdCode && (
-                            <div className="mt-4 bg-white rounded-lg p-3 border border-blue-200">
-                              <p className="text-xs text-gray-500">Or dial this USSD code:</p>
-                              <p className="text-xl font-mono font-bold text-gray-900 mt-1">
-                                {mobileMoneyUssdCode}
-                              </p>
-                            </div>
-                          )}
-                          <button
-                            onClick={() => {
-                              if (mobileMoneyPollingRef.current) {
-                                clearInterval(mobileMoneyPollingRef.current);
-                                mobileMoneyPollingRef.current = null;
-                              }
-                              setMobileMoneyStatus('idle');
-                              setMobileMoneyTransactionId(null);
-                              setMobileMoneyUssdCode(null);
-                            }}
-                            className="mt-4 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium"
-                          >
-                            Cancel
-                          </button>
                         </div>
                       ) : (
                         <>
-                          {/* Phone Number Input - Direct to Monime */}
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              Customer's Mobile Money Number
-                            </label>
-                            <div className="flex gap-2">
-                              <div className="flex items-center px-3 bg-gray-100 dark:bg-gray-700 rounded-lg border border-gray-300 dark:border-gray-600">
-                                <span className="text-gray-600 dark:text-gray-400 font-medium">+232</span>
-                              </div>
-                              <input
-                                type="tel"
-                                value={mobileMoneyPhone}
-                                onChange={(e) => setMobileMoneyPhone(e.target.value.replace(/\D/g, ''))}
-                                placeholder="XX XXX XXXX"
-                                className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-lg"
-                                maxLength={9}
-                              />
-                            </div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                              Enter any mobile money number (Orange, Africell, or QMoney)
+                          {/* Amount Display */}
+                          <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-6 text-center">
+                            <Smartphone className="w-12 h-12 mx-auto text-orange-600 mb-3" />
+                            <p className="text-sm text-orange-600 dark:text-orange-400 mb-2">Amount to Pay</p>
+                            <p className="text-3xl font-bold text-orange-800 dark:text-orange-200">
+                              {formatCurrency(totalAmount)}
+                            </p>
+                            <p className="text-xs text-orange-500 dark:text-orange-400 mt-2">
+                              Customer will enter their mobile money number on the next screen
                             </p>
                           </div>
 
-                          {/* Request Payment Button */}
+                          {/* Pay with Mobile Money Button */}
                           <button
                             onClick={initiateMobileMoneyPayment}
-                            disabled={!mobileMoneyPhone || mobileMoneyPhone.length < 6 || !merchantWalletId || processing}
-                            className="w-full py-4 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:from-gray-400 disabled:to-gray-500 text-white rounded-lg font-semibold flex items-center justify-center gap-2 transition-all"
+                            disabled={!merchantWalletId || processing}
+                            className="w-full py-4 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:from-gray-400 disabled:to-gray-500 text-white rounded-xl font-semibold flex items-center justify-center gap-2 transition-all"
                           >
-                            {processing ? (
-                              <>
-                                <Loader2 className="w-5 h-5 animate-spin" />
-                                Sending Request...
-                              </>
-                            ) : (
-                              <>
-                                <Send className="w-5 h-5" />
-                                Request Payment of {formatCurrency(totalAmount)}
-                              </>
-                            )}
+                            <Smartphone className="w-5 h-5" />
+                            Pay with Mobile Money
                           </button>
 
                           {!merchantWalletId && (

@@ -701,48 +701,18 @@ export function WithdrawPage() {
                 </div>
               )}
 
-              {/* Phone Number (for mobile money) */}
+              {/* Mobile Money Info */}
               {destinationType === 'momo' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Phone Number
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">+232</span>
-                    <input
-                      type="tel"
-                      value={accountNumber}
-                      onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, '').slice(0, 8))}
-                      placeholder="76123456"
-                      className="w-full pl-14 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                    />
-                  </div>
-
-                  {/* Auto-Detected Provider Badge */}
-                  {accountNumber.length >= 2 && (
-                    <div className="mt-2">
-                      {selectedProviderId && PROVIDER_DISPLAY[selectedProviderId] ? (
-                        <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg ${PROVIDER_DISPLAY[selectedProviderId].bgColor}`}>
-                          <span className={`font-bold text-sm ${PROVIDER_DISPLAY[selectedProviderId].color}`}>
-                            {PROVIDER_DISPLAY[selectedProviderId].icon}
-                          </span>
-                          <span className={`font-medium text-sm ${PROVIDER_DISPLAY[selectedProviderId].color}`}>
-                            {PROVIDER_DISPLAY[selectedProviderId].name}
-                          </span>
-                          <span className="text-xs text-gray-500">detected</span>
-                        </div>
-                      ) : (
-                        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20">
-                          <AlertCircle className="w-4 h-4 text-red-500" />
-                          <span className="text-sm text-red-600 dark:text-red-400">Unknown network</span>
-                        </div>
-                      )}
+                <div className="p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl">
+                  <div className="flex items-start gap-3">
+                    <Smartphone className="w-5 h-5 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-orange-800 dark:text-orange-200">Mobile Money Withdrawal</p>
+                      <p className="text-sm text-orange-600 dark:text-orange-300 mt-1">
+                        You'll be redirected to Monime to enter your phone number and complete the withdrawal.
+                      </p>
                     </div>
-                  )}
-
-                  <p className="mt-1 text-xs text-gray-500">
-                    Orange: 72-76, 78-79 | Africell: 30, 33, 77, 80, 88, 90, 99
-                  </p>
+                  </div>
                 </div>
               )}
 
