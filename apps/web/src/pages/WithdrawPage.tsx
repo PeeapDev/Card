@@ -3,10 +3,11 @@
  *
  * Users can withdraw their balance to:
  * - Mobile Money (Orange Money, Africell)
- * - Bank Account (Sierra Leone banks)
+ * - Bank Account (from user's connected bank accounts)
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
 import {
   ArrowDownToLine,
@@ -21,12 +22,15 @@ import {
   Info,
   Lock,
   ChevronRight,
+  Plus,
+  Star,
 } from 'lucide-react';
 import { Card, Button } from '@/components/ui';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useWallets } from '@/hooks/useWallets';
 import { useAuth } from '@/context/AuthContext';
 import { currencyService, Currency } from '@/services/currency.service';
+import { bankAccountService, UserBankAccount } from '@/services/bankAccount.service';
 
 interface MobileMoneyProvider {
   providerId: string;
@@ -212,6 +216,7 @@ function SlideToPayButton({
 
 export function WithdrawPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { data: wallets, isLoading: walletsLoading, refetch: refetchWallets } = useWallets();
 
   const [step, setStep] = useState<Step>('select');
@@ -221,6 +226,11 @@ export function WithdrawPage() {
   const [momoProviders, setMomoProviders] = useState<MobileMoneyProvider[]>([]);
   const [banks, setBanks] = useState<Bank[]>([]);
   const [providersLoading, setProvidersLoading] = useState(true);
+
+  // Connected bank accounts
+  const [connectedBankAccounts, setConnectedBankAccounts] = useState<UserBankAccount[]>([]);
+  const [bankAccountsLoading, setBankAccountsLoading] = useState(false);
+  const [selectedBankAccount, setSelectedBankAccount] = useState<UserBankAccount | null>(null);
 
   // Form state
   const [selectedWalletId, setSelectedWalletId] = useState<string>('');
@@ -303,16 +313,42 @@ export function WithdrawPage() {
     }
   };
 
+  // Load available banks from Monime API
   const loadBanks = async () => {
     try {
-      const response = await fetch(`${API_BASE}/router/payouts/banks`);
-      const data = await response.json();
-      if (data.banks) {
-        setBanks(data.banks);
-      }
+      const bankList = await bankAccountService.getAvailableBanks('SL');
+      setBanks(bankList.map(b => ({ id: b.providerId, name: b.name, country: b.country })));
     } catch (err) {
       console.error('Failed to load banks:', err);
     }
+  };
+
+  // Load user's connected bank accounts
+  const loadConnectedBankAccounts = async () => {
+    setBankAccountsLoading(true);
+    try {
+      const accounts = await bankAccountService.getUserBankAccounts();
+      setConnectedBankAccounts(accounts);
+      // Auto-select default account if exists
+      const defaultAccount = accounts.find(a => a.isDefault);
+      if (defaultAccount) {
+        selectBankAccount(defaultAccount);
+      } else if (accounts.length > 0) {
+        selectBankAccount(accounts[0]);
+      }
+    } catch (err) {
+      console.error('Failed to load connected bank accounts:', err);
+    } finally {
+      setBankAccountsLoading(false);
+    }
+  };
+
+  // Select a bank account
+  const selectBankAccount = (account: UserBankAccount) => {
+    setSelectedBankAccount(account);
+    setSelectedProviderId(account.bankProviderId);
+    setAccountNumber(account.accountNumber);
+    setAccountName(account.accountName || '');
   };
 
   const getCurrencySymbol = (code: string): string => {
@@ -335,17 +371,24 @@ export function WithdrawPage() {
       return false;
     }
 
-    if (!selectedProviderId) {
-      setError('Please select a provider');
-      return false;
-    }
+    // For bank withdrawals, check selected bank account
+    if (destinationType === 'bank') {
+      if (!selectedBankAccount) {
+        setError('Please select a bank account');
+        return false;
+      }
+    } else {
+      // For mobile money
+      if (!selectedProviderId) {
+        setError('Please select a provider');
+        return false;
+      }
 
-    if (!accountNumber) {
-      setError(destinationType === 'momo' ? 'Please enter a phone number' : 'Please enter an account number');
-      return false;
-    }
+      if (!accountNumber) {
+        setError('Please enter a phone number');
+        return false;
+      }
 
-    if (destinationType === 'momo') {
       const normalized = accountNumber.replace(/\s+/g, '').replace(/^(\+232|232)/, '');
       if (!/^[0-9]{8}$/.test(normalized)) {
         setError('Please enter a valid 8-digit phone number');
@@ -380,20 +423,32 @@ export function WithdrawPage() {
     setError('');
 
     try {
+      // Build request payload based on destination type
+      const payload: Record<string, any> = {
+        userId: user.id,
+        walletId: selectedWalletId,
+        amount: parseFloat(amount),
+        currency: 'SLE',
+        destinationType,
+        walletPin,
+      };
+
+      if (destinationType === 'bank' && selectedBankAccount) {
+        // Use selected bank account details
+        payload.providerId = selectedBankAccount.bankProviderId;
+        payload.accountNumber = selectedBankAccount.accountNumber;
+        payload.accountName = selectedBankAccount.accountName || undefined;
+        payload.bankAccountId = selectedBankAccount.id;
+      } else {
+        // Mobile money
+        payload.providerId = selectedProviderId;
+        payload.accountNumber = accountNumber;
+      }
+
       const response = await fetch(`${API_BASE}/router/payouts/user/cashout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.id,
-          walletId: selectedWalletId,
-          amount: parseFloat(amount),
-          currency: 'SLE',
-          destinationType,
-          providerId: selectedProviderId,
-          accountNumber,
-          accountName: accountName || undefined,
-          walletPin,
-        }),
+        body: JSON.stringify(payload),
       });
 
       // Check if response is JSON
@@ -435,17 +490,20 @@ export function WithdrawPage() {
     setWalletPin('');
     setError('');
     setPayoutId(null);
+    setSelectedBankAccount(null);
+    setConnectedBankAccounts([]);
   };
 
   const selectedWallet = wallets?.find(w => w.id === selectedWalletId);
-  const selectedBank = banks.find(b => b.id === selectedProviderId);
   const providerDisplay = destinationType === 'momo' && PROVIDER_DISPLAY[selectedProviderId]
     ? PROVIDER_DISPLAY[selectedProviderId]
-    : { name: selectedBank?.name || 'Bank', color: 'text-blue-600', icon: 'BK', bgColor: 'bg-blue-100' };
+    : { name: selectedBankAccount?.bankName || 'Bank', color: 'text-blue-600', icon: 'BK', bgColor: 'bg-blue-100' };
 
   // Check if form is ready for submission
-  const isFormValid = selectedProviderId && accountNumber && parseFloat(amount) >= 1 &&
-    (destinationType !== 'momo' || /^[0-9]{8}$/.test(accountNumber.replace(/\s+/g, '').replace(/^(\+232|232)/, '')));
+  const isFormValid = destinationType === 'bank'
+    ? selectedBankAccount && parseFloat(amount) >= 1
+    : selectedProviderId && accountNumber && parseFloat(amount) >= 1 &&
+      /^[0-9]{8}$/.test(accountNumber.replace(/\s+/g, '').replace(/^(\+232|232)/, ''));
 
   return (
     <MainLayout>
@@ -511,11 +569,10 @@ export function WithdrawPage() {
                 </button>
 
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     setDestinationType('bank');
-                    if (banks.length > 0) {
-                      setSelectedProviderId(banks[0].id);
-                    }
+                    // Load user's connected bank accounts
+                    await loadConnectedBankAccounts();
                     setStep('form');
                   }}
                   className="flex items-center gap-4 p-4 border-2 border-gray-200 dark:border-gray-700 rounded-xl hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors text-left"
@@ -525,7 +582,7 @@ export function WithdrawPage() {
                   </div>
                   <div className="flex-1">
                     <p className="font-medium text-gray-900 dark:text-white">Bank Account</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Transfer to any Sierra Leone bank</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Transfer to your connected bank accounts</p>
                   </div>
                   <ArrowRight className="w-5 h-5 text-gray-400" />
                 </button>
@@ -552,93 +609,140 @@ export function WithdrawPage() {
                 Amount & Recipient
               </h2>
 
-              {/* Bank Selection (only for bank withdrawals) */}
+              {/* Connected Bank Accounts (for bank withdrawals) */}
               {destinationType === 'bank' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Select Bank
+                    Select Bank Account
                   </label>
-                  <select
-                    value={selectedProviderId}
-                    onChange={(e) => setSelectedProviderId(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                  >
-                    <option value="">Select a bank</option>
-                    {banks.map((bank) => (
-                      <option key={bank.id} value={bank.id}>{bank.name}</option>
-                    ))}
-                  </select>
+
+                  {bankAccountsLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+                    </div>
+                  ) : connectedBankAccounts.length === 0 ? (
+                    // No connected bank accounts - prompt to add one
+                    <div className="p-6 bg-gray-50 dark:bg-gray-800 rounded-xl text-center">
+                      <Building2 className="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
+                      <p className="font-medium text-gray-900 dark:text-white mb-2">
+                        No Bank Accounts Connected
+                      </p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                        Add a bank account in settings to enable bank withdrawals
+                      </p>
+                      <Button
+                        onClick={() => navigate('/settings')}
+                        className="inline-flex items-center gap-2"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add Bank Account
+                      </Button>
+                    </div>
+                  ) : (
+                    // Show connected bank accounts
+                    <div className="space-y-2">
+                      {connectedBankAccounts.map((account) => (
+                        <button
+                          key={account.id}
+                          type="button"
+                          onClick={() => selectBankAccount(account)}
+                          className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-left ${
+                            selectedBankAccount?.id === account.id
+                              ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                              : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                          }`}
+                        >
+                          <div className={`p-2 rounded-lg ${
+                            selectedBankAccount?.id === account.id
+                              ? 'bg-blue-200 dark:bg-blue-800'
+                              : 'bg-gray-100 dark:bg-gray-800'
+                          }`}>
+                            <Building2 className={`w-5 h-5 ${
+                              selectedBankAccount?.id === account.id
+                                ? 'text-blue-700 dark:text-blue-300'
+                                : 'text-gray-600 dark:text-gray-400'
+                            }`} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-gray-900 dark:text-white truncate">
+                                {account.nickname || account.bankName}
+                              </p>
+                              {account.isDefault && (
+                                <Star className="w-4 h-4 text-yellow-500 fill-yellow-500 flex-shrink-0" />
+                              )}
+                            </div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                              {account.bankName} • {bankAccountService.formatAccountNumber(account.accountNumber)}
+                            </p>
+                            {account.accountName && (
+                              <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
+                                {account.accountName}
+                              </p>
+                            )}
+                          </div>
+                          {selectedBankAccount?.id === account.id && (
+                            <CheckCircle className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                          )}
+                        </button>
+                      ))}
+
+                      {/* Add new bank account button */}
+                      <button
+                        type="button"
+                        onClick={() => navigate('/settings')}
+                        className="w-full flex items-center justify-center gap-2 p-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl text-gray-500 dark:text-gray-400 hover:border-blue-500 hover:text-blue-600 transition-colors"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span className="text-sm font-medium">Add Another Bank Account</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Phone Number / Account Number */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  {destinationType === 'momo' ? 'Phone Number' : 'Account Number'}
-                </label>
-                {destinationType === 'momo' ? (
-                  <>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">+232</span>
-                      <input
-                        type="tel"
-                        value={accountNumber}
-                        onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, '').slice(0, 8))}
-                        placeholder="76123456"
-                        className="w-full pl-14 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                      />
-                    </div>
-
-                    {/* Auto-Detected Provider Badge */}
-                    {accountNumber.length >= 2 && (
-                      <div className="mt-2">
-                        {selectedProviderId && PROVIDER_DISPLAY[selectedProviderId] ? (
-                          <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg ${PROVIDER_DISPLAY[selectedProviderId].bgColor}`}>
-                            <span className={`font-bold text-sm ${PROVIDER_DISPLAY[selectedProviderId].color}`}>
-                              {PROVIDER_DISPLAY[selectedProviderId].icon}
-                            </span>
-                            <span className={`font-medium text-sm ${PROVIDER_DISPLAY[selectedProviderId].color}`}>
-                              {PROVIDER_DISPLAY[selectedProviderId].name}
-                            </span>
-                            <span className="text-xs text-gray-500">detected</span>
-                          </div>
-                        ) : (
-                          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20">
-                            <AlertCircle className="w-4 h-4 text-red-500" />
-                            <span className="text-sm text-red-600 dark:text-red-400">Unknown network</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    <p className="mt-1 text-xs text-gray-500">
-                      Orange: 72-76, 78-79 | Africell: 30, 33, 77, 80, 88, 90, 99
-                    </p>
-                  </>
-                ) : (
-                  <input
-                    type="text"
-                    value={accountNumber}
-                    onChange={(e) => setAccountNumber(e.target.value)}
-                    placeholder="Enter account number"
-                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                  />
-                )}
-              </div>
-
-              {/* Account Name (for bank) */}
-              {destinationType === 'bank' && (
+              {/* Phone Number (for mobile money) */}
+              {destinationType === 'momo' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Account Name
+                    Phone Number
                   </label>
-                  <input
-                    type="text"
-                    value={accountName}
-                    onChange={(e) => setAccountName(e.target.value)}
-                    placeholder="Enter account holder name"
-                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                  />
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">+232</span>
+                    <input
+                      type="tel"
+                      value={accountNumber}
+                      onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                      placeholder="76123456"
+                      className="w-full pl-14 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                    />
+                  </div>
+
+                  {/* Auto-Detected Provider Badge */}
+                  {accountNumber.length >= 2 && (
+                    <div className="mt-2">
+                      {selectedProviderId && PROVIDER_DISPLAY[selectedProviderId] ? (
+                        <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg ${PROVIDER_DISPLAY[selectedProviderId].bgColor}`}>
+                          <span className={`font-bold text-sm ${PROVIDER_DISPLAY[selectedProviderId].color}`}>
+                            {PROVIDER_DISPLAY[selectedProviderId].icon}
+                          </span>
+                          <span className={`font-medium text-sm ${PROVIDER_DISPLAY[selectedProviderId].color}`}>
+                            {PROVIDER_DISPLAY[selectedProviderId].name}
+                          </span>
+                          <span className="text-xs text-gray-500">detected</span>
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20">
+                          <AlertCircle className="w-4 h-4 text-red-500" />
+                          <span className="text-sm text-red-600 dark:text-red-400">Unknown network</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <p className="mt-1 text-xs text-gray-500">
+                    Orange: 72-76, 78-79 | Africell: 30, 33, 77, 80, 88, 90, 99
+                  </p>
                 </div>
               )}
 

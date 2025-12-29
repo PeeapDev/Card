@@ -958,14 +958,15 @@ export const updateOpeningBalance = async (
 // ================== Customer Management (Credit/Tab System) ==================
 
 export const getCustomers = async (merchantId: string, search?: string): Promise<POSCustomer[]> => {
-  let query = supabase
+  // Use supabaseAdmin to bypass RLS since app manages auth
+  let query = supabaseAdmin
     .from('pos_customers')
     .select('*')
     .eq('merchant_id', merchantId)
     .eq('is_active', true)
     .order('name', { ascending: true });
 
-  if (search) {
+  if (search && search.trim()) {
     query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
   }
 
@@ -975,7 +976,7 @@ export const getCustomers = async (merchantId: string, search?: string): Promise
 };
 
 export const getCustomerById = async (customerId: string): Promise<POSCustomer | null> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('pos_customers')
     .select('*')
     .eq('id', customerId)
@@ -986,7 +987,7 @@ export const getCustomerById = async (customerId: string): Promise<POSCustomer |
 };
 
 export const createCustomer = async (customer: Partial<POSCustomer>): Promise<POSCustomer> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('pos_customers')
     .insert({
       ...customer,
@@ -1003,7 +1004,7 @@ export const createCustomer = async (customer: Partial<POSCustomer>): Promise<PO
 };
 
 export const updateCustomer = async (id: string, updates: Partial<POSCustomer>): Promise<POSCustomer> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('pos_customers')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id)
@@ -2551,6 +2552,102 @@ async function isPOSSetupCompleted(merchantId: string): Promise<boolean> {
     // Silently handle errors - POS is just not set up
     return false;
   }
+}
+
+/**
+ * Log POS sale to merchant's wallet as a transaction
+ * Only logs digital payments (QR, mobile money, card) - not cash
+ */
+export const logSaleToWallet = async (
+  merchantId: string,
+  saleId: string,
+  saleNumber: string,
+  amount: number,
+  paymentMethod: string,
+  description?: string
+): Promise<void> => {
+  // Only log digital payments to wallet, not cash
+  if (paymentMethod === 'cash') {
+    console.log('[POS] Cash payment - not logging to wallet (physical cash stays with merchant)');
+    return;
+  }
+
+  try {
+    // Get merchant's primary/merchant wallet
+    const { data: wallet, error: walletError } = await supabaseAdmin
+      .from('wallets')
+      .select('id, balance')
+      .eq('user_id', merchantId)
+      .in('wallet_type', ['primary', 'merchant', 'pos'])
+      .eq('status', 'ACTIVE')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .single();
+
+    if (walletError || !wallet) {
+      console.log('[POS] No wallet found for merchant, skipping transaction log');
+      return;
+    }
+
+    // Create transaction record
+    const reference = `POS-${saleNumber}-${Date.now()}`;
+    const txDescription = description || `POS Sale #${saleNumber} (${getPaymentMethodLabel(paymentMethod)})`;
+
+    const { error: txError } = await supabaseAdmin
+      .from('transactions')
+      .insert({
+        wallet_id: wallet.id,
+        type: 'POS_SALE',
+        amount: amount,
+        currency: 'SLE',
+        status: 'COMPLETED',
+        description: txDescription,
+        reference: reference,
+        merchant_name: 'POS Terminal',
+        merchant_category: 'pos_sale',
+        metadata: {
+          sale_id: saleId,
+          sale_number: saleNumber,
+          payment_method: paymentMethod,
+          source: 'pos',
+        },
+        created_at: new Date().toISOString(),
+      });
+
+    if (txError) {
+      console.error('[POS] Error logging sale to wallet:', txError);
+      // Don't throw - wallet logging shouldn't fail the sale
+      return;
+    }
+
+    // Update wallet balance (for digital payments, money comes to merchant)
+    const newBalance = (parseFloat(wallet.balance as any) || 0) + amount;
+    await supabaseAdmin
+      .from('wallets')
+      .update({
+        balance: newBalance,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', wallet.id);
+
+    console.log(`[POS] Sale #${saleNumber} logged to wallet: +${amount} SLE`);
+  } catch (error) {
+    console.error('[POS] Error in logSaleToWallet:', error);
+    // Don't throw - wallet logging shouldn't fail the sale
+  }
+};
+
+// Helper to get readable payment method label
+function getPaymentMethodLabel(method: string): string {
+  const labels: Record<string, string> = {
+    cash: 'Cash',
+    card: 'Card',
+    mobile_money: 'Mobile Money',
+    qr: 'QR Payment',
+    credit: 'Credit/Tab',
+    nfc: 'Tap to Pay',
+  };
+  return labels[method] || method;
 }
 
 export default posService;

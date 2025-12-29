@@ -114,6 +114,12 @@ export interface VerifiedPayment extends CheckoutSession {
   expectedAmount: number;
   /** The note/description we sent */
   note: string;
+  /** Payer's user ID (when available) */
+  payerId?: string;
+  /** Payer's name (when available) */
+  payerName?: string;
+  /** Session metadata */
+  metadata?: Record<string, any>;
 }
 
 export type PaymentStatus = 'idle' | 'creating' | 'pending' | 'paid' | 'expired' | 'error';
@@ -298,6 +304,11 @@ export function usePaymentReceiver(config: PaymentReceiverConfig): PaymentReceiv
                 received: { reference: receivedReference, amount: receivedAmount, sessionId: receivedSessionId },
               });
 
+              // Extract payer info from session metadata
+              const sessionMetadata = sessionData.metadata || {};
+              const payerId = sessionMetadata.payerId || sessionData.payer_id;
+              const payerName = sessionMetadata.payerName || sessionData.payer_name;
+
               const verifiedPayment: VerifiedPayment = {
                 id: data.sessionId,
                 externalId: sessionData.externalId || sessionData.external_id,
@@ -315,6 +326,9 @@ export function usePaymentReceiver(config: PaymentReceiverConfig): PaymentReceiv
                   sessionMatch,
                 },
                 expectedAmount: amount,
+                payerId,
+                payerName,
+                metadata: sessionMetadata,
               };
 
               setSession(verifiedPayment);

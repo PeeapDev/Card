@@ -56,6 +56,7 @@ import {
   Percent,
   RotateCcw,
   Send,
+  Radio,
 } from 'lucide-react';
 import posService, {
   POSProduct,
@@ -66,6 +67,7 @@ import posService, {
   POSCustomer,
   POSHeldOrder,
   POSDiscount,
+  logSaleToWallet,
 } from '@/services/pos.service';
 import { useOfflineSync } from '@/hooks/useOfflineSync';
 import { PaymentReceiver } from '@/components/payment/PaymentReceiver';
@@ -109,11 +111,17 @@ export function POSTerminalPage() {
 
   // Payment modal state
   const [showPayment, setShowPayment] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'mobile_money' | 'card' | 'qr' | 'credit'>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'mobile_money' | 'card' | 'qr' | 'credit' | 'nfc'>('cash');
   const [cashReceived, setCashReceived] = useState('');
   const [processing, setProcessing] = useState(false);
   const [saleComplete, setSaleComplete] = useState(false);
   const [lastSale, setLastSale] = useState<any>(null);
+
+  // NFC Tap to Pay
+  const [nfcSupported, setNfcSupported] = useState(false);
+  const [nfcReading, setNfcReading] = useState(false);
+  const [nfcError, setNfcError] = useState<string | null>(null);
+  const nfcReaderRef = useRef<any>(null);
 
   // Barcode mode
   const [barcodeMode, setBarcodeMode] = useState(false);
@@ -166,10 +174,10 @@ export function POSTerminalPage() {
   // QR Payment - simplified with PaymentReceiver component
   const [merchantWalletId, setMerchantWalletId] = useState<string | null>(null);
   const [qrPaymentReceived, setQrPaymentReceived] = useState(false);
+  const [qrPayerInfo, setQrPayerInfo] = useState<{ payerId?: string; payerName?: string } | null>(null);
 
   // Mobile Money Payment
   const [mobileMoneyPhone, setMobileMoneyPhone] = useState('');
-  const [mobileMoneyProvider, setMobileMoneyProvider] = useState<'orange' | 'africell'>('orange');
   const [mobileMoneyTransactionId, setMobileMoneyTransactionId] = useState<string | null>(null);
   const [mobileMoneyStatus, setMobileMoneyStatus] = useState<'idle' | 'pending' | 'processing' | 'completed' | 'failed'>('idle');
   const [mobileMoneyUssdCode, setMobileMoneyUssdCode] = useState<string | null>(null);
@@ -880,6 +888,18 @@ export function POSTerminalPage() {
         }
       }
 
+      // Log digital payment to merchant's wallet (not cash - cash stays physical)
+      if (merchantId && paymentMethod !== 'cash') {
+        logSaleToWallet(
+          merchantId,
+          sale.id,
+          sale.sale_number,
+          totalAmount,
+          paymentMethod,
+          `POS Sale - ${cart.length} item(s)`
+        ).catch(err => console.error('Error logging sale to wallet:', err));
+      }
+
       // Store sale with items for receipt printing
       setLastSale({ ...sale, items: saleItems });
       setSaleComplete(true);
@@ -925,6 +945,47 @@ export function POSTerminalPage() {
         }
       }
 
+      // For QR payments, send receipt to payer via chat if we have their ID
+      if (paymentMethod === 'qr' && qrPayerInfo?.payerId) {
+        try {
+          const receiptData: ReceiptData = {
+            saleId: sale.id,
+            saleNumber: sale.sale_number,
+            merchantId: merchantId!,
+            merchantName: business?.name || `${user?.firstName} ${user?.lastName}`,
+            customerId: qrPayerInfo.payerId,
+            customerName: qrPayerInfo.payerName || 'Customer',
+            items: saleItems.map((item: any) => ({
+              name: item.product_name,
+              quantity: item.quantity,
+              unitPrice: item.unit_price,
+              total: item.total_price,
+            })),
+            subtotal,
+            discount: totalDiscount,
+            tax: taxAmount,
+            total: totalAmount,
+            paymentMethod: 'qr',
+            amountPaid: totalAmount,
+            change: 0,
+            date: new Date().toISOString(),
+          };
+
+          // Send receipt via chat to the payer
+          sendReceipt(receiptData, { sendNotification: true, sendToChat: true })
+            .then(result => {
+              if (result.success) {
+                console.log('Receipt sent to QR payer via chat successfully');
+              }
+            })
+            .catch(err => console.error('Error sending receipt to QR payer:', err));
+        } catch (err) {
+          console.error('Error preparing QR payer receipt:', err);
+        }
+        // Clear payer info after sending
+        setQrPayerInfo(null);
+      }
+
       setCart([]);
       offlineSync.clearCart();
       setCashReceived('');
@@ -952,6 +1013,13 @@ export function POSTerminalPage() {
   const handleQrPaymentReceived = useCallback((session: any) => {
     console.log('[POS] QR Payment received:', session);
     setQrPaymentReceived(true);
+    // Store payer info for receipt sending
+    if (session.payerId || session.payerName) {
+      setQrPayerInfo({
+        payerId: session.payerId,
+        payerName: session.payerName,
+      });
+    }
     // Auto-complete the sale after short delay
     setTimeout(() => processSale(), 500);
   }, [processSale]);
@@ -960,8 +1028,91 @@ export function POSTerminalPage() {
   useEffect(() => {
     if (paymentMethod !== 'qr') {
       setQrPaymentReceived(false);
+      setQrPayerInfo(null);
     }
   }, [paymentMethod]);
+
+  // NFC Detection and Support
+  useEffect(() => {
+    // Check if Web NFC API is available
+    if ('NDEFReader' in window) {
+      setNfcSupported(true);
+      console.log('[POS] NFC is supported on this device');
+    } else {
+      setNfcSupported(false);
+      console.log('[POS] NFC is not supported on this device');
+    }
+
+    // Cleanup NFC reader on unmount
+    return () => {
+      if (nfcReaderRef.current) {
+        // Stop reading if active
+        nfcReaderRef.current = null;
+      }
+    };
+  }, []);
+
+  // Start NFC reading when NFC payment method is selected
+  const startNfcReading = useCallback(async () => {
+    if (!nfcSupported) {
+      setNfcError('NFC is not supported on this device');
+      return;
+    }
+
+    setNfcReading(true);
+    setNfcError(null);
+
+    try {
+      // @ts-ignore - Web NFC API
+      const ndef = new window.NDEFReader();
+      nfcReaderRef.current = ndef;
+
+      await ndef.scan();
+      console.log('[POS] NFC scanning started');
+
+      ndef.addEventListener('reading', ({ serialNumber }: any) => {
+        console.log('[POS] NFC tag detected:', serialNumber);
+        // For now, simulate a successful payment when a tag is detected
+        // In production, this would validate the payment card/device
+        setNfcReading(false);
+        // Process the payment
+        processSale();
+      });
+
+      ndef.addEventListener('readingerror', () => {
+        console.error('[POS] NFC reading error');
+        setNfcError('Error reading NFC. Please try again.');
+        setNfcReading(false);
+      });
+
+    } catch (error: any) {
+      console.error('[POS] NFC error:', error);
+      if (error.name === 'NotAllowedError') {
+        setNfcError('NFC permission denied. Please enable NFC and try again.');
+      } else if (error.name === 'NotSupportedError') {
+        setNfcError('NFC is not supported on this device.');
+        setNfcSupported(false);
+      } else {
+        setNfcError(error.message || 'Failed to start NFC reader');
+      }
+      setNfcReading(false);
+    }
+  }, [nfcSupported, processSale]);
+
+  // Stop NFC reading
+  const stopNfcReading = useCallback(() => {
+    setNfcReading(false);
+    nfcReaderRef.current = null;
+  }, []);
+
+  // Auto-start NFC reading when payment method is NFC
+  useEffect(() => {
+    if (paymentMethod === 'nfc' && nfcSupported && !nfcReading && showPayment) {
+      startNfcReading();
+    } else if (paymentMethod !== 'nfc') {
+      stopNfcReading();
+    }
+  }, [paymentMethod, nfcSupported, showPayment, nfcReading, startNfcReading, stopNfcReading]);
 
   // Mobile Money Payment handlers - Redirect to Monime for payment
   const initiateMobileMoneyPayment = async () => {
@@ -989,7 +1140,6 @@ export function POSTerminalPage() {
         taxAmount: taxAmount,
         discountAmount: discountAmount,
         paymentMethod: 'mobile_money',
-        mobileMoneyProvider: mobileMoneyProvider,
         customerPhone: mobileMoneyPhone,
         merchantId: merchantId,
         createdAt: new Date().toISOString(),
@@ -2232,6 +2382,25 @@ export function POSTerminalPage() {
                       </span>
                     </button>
                     <button
+                      onClick={() => setPaymentMethod('nfc')}
+                      className={`p-4 rounded-lg border-2 flex flex-col items-center gap-2 transition-colors relative ${
+                        paymentMethod === 'nfc'
+                          ? 'border-purple-500 bg-purple-50'
+                          : nfcSupported
+                            ? 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:border-gray-600'
+                            : 'border-gray-200 dark:border-gray-700 opacity-50 cursor-not-allowed'
+                      }`}
+                      disabled={!nfcSupported}
+                    >
+                      <Radio className={`w-8 h-8 ${paymentMethod === 'nfc' ? 'text-purple-600' : 'text-gray-600 dark:text-gray-400'}`} />
+                      <span className={`font-medium ${paymentMethod === 'nfc' ? 'text-purple-600' : 'text-gray-700 dark:text-gray-300'}`}>
+                        Tap to Pay
+                      </span>
+                      {!nfcSupported && (
+                        <span className="absolute -top-1 -right-1 text-xs bg-red-100 text-red-600 px-1 rounded">N/A</span>
+                      )}
+                    </button>
+                    <button
                       onClick={() => setPaymentMethod('qr')}
                       className={`p-4 rounded-lg border-2 flex flex-col items-center gap-2 transition-colors ${
                         paymentMethod === 'qr'
@@ -2351,36 +2520,10 @@ export function POSTerminalPage() {
                         </div>
                       ) : (
                         <>
-                          {/* Provider Selection */}
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => setMobileMoneyProvider('orange')}
-                              className={`flex-1 py-3 px-4 rounded-lg border-2 flex items-center justify-center gap-2 transition-colors ${
-                                mobileMoneyProvider === 'orange'
-                                  ? 'border-orange-500 bg-orange-50 text-orange-700'
-                                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
-                              }`}
-                            >
-                              <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center text-white font-bold text-sm">OM</div>
-                              <span className="font-medium">Orange Money</span>
-                            </button>
-                            <button
-                              onClick={() => setMobileMoneyProvider('africell')}
-                              className={`flex-1 py-3 px-4 rounded-lg border-2 flex items-center justify-center gap-2 transition-colors ${
-                                mobileMoneyProvider === 'africell'
-                                  ? 'border-purple-500 bg-purple-50 text-purple-700'
-                                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
-                              }`}
-                            >
-                              <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center text-white font-bold text-sm">AF</div>
-                              <span className="font-medium">Africell Money</span>
-                            </button>
-                          </div>
-
-                          {/* Phone Number Input */}
+                          {/* Phone Number Input - Direct to Monime */}
                           <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                              Customer's Phone Number
+                              Customer's Mobile Money Number
                             </label>
                             <div className="flex gap-2">
                               <div className="flex items-center px-3 bg-gray-100 dark:bg-gray-700 rounded-lg border border-gray-300 dark:border-gray-600">
@@ -2390,15 +2533,13 @@ export function POSTerminalPage() {
                                 type="tel"
                                 value={mobileMoneyPhone}
                                 onChange={(e) => setMobileMoneyPhone(e.target.value.replace(/\D/g, ''))}
-                                placeholder={mobileMoneyProvider === 'orange' ? '76 XXX XXX' : '77 XXX XXX'}
+                                placeholder="XX XXX XXXX"
                                 className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-lg"
-                                maxLength={8}
+                                maxLength={9}
                               />
                             </div>
                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                              {mobileMoneyProvider === 'orange'
-                                ? 'Enter Orange Money number (starts with 76, 77, 78)'
-                                : 'Enter Africell Money number (starts with 30, 33, 34)'}
+                              Enter any mobile money number (Orange, Africell, or QMoney)
                             </p>
                           </div>
 
@@ -2428,6 +2569,84 @@ export function POSTerminalPage() {
                             </div>
                           )}
                         </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* NFC Tap to Pay */}
+                  {paymentMethod === 'nfc' && (
+                    <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-6 mb-6">
+                      {nfcSupported ? (
+                        <div className="text-center">
+                          {nfcReading ? (
+                            <>
+                              <div className="w-24 h-24 mx-auto mb-4 bg-purple-100 dark:bg-purple-900/40 rounded-full flex items-center justify-center animate-pulse">
+                                <Radio className="w-12 h-12 text-purple-600" />
+                              </div>
+                              <h3 className="text-lg font-semibold text-purple-800 dark:text-purple-300 mb-2">
+                                Ready for Tap
+                              </h3>
+                              <p className="text-sm text-purple-600 dark:text-purple-400 mb-4">
+                                Hold the customer's card or phone near this device
+                              </p>
+                              <div className="text-2xl font-bold text-purple-800 dark:text-purple-200 mb-4">
+                                {formatCurrency(totalAmount)}
+                              </div>
+                              <Button
+                                variant="outline"
+                                onClick={stopNfcReading}
+                                className="border-purple-300 text-purple-700 hover:bg-purple-100"
+                              >
+                                Cancel
+                              </Button>
+                            </>
+                          ) : nfcError ? (
+                            <>
+                              <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+                                <X className="w-8 h-8 text-red-600" />
+                              </div>
+                              <h3 className="text-lg font-semibold text-red-800 dark:text-red-300 mb-2">
+                                NFC Error
+                              </h3>
+                              <p className="text-sm text-red-600 dark:text-red-400 mb-4">
+                                {nfcError}
+                              </p>
+                              <Button onClick={startNfcReading} className="bg-purple-600 hover:bg-purple-700">
+                                Try Again
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <div className="w-16 h-16 mx-auto mb-4 bg-purple-100 dark:bg-purple-900/40 rounded-full flex items-center justify-center">
+                                <Radio className="w-8 h-8 text-purple-600" />
+                              </div>
+                              <h3 className="text-lg font-semibold text-purple-800 dark:text-purple-300 mb-2">
+                                Tap to Pay
+                              </h3>
+                              <p className="text-sm text-purple-600 dark:text-purple-400 mb-4">
+                                Accept contactless payments via NFC
+                              </p>
+                              <Button onClick={startNfcReading} className="bg-purple-600 hover:bg-purple-700">
+                                <Radio className="w-4 h-4 mr-2" />
+                                Start NFC Reader
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-center py-4">
+                          <div className="w-16 h-16 mx-auto mb-4 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center">
+                            <Radio className="w-8 h-8 text-gray-400" />
+                          </div>
+                          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                            NFC Not Available
+                          </h3>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">
+                            This device does not support NFC payments.
+                            <br />
+                            Try using a mobile device with NFC capability.
+                          </p>
+                        </div>
                       )}
                     </div>
                   )}

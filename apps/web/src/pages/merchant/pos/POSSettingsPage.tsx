@@ -57,7 +57,13 @@ import {
   ShoppingCart,
   Clock,
   Globe,
+  Download,
+  Wifi,
+  WifiOff,
+  RefreshCw,
+  Radio,
 } from 'lucide-react';
+import { usePWA } from '@/hooks/usePWA';
 
 // Format currency - using Le (Leone) symbol
 const formatCurrency = (amount: number) => {
@@ -296,6 +302,7 @@ const generatePin = () => {
 
 const tabs = [
   { id: 'general', label: 'General', icon: Store },
+  { id: 'terminal', label: 'Terminal', icon: Radio },
   { id: 'multivendor', label: 'Multivendor', icon: Globe },
   { id: 'categories', label: 'Categories', icon: FolderOpen },
   { id: 'staff', label: 'Staff', icon: Users },
@@ -331,11 +338,16 @@ export function POSSettingsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
+  const pwa = usePWA();
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'general');
   const [settings, setSettings] = useState<POSSettings>(defaultSettings);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Terminal state
+  const [terminalCode, setTerminalCode] = useState<string | null>(null);
+  const [registeringTerminal, setRegisteringTerminal] = useState(false);
 
   // Categories state
   const [categories, setCategories] = useState<POSCategory[]>([]);
@@ -906,6 +918,208 @@ export function POSSettingsPage() {
           {/* Multivendor Tab */}
           {activeTab === 'multivendor' && merchantId && (
             <MultivendorSettings merchantId={merchantId} />
+          )}
+
+          {/* Terminal Tab - PWA Installation & Terminal Registration */}
+          {activeTab === 'terminal' && (
+            <div className="space-y-6">
+              {/* PWA Installation Card */}
+              <Card className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
+                    <Download className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Install POS App</h2>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Install as an app for offline use</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Online Status */}
+                  <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      {pwa.isOnline ? (
+                        <Wifi className="w-5 h-5 text-green-500" />
+                      ) : (
+                        <WifiOff className="w-5 h-5 text-red-500" />
+                      )}
+                      <span className="text-sm text-gray-700 dark:text-gray-300">
+                        {pwa.isOnline ? 'Online' : 'Offline'}
+                      </span>
+                    </div>
+                    {pwa.pendingSyncCount > 0 && (
+                      <span className="text-sm text-orange-600 dark:text-orange-400">
+                        {pwa.pendingSyncCount} pending sync
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Installation Status */}
+                  {pwa.isInstalled ? (
+                    <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                      <Check className="w-6 h-6 text-green-600" />
+                      <div>
+                        <p className="font-medium text-green-800 dark:text-green-300">App Installed</p>
+                        <p className="text-sm text-green-600 dark:text-green-400">
+                          POS is running as an installed app. You can use it offline.
+                        </p>
+                      </div>
+                    </div>
+                  ) : pwa.isInstallable ? (
+                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <p className="font-medium text-blue-800 dark:text-blue-300">Install POS App</p>
+                          <p className="text-sm text-blue-600 dark:text-blue-400">
+                            Install for faster access and offline capability
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        onClick={() => pwa.install()}
+                        disabled={pwa.isInstalling}
+                        className="w-full bg-blue-600 hover:bg-blue-700"
+                      >
+                        {pwa.isInstalling ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Installing...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="w-4 h-4 mr-2" />
+                            Install App
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        <strong>How to install:</strong>
+                      </p>
+                      <ul className="mt-2 text-sm text-gray-600 dark:text-gray-400 list-disc list-inside space-y-1">
+                        <li>On Chrome (Android): Tap the menu (⋮) → "Add to Home screen"</li>
+                        <li>On Safari (iOS): Tap Share → "Add to Home Screen"</li>
+                        <li>On Chrome (Desktop): Click the install icon in the address bar</li>
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Service Worker Status */}
+                  <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${pwa.isServiceWorkerReady ? 'bg-green-500' : 'bg-gray-400'}`} />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">
+                        {pwa.isServiceWorkerReady ? 'Offline mode ready' : 'Setting up offline...'}
+                      </span>
+                    </div>
+                    {pwa.hasUpdate && (
+                      <Button size="sm" variant="outline" onClick={() => pwa.updateServiceWorker()}>
+                        <RefreshCw className="w-4 h-4 mr-1" />
+                        Update
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Manual Sync */}
+                  {pwa.pendingSyncCount > 0 && pwa.isOnline && (
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => pwa.syncNow()}
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Sync Now ({pwa.pendingSyncCount} pending)
+                    </Button>
+                  )}
+                </div>
+              </Card>
+
+              {/* Terminal Registration Card */}
+              <Card className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg flex items-center justify-center">
+                    <Radio className="w-5 h-5 text-indigo-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Terminal Registration</h2>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Register this device as a POS terminal</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Register this device as a dedicated POS terminal. Staff can login with their PIN codes to process sales.
+                  </p>
+
+                  {terminalCode ? (
+                    <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg">
+                      <div className="text-center">
+                        <p className="text-sm text-indigo-600 dark:text-indigo-400 mb-2">Terminal Code</p>
+                        <p className="text-3xl font-mono font-bold text-indigo-800 dark:text-indigo-300 tracking-widest">
+                          {terminalCode}
+                        </p>
+                        <p className="text-xs text-indigo-500 mt-2">
+                          Use this code to identify this terminal
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg text-center">
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                        This device is not registered as a terminal yet.
+                      </p>
+                      <Button
+                        onClick={async () => {
+                          setRegisteringTerminal(true);
+                          try {
+                            // Generate terminal code
+                            const code = Array.from({ length: 8 }, () =>
+                              'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)]
+                            ).join('');
+                            setTerminalCode(code);
+                            // In production, this would register with the database
+                          } finally {
+                            setRegisteringTerminal(false);
+                          }
+                        }}
+                        disabled={registeringTerminal}
+                        className="bg-indigo-600 hover:bg-indigo-700"
+                      >
+                        {registeringTerminal ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Registering...
+                          </>
+                        ) : (
+                          <>
+                            <Radio className="w-4 h-4 mr-2" />
+                            Register Terminal
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+
+                  <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                    <h3 className="font-medium text-gray-900 dark:text-white mb-2">Staff Management</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                      Manage staff members and their PIN codes for terminal access.
+                    </p>
+                    <Button
+                      variant="outline"
+                      onClick={() => setActiveTab('staff')}
+                      className="w-full"
+                    >
+                      <Users className="w-4 h-4 mr-2" />
+                      Manage Staff & PINs
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            </div>
           )}
 
           {/* Categories Tab */}

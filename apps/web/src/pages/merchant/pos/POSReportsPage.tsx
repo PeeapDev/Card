@@ -87,6 +87,9 @@ interface ReportData {
   totalCustomers: number;
   totalRefunds: number;
   refundAmount: number;
+  // Cash vs Digital breakdown
+  cashTotal: number;       // Physical cash collected
+  digitalTotal: number;    // Digital payments (QR, mobile money, card, etc.)
   // Comparison with previous period
   salesChange: number;
   revenueChange: number;
@@ -99,7 +102,7 @@ interface ReportData {
   // Category data
   categoryData: { name: string; revenue: number; quantity: number; profit: number }[];
   // Payment data
-  paymentData: { name: string; value: number; count: number }[];
+  paymentData: { name: string; value: number; count: number; method?: string }[];
   // Top products
   topProducts: { name: string; quantity: number; revenue: number; profit: number }[];
   // Staff performance
@@ -306,12 +309,32 @@ export function POSReportsPage() {
         existing.count += 1;
         paymentMap.set(method, existing);
       });
+
+      // Map payment method names for display - cash is physical, others are digital
+      const getPaymentDisplayName = (method: string): string => {
+        const displayNames: Record<string, string> = {
+          'cash': 'Cash (Physical)',
+          'mobile_money': 'Mobile Money',
+          'qr': 'QR Payment',
+          'card': 'Card',
+          'credit': 'Credit/Tab',
+          'bank': 'Bank Transfer',
+          'other': 'Other',
+        };
+        return displayNames[method] || method.charAt(0).toUpperCase() + method.slice(1).replace('_', ' ');
+      };
+
       const paymentData = Array.from(paymentMap.entries())
         .map(([name, data]) => ({
-          name: name.charAt(0).toUpperCase() + name.slice(1).replace('_', ' '),
+          name: getPaymentDisplayName(name),
+          method: name, // Keep original method for categorization
           ...data
         }))
         .sort((a, b) => b.value - a.value);
+
+      // Calculate cash vs digital totals for summary
+      const cashTotal = paymentMap.get('cash')?.value || 0;
+      const digitalTotal = totalRevenue - cashTotal;
 
       // Top products
       const productMap = new Map<string, { quantity: number; revenue: number; profit: number }>();
@@ -384,6 +407,8 @@ export function POSReportsPage() {
         totalCustomers: uniqueCustomers,
         totalRefunds: refundedSales.length,
         refundAmount: refundedSales.reduce((sum, s) => sum + Number(s.total_amount || 0), 0),
+        cashTotal,
+        digitalTotal,
         salesChange,
         revenueChange,
         profitChange: revenueChange, // Simplified
@@ -420,6 +445,10 @@ export function POSReportsPage() {
       ['Profit Margin', `${report.profitMargin.toFixed(1)}%`],
       ['Average Ticket', report.avgTicket],
       ['Items Sold', report.totalItems],
+      [''],
+      ['Cash vs Digital Breakdown'],
+      ['Physical Cash (Liquid cash with you)', report.cashTotal],
+      ['Digital Payments (QR, Mobile Money, Card, Bank)', report.digitalTotal],
       [''],
       ['Top Products'],
       ['Product', 'Quantity', 'Revenue', 'Profit'],
@@ -580,6 +609,55 @@ export function POSReportsPage() {
                     <p className="text-xs text-red-600 font-medium">Refunds</p>
                     <p className="text-xl font-bold text-red-700">{report.totalRefunds}</p>
                   </div>
+                </div>
+              </Card>
+            </div>
+
+            {/* Cash vs Digital Revenue - Important distinction */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card className="p-5 bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20 border-amber-200 dark:border-amber-800">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
+                      <Banknote className="w-6 h-6 text-amber-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-amber-700 dark:text-amber-400 font-medium">Physical Cash Collected</p>
+                      <p className="text-2xl font-bold text-amber-800 dark:text-amber-300">{formatCurrency(report.cashTotal)}</p>
+                      <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">Liquid cash with you</p>
+                    </div>
+                  </div>
+                  {report.totalRevenue > 0 && (
+                    <div className="text-right">
+                      <p className="text-3xl font-bold text-amber-700">
+                        {((report.cashTotal / report.totalRevenue) * 100).toFixed(0)}%
+                      </p>
+                      <p className="text-xs text-amber-600">of revenue</p>
+                    </div>
+                  )}
+                </div>
+              </Card>
+
+              <Card className="p-5 bg-gradient-to-br from-cyan-50 to-blue-50 dark:from-cyan-900/20 dark:to-blue-900/20 border-cyan-200 dark:border-cyan-800">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-cyan-100 dark:bg-cyan-900/40 flex items-center justify-center">
+                      <Smartphone className="w-6 h-6 text-cyan-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-cyan-700 dark:text-cyan-400 font-medium">Digital Payments</p>
+                      <p className="text-2xl font-bold text-cyan-800 dark:text-cyan-300">{formatCurrency(report.digitalTotal)}</p>
+                      <p className="text-xs text-cyan-600 dark:text-cyan-500 mt-1">QR, Mobile Money, Card, Bank</p>
+                    </div>
+                  </div>
+                  {report.totalRevenue > 0 && (
+                    <div className="text-right">
+                      <p className="text-3xl font-bold text-cyan-700">
+                        {((report.digitalTotal / report.totalRevenue) * 100).toFixed(0)}%
+                      </p>
+                      <p className="text-xs text-cyan-600">of revenue</p>
+                    </div>
+                  )}
                 </div>
               </Card>
             </div>
