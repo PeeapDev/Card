@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(vercel --version:*)",
+      "Bash(npm install -g vercel)",
+      "Bash(vercel login)",
+      "Bash(vercel link:*)",
+      "WebSearch",
+      "WebFetch(domain:docs.monime.io)",
+      "Bash(vercel:*)",
+      "Bash(gh auth status:*)",
+      "Bash(npx vercel:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd school portal for school.peeap.com\n\nFeatures:\n- School dashboard with quick actions\n- Fee management system with collection tracking\n- Staff management with Peeap user search\n- Salary management for payroll\n- Accounting system for income/expenses\n- Invoice system for billing\n- Reports and analytics\n- Student wallet management\n- Vendor management\n- Session-based onboarding for schools\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(winget install:*)",
+      "Bash(choco install:*)",
+      "Bash(\"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" --version)",
+      "Bash(\"C:\\\\Program Files \\(x86\\)\\\\GitHub CLI\\\\gh.exe\" --version)",
+      "Bash(where gh)",
+      "Bash(git push:*)",
+      "Bash(printf:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ]
+  }
+}

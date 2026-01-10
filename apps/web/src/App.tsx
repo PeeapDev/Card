@@ -203,6 +203,7 @@ import {
   SchoolSalaryPage,
   SchoolInvoicesPage,
   SchoolReportsPage,
+  SchoolLoginPage,
 } from '@/pages/school';
 
 const queryClient = new QueryClient({
@@ -308,8 +309,8 @@ function App() {
                 <>
                   {/* Public routes */}
                   <Route path="/" element={<Navigate to="/school" replace />} />
-                  <Route path="/login" element={<LoginPage />} />
-                  <Route path="/register" element={<RegisterPage />} />
+                  <Route path="/login" element={<SchoolLoginPage />} />
+                  <Route path="/register" element={<Navigate to="/onboard" replace />} />
 
                   {/* School Onboarding - Session-based registration */}
                   <Route path="/onboard" element={<SchoolOnboardingPage />} />
