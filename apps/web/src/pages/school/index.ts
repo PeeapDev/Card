@@ -1,0 +1,13 @@
+export { SchoolDashboard } from './SchoolDashboard';
+export { SchoolOnboardingPage } from './SchoolOnboardingPage';
+export { SchoolStudentsPage } from './SchoolStudentsPage';
+export { SchoolVendorsPage } from './SchoolVendorsPage';
+export { SchoolShopPage } from './SchoolShopPage';
+export { SchoolTransactionsPage } from './SchoolTransactionsPage';
+export { SchoolSettingsPage } from './SchoolSettingsPage';
+export { SchoolFeesPage } from './SchoolFeesPage';
+export { SchoolStaffPage } from './SchoolStaffPage';
+export { SchoolAccountingPage } from './SchoolAccountingPage';
+export { SchoolSalaryPage } from './SchoolSalaryPage';
+export { SchoolInvoicesPage } from './SchoolInvoicesPage';
+export { SchoolReportsPage } from './SchoolReportsPage';

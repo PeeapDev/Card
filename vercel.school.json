@@ -1,0 +1,66 @@
+{
+  "version": 2,
+  "name": "school-peeap",
+  "buildCommand": "cd apps/web && npm install && npm run build",
+  "outputDirectory": "apps/web/dist",
+  "installCommand": "npm install",
+  "framework": "vite",
+  "devCommand": "cd apps/web && npm run dev",
+  "routes": [
+    {
+      "src": "/school/(.*)",
+      "dest": "/index.html"
+    },
+    {
+      "src": "/onboard/(.*)",
+      "dest": "/index.html"
+    },
+    {
+      "src": "/auth/(.*)",
+      "dest": "/index.html"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ],
+  "env": {
+    "VITE_API_URL": "https://api.peeap.com",
+    "VITE_FRONTEND_URL": "https://school.peeap.com",
+    "FRONTEND_URL": "https://school.peeap.com",
+    "VITE_CHECKOUT_URL": "https://checkout.peeap.com",
+    "VITE_MERCHANT_SERVICE_URL": "https://api.peeap.com",
+    "VITE_APP_MODE": "school",
+    "VITE_PRIMARY_APP_URL": "https://my.peeap.com"
+  },
+  "build": {
+    "env": {
+      "VITE_API_URL": "https://api.peeap.com",
+      "VITE_FRONTEND_URL": "https://school.peeap.com",
+      "FRONTEND_URL": "https://school.peeap.com",
+      "VITE_CHECKOUT_URL": "https://checkout.peeap.com",
+      "VITE_MERCHANT_SERVICE_URL": "https://api.peeap.com",
+      "VITE_APP_MODE": "school",
+      "VITE_PRIMARY_APP_URL": "https://my.peeap.com"
+    }
+  },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Frame-Options",
+          "value": "SAMEORIGIN"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        }
+      ]
+    }
+  ]
+}

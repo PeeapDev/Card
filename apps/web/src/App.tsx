@@ -188,6 +188,23 @@ import { AgentTransactionsPage } from '@/pages/agent/AgentTransactionsPage';
 import { AgentCashOutPage } from '@/pages/agent/AgentCashOutPage';
 import { AgentFloatPage } from '@/pages/agent/AgentFloatPage';
 
+// School Pages
+import {
+  SchoolDashboard,
+  SchoolOnboardingPage,
+  SchoolStudentsPage,
+  SchoolVendorsPage,
+  SchoolShopPage,
+  SchoolTransactionsPage,
+  SchoolSettingsPage,
+  SchoolFeesPage,
+  SchoolStaffPage,
+  SchoolAccountingPage,
+  SchoolSalaryPage,
+  SchoolInvoicesPage,
+  SchoolReportsPage,
+} from '@/pages/school';
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -206,7 +223,8 @@ function App() {
   // Determine which routes to show
   const isCheckoutMode = APP_MODE === 'checkout';
   const isMerchantMode = APP_MODE === 'merchant';
-  const isFullMode = APP_MODE === 'full' || (!isCheckoutMode && !isMerchantMode); // Fallback to full if mode is invalid
+  const isSchoolMode = APP_MODE === 'school';
+  const isFullMode = APP_MODE === 'full' || (!isCheckoutMode && !isMerchantMode && !isSchoolMode); // Fallback to full if mode is invalid
 
   return (
     <ErrorBoundary>
@@ -281,6 +299,120 @@ function App() {
 
                   {/* Catch-all redirect */}
                   <Route path="*" element={<Navigate to="/" replace />} />
+                </>
+              )}
+
+              {/* School App - School partner portal for managing student wallets */}
+              {isSchoolMode && (
+                <>
+                  {/* Public routes */}
+                  <Route path="/" element={<Navigate to="/school" replace />} />
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route path="/register" element={<RegisterPage />} />
+
+                  {/* School Onboarding - Session-based registration */}
+                  <Route path="/onboard" element={<SchoolOnboardingPage />} />
+
+                  {/* School Dashboard and Management */}
+                  <Route
+                    path="/school"
+                    element={
+                      <ProtectedRoute>
+                        <SchoolDashboard />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/school/students"
+                    element={
+                      <ProtectedRoute>
+                        <SchoolStudentsPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/school/vendors"
+                    element={
+                      <ProtectedRoute>
+                        <SchoolVendorsPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/school/shop"
+                    element={
+                      <ProtectedRoute>
+                        <SchoolShopPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/school/transactions"
+                    element={
+                      <ProtectedRoute>
+                        <SchoolTransactionsPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/school/settings"
+                    element={
+                      <ProtectedRoute>
+                        <SchoolSettingsPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/school/fees"
+                    element={
+                      <ProtectedRoute>
+                        <SchoolFeesPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/school/staff"
+                    element={
+                      <ProtectedRoute>
+                        <SchoolStaffPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/school/accounting"
+                    element={
+                      <ProtectedRoute>
+                        <SchoolAccountingPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/school/salary"
+                    element={
+                      <ProtectedRoute>
+                        <SchoolSalaryPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/school/invoices"
+                    element={
+                      <ProtectedRoute>
+                        <SchoolInvoicesPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/school/reports"
+                    element={
+                      <ProtectedRoute>
+                        <SchoolReportsPage />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  {/* Catch-all redirect */}
+                  <Route path="*" element={<Navigate to="/school" replace />} />
                 </>
               )}
 
