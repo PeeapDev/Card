@@ -215,7 +215,8 @@ const queryClient = new QueryClient({
 });
 
 // Get the app mode from environment variable
-const APP_MODE = import.meta.env.VITE_APP_MODE || 'full'; // 'checkout', 'merchant', or 'full'
+const APP_MODE = import.meta.env.VITE_APP_MODE || 'full'; // 'checkout', 'merchant', 'school', or 'full'
+console.log('[Peeap] APP_MODE:', APP_MODE, '| VITE_APP_MODE:', import.meta.env.VITE_APP_MODE);
 
 // Debug log for troubleshooting
 
