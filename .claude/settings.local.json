@@ -19,7 +19,12 @@
       "Bash(git push:*)",
       "Bash(printf:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run build:web:*)",
+      "Bash(npm install:*)",
+      "Bash(./node_modules/.bin/tsc:*)"
     ]
   }
 }

@@ -9,7 +9,7 @@ export function SchoolLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { signIn } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -18,7 +18,7 @@ export function SchoolLoginPage() {
     setError('');
 
     try {
-      await signIn(email, password);
+      await login({ email, password });
       navigate('/school');
     } catch (err: any) {
       setError(err.message || 'Failed to sign in');
