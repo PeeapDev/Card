@@ -1,0 +1,45 @@
+{
+  "name": "@peeap/chat-sdk",
+  "version": "1.0.0",
+  "description": "Peeap Chat Widget SDK - Embeddable chat for any website to message Peeap users",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "browser": "dist/peeap-chat.min.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "build:types": "tsc --emitDeclarationOnly",
+    "dev": "rollup -c -w",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "peeap",
+    "chat",
+    "widget",
+    "messaging",
+    "embed",
+    "sdk",
+    "customer-support",
+    "live-chat"
+  ],
+  "author": "Peeap",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/peeap/chat-sdk"
+  },
+  "homepage": "https://my.peeap.com",
+  "devDependencies": {
+    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-typescript": "^11.1.6",
+    "rollup": "^4.9.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=14"
+  }
+}

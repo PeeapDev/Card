@@ -203,6 +203,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleSharedCheckoutCreate(req, res);
     } else if (path === 'shared/users/search' || path === 'shared/users/search/') {
       return await handleSharedUsersSearch(req, res);
+    // ========== CHAT WIDGET ENDPOINTS ==========
+    } else if (path === 'widget/session' || path === 'widget/session/') {
+      return await handleWidgetSession(req, res);
+    } else if (path === 'widget/session/validate' || path === 'widget/session/validate/') {
+      return await handleWidgetSessionValidate(req, res);
+    } else if (path === 'widget/users/search' || path === 'widget/users/search/') {
+      return await handleWidgetUsersSearch(req, res);
+    } else if (path.match(/^widget\/users\/[^/]+$/)) {
+      const userId = path.split('/')[2];
+      return await handleWidgetUserById(req, res, userId);
+    } else if (path === 'widget/conversations' || path === 'widget/conversations/') {
+      return await handleWidgetConversations(req, res);
+    } else if (path.match(/^widget\/conversations\/[^/]+$/)) {
+      const conversationId = path.split('/')[2];
+      return await handleWidgetConversationById(req, res, conversationId);
+    } else if (path.match(/^widget\/conversations\/[^/]+\/messages$/)) {
+      const conversationId = path.split('/')[2];
+      return await handleWidgetMessages(req, res, conversationId);
+    } else if (path.match(/^widget\/conversations\/[^/]+\/messages\/poll$/)) {
+      const conversationId = path.split('/')[2];
+      return await handleWidgetMessagesPoll(req, res, conversationId);
+    } else if (path.match(/^widget\/conversations\/[^/]+\/read$/)) {
+      const conversationId = path.split('/')[2];
+      return await handleWidgetMarkRead(req, res, conversationId);
+    } else if (path.match(/^widget\/conversations\/[^/]+\/typing$/)) {
+      const conversationId = path.split('/')[2];
+      return await handleWidgetTyping(req, res, conversationId);
+    } else if (path === 'widget/platforms' || path === 'widget/platforms/') {
+      return await handleWidgetPlatforms(req, res);
+    } else if (path === 'widget/upload' || path === 'widget/upload/') {
+      return await handleWidgetUpload(req, res);
     // ========== CRON ENDPOINTS ==========
     } else if (path === 'cron/keepalive' || path === 'cron/keepalive/') {
       return await handleCronKeepalive(req, res);
@@ -11941,4 +11972,794 @@ async function handlePaymentIntentQr(req: VercelRequest, res: VercelResponse, in
     console.error('[PaymentIntents] QR error:', error);
     return res.status(500).json({ error: error.message || 'Internal server error' });
   }
+}
+
+// =============================================
+// CHAT WIDGET HANDLERS
+// =============================================
+
+/**
+ * Validate widget API key
+ */
+async function validateWidgetApiKey(apiKey: string): Promise<{
+  valid: boolean;
+  platform?: any;
+  error?: string;
+}> {
+  if (!apiKey?.startsWith('pk_')) {
+    return { valid: false, error: 'Invalid API key format' };
+  }
+
+  // Hash the API key for lookup
+  const keyHash = require('crypto').createHash('sha256').update(apiKey).digest('hex');
+
+  const { data: apiKeyData, error } = await supabase
+    .from('api_keys')
+    .select('*, chat_widget_platforms(*)')
+    .eq('key_hash', keyHash)
+    .eq('is_active', true)
+    .single();
+
+  if (error || !apiKeyData) {
+    return { valid: false, error: 'Invalid API key' };
+  }
+
+  // Check for widget scope
+  const hasWidgetScope = apiKeyData.scopes?.includes('chat.widget') ||
+                         apiKeyData.scopes?.includes('*');
+
+  if (!hasWidgetScope) {
+    return { valid: false, error: 'API key does not have chat.widget scope' };
+  }
+
+  return {
+    valid: true,
+    platform: apiKeyData.chat_widget_platforms?.[0] || null,
+  };
+}
+
+/**
+ * Validate widget session
+ */
+async function validateWidgetSession(sessionToken: string): Promise<any | null> {
+  if (!sessionToken) return null;
+
+  const { data, error } = await supabase
+    .from('widget_anonymous_sessions')
+    .select('*, chat_widget_platforms(*)')
+    .eq('session_token', sessionToken)
+    .gt('expires_at', new Date().toISOString())
+    .single();
+
+  if (error || !data) return null;
+
+  // Update last activity
+  await supabase
+    .from('widget_anonymous_sessions')
+    .update({ last_activity_at: new Date().toISOString() })
+    .eq('id', data.id);
+
+  return data;
+}
+
+/**
+ * Widget Session - POST /widget/session, PATCH /widget/session
+ */
+async function handleWidgetSession(req: VercelRequest, res: VercelResponse) {
+  const apiKey = req.headers['x-api-key'] as string;
+  const keyValidation = await validateWidgetApiKey(apiKey);
+
+  if (!keyValidation.valid) {
+    return res.status(401).json({ error: keyValidation.error });
+  }
+
+  if (req.method === 'POST') {
+    // Create new session
+    const { fingerprint, domain, origin, referrer, name, email, metadata } = req.body;
+
+    // Get or create platform for this domain
+    let platformId = keyValidation.platform?.id;
+
+    if (!platformId) {
+      // Auto-create platform entry
+      const { data: apiKeyData } = await supabase
+        .from('api_keys')
+        .select('id, user_id')
+        .eq('key_hash', require('crypto').createHash('sha256').update(apiKey).digest('hex'))
+        .single();
+
+      const { data: platform } = await supabase
+        .from('chat_widget_platforms')
+        .insert({
+          developer_id: apiKeyData?.user_id,
+          api_key_id: apiKeyData?.id,
+          name: domain || 'Unknown',
+          domain: domain || 'unknown',
+        })
+        .select()
+        .single();
+
+      platformId = platform?.id;
+    }
+
+    // Check for existing session with fingerprint
+    if (fingerprint) {
+      const { data: existing } = await supabase
+        .from('widget_anonymous_sessions')
+        .select('*')
+        .eq('platform_id', platformId)
+        .eq('fingerprint', fingerprint)
+        .gt('expires_at', new Date().toISOString())
+        .single();
+
+      if (existing) {
+        await supabase
+          .from('widget_anonymous_sessions')
+          .update({ last_activity_at: new Date().toISOString() })
+          .eq('id', existing.id);
+
+        return res.json({
+          sessionId: existing.session_token,
+          name: existing.name,
+          email: existing.email,
+          createdAt: existing.created_at,
+          expiresAt: existing.expires_at,
+        });
+      }
+    }
+
+    // Generate session token
+    const sessionToken = require('crypto').randomBytes(48).toString('hex');
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+
+    const { data: session, error } = await supabase
+      .from('widget_anonymous_sessions')
+      .insert({
+        platform_id: platformId,
+        session_token: sessionToken,
+        fingerprint,
+        name,
+        email,
+        metadata,
+        origin_url: origin,
+        referrer,
+        user_agent: req.headers['user-agent'],
+        expires_at: expiresAt.toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[Widget] Session creation error:', error);
+      return res.status(500).json({ error: 'Failed to create session' });
+    }
+
+    return res.json({
+      sessionId: session.session_token,
+      name: session.name,
+      email: session.email,
+      createdAt: session.created_at,
+      expiresAt: session.expires_at,
+    });
+  }
+
+  if (req.method === 'PATCH') {
+    // Update session
+    const sessionToken = req.headers['x-widget-session'] as string;
+    const session = await validateWidgetSession(sessionToken);
+
+    if (!session) {
+      return res.status(401).json({ error: 'Invalid session' });
+    }
+
+    const { name, email, phone, metadata } = req.body;
+
+    const { data: updated, error } = await supabase
+      .from('widget_anonymous_sessions')
+      .update({
+        name: name || session.name,
+        email: email || session.email,
+        phone: phone || session.phone,
+        metadata: { ...session.metadata, ...metadata },
+      })
+      .eq('id', session.id)
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(500).json({ error: 'Failed to update session' });
+    }
+
+    return res.json({
+      sessionId: updated.session_token,
+      name: updated.name,
+      email: updated.email,
+      createdAt: updated.created_at,
+      expiresAt: updated.expires_at,
+    });
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Validate Widget Session - POST /widget/session/validate
+ */
+async function handleWidgetSessionValidate(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const sessionToken = req.headers['x-widget-session'] as string;
+  const session = await validateWidgetSession(sessionToken);
+
+  if (!session) {
+    return res.status(401).json({ valid: false });
+  }
+
+  return res.json({ valid: true });
+}
+
+/**
+ * Search Users - GET /widget/users/search
+ */
+async function handleWidgetUsersSearch(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const sessionToken = req.headers['x-widget-session'] as string;
+  const session = await validateWidgetSession(sessionToken);
+
+  if (!session) {
+    return res.status(401).json({ error: 'Invalid session' });
+  }
+
+  const query = (req.query.q as string || '').trim();
+  const limit = Math.min(parseInt(req.query.limit as string) || 10, 20);
+
+  if (query.length < 2) {
+    return res.status(400).json({ error: 'Query must be at least 2 characters' });
+  }
+
+  const { data: users, error } = await supabase
+    .from('users')
+    .select('id, first_name, last_name, profile_picture')
+    .or(`email.ilike.%${query}%,phone.ilike.%${query}%,first_name.ilike.%${query}%,last_name.ilike.%${query}%`)
+    .limit(limit);
+
+  if (error) {
+    return res.status(500).json({ error: 'Search failed' });
+  }
+
+  return res.json({
+    users: (users || []).map(u => ({
+      id: u.id,
+      name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || 'Unknown',
+      avatar: u.profile_picture,
+    })),
+  });
+}
+
+/**
+ * Get User by ID - GET /widget/users/:id
+ */
+async function handleWidgetUserById(req: VercelRequest, res: VercelResponse, userId: string) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const sessionToken = req.headers['x-widget-session'] as string;
+  const session = await validateWidgetSession(sessionToken);
+
+  if (!session) {
+    return res.status(401).json({ error: 'Invalid session' });
+  }
+
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('id, first_name, last_name, profile_picture')
+    .eq('id', userId)
+    .single();
+
+  if (error || !user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  return res.json({
+    id: user.id,
+    name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Unknown',
+    avatar: user.profile_picture,
+  });
+}
+
+/**
+ * Widget Conversations - GET/POST /widget/conversations
+ */
+async function handleWidgetConversations(req: VercelRequest, res: VercelResponse) {
+  const sessionToken = req.headers['x-widget-session'] as string;
+  const session = await validateWidgetSession(sessionToken);
+
+  if (!session) {
+    return res.status(401).json({ error: 'Invalid session' });
+  }
+
+  if (req.method === 'GET') {
+    // Get conversations for this session
+    const { data: conversations, error } = await supabase
+      .from('conversations')
+      .select(`
+        *,
+        messages(id, content, created_at, sender_type, sender_name)
+      `)
+      .eq('widget_session_id', session.id)
+      .order('last_message_at', { ascending: false });
+
+    if (error) {
+      return res.status(500).json({ error: 'Failed to load conversations' });
+    }
+
+    return res.json({
+      conversations: (conversations || []).map(c => ({
+        id: c.id,
+        type: c.type,
+        subject: c.subject,
+        status: c.status,
+        participantIds: c.participant_ids || [],
+        lastMessage: c.messages?.[0] ? {
+          id: c.messages[0].id,
+          content: c.messages[0].content,
+          createdAt: c.messages[0].created_at,
+        } : null,
+        lastMessageAt: c.last_message_at,
+        unreadCount: 0, // TODO: Calculate properly
+        createdAt: c.created_at,
+        updatedAt: c.updated_at,
+      })),
+    });
+  }
+
+  if (req.method === 'POST') {
+    // Start new conversation
+    const { targetUserId, subject, message } = req.body;
+
+    if (!targetUserId) {
+      // Check for platform default target
+      const platformTargetId = session.chat_widget_platforms?.target_user_id;
+      if (!platformTargetId) {
+        return res.status(400).json({ error: 'targetUserId is required' });
+      }
+    }
+
+    const recipientId = targetUserId || session.chat_widget_platforms?.target_user_id;
+
+    // Create conversation
+    const { data: conversation, error } = await supabase
+      .from('conversations')
+      .insert({
+        type: 'general',
+        subject: subject || 'Chat from website',
+        participant_ids: [recipientId],
+        widget_session_id: session.id,
+        platform_id: session.platform_id,
+        source: 'widget',
+        status: 'open',
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[Widget] Conversation creation error:', error);
+      return res.status(500).json({ error: 'Failed to create conversation' });
+    }
+
+    // Send initial message if provided
+    if (message) {
+      await supabase.from('messages').insert({
+        conversation_id: conversation.id,
+        content: message,
+        sender_type: 'anonymous',
+        sender_name: session.name || 'Website Visitor',
+        widget_session_id: session.id,
+      });
+
+      // Update conversation last message
+      await supabase
+        .from('conversations')
+        .update({
+          last_message_at: new Date().toISOString(),
+          last_message_preview: message.substring(0, 100),
+        })
+        .eq('id', conversation.id);
+    }
+
+    return res.json({
+      conversation: {
+        id: conversation.id,
+        type: conversation.type,
+        subject: conversation.subject,
+        status: conversation.status,
+        participantIds: conversation.participant_ids || [],
+        createdAt: conversation.created_at,
+      },
+    });
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Get Conversation by ID - GET/PATCH /widget/conversations/:id
+ */
+async function handleWidgetConversationById(req: VercelRequest, res: VercelResponse, conversationId: string) {
+  const sessionToken = req.headers['x-widget-session'] as string;
+  const session = await validateWidgetSession(sessionToken);
+
+  if (!session) {
+    return res.status(401).json({ error: 'Invalid session' });
+  }
+
+  // Verify conversation belongs to session
+  const { data: conversation, error } = await supabase
+    .from('conversations')
+    .select('*')
+    .eq('id', conversationId)
+    .eq('widget_session_id', session.id)
+    .single();
+
+  if (error || !conversation) {
+    return res.status(404).json({ error: 'Conversation not found' });
+  }
+
+  if (req.method === 'GET') {
+    return res.json({
+      id: conversation.id,
+      type: conversation.type,
+      subject: conversation.subject,
+      status: conversation.status,
+      participantIds: conversation.participant_ids || [],
+      lastMessageAt: conversation.last_message_at,
+      createdAt: conversation.created_at,
+      updatedAt: conversation.updated_at,
+    });
+  }
+
+  if (req.method === 'PATCH') {
+    const { status } = req.body;
+
+    const { data: updated, error: updateError } = await supabase
+      .from('conversations')
+      .update({ status })
+      .eq('id', conversationId)
+      .select()
+      .single();
+
+    if (updateError) {
+      return res.status(500).json({ error: 'Failed to update conversation' });
+    }
+
+    return res.json({ success: true });
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Widget Messages - GET/POST /widget/conversations/:id/messages
+ */
+async function handleWidgetMessages(req: VercelRequest, res: VercelResponse, conversationId: string) {
+  const sessionToken = req.headers['x-widget-session'] as string;
+  const session = await validateWidgetSession(sessionToken);
+
+  if (!session) {
+    return res.status(401).json({ error: 'Invalid session' });
+  }
+
+  // Verify conversation belongs to session
+  const { data: conversation } = await supabase
+    .from('conversations')
+    .select('id')
+    .eq('id', conversationId)
+    .eq('widget_session_id', session.id)
+    .single();
+
+  if (!conversation) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  if (req.method === 'GET') {
+    const cursor = req.query.cursor as string;
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+
+    let query = supabase
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .eq('is_deleted', false)
+      .order('created_at', { ascending: true })
+      .limit(limit);
+
+    if (cursor) {
+      query = query.gt('created_at', cursor);
+    }
+
+    const { data: messages, error } = await query;
+
+    if (error) {
+      return res.status(500).json({ error: 'Failed to load messages' });
+    }
+
+    return res.json({
+      messages: (messages || []).map(m => ({
+        id: m.id,
+        conversationId: m.conversation_id,
+        content: m.content,
+        senderType: m.sender_type,
+        senderId: m.sender_id,
+        senderSessionId: m.widget_session_id,
+        senderName: m.sender_name,
+        messageType: m.message_type || 'text',
+        attachments: m.attachments || [],
+        createdAt: m.created_at,
+      })),
+      hasMore: (messages || []).length === limit,
+      cursor: messages?.length ? messages[messages.length - 1].created_at : null,
+    });
+  }
+
+  if (req.method === 'POST') {
+    const { content, attachments } = req.body;
+
+    if (!content?.trim()) {
+      return res.status(400).json({ error: 'Message content is required' });
+    }
+
+    const { data: message, error } = await supabase
+      .from('messages')
+      .insert({
+        conversation_id: conversationId,
+        content: content.trim(),
+        sender_type: 'anonymous',
+        sender_name: session.name || 'Website Visitor',
+        widget_session_id: session.id,
+        message_type: 'text',
+        attachments: attachments || [],
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[Widget] Message send error:', error);
+      return res.status(500).json({ error: 'Failed to send message' });
+    }
+
+    // Update conversation
+    await supabase
+      .from('conversations')
+      .update({
+        last_message_at: new Date().toISOString(),
+        last_message_preview: content.substring(0, 100),
+      })
+      .eq('id', conversationId);
+
+    // Broadcast message via Supabase realtime
+    const channel = supabase.channel(`chat-${conversationId}`);
+    await channel.send({
+      type: 'broadcast',
+      event: 'new_message',
+      payload: {
+        id: message.id,
+        conversationId: message.conversation_id,
+        content: message.content,
+        senderType: message.sender_type,
+        senderSessionId: message.widget_session_id,
+        senderName: message.sender_name,
+        messageType: message.message_type,
+        createdAt: message.created_at,
+      },
+    });
+
+    return res.json({
+      message: {
+        id: message.id,
+        conversationId: message.conversation_id,
+        content: message.content,
+        senderType: message.sender_type,
+        senderSessionId: message.widget_session_id,
+        senderName: message.sender_name,
+        messageType: message.message_type,
+        createdAt: message.created_at,
+      },
+    });
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Poll for new messages - GET /widget/conversations/:id/messages/poll
+ */
+async function handleWidgetMessagesPoll(req: VercelRequest, res: VercelResponse, conversationId: string) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const sessionToken = req.headers['x-widget-session'] as string;
+  const session = await validateWidgetSession(sessionToken);
+
+  if (!session) {
+    return res.status(401).json({ error: 'Invalid session' });
+  }
+
+  const afterId = req.query.after as string;
+
+  let query = supabase
+    .from('messages')
+    .select('*')
+    .eq('conversation_id', conversationId)
+    .eq('is_deleted', false)
+    .order('created_at', { ascending: true });
+
+  if (afterId) {
+    query = query.gt('id', afterId);
+  }
+
+  const { data: messages, error } = await query.limit(50);
+
+  if (error) {
+    return res.status(500).json({ error: 'Failed to poll messages' });
+  }
+
+  return res.json({
+    messages: (messages || []).map(m => ({
+      id: m.id,
+      conversationId: m.conversation_id,
+      content: m.content,
+      senderType: m.sender_type,
+      senderSessionId: m.widget_session_id,
+      senderName: m.sender_name,
+      messageType: m.message_type || 'text',
+      createdAt: m.created_at,
+    })),
+  });
+}
+
+/**
+ * Mark conversation as read - POST /widget/conversations/:id/read
+ */
+async function handleWidgetMarkRead(req: VercelRequest, res: VercelResponse, conversationId: string) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const sessionToken = req.headers['x-widget-session'] as string;
+  const session = await validateWidgetSession(sessionToken);
+
+  if (!session) {
+    return res.status(401).json({ error: 'Invalid session' });
+  }
+
+  // Just acknowledge - actual read tracking can be implemented later
+  return res.json({ success: true });
+}
+
+/**
+ * Typing indicator - POST /widget/conversations/:id/typing
+ */
+async function handleWidgetTyping(req: VercelRequest, res: VercelResponse, conversationId: string) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const sessionToken = req.headers['x-widget-session'] as string;
+  const session = await validateWidgetSession(sessionToken);
+
+  if (!session) {
+    return res.status(401).json({ error: 'Invalid session' });
+  }
+
+  const { isTyping } = req.body;
+
+  // Broadcast typing via Supabase realtime
+  const channel = supabase.channel(`chat-${conversationId}`);
+  await channel.send({
+    type: 'broadcast',
+    event: 'typing',
+    payload: {
+      conversationId,
+      sessionId: session.session_token,
+      name: session.name || 'Website Visitor',
+      isTyping: !!isTyping,
+    },
+  });
+
+  return res.json({ success: true });
+}
+
+/**
+ * Widget Platforms - GET/POST /widget/platforms
+ */
+async function handleWidgetPlatforms(req: VercelRequest, res: VercelResponse) {
+  const apiKey = req.headers['x-api-key'] as string;
+  const keyValidation = await validateWidgetApiKey(apiKey);
+
+  if (!keyValidation.valid) {
+    return res.status(401).json({ error: keyValidation.error });
+  }
+
+  // Get developer ID from API key
+  const keyHash = require('crypto').createHash('sha256').update(apiKey).digest('hex');
+  const { data: apiKeyData } = await supabase
+    .from('api_keys')
+    .select('id, user_id')
+    .eq('key_hash', keyHash)
+    .single();
+
+  if (!apiKeyData) {
+    return res.status(401).json({ error: 'Invalid API key' });
+  }
+
+  if (req.method === 'GET') {
+    const { data: platforms, error } = await supabase
+      .from('chat_widget_platforms')
+      .select('*')
+      .eq('developer_id', apiKeyData.user_id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      return res.status(500).json({ error: 'Failed to load platforms' });
+    }
+
+    return res.json({ platforms });
+  }
+
+  if (req.method === 'POST') {
+    const { name, domain, config, targetUserId } = req.body;
+
+    if (!name || !domain) {
+      return res.status(400).json({ error: 'name and domain are required' });
+    }
+
+    const { data: platform, error } = await supabase
+      .from('chat_widget_platforms')
+      .insert({
+        developer_id: apiKeyData.user_id,
+        api_key_id: apiKeyData.id,
+        name,
+        domain,
+        config,
+        target_user_id: targetUserId,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[Widget] Platform creation error:', error);
+      return res.status(500).json({ error: 'Failed to create platform' });
+    }
+
+    return res.json({ platform });
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Widget File Upload - POST /widget/upload
+ */
+async function handleWidgetUpload(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const sessionToken = req.headers['x-widget-session'] as string;
+  const session = await validateWidgetSession(sessionToken);
+
+  if (!session) {
+    return res.status(401).json({ error: 'Invalid session' });
+  }
+
+  // File upload handling would go here
+  // For now, return a placeholder
+  return res.status(501).json({ error: 'File upload not yet implemented' });
 }
