@@ -27,18 +27,15 @@ export function SchoolLoginPage() {
     }
   };
 
-  const handleDemoLogin = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      // Demo admin credentials for testing
-      await login({ email: 'admin@demo-school.edu', password: 'demo123456' });
-      navigate('/school');
-    } catch (err: any) {
-      setError(err.message || 'Demo login failed');
-    } finally {
-      setLoading(false);
-    }
+  const handleDemoLogin = () => {
+    // Demo mode - bypass authentication for testing
+    // Store mock school data in localStorage
+    localStorage.setItem('schoolId', 'demo-school-001');
+    localStorage.setItem('schoolRole', 'admin');
+    localStorage.setItem('demoMode', 'true');
+
+    // Navigate directly to dashboard
+    navigate('/school');
   };
 
   return (
