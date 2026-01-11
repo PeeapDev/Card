@@ -39,11 +39,217 @@ Integration guide for connecting the School SaaS system with Peeap Pay.
 
 ---
 
+## Payment Gateway Settings Page (PHP Side)
+
+This section explains how to implement the Peeap Pay gateway option in the School SaaS payment settings.
+
+### UI States
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Peeap Pay (Integrated)                                                     │
+│  Manage your school's financial system, student wallets, and shop.          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  STATE 1: Not Registered                                                    │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  ⚠️ Not Registered                                                   │   │
+│  │                                                                      │   │
+│  │  1. Register School                                                  │   │
+│  │     Create your school account on Peeap.                            │   │
+│  │     [Register on Peeap] ──► https://school.peeap.com/school/register│   │
+│  │                                                                      │   │
+│  │  2. Connect via SSO                                                  │   │
+│  │     Link your school system with Peeap Pay.                         │   │
+│  │     [Connect with Peeap] ──► Disabled until registered              │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│  STATE 2: Registered but Not Connected                                      │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  ✓ Registered on Peeap                                              │   │
+│  │                                                                      │   │
+│  │  [Connect with Peeap] ──► OAuth SSO Flow                            │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│  STATE 3: Connected                                                         │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  ✅ Connected to Peeap Pay                                          │   │
+│  │  Connected by: admin@school.edu.sl                                  │   │
+│  │  Connected on: January 15, 2024                                     │   │
+│  │                                                                      │   │
+│  │  Students Linked: 450  │  Transactions: 12,500  │  Volume: NLE 45K  │   │
+│  │                                                                      │   │
+│  │  [Access Dashboard]  [Sync Now]  [Disconnect]                       │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Button URLs & Actions
+
+| Button | URL / Action |
+|--------|--------------|
+| **Register on Peeap** | `https://school.peeap.com/school/register` (opens in new tab) |
+| **Connect with Peeap** | OAuth SSO flow (see PHP code below) |
+| **Access Dashboard** | `https://school.peeap.com/school/login?quick_access=true&user_id={peeap_user_id}` |
+| **Sync Now** | Call internal sync API |
+| **Disconnect** | Revoke tokens, clear `peeap_*` fields |
+
+### PHP Implementation for "Connect with Peeap" Button
+
+```php
+// In payment-settings.php or gateway controller
+
+// Check current state
+function getPeeapConnectionState($school_id) {
+    $school = getSchool($school_id);
+
+    if (!empty($school['peeap_school_id']) && !empty($school['peeap_access_token'])) {
+        return 'connected';
+    }
+
+    // Check if admin has registered (you can track this in DB or check via API)
+    if (!empty($school['peeap_registered_at'])) {
+        return 'registered';
+    }
+
+    return 'not_registered';
+}
+
+// Handle "Connect with Peeap" button click
+function initiatePeeapConnection() {
+    $state = bin2hex(random_bytes(32));
+    $_SESSION['peeap_oauth_state'] = $state;
+
+    $params = [
+        'response_type' => 'code',
+        'client_id' => 'school_saas',
+        'redirect_uri' => 'https://' . $_SERVER['HTTP_HOST'] . '/peeap/callback',
+        'scope' => 'school:connect school:manage wallet:read',
+        'state' => $state,
+        'school_id' => getCurrentSchoolId(),
+        'user_type' => 'admin'
+    ];
+
+    $sso_url = 'https://my.peeap.com/auth/authorize?' . http_build_query($params);
+
+    header('Location: ' . $sso_url);
+    exit;
+}
+```
+
+### Database Fields for School SaaS
+
+```sql
+-- Add these columns to your schools table
+ALTER TABLE schools ADD COLUMN peeap_registered_at DATETIME NULL;
+ALTER TABLE schools ADD COLUMN peeap_school_id VARCHAR(50) NULL;
+ALTER TABLE schools ADD COLUMN peeap_user_id VARCHAR(50) NULL;
+ALTER TABLE schools ADD COLUMN peeap_access_token TEXT NULL;
+ALTER TABLE schools ADD COLUMN peeap_refresh_token TEXT NULL;
+ALTER TABLE schools ADD COLUMN peeap_token_expires_at DATETIME NULL;
+ALTER TABLE schools ADD COLUMN peeap_connected_by VARCHAR(255) NULL;
+ALTER TABLE schools ADD COLUMN peeap_connected_at DATETIME NULL;
+
+-- Index for quick lookups
+CREATE INDEX idx_schools_peeap ON schools(peeap_school_id);
+```
+
+### Callback Handler (peeap/callback.php)
+
+```php
+<?php
+// /peeap/callback.php
+
+session_start();
+
+// 1. Verify state (CSRF protection)
+if ($_GET['state'] !== $_SESSION['peeap_oauth_state']) {
+    die('Invalid state - security error');
+}
+
+// 2. Check for errors
+if (isset($_GET['error'])) {
+    $error_msg = $_GET['error_description'] ?? $_GET['error'];
+    header('Location: /settings/payment?error=' . urlencode($error_msg));
+    exit;
+}
+
+// 3. Exchange authorization code for tokens
+$code = $_GET['code'];
+$token_response = exchangeCodeForTokens($code);
+
+if (isset($token_response['error'])) {
+    header('Location: /settings/payment?error=' . urlencode($token_response['error']));
+    exit;
+}
+
+// 4. Save connection to database
+$school_id = getCurrentSchoolId();
+$db->query("
+    UPDATE schools SET
+        peeap_school_id = ?,
+        peeap_user_id = ?,
+        peeap_access_token = ?,
+        peeap_refresh_token = ?,
+        peeap_token_expires_at = ?,
+        peeap_connected_by = ?,
+        peeap_connected_at = NOW()
+    WHERE id = ?
+", [
+    $token_response['school_connection']['peeap_school_id'] ?? null,
+    $token_response['user']['peeap_id'] ?? null,
+    $token_response['access_token'],
+    $token_response['refresh_token'],
+    date('Y-m-d H:i:s', time() + $token_response['expires_in']),
+    $token_response['user']['email'] ?? 'Unknown',
+    $school_id
+]);
+
+// 5. Redirect to settings with success
+header('Location: /settings/payment?peeap_connected=true');
+
+function exchangeCodeForTokens($code) {
+    $ch = curl_init('https://my.peeap.com/api/oauth/token');
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+        CURLOPT_POSTFIELDS => json_encode([
+            'grant_type' => 'authorization_code',
+            'code' => $code,
+            'client_id' => 'school_saas',
+            'client_secret' => PEEAP_CLIENT_SECRET, // From config
+            'redirect_uri' => 'https://' . $_SERVER['HTTP_HOST'] . '/peeap/callback'
+        ])
+    ]);
+
+    $response = curl_exec($ch);
+    curl_close($ch);
+
+    return json_decode($response, true);
+}
+```
+
+### Mark School as Registered
+
+When admin clicks "Register on Peeap" and completes registration, they should return to the School SaaS. You can:
+
+**Option A:** Add a return URL parameter
+```php
+$register_url = 'https://school.peeap.com/school/register?return_url=' .
+    urlencode('https://' . $_SERVER['HTTP_HOST'] . '/settings/payment?registered=true');
+```
+
+**Option B:** Just let them manually return after registration and use the "Connect" button.
+
+---
+
 ## School Registration & Login Flows
 
 ### 1. Register on school.peeap.com
 
-Schools can register directly on `school.peeap.com/register`:
+Schools can register directly on `school.peeap.com/school/register`:
 
 1. Fill in school name, admin name, email, phone, password
 2. After registration, see integration instructions
