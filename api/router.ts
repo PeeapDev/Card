@@ -6724,13 +6724,91 @@ async function handleOAuthToken(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      return res.status(200).json({
+      // Fetch user data for enhanced response (for school integration)
+      const { data: userData } = await supabase
+        .from('users')
+        .select('id, email, phone, first_name, last_name, roles')
+        .eq('id', authCode.user_id)
+        .limit(1);
+
+      const user = userData?.[0];
+
+      // Fetch wallet data if wallet scopes are requested
+      let walletData = null;
+      const scopes = authCode.scope.split(' ');
+      if (scopes.includes('wallet:read') || scopes.includes('wallet:write')) {
+        const { data: wallets } = await supabase
+          .from('wallets')
+          .select('id, balance, currency, status, daily_limit, daily_spent')
+          .eq('user_id', authCode.user_id)
+          .eq('type', 'personal')
+          .limit(1);
+
+        if (wallets && wallets.length > 0) {
+          walletData = {
+            wallet_id: wallets[0].id,
+            balance: wallets[0].balance || 0,
+            currency: wallets[0].currency || 'NLE',
+            status: wallets[0].status || 'active',
+            daily_limit: wallets[0].daily_limit || 100,
+            daily_spent: wallets[0].daily_spent || 0,
+          };
+        }
+      }
+
+      // Build response with user and wallet data
+      const response: Record<string, any> = {
         access_token: accessToken,
         token_type: 'Bearer',
         expires_in: expiresIn,
         refresh_token: newRefreshToken,
         scope: authCode.scope,
-      });
+      };
+
+      // Add user data
+      if (user) {
+        response.user = {
+          peeap_id: user.id,
+          email: user.email,
+          phone: user.phone,
+          name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+          is_new_account: false,
+        };
+      }
+
+      // Add wallet data if available
+      if (walletData) {
+        response.wallet = walletData;
+      }
+
+      // Add link info from authorization code metadata if present
+      if (authCode.metadata) {
+        try {
+          const metadata = typeof authCode.metadata === 'string'
+            ? JSON.parse(authCode.metadata)
+            : authCode.metadata;
+          if (metadata.index_number || metadata.school_id) {
+            response.link = {
+              index_number: metadata.index_number,
+              school_id: metadata.school_id,
+              linked_at: new Date().toISOString(),
+            };
+          }
+          // For school admin connection
+          if (metadata.user_type === 'admin') {
+            response.school_connection = {
+              peeap_school_id: `sch_${authCode.user_id.substring(0, 8)}`,
+              connected_by: response.user,
+              connected_at: new Date().toISOString(),
+              status: 'active',
+            };
+          }
+        } catch (e) {
+          // Ignore metadata parsing errors
+        }
+      }
+
+      return res.status(200).json(response);
 
     } else if (grant_type === 'refresh_token') {
       if (!refresh_token) {

@@ -447,6 +447,13 @@ export const ssoService = {
     userId: string;
     redirectUri: string;
     scope: string;
+    metadata?: {
+      school_id?: number | string;
+      index_number?: string;
+      student_name?: string;
+      student_phone?: string;
+      user_type?: 'admin' | 'student' | 'parent';
+    };
   }): Promise<{ code: string; expiresAt: Date }> {
     const code = generateSecureToken(48);
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
@@ -458,6 +465,7 @@ export const ssoService = {
       redirect_uri: params.redirectUri,
       scope: params.scope,
       expires_at: expiresAt.toISOString(),
+      metadata: params.metadata || null,
     });
 
     if (error) {

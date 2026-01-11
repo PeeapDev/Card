@@ -29,6 +29,10 @@ const SCOPE_DESCRIPTIONS: Record<string, { name: string; description: string }> 
     name: 'Email',
     description: 'View your email address',
   },
+  phone: {
+    name: 'Phone',
+    description: 'View your phone number',
+  },
   'wallet:read': {
     name: 'View Wallet',
     description: 'View your wallet balance and transaction history',
@@ -44,6 +48,23 @@ const SCOPE_DESCRIPTIONS: Record<string, { name: string; description: string }> 
   'transactions:read': {
     name: 'View Transactions',
     description: 'View your transaction history',
+  },
+  // School-specific scopes
+  'school:connect': {
+    name: 'Connect School',
+    description: 'Connect your school to Peeap Pay for payments',
+  },
+  'school:manage': {
+    name: 'Manage School',
+    description: 'Manage school settings, vendors, and student sync',
+  },
+  'student:sync': {
+    name: 'Sync Students',
+    description: 'Sync student data between school and Peeap',
+  },
+  'fee:pay': {
+    name: 'Pay Fees',
+    description: 'Pay school fees on behalf of students',
   },
 };
 
@@ -64,6 +85,13 @@ export function OAuthAuthorizePage() {
   const responseType = searchParams.get('response_type');
   const scope = searchParams.get('scope') || 'profile';
   const state = searchParams.get('state');
+
+  // Extract school-specific metadata
+  const schoolId = searchParams.get('school_id');
+  const userType = searchParams.get('user_type') as 'admin' | 'student' | 'parent' | null;
+  const indexNumber = searchParams.get('index_number');
+  const studentName = searchParams.get('student_name');
+  const studentPhone = searchParams.get('student_phone');
 
   useEffect(() => {
     const validateRequest = async () => {
@@ -117,12 +145,21 @@ export function OAuthAuthorizePage() {
     setIsAuthorizing(true);
 
     try {
+      // Build metadata for school integration
+      const metadata: Record<string, any> = {};
+      if (schoolId) metadata.school_id = schoolId;
+      if (userType) metadata.user_type = userType;
+      if (indexNumber) metadata.index_number = indexNumber;
+      if (studentName) metadata.student_name = studentName;
+      if (studentPhone) metadata.student_phone = studentPhone;
+
       // Generate authorization code
       const { code } = await ssoService.generateAuthorizationCode({
         clientId: client.client_id,
         userId: user.id,
         redirectUri,
         scope: requestedScopes.join(' '),
+        metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
       });
 
       setStatus('success');
