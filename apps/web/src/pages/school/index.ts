@@ -12,3 +12,4 @@ export { SchoolSalaryPage } from './SchoolSalaryPage';
 export { SchoolInvoicesPage } from './SchoolInvoicesPage';
 export { SchoolReportsPage } from './SchoolReportsPage';
 export { SchoolLoginPage } from './SchoolLoginPage';
+export { SchoolAuthCallbackPage } from './SchoolAuthCallbackPage';

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { GraduationCap, Mail, Lock, Eye, EyeOff, ArrowRight, Building2 } from 'lucide-react';
+import { GraduationCap, Mail, Lock, Eye, EyeOff, ArrowRight, Building2, UserCircle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 export function SchoolLoginPage() {
@@ -22,6 +22,20 @@ export function SchoolLoginPage() {
       navigate('/school');
     } catch (err: any) {
       setError(err.message || 'Failed to sign in');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDemoLogin = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      // Demo admin credentials for testing
+      await login({ email: 'admin@demo-school.edu', password: 'demo123456' });
+      navigate('/school');
+    } catch (err: any) {
+      setError(err.message || 'Demo login failed');
     } finally {
       setLoading(false);
     }
@@ -177,18 +191,9 @@ export function SchoolLoginPage() {
               </button>
             </form>
 
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <p className="text-center text-gray-600 text-sm">
-                New to Peeap School?{' '}
-                <Link to="/onboard" className="text-blue-600 hover:text-blue-700 font-medium">
-                  Register your school
-                </Link>
-              </p>
-            </div>
-
             {/* SSO Option */}
-            <div className="mt-6">
-              <div className="relative">
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <div className="relative mb-4">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-gray-200" />
                 </div>
@@ -197,13 +202,26 @@ export function SchoolLoginPage() {
                 </div>
               </div>
 
-              <a
-                href={`https://my.peeap.com/auth/authorize?client_id=school-portal&redirect_uri=${encodeURIComponent(window.location.origin + '/auth/callback')}&response_type=code`}
-                className="mt-4 w-full flex items-center justify-center gap-3 py-3 px-4 border border-gray-300 rounded-xl text-gray-700 font-medium hover:bg-gray-50 transition-colors"
-              >
-                <Building2 className="h-5 w-5 text-blue-600" />
-                Sign in with Peeap Account
-              </a>
+              <div className="space-y-3">
+                <a
+                  href={`https://my.peeap.com/auth/authorize?client_id=school-portal&redirect_uri=${encodeURIComponent(window.location.origin + '/auth/callback')}&response_type=code&scope=school_admin`}
+                  className="w-full flex items-center justify-center gap-3 py-3 px-4 border border-gray-300 rounded-xl text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+                >
+                  <Building2 className="h-5 w-5 text-blue-600" />
+                  Sign in with Peeap Account
+                </a>
+
+                {/* Demo Admin Button - For Testing */}
+                <button
+                  type="button"
+                  onClick={handleDemoLogin}
+                  disabled={loading}
+                  className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl font-medium hover:from-emerald-600 hover:to-teal-600 transition-all disabled:opacity-50"
+                >
+                  <UserCircle className="h-5 w-5" />
+                  Demo Admin Account
+                </button>
+              </div>
             </div>
           </div>
 
