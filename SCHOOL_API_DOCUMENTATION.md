@@ -39,6 +39,43 @@ Integration guide for connecting the School SaaS system with Peeap Pay.
 
 ---
 
+## School Registration & Login Flows
+
+### 1. Register on school.peeap.com
+
+Schools can register directly on `school.peeap.com/register`:
+
+1. Fill in school name, admin name, email, phone, password
+2. After registration, see integration instructions
+3. Log in to dashboard and complete setup wizard (creates wallet PIN)
+4. Go to school system and connect with Peeap
+
+### 2. Login Methods
+
+**A. Direct Login (school.peeap.com)**
+- Email/phone + password
+- Standard authentication
+
+**B. Quick Access from School Dashboard (gov.school.edu.sl)**
+- School dashboard has "Access Peeap" button
+- Redirects to `school.peeap.com/login?quick_access=true&user_id=xxx`
+- User enters 4-digit wallet PIN only
+- PIN was created during setup wizard
+- Faster than full login
+
+```
+┌─────────────────────────┐     ┌─────────────────────────┐
+│   SCHOOL DASHBOARD      │     │    PEEAP LOGIN PAGE     │
+│   (gov.school.edu.sl)   │     │  (school.peeap.com)     │
+│                         │     │                         │
+│   [Access Peeap Pay]    │────▶│   Enter PIN: ****       │
+│                         │     │                         │
+│                         │     │   [Verify & Access]     │
+└─────────────────────────┘     └─────────────────────────┘
+```
+
+---
+
 ## SSO Connection Flows
 
 ### OAuth 2.0 Authorization Code Flow (Recommended)

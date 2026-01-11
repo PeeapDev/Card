@@ -205,6 +205,7 @@ import {
   SchoolInvoicesPage,
   SchoolReportsPage,
   SchoolLoginPage,
+  SchoolRegisterPage,
   SchoolAuthCallbackPage,
 } from '@/pages/school';
 
@@ -312,8 +313,10 @@ function App() {
                   {/* Public routes */}
                   <Route path="/" element={<Navigate to="/school" replace />} />
                   <Route path="/login" element={<SchoolLoginPage />} />
+                  <Route path="/register" element={<SchoolRegisterPage />} />
+                  <Route path="/school/login" element={<SchoolLoginPage />} />
+                  <Route path="/school/register" element={<SchoolRegisterPage />} />
                   <Route path="/auth/callback" element={<SchoolAuthCallbackPage />} />
-                  <Route path="/register" element={<Navigate to="/onboard" replace />} />
 
                   {/* School Onboarding - Session-based registration */}
                   <Route path="/onboard" element={<SchoolOnboardingPage />} />

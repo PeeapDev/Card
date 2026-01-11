@@ -178,6 +178,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } else if (path.match(/^payouts\/[^/]+$/) && !path.includes('/user/') && !path.includes('/merchant/') && !path.includes('/banks')) {
       const payoutId = path.split('/')[1];
       return await handlePayoutById(req, res, payoutId);
+    } else if (path === 'auth/verify-pin' || path === 'auth/verify-pin/') {
+      return await handleAuthVerifyPin(req, res);
     } else if (path === 'oauth/token' || path === 'oauth/token/') {
       return await handleOAuthToken(req, res);
     } else if (path === 'oauth/userinfo' || path === 'oauth/userinfo/') {
@@ -6612,6 +6614,98 @@ function generateSecureToken(length: number = 64): string {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return result;
+}
+
+/**
+ * PIN Verification Endpoint
+ * Verify user's wallet PIN for quick access from school dashboard
+ *
+ * POST /api/auth/verify-pin
+ * Body: { user_id, pin }
+ */
+async function handleAuthVerifyPin(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'method_not_allowed' });
+  }
+
+  try {
+    const { user_id, pin } = req.body;
+
+    if (!user_id || !pin) {
+      return res.status(400).json({
+        error: 'invalid_request',
+        error_description: 'user_id and pin are required',
+      });
+    }
+
+    if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+      return res.status(400).json({
+        error: 'invalid_pin',
+        error_description: 'PIN must be 4 digits',
+      });
+    }
+
+    // Get user and verify PIN
+    const { data: users, error: userError } = await supabase
+      .from('users')
+      .select('id, email, first_name, last_name, phone, roles, transaction_pin')
+      .eq('id', user_id)
+      .limit(1);
+
+    if (userError || !users || users.length === 0) {
+      return res.status(404).json({
+        error: 'user_not_found',
+        error_description: 'User not found',
+      });
+    }
+
+    const user = users[0];
+
+    // Verify PIN (stored as hashed or plain depending on setup)
+    // For now, we'll do a simple comparison - in production, use bcrypt
+    if (user.transaction_pin !== pin) {
+      return res.status(401).json({
+        error: 'invalid_pin',
+        error_description: 'Invalid PIN',
+      });
+    }
+
+    // Generate tokens for the user
+    const accessToken = generateSecureToken(64);
+    const refreshToken = generateSecureToken(64);
+    const expiresIn = 3600; // 1 hour
+
+    // Store the access token in oauth_access_tokens for consistency
+    await supabase.from('oauth_access_tokens').insert({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      client_id: 'school_saas',
+      user_id: user.id,
+      scope: 'profile email wallet:read school:manage',
+      expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
+    });
+
+    return res.status(200).json({
+      success: true,
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      token_type: 'Bearer',
+      expires_in: expiresIn,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+        phone: user.phone,
+        roles: user.roles,
+      },
+    });
+  } catch (error: any) {
+    console.error('[Auth Verify PIN] Error:', error);
+    return res.status(500).json({
+      error: 'server_error',
+      error_description: error.message || 'Internal server error',
+    });
+  }
 }
 
 /**
