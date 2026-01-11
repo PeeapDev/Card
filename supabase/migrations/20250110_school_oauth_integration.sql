@@ -145,12 +145,15 @@ CREATE INDEX IF NOT EXISTS idx_school_connections_status ON school_connections(s
 -- RLS
 ALTER TABLE school_connections ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Allow select school_connections" ON school_connections;
 CREATE POLICY "Allow select school_connections" ON school_connections
   FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Allow insert school_connections" ON school_connections;
 CREATE POLICY "Allow insert school_connections" ON school_connections
   FOR INSERT WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Allow update school_connections" ON school_connections;
 CREATE POLICY "Allow update school_connections" ON school_connections
   FOR UPDATE USING (true);
 
@@ -183,12 +186,15 @@ CREATE INDEX IF NOT EXISTS idx_student_wallet_links_school ON student_wallet_lin
 -- RLS
 ALTER TABLE student_wallet_links ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Allow select student_wallet_links" ON student_wallet_links;
 CREATE POLICY "Allow select student_wallet_links" ON student_wallet_links
   FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Allow insert student_wallet_links" ON student_wallet_links;
 CREATE POLICY "Allow insert student_wallet_links" ON student_wallet_links
   FOR INSERT WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Allow update student_wallet_links" ON student_wallet_links;
 CREATE POLICY "Allow update student_wallet_links" ON student_wallet_links
   FOR UPDATE USING (true);
 
@@ -264,6 +270,7 @@ CREATE INDEX IF NOT EXISTS idx_school_webhooks_active ON school_webhooks(is_acti
 -- RLS
 ALTER TABLE school_webhooks ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Allow all school_webhooks" ON school_webhooks;
 CREATE POLICY "Allow all school_webhooks" ON school_webhooks
   FOR ALL USING (true);
 
