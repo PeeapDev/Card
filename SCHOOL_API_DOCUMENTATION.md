@@ -379,7 +379,7 @@ function handlePeeapCallback() {
 
 ```php
 function exchangeCodeForTokens($code) {
-    $response = http_post('https://peeap.com/oauth/token', [
+    $response = http_post('https://my.peeap.com/api/oauth/token', [
         'grant_type' => 'authorization_code',
         'code' => $code,
         'client_id' => 'school_saas',
@@ -537,7 +537,7 @@ WHERE id = 45;
 function refreshAccessToken($school_id) {
     $school = getSchool($school_id);
 
-    $response = http_post('https://peeap.com/oauth/token', [
+    $response = http_post('https://my.peeap.com/api/oauth/token', [
         'grant_type' => 'refresh_token',
         'refresh_token' => $school['peeap_refresh_token'],
         'client_id' => 'school_saas',
