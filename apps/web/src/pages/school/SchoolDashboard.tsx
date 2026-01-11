@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
+import { SchoolLayout } from '@/components/school';
 import {
   Users,
   Store,
@@ -8,11 +9,7 @@ import {
   CreditCard,
   TrendingUp,
   ArrowUpRight,
-  ArrowDownRight,
-  GraduationCap,
-  Building2,
   Wallet,
-  Settings,
   Receipt,
   UserCog,
   Calculator,
@@ -135,31 +132,8 @@ export function SchoolDashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
-                <GraduationCap className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900 dark:text-white">School Dashboard</h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Manage your school's payment system</p>
-              </div>
-            </div>
-            <Link
-              to="/school/settings"
-              className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-            >
-              <Settings className="h-5 w-5" />
-            </Link>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <SchoolLayout>
+      <div className="space-y-6">
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm">
@@ -277,7 +251,7 @@ export function SchoolDashboard() {
             <p>Recent transactions will appear here</p>
           </div>
         </div>
-      </main>
-    </div>
+      </div>
+    </SchoolLayout>
   );
 }
