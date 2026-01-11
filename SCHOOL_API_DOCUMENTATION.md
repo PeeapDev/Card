@@ -335,7 +335,7 @@ School admin connects their school to Peeap Pay:
 $state = bin2hex(random_bytes(32)); // CSRF protection
 $_SESSION['oauth_state'] = $state;
 
-$sso_url = "https://peeap.com/oauth/authorize?" . http_build_query([
+$sso_url = "https://my.peeap.com/auth/authorize?" . http_build_query([
     'response_type' => 'code',
     'client_id' => 'school_saas',
     'redirect_uri' => 'https://' . $_SERVER['HTTP_HOST'] . '/peeap/callback',
@@ -440,7 +440,7 @@ $state = bin2hex(random_bytes(32));
 $_SESSION['oauth_state'] = $state;
 $_SESSION['linking_student_id'] = $current_student_id;
 
-$sso_url = "https://peeap.com/oauth/authorize?" . http_build_query([
+$sso_url = "https://my.peeap.com/auth/authorize?" . http_build_query([
     'response_type' => 'code',
     'client_id' => 'school_saas',
     'redirect_uri' => 'https://' . $_SERVER['HTTP_HOST'] . '/peeap/student-callback',
