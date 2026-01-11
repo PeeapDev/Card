@@ -179,6 +179,7 @@ import { StaffEventScannerPage } from '@/pages/user/StaffEventScannerPage';
 // Settings and Cash Box
 import { SettingsPage } from '@/pages/SettingsPage';
 import { CashBoxSetupWizard } from '@/components/cashbox/CashBoxSetupWizard';
+import { StudentConnectPage } from '@/pages/apps/StudentConnectPage';
 // Agent Pages
 import { AgentDashboard } from '@/pages/agent/AgentDashboard';
 import { AgentNotificationsPage } from '@/pages/agent/AgentNotificationsPage';
@@ -1672,6 +1673,7 @@ function App() {
                   {/* Settings and Cash Box */}
                   <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
                   <Route path="/cashbox/setup" element={<ProtectedRoute><CashBoxSetupWizard /></ProtectedRoute>} />
+                  <Route path="/student-connect" element={<ProtectedRoute><StudentConnectPage /></ProtectedRoute>} />
                   <Route path="/support" element={<ProtectedRoute><SupportPage /></ProtectedRoute>} />
                   <Route path="/disputes" element={<ProtectedRoute><UserDisputesPage /></ProtectedRoute>} />
                   <Route path="/verify" element={<ProtectedRoute><VerifyPage /></ProtectedRoute>} />

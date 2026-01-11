@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { SchoolLayout } from '@/components/school';
+import { UserSearch, type SearchResult } from '@/components/ui/UserSearch';
 import {
   Store,
   Search,
@@ -9,14 +11,16 @@ import {
   ExternalLink,
   ShoppingBag,
   TrendingUp,
-  Users,
   X,
-  Loader2
+  AlertCircle,
+  UserPlus
 } from 'lucide-react';
 
 interface ApprovedVendor {
   id: string;
   merchantId: string;
+  userId: string;
+  username: string | null;
   merchantName: string;
   businessName: string;
   category: string;
@@ -28,28 +32,24 @@ interface ApprovedVendor {
   productCount: number;
 }
 
-interface SearchResult {
-  id: string;
-  businessName: string;
-  category: string;
-  logo: string | null;
-  isApproved: boolean;
-}
-
 export function SchoolVendorsPage() {
+  const navigate = useNavigate();
   const [vendors, setVendors] = useState<ApprovedVendor[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showSearchModal, setShowSearchModal] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [searching, setSearching] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<SearchResult | null>(null);
+  const [addingVendor, setAddingVendor] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     // TODO: Fetch approved vendors from API
+    // GET /api/schools/{schoolId}/vendors
     setVendors([
       {
-        id: '1',
+        id: 'v2',
         merchantId: 'merch_abc123',
+        userId: 'user_123',
+        username: 'campus_canteen',
         merchantName: 'John\'s Enterprises',
         businessName: 'Campus Canteen',
         category: 'Food & Beverages',
@@ -58,11 +58,13 @@ export function SchoolVendorsPage() {
         approvedAt: '2024-01-15T10:00:00Z',
         totalSales: 15000000,
         transactionCount: 450,
-        productCount: 24,
+        productCount: 2,
       },
       {
-        id: '2',
+        id: 'v1',
         merchantId: 'merch_def456',
+        userId: 'user_456',
+        username: 'bookshop_edu',
         merchantName: 'Education Supplies Ltd',
         businessName: 'Student Bookshop',
         category: 'Books & Stationery',
@@ -71,74 +73,90 @@ export function SchoolVendorsPage() {
         approvedAt: '2024-01-10T10:00:00Z',
         totalSales: 8500000,
         transactionCount: 120,
-        productCount: 156,
+        productCount: 3,
       },
       {
-        id: '3',
+        id: 'v3',
         merchantId: 'merch_ghi789',
-        merchantName: 'Uniform World',
+        userId: 'user_789',
+        username: 'school_uniforms',
+        merchantName: 'Uniforms Plus Ltd',
         businessName: 'School Uniforms',
         category: 'Clothing',
         logo: null,
-        status: 'suspended',
+        status: 'active',
         approvedAt: '2024-01-05T10:00:00Z',
-        totalSales: 2500000,
+        totalSales: 3500000,
         transactionCount: 45,
-        productCount: 12,
+        productCount: 1,
       },
     ]);
     setLoading(false);
   }, []);
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
-
-    setSearching(true);
-    // TODO: Call API to search Peeap merchants
-    // GET /api/merchants/search?q={query}&category=education
-
-    // Mock results
-    setTimeout(() => {
-      setSearchResults([
-        {
-          id: 'merch_new1',
-          businessName: 'Tech Supplies Co',
-          category: 'Electronics',
-          logo: null,
-          isApproved: false,
-        },
-        {
-          id: 'merch_new2',
-          businessName: 'Healthy Snacks',
-          category: 'Food & Beverages',
-          logo: null,
-          isApproved: false,
-        },
-        {
-          id: 'merch_abc123',
-          businessName: 'Campus Canteen',
-          category: 'Food & Beverages',
-          logo: null,
-          isApproved: true,
-        },
-      ]);
-      setSearching(false);
-    }, 500);
+  const handleUserSelect = (user: SearchResult) => {
+    setSelectedUser(user);
+    setError(null);
   };
 
-  const handleApprove = async (merchantId: string) => {
-    // TODO: Call API to approve merchant
-    // POST /api/schools/{schoolId}/vendors
-    // { merchantId }
-    console.log('Approving merchant:', merchantId);
-    setShowSearchModal(false);
-    setSearchQuery('');
-    setSearchResults([]);
+  const handleAddVendor = async () => {
+    if (!selectedUser) return;
+
+    setAddingVendor(true);
+    setError(null);
+
+    try {
+      // TODO: Call API to add vendor
+      // POST /api/schools/{schoolId}/vendors
+      // { userId: selectedUser.id }
+
+      // The API will check if user is a merchant and return their business details
+      console.log('Adding vendor:', selectedUser);
+
+      // Mock success - in real implementation, API validates merchant status
+      const newVendor: ApprovedVendor = {
+        id: `new_${Date.now()}`,
+        merchantId: `merch_${selectedUser.id}`,
+        userId: selectedUser.id,
+        username: selectedUser.username,
+        merchantName: `${selectedUser.first_name} ${selectedUser.last_name}`,
+        businessName: selectedUser.username ? `@${selectedUser.username}'s Business` : 'New Vendor',
+        category: 'General',
+        logo: selectedUser.profile_picture,
+        status: 'active',
+        approvedAt: new Date().toISOString(),
+        totalSales: 0,
+        transactionCount: 0,
+        productCount: 0,
+      };
+
+      setVendors(prev => [...prev, newVendor]);
+      setShowAddModal(false);
+      setSelectedUser(null);
+
+    } catch (err: any) {
+      setError(err.message || 'Failed to add vendor');
+    } finally {
+      setAddingVendor(false);
+    }
   };
 
-  const handleSuspend = async (vendorId: string) => {
-    // TODO: Call API to suspend vendor
-    console.log('Suspending vendor:', vendorId);
+  const handleRemoveVendor = async (vendorId: string) => {
+    // TODO: Call API to remove vendor
+    // DELETE /api/schools/{schoolId}/vendors/{vendorId}
+    setVendors(prev => prev.filter(v => v.id !== vendorId));
+  };
+
+  const handleToggleStatus = async (vendorId: string) => {
+    // TODO: Call API to toggle vendor status
+    // PATCH /api/schools/{schoolId}/vendors/{vendorId}
+    setVendors(prev =>
+      prev.map(v =>
+        v.id === vendorId
+          ? { ...v, status: v.status === 'active' ? 'suspended' : 'active' }
+          : v
+      )
+    );
   };
 
   return (
@@ -153,11 +171,11 @@ export function SchoolVendorsPage() {
             </p>
           </div>
           <button
-            onClick={() => setShowSearchModal(true)}
+            onClick={() => setShowAddModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
-            <Search className="h-4 w-4" />
-            Find Merchant
+            <UserPlus className="h-4 w-4" />
+            Add Vendor
           </button>
         </div>
 
@@ -168,9 +186,8 @@ export function SchoolVendorsPage() {
             <div>
               <h3 className="font-medium text-blue-900 dark:text-blue-100">How Vendors Work</h3>
               <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-                Search for existing Peeap merchants and approve them to sell to your students.
-                Their products in the "Education" category will appear in your school shop.
-                Students can only purchase from approved vendors.
+                Search for Peeap merchants by @username, phone, or name. Once added, their
+                products will be available to your students. Only merchants (users with POS) can be vendors.
               </p>
             </div>
           </div>
@@ -229,41 +246,59 @@ export function SchoolVendorsPage() {
               <div className="p-6">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center">
+                    <div className="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center overflow-hidden">
                       {vendor.logo ? (
-                        <img src={vendor.logo} alt="" className="w-full h-full object-cover rounded-lg" />
+                        <img src={vendor.logo} alt="" className="w-full h-full object-cover" />
                       ) : (
                         <Store className="h-6 w-6 text-gray-400" />
                       )}
                     </div>
                     <div>
                       <h3 className="font-semibold text-gray-900 dark:text-white">{vendor.businessName}</h3>
-                      <p className="text-sm text-gray-500">{vendor.category}</p>
+                      {vendor.username && (
+                        <p className="text-sm text-blue-600 dark:text-blue-400">@{vendor.username}</p>
+                      )}
                     </div>
                   </div>
-                  <button className="p-1 text-gray-400 hover:text-gray-600">
-                    <MoreVertical className="h-4 w-4" />
-                  </button>
+                  <div className="relative group">
+                    <button className="p-1 text-gray-400 hover:text-gray-600">
+                      <MoreVertical className="h-4 w-4" />
+                    </button>
+                    <div className="absolute right-0 mt-1 w-32 bg-white dark:bg-gray-700 rounded-lg shadow-lg border border-gray-200 dark:border-gray-600 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+                      <button
+                        onClick={() => handleToggleStatus(vendor.id)}
+                        className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-600"
+                      >
+                        {vendor.status === 'active' ? 'Suspend' : 'Activate'}
+                      </button>
+                      <button
+                        onClick={() => handleRemoveVendor(vendor.id)}
+                        className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                  by {vendor.merchantName}
-                </div>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                  {vendor.category} &bull; by {vendor.merchantName}
+                </p>
 
-                <div className="grid grid-cols-3 gap-2 text-center mb-4">
+                <div className="grid grid-cols-3 gap-2 text-center">
                   <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
                     <p className="text-lg font-semibold text-gray-900 dark:text-white">{vendor.productCount}</p>
                     <p className="text-xs text-gray-500">Products</p>
                   </div>
                   <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
                     <p className="text-lg font-semibold text-gray-900 dark:text-white">{vendor.transactionCount}</p>
-                    <p className="text-xs text-gray-500">Orders</p>
+                    <p className="text-xs text-gray-500">Sales</p>
                   </div>
                   <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
                     <p className="text-lg font-semibold text-gray-900 dark:text-white">
                       {(vendor.totalSales / 100 / 1000).toFixed(0)}K
                     </p>
-                    <p className="text-xs text-gray-500">Sales</p>
+                    <p className="text-xs text-gray-500">Revenue</p>
                   </div>
                 </div>
               </div>
@@ -280,7 +315,10 @@ export function SchoolVendorsPage() {
                     Suspended
                   </span>
                 )}
-                <button className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                <button
+                  onClick={() => navigate(`/school/shop?vendorId=${vendor.id}`)}
+                  className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                >
                   View Products
                   <ExternalLink className="h-3 w-3" />
                 </button>
@@ -295,29 +333,29 @@ export function SchoolVendorsPage() {
             <Store className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
             <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No vendors yet</h3>
             <p className="text-gray-500 dark:text-gray-400 mb-4">
-              Search for Peeap merchants and approve them to sell to your students
+              Add Peeap merchants as vendors to let them sell to your students
             </p>
             <button
-              onClick={() => setShowSearchModal(true)}
+              onClick={() => setShowAddModal(true)}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
-              Find Merchant
+              Add Vendor
             </button>
           </div>
         )}
       </div>
 
-      {/* Search Modal */}
-      {showSearchModal && (
+      {/* Add Vendor Modal */}
+      {showAddModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-lg w-full">
             <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Find Peeap Merchant</h2>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add Vendor</h2>
               <button
                 onClick={() => {
-                  setShowSearchModal(false);
-                  setSearchQuery('');
-                  setSearchResults([]);
+                  setShowAddModal(false);
+                  setSelectedUser(null);
+                  setError(null);
                 }}
                 className="p-1 text-gray-400 hover:text-gray-600"
               >
@@ -325,65 +363,80 @@ export function SchoolVendorsPage() {
               </button>
             </div>
 
-            <div className="p-4">
-              <div className="flex gap-2 mb-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                    placeholder="Search by business name..."
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  />
-                </div>
-                <button
-                  onClick={handleSearch}
-                  disabled={searching}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {searching ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Search'}
-                </button>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Search Peeap User
+                </label>
+                <UserSearch
+                  onSelect={handleUserSelect}
+                  placeholder="Search by @username, phone, or name..."
+                  autoFocus
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Only users with merchant accounts can be added as vendors
+                </p>
               </div>
 
-              <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                {searchResults.map((result) => (
-                  <div
-                    key={result.id}
-                    className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-gray-200 dark:bg-gray-600 rounded-lg flex items-center justify-center">
-                        <Store className="h-5 w-5 text-gray-400" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-900 dark:text-white">{result.businessName}</p>
-                        <p className="text-sm text-gray-500">{result.category}</p>
-                      </div>
-                    </div>
-                    {result.isApproved ? (
-                      <span className="text-sm text-green-600 dark:text-green-400 flex items-center gap-1">
-                        <CheckCircle className="h-4 w-4" />
-                        Approved
-                      </span>
+              {/* Selected User Preview */}
+              {selectedUser && (
+                <div className="p-4 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-center gap-3">
+                    {selectedUser.profile_picture ? (
+                      <img
+                        src={selectedUser.profile_picture}
+                        alt=""
+                        className="w-12 h-12 rounded-full object-cover"
+                      />
                     ) : (
-                      <button
-                        onClick={() => handleApprove(result.id)}
-                        className="px-3 py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                      >
-                        Approve
-                      </button>
+                      <div className="w-12 h-12 bg-blue-100 dark:bg-blue-800 rounded-full flex items-center justify-center">
+                        <span className="text-blue-700 dark:text-blue-300 font-medium">
+                          {selectedUser.first_name?.charAt(0)}{selectedUser.last_name?.charAt(0)}
+                        </span>
+                      </div>
                     )}
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        {selectedUser.first_name} {selectedUser.last_name}
+                      </p>
+                      {selectedUser.username && (
+                        <p className="text-sm text-blue-600 dark:text-blue-400">@{selectedUser.username}</p>
+                      )}
+                      {selectedUser.phone && (
+                        <p className="text-sm text-gray-500">{selectedUser.phone}</p>
+                      )}
+                    </div>
                   </div>
-                ))}
+                </div>
+              )}
 
-                {searchResults.length === 0 && searchQuery && !searching && (
-                  <div className="text-center py-8 text-gray-500">
-                    No merchants found for "{searchQuery}"
-                  </div>
-                )}
-              </div>
+              {/* Error Message */}
+              {error && (
+                <div className="p-3 bg-red-50 dark:bg-red-900/30 rounded-lg border border-red-200 dark:border-red-800 flex items-center gap-2 text-red-700 dark:text-red-400">
+                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                  <p className="text-sm">{error}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowAddModal(false);
+                  setSelectedUser(null);
+                  setError(null);
+                }}
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddVendor}
+                disabled={!selectedUser || addingVendor}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {addingVendor ? 'Adding...' : 'Add as Vendor'}
+              </button>
             </div>
           </div>
         </div>

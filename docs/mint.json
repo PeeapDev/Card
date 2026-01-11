@@ -101,6 +101,17 @@
             "api-reference/transactions/get",
             "api-reference/transactions/authorize"
           ]
+        },
+        {
+          "group": "Schools",
+          "pages": [
+            "api-reference/schools/overview",
+            "api-reference/schools/students",
+            "api-reference/schools/vendors",
+            "api-reference/schools/products",
+            "api-reference/schools/payments",
+            "api-reference/schools/peeap-integration"
+          ]
         }
       ]
     },

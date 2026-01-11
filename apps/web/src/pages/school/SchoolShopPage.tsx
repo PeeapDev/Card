@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { SchoolLayout } from '@/components/school';
 import {
   ShoppingBag,
@@ -35,12 +36,25 @@ interface Vendor {
 }
 
 export function SchoolShopPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [products, setProducts] = useState<Product[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [selectedVendor, setSelectedVendor] = useState<string>('all');
+  const [selectedVendor, setSelectedVendor] = useState<string>(searchParams.get('vendorId') || 'all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'visible' | 'blocked'>('all');
+
+  // Update URL when vendor filter changes
+  const handleVendorChange = (vendorId: string) => {
+    setSelectedVendor(vendorId);
+    if (vendorId === 'all') {
+      searchParams.delete('vendorId');
+    } else {
+      searchParams.set('vendorId', vendorId);
+    }
+    setSearchParams(searchParams);
+  };
 
   useEffect(() => {
     // TODO: Fetch from API - GET /api/schools/{schoolId}/products
@@ -241,7 +255,7 @@ export function SchoolShopPage() {
             <div className="relative">
               <select
                 value={selectedVendor}
-                onChange={(e) => setSelectedVendor(e.target.value)}
+                onChange={(e) => handleVendorChange(e.target.value)}
                 className="appearance-none pl-4 pr-10 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
               >
                 <option value="all">All Vendors</option>
