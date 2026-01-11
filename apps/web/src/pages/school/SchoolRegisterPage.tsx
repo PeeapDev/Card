@@ -51,7 +51,7 @@ export function SchoolRegisterPage() {
         firstName: formData.adminName.split(' ')[0],
         lastName: formData.adminName.split(' ').slice(1).join(' ') || '',
         phone: formData.phone,
-        roles: ['user', 'school_admin'],
+        role: 'school_admin',
       });
 
       // Show success with integration instructions

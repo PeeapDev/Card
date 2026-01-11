@@ -50,7 +50,7 @@ export interface RegisterRequest {
   firstName: string;
   lastName: string;
   phone?: string;
-  role?: 'user' | 'merchant' | 'agent';
+  role?: 'user' | 'merchant' | 'agent' | 'school_admin';
 }
 
 export interface Wallet {
