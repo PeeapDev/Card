@@ -600,6 +600,25 @@ After student connects via SSO:
 
 ---
 
+## OAuth Endpoints (Live)
+
+| Endpoint | Method | URL |
+|----------|--------|-----|
+| Authorization | GET | `https://my.peeap.com/auth/authorize` |
+| Token Exchange | POST | `https://my.peeap.com/api/oauth/token` |
+| User Info | GET | `https://my.peeap.com/api/oauth/userinfo` |
+| Revoke Token | POST | `https://my.peeap.com/api/oauth/revoke` |
+
+### OAuth Client ID
+
+```
+client_id: school_saas
+```
+
+The `client_secret` will be provided separately via secure channel.
+
+---
+
 ## Support
 
 - **School Support:** schools@peeap.com
