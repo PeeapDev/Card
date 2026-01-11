@@ -89,11 +89,37 @@ This section explains how to implement the Peeap Pay gateway option in the Schoo
 
 | Button | URL / Action |
 |--------|--------------|
-| **Register on Peeap** | `https://school.peeap.com/school/register` (opens in new tab) |
+| **Register on Peeap** | `https://my.peeap.com/register?redirect={school.peeap.com/school/register?return_url=...}` |
 | **Connect with Peeap** | OAuth SSO flow (see PHP code below) |
 | **Access Dashboard** | `https://school.peeap.com/school/login?quick_access=true&user_id={peeap_user_id}` |
 | **Sync Now** | Call internal sync API |
 | **Disconnect** | Revoke tokens, clear `peeap_*` fields |
+
+### Registration Flow
+
+```
+┌─────────────────────────┐     ┌─────────────────────────┐     ┌─────────────────────────┐
+│   SCHOOL SAAS           │     │      MY.PEEAP.COM       │     │   SCHOOL.PEEAP.COM      │
+│   (gov.school.edu.sl)   │     │   (Registration/Login)  │     │   (Setup Wizard)        │
+│                         │     │                         │     │                         │
+│   [Register on Peeap]   │────▶│   Create Account        │────▶│   Setup Wizard          │
+│                         │     │   or Login              │     │   (Create PIN, etc)     │
+│                         │     │                         │     │                         │
+│                         │◀────────────────────────────────────│   [Return to School]    │
+│   ?registered=true      │     │                         │     │                         │
+└─────────────────────────┘     └─────────────────────────┘     └─────────────────────────┘
+```
+
+**PHP Code for Register Button:**
+```php
+// Build the registration URL
+$return_url = 'https://' . $_SERVER['HTTP_HOST'] . '/settings/payment?registered=true';
+$school_redirect = 'https://school.peeap.com/school/register?return_url=' . urlencode($return_url);
+$register_url = 'https://my.peeap.com/register?redirect=' . urlencode($school_redirect);
+
+// In your HTML/Blade template:
+// <a href="<?= $register_url ?>" target="_blank">Register on Peeap</a>
+```
 
 ### PHP Implementation for "Connect with Peeap" Button
 
@@ -233,15 +259,12 @@ function exchangeCodeForTokens($code) {
 
 ### Mark School as Registered
 
-When admin clicks "Register on Peeap" and completes registration, they should return to the School SaaS. You can:
+When admin clicks "Register on Peeap", they go through this flow:
+1. `my.peeap.com/register` - Create Peeap account (or login if exists)
+2. `school.peeap.com/school/register` - Setup wizard (create PIN, etc)
+3. Return to School SaaS with `?registered=true`
 
-**Option A:** Add a return URL parameter
-```php
-$register_url = 'https://school.peeap.com/school/register?return_url=' .
-    urlencode('https://' . $_SERVER['HTTP_HOST'] . '/settings/payment?registered=true');
-```
-
-**Option B:** Just let them manually return after registration and use the "Connect" button.
+The return URL is passed through the entire chain automatically.
 
 ---
 
