@@ -33,27 +33,14 @@ INSERT INTO oauth_clients (
   'https://gov.school.edu.sl/logo.png',
   'https://gov.school.edu.sl',
   ARRAY[
-    -- Production redirect URIs (wildcard pattern handled in code)
+    -- Wildcard patterns for all schools (*.gov.school.edu.sl)
     'https://*.gov.school.edu.sl/peeap/callback',
     'https://*.gov.school.edu.sl/peeap/student-callback',
     'https://*.gov.school.edu.sl/peeap-settings/callback',
     'https://*.gov.school.edu.sl/peeap-settings/student-callback',
-    -- Allow any subdomain callback
-    'https://ses.gov.school.edu.sl/peeap/callback',
-    'https://ses.gov.school.edu.sl/peeap/student-callback',
-    'https://ses.gov.school.edu.sl/peeap-settings/callback',
-    'https://ses.gov.school.edu.sl/peeap-settings/student-callback',
-    'https://fyp.gov.school.edu.sl/peeap/callback',
-    'https://fyp.gov.school.edu.sl/peeap/student-callback',
-    'https://fyp.gov.school.edu.sl/peeap-settings/callback',
-    'https://fyp.gov.school.edu.sl/peeap-settings/student-callback',
     -- Development/testing
     'http://localhost:8000/peeap/callback',
-    'http://localhost:8000/peeap/student-callback',
-    'http://localhost:8000/peeap-settings/callback',
-    'http://127.0.0.1:8000/peeap/callback',
-    'http://127.0.0.1:8000/peeap/student-callback',
-    'http://127.0.0.1:8000/peeap-settings/callback'
+    'http://localhost:8000/peeap-settings/callback'
   ],
   ARRAY[
     'profile',

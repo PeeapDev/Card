@@ -431,8 +431,24 @@ export const ssoService = {
 
     const client = clients[0] as OAuthClient;
 
-    // Validate redirect URI
-    if (!client.redirect_uris.includes(redirectUri)) {
+    // Validate redirect URI (supports wildcards like https://*.domain.com/path)
+    const isValidRedirectUri = client.redirect_uris.some(allowedUri => {
+      // Exact match
+      if (allowedUri === redirectUri) return true;
+
+      // Wildcard match (e.g., https://*.gov.school.edu.sl/peeap-settings/callback)
+      if (allowedUri.includes('*')) {
+        const pattern = allowedUri
+          .replace(/[.+?^${}()|[\]\\]/g, '\\$&') // Escape regex special chars
+          .replace(/\*/g, '[a-zA-Z0-9-]+');       // Replace * with subdomain pattern
+        const regex = new RegExp(`^${pattern}$`);
+        return regex.test(redirectUri);
+      }
+
+      return false;
+    });
+
+    if (!isValidRedirectUri) {
       return { valid: false, error: 'Invalid redirect URI' };
     }
 
