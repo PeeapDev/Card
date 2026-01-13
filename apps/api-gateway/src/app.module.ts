@@ -15,6 +15,7 @@ import { PaymentSessionModule } from './modules/payment-session/payment-session.
 import { P2PTransferModule } from './modules/p2p-transfer/p2p-transfer.module';
 import { CheckoutModule } from './modules/checkout/checkout.module';
 import { PaymentIntentsModule } from './modules/payment-intents/payment-intents.module';
+import { SchoolModule } from './modules/school/school.module';
 import { LoggingInterceptor } from './interceptors/logging.interceptor';
 import { HttpExceptionFilter } from './filters/http-exception.filter';
 import { RequestIdMiddleware } from './middleware/request-id.middleware';
@@ -67,6 +68,9 @@ import { CorrelationIdMiddleware } from './middleware/correlation-id.middleware'
     P2PTransferModule,
     CheckoutModule,
     PaymentIntentsModule,
+
+    // School Integration module
+    SchoolModule,
   ],
   providers: [
     {

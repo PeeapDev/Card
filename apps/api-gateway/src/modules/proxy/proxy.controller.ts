@@ -16,7 +16,7 @@ import { ApiKeyGuard } from '../auth/guards/api-key.guard';
 import { Public } from '../auth/decorators/public.decorator';
 
 // Routes that should not be proxied (handled by other controllers)
-const SKIP_ROUTES = ['health', 'docs'];
+const SKIP_ROUTES = ['health', 'docs', 'oauth', 'school', 'payments'];
 
 // Route mapping configuration
 const SERVICE_ROUTES: Record<string, { service: string; requiresAuth: boolean }> = {
