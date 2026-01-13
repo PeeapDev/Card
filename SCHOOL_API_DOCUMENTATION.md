@@ -256,7 +256,7 @@ function exchangeCodeForTokens($code) {
             'grant_type' => 'authorization_code',
             'code' => $code,
             'client_id' => 'school_saas',
-            'client_secret' => PEEAP_CLIENT_SECRET, // From config
+            'client_secret' => PEEAP_CLIENT_SECRET // = 'peeap_school_integration_2024_sl', // From config
             'redirect_uri' => 'https://' . $_SERVER['HTTP_HOST'] . '/peeap/callback'
         ])
     ]);
@@ -430,7 +430,7 @@ function exchangeCodeForTokens($code) {
             'grant_type' => 'authorization_code',
             'code' => $code,
             'client_id' => 'school_saas',
-            'client_secret' => PEEAP_CLIENT_SECRET,  // Server-side only, from config
+            'client_secret' => PEEAP_CLIENT_SECRET // = 'peeap_school_integration_2024_sl',  // Server-side only, from config
             'redirect_uri' => 'https://' . $_SERVER['HTTP_HOST'] . '/peeap/callback'
         ])
     ]);
@@ -609,7 +609,7 @@ function refreshAccessToken($school_id) {
             'grant_type' => 'refresh_token',
             'refresh_token' => $school['peeap_refresh_token'],
             'client_id' => 'school_saas',
-            'client_secret' => PEEAP_CLIENT_SECRET
+            'client_secret' => PEEAP_CLIENT_SECRET // = 'peeap_school_integration_2024_sl'
         ])
     ]);
 
@@ -984,13 +984,14 @@ If you get errors when exchanging the code for tokens:
 
 > **Note:** Authorization happens on `my.peeap.com` (user-facing), but API calls go to `api.peeap.com`.
 
-### OAuth Client ID
+### OAuth Client Credentials
 
 ```
 client_id: school_saas
+client_secret: peeap_school_integration_2024_sl
 ```
 
-The `client_secret` will be provided separately via secure channel.
+> **Note:** This is a fixed secret for internal integration. Do not share outside the organization.
 
 ---
 
