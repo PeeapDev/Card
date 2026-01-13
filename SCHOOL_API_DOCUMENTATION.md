@@ -144,6 +144,11 @@ function getPeeapConnectionState($school_id) {
 
 // Handle "Connect with Peeap" button click
 function initiatePeeapConnection() {
+    // Configure session for cross-domain compatibility
+    ini_set('session.cookie_samesite', 'Lax');
+    ini_set('session.cookie_secure', '1');
+    session_start();
+
     $state = bin2hex(random_bytes(32));
     $_SESSION['peeap_oauth_state'] = $state;
 
@@ -187,12 +192,18 @@ CREATE INDEX idx_schools_peeap ON schools(peeap_school_id);
 <?php
 // /peeap/callback.php
 
+// IMPORTANT: Configure session BEFORE session_start() to prevent CSRF issues
+ini_set('session.cookie_samesite', 'Lax');
+ini_set('session.cookie_secure', '1');
 session_start();
 
 // 1. Verify state (CSRF protection)
-if ($_GET['state'] !== $_SESSION['peeap_oauth_state']) {
+if (!isset($_GET['state']) || !isset($_SESSION['peeap_oauth_state']) ||
+    $_GET['state'] !== $_SESSION['peeap_oauth_state']) {
     die('Invalid state - security error');
 }
+// Clear the state after validation (one-time use)
+unset($_SESSION['peeap_oauth_state']);
 
 // 2. Check for errors
 if (isset($_GET['error'])) {
@@ -236,7 +247,7 @@ $db->query("
 header('Location: /settings/payment?peeap_connected=true');
 
 function exchangeCodeForTokens($code) {
-    $ch = curl_init('https://my.peeap.com/api/oauth/token');
+    $ch = curl_init('https://api.peeap.com/api/oauth/token');
     curl_setopt_array($ch, [
         CURLOPT_POST => true,
         CURLOPT_RETURNTRANSFER => true,
@@ -251,9 +262,17 @@ function exchangeCodeForTokens($code) {
     ]);
 
     $response = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    return json_decode($response, true);
+    $data = json_decode($response, true);
+
+    // Handle HTTP errors
+    if ($http_code !== 200) {
+        return ['error' => $data['error_description'] ?? $data['error'] ?? 'Token exchange failed'];
+    }
+
+    return $data;
 }
 ```
 
@@ -319,29 +338,29 @@ We use the **Authorization Code Flow** for security - tokens are never exposed i
        │                                                   │
        │  1. User clicks "Sign in with Peeap"              │
        │──────────────────────────────────────────────────▶│
-       │     GET /oauth/authorize                          │
+       │     GET https://my.peeap.com/auth/authorize       │
        │     ?response_type=code                           │
        │     &client_id=school_saas                        │
-       │     &redirect_uri=https://xxx.gov.school.edu.sl/callback
+       │     &redirect_uri=https://xxx.gov.school.edu.sl/peeap/callback
        │     &scope=wallet:read wallet:write               │
        │     &state={random_csrf_token}                    │
        │                                                   │
-       │  2. User logs in / creates account                │
+       │  2. User logs in / creates account on Peeap       │
        │                                                   │
        │  3. Peeap redirects back with authorization code  │
        │◀──────────────────────────────────────────────────│
-       │     GET /callback                                 │
+       │     GET /peeap/callback                           │
        │     ?code={authorization_code}                    │
        │     &state={random_csrf_token}                    │
        │                                                   │
        │  4. School exchanges code for tokens (server-side)│
        │──────────────────────────────────────────────────▶│
-       │     POST /oauth/token                             │
-       │     {code, client_secret, redirect_uri}           │
+       │     POST https://api.peeap.com/api/oauth/token    │
+       │     {code, client_id, client_secret, redirect_uri}│
        │                                                   │
        │  5. Peeap returns tokens + user data              │
        │◀──────────────────────────────────────────────────│
-       │     {access_token, refresh_token, user_data}      │
+       │     {access_token, refresh_token, user, wallet}   │
        │                                                   │
 ```
 
@@ -402,13 +421,22 @@ function handlePeeapCallback() {
 
 ```php
 function exchangeCodeForTokens($code) {
-    $response = http_post('https://my.peeap.com/api/oauth/token', [
-        'grant_type' => 'authorization_code',
-        'code' => $code,
-        'client_id' => 'school_saas',
-        'client_secret' => PEEAP_INTERNAL_SECRET,  // Server-side only
-        'redirect_uri' => 'https://' . $_SERVER['HTTP_HOST'] . '/peeap/callback'
+    $ch = curl_init('https://api.peeap.com/api/oauth/token');
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+        CURLOPT_POSTFIELDS => json_encode([
+            'grant_type' => 'authorization_code',
+            'code' => $code,
+            'client_id' => 'school_saas',
+            'client_secret' => PEEAP_CLIENT_SECRET,  // Server-side only, from config
+            'redirect_uri' => 'https://' . $_SERVER['HTTP_HOST'] . '/peeap/callback'
+        ])
     ]);
+
+    $response = curl_exec($ch);
+    curl_close($ch);
 
     return json_decode($response, true);
 }
@@ -418,13 +446,20 @@ function exchangeCodeForTokens($code) {
 
 ```json
 {
-  "access_token": "eyJhbGciOiJSUzI1NiIs...",
-  "refresh_token": "dGhpcyBpcyBhIHJlZnJl...",
+  "access_token": "ABC123xyz...",
+  "refresh_token": "DEF456abc...",
   "token_type": "Bearer",
   "expires_in": 3600,
   "scope": "school:connect school:manage",
+  "user": {
+    "peeap_id": "usr_admin456",
+    "email": "admin@ses.gov.school.edu.sl",
+    "phone": "+23276123456",
+    "name": "John Admin",
+    "is_new_account": false
+  },
   "school_connection": {
-    "peeap_school_id": "sch_abc123",
+    "peeap_school_id": "sch_abc12345",
     "connected_by": {
       "peeap_id": "usr_admin456",
       "email": "admin@ses.gov.school.edu.sl",
@@ -459,6 +494,11 @@ Students create/link their Peeap wallet:
 
 ```php
 // Student clicks "Sign in with Peeap"
+// Configure session for cross-domain compatibility
+ini_set('session.cookie_samesite', 'Lax');
+ini_set('session.cookie_secure', '1');
+session_start();
+
 $state = bin2hex(random_bytes(32));
 $_SESSION['oauth_state'] = $state;
 $_SESSION['linking_student_id'] = $current_student_id;
@@ -560,14 +600,28 @@ WHERE id = 45;
 function refreshAccessToken($school_id) {
     $school = getSchool($school_id);
 
-    $response = http_post('https://my.peeap.com/api/oauth/token', [
-        'grant_type' => 'refresh_token',
-        'refresh_token' => $school['peeap_refresh_token'],
-        'client_id' => 'school_saas',
-        'client_secret' => PEEAP_INTERNAL_SECRET
+    $ch = curl_init('https://api.peeap.com/api/oauth/token');
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+        CURLOPT_POSTFIELDS => json_encode([
+            'grant_type' => 'refresh_token',
+            'refresh_token' => $school['peeap_refresh_token'],
+            'client_id' => 'school_saas',
+            'client_secret' => PEEAP_CLIENT_SECRET
+        ])
     ]);
 
+    $response = curl_exec($ch);
+    curl_close($ch);
+
     $tokens = json_decode($response, true);
+
+    if (isset($tokens['error'])) {
+        // Handle refresh failure - user may need to re-authenticate
+        throw new Exception('Token refresh failed: ' . $tokens['error']);
+    }
 
     // Update stored tokens
     updateSchoolTokens($school_id, $tokens);
@@ -866,14 +920,69 @@ After student connects via SSO:
 
 ---
 
+## Troubleshooting
+
+### "Invalid state" or CSRF Errors
+
+If you see "Invalid state - security error" after OAuth redirect, the PHP session is being lost. This is the most common integration issue.
+
+**Causes:**
+1. Session cookies not persisting across cross-domain redirect
+2. `session_start()` called after output or with wrong settings
+3. Load balancer routing to different servers with separate session storage
+
+**Fix:**
+
+```php
+// At the VERY TOP of your PHP files (before ANY output)
+// In both the initiate file AND callback file:
+
+ini_set('session.cookie_samesite', 'Lax');  // Allow cross-site in Lax mode
+ini_set('session.cookie_secure', '1');       // HTTPS only
+ini_set('session.cookie_httponly', '1');     // Prevent XSS
+session_start();
+```
+
+**Alternative: Use Database/Redis for State Storage**
+
+If session issues persist, store the state in database instead:
+
+```php
+// When initiating OAuth:
+$state = bin2hex(random_bytes(32));
+$db->query("INSERT INTO oauth_states (state, school_id, created_at) VALUES (?, ?, NOW())",
+    [$state, getCurrentSchoolId()]);
+
+// In callback:
+$result = $db->query("SELECT * FROM oauth_states WHERE state = ? AND created_at > NOW() - INTERVAL 10 MINUTE",
+    [$_GET['state']]);
+if (!$result) {
+    die('Invalid or expired state');
+}
+$db->query("DELETE FROM oauth_states WHERE state = ?", [$_GET['state']]);
+```
+
+### Token Exchange Fails
+
+If you get errors when exchanging the code for tokens:
+
+1. **Check `redirect_uri` matches exactly** - Must be identical in both authorization request and token exchange
+2. **Check `client_secret`** - Ensure it's correct and not URL-encoded
+3. **Code already used** - Authorization codes are single-use, don't retry
+4. **Code expired** - Codes expire after 10 minutes
+
+---
+
 ## OAuth Endpoints (Live)
 
 | Endpoint | Method | URL |
 |----------|--------|-----|
 | Authorization | GET | `https://my.peeap.com/auth/authorize` |
-| Token Exchange | POST | `https://my.peeap.com/api/oauth/token` |
-| User Info | GET | `https://my.peeap.com/api/oauth/userinfo` |
-| Revoke Token | POST | `https://my.peeap.com/api/oauth/revoke` |
+| Token Exchange | POST | `https://api.peeap.com/api/oauth/token` |
+| User Info | GET | `https://api.peeap.com/api/oauth/userinfo` |
+| Revoke Token | POST | `https://api.peeap.com/api/oauth/revoke` |
+
+> **Note:** Authorization happens on `my.peeap.com` (user-facing), but API calls go to `api.peeap.com`.
 
 ### OAuth Client ID
 
