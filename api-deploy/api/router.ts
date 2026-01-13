@@ -6,25 +6,6 @@ import { sendEmailWithConfig, SmtpConfig } from './services/email';
 import { sendNotification, storeNotification, getNotificationHistory, getUsersWithTokens, getTokenStats, SendNotificationRequest } from './services/push-notification';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-// Public API handlers for third-party integrations
-import {
-  handlePosProducts,
-  handlePosProductById,
-  handlePosCategories,
-  handlePosCategoryById,
-  handlePosSales,
-  handlePosSaleById,
-  handlePosSaleVoid,
-  handlePosInventory,
-  handlePosInventoryAdjust,
-  handleInvoices,
-  handleInvoiceById,
-  handleInvoiceSend,
-  handleEvents,
-  handleEventById,
-  handleEventTickets,
-  handleEventTicketScan,
-} from './handlers/public-api';
 
 const supabaseUrl = process.env.SUPABASE_URL || 'https://akiecgwcxadcpqlvntmf.supabase.co';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFraWVjZ3djeGFkY3BxbHZudG1mIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDI4MzMzMiwiZXhwIjoyMDc5ODU5MzMyfQ.q8R8t_aHiMReEIpeJIV-m0RCEA-n0_RDOtTX8bLJgYs';
@@ -33,103 +14,6 @@ const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsIn
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const supabaseAnon = createClient(supabaseUrl, supabaseAnonKey);
 const SETTINGS_ID = '00000000-0000-0000-0000-000000000001';
-
-// ============================================================================
-// IN-MEMORY CACHE - Reduces database calls for frequently accessed data
-// ============================================================================
-interface CacheEntry<T> {
-  data: T;
-  expiry: number;
-}
-
-const cache = new Map<string, CacheEntry<any>>();
-
-function getCached<T>(key: string): T | null {
-  const entry = cache.get(key);
-  if (!entry) return null;
-  if (Date.now() > entry.expiry) {
-    cache.delete(key);
-    return null;
-  }
-  return entry.data as T;
-}
-
-function setCache<T>(key: string, data: T, ttlSeconds: number): void {
-  cache.set(key, {
-    data,
-    expiry: Date.now() + (ttlSeconds * 1000),
-  });
-}
-
-// Cache TTLs in seconds
-const CACHE_TTL = {
-  SETTINGS: 300,      // 5 minutes - settings rarely change
-  BANKS: 3600,        // 1 hour - bank list rarely changes
-  PROVIDERS: 3600,    // 1 hour - mobile money providers rarely change
-  FLOAT_SUMMARY: 60,  // 1 minute - float data updates frequently
-  FLOAT_TODAY: 30,    // 30 seconds - today's movements update frequently
-  MONIME_BALANCE: 60, // 1 minute - balance updates with transactions
-};
-
-// ============================================================================
-// FEE CALCULATION HELPERS - Monime charges 1.5% on mobile money transactions
-// ============================================================================
-interface FeeBreakdown {
-  grossAmount: number;      // What customer paid
-  monimeFeePercent: number; // Monime's fee percentage (default 1.5%)
-  monimeFee: number;        // Monime's cut
-  peeapFeePercent: number;  // Platform fee percentage
-  peeapFeeFlat: number;     // Platform flat fee
-  peeapFee: number;         // Platform's profit
-  totalFees: number;        // Total fees deducted
-  netAmount: number;        // What gets credited to wallet
-  floatAmount: number;      // What actually comes into our float (after Monime)
-}
-
-/**
- * Calculate fees for mobile money transactions
- * Monime charges their fee on the gross amount before we receive it
- * We optionally charge our platform fee on top
- */
-async function calculateMobileMoneyFees(grossAmount: number, applyPlatformFee: boolean = false): Promise<FeeBreakdown> {
-  // Get fee settings from database
-  const { data: feeSettings } = await supabase
-    .from('payment_settings')
-    .select('gateway_deposit_fee_percent, deposit_fee_percent, deposit_fee_flat, checkout_fee_percent, checkout_fee_flat')
-    .eq('id', SETTINGS_ID)
-    .single();
-
-  // Monime (gateway) fee - defaults to 1.5%
-  const monimeFeePercent = parseFloat(feeSettings?.gateway_deposit_fee_percent?.toString() || '1.5');
-  const monimeFee = grossAmount * (monimeFeePercent / 100);
-
-  // Platform fee (Peeap's profit) - only applied if requested
-  let peeapFeePercent = 0;
-  let peeapFeeFlat = 0;
-  let peeapFee = 0;
-
-  if (applyPlatformFee) {
-    peeapFeePercent = parseFloat(feeSettings?.deposit_fee_percent?.toString() || '0');
-    peeapFeeFlat = parseFloat(feeSettings?.deposit_fee_flat?.toString() || '0');
-    peeapFee = (grossAmount * (peeapFeePercent / 100)) + peeapFeeFlat;
-  }
-
-  const totalFees = monimeFee + peeapFee;
-  const netAmount = grossAmount - totalFees;
-  const floatAmount = grossAmount - monimeFee; // What we actually receive from Monime
-
-  return {
-    grossAmount,
-    monimeFeePercent,
-    monimeFee,
-    peeapFeePercent,
-    peeapFeeFlat,
-    peeapFee,
-    totalFees,
-    netAmount,
-    floatAmount,
-  };
-}
 
 /**
  * Unified API Router
@@ -143,7 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Always allow the requesting origin (or * if no origin header)
   res.setHeader('Access-Control-Allow-Origin', origin || '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Business-Id, X-Mode, X-User-Id, X-Requested-With, X-API-Key, Idempotency-Key');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Business-Id, X-Mode, X-User-Id, X-Requested-With');
   res.setHeader('Access-Control-Max-Age', '86400'); // Cache preflight for 24 hours
 
   // Only set credentials header if there's a specific origin (not wildcard)
@@ -158,12 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const url = new URL(req.url || '', `http://${req.headers.host}`);
-    // Handle various URL prefixes: /api/router/*, /api/*, /router/*, or just /*
-    const path = url.pathname
-      .replace('/api/router', '')
-      .replace('/api', '')
-      .replace(/^\/router/, '')  // Handle /router/checkout/sessions from api.peeap.com
-      .replace(/^\//, '');
+    const path = url.pathname.replace('/api/router', '').replace('/api', '').replace(/^\//, '');
 
     console.log('[Router] Path:', path, 'Method:', req.method);
 
@@ -177,13 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         endpoints: {
           checkout: '/api/checkout/*',
           payments: '/api/payments/*',
-          webhooks: '/api/webhooks/*',
-          public_api: {
-            pos: '/api/v1/pos/*',
-            invoices: '/api/v1/invoices/*',
-            events: '/api/v1/events/*',
-            authentication: 'Use X-API-Key header or Authorization: Bearer sk_*'
-          }
+          webhooks: '/api/webhooks/*'
         }
       });
     }
@@ -223,7 +96,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handlePaymentsInitialize(req, res);
     } else if (path.match(/^payments\/[^/]+$/)) {
       return await handlePaymentsId(req, res);
-    } else if (path === 'monime/deposit' || path === 'monime/deposit/') {
+    } else if (path.startsWith('monime/deposit')) {
       return await handleMonimeDeposit(req, res);
     } else if (path === 'checkout/quick' || path.startsWith('checkout/quick')) {
       return await handleCheckoutQuick(req, res);
@@ -284,13 +157,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleMonimeSetupWebhook(req, res);
     } else if (path === 'monime/balance' || path === 'monime/balance/') {
       return await handleMonimeBalance(req, res);
-    } else if (path === 'monime/banks' || path === 'monime/banks/') {
-      // Alias for /payouts/banks - for backwards compatibility with bankAccountService
-      return await handlePayoutBanks(req, res);
-    } else if (path === 'monime/deposits' || path === 'monime/deposits/') {
-      return await handleMonimeDeposits(req, res);
-    } else if (path === 'merchant/transactions' || path === 'merchant/transactions/') {
-      return await handleMerchantTransactions(req, res);
     } else if (path === 'float/summary' || path === 'float/summary/') {
       return await handleFloatSummary(req, res);
     } else if (path === 'float/today' || path === 'float/today/') {
@@ -312,6 +178,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } else if (path.match(/^payouts\/[^/]+$/) && !path.includes('/user/') && !path.includes('/merchant/') && !path.includes('/banks')) {
       const payoutId = path.split('/')[1];
       return await handlePayoutById(req, res, payoutId);
+    } else if (path === 'auth/verify-pin' || path === 'auth/verify-pin/') {
+      return await handleAuthVerifyPin(req, res);
+    } else if (path === 'auth/sso/exchange' || path === 'auth/sso/exchange/') {
+      return await handleSsoExchange(req, res);
     } else if (path === 'oauth/token' || path === 'oauth/token/') {
       return await handleOAuthToken(req, res);
     } else if (path === 'oauth/userinfo' || path === 'oauth/userinfo/') {
@@ -335,6 +205,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleSharedCheckoutCreate(req, res);
     } else if (path === 'shared/users/search' || path === 'shared/users/search/') {
       return await handleSharedUsersSearch(req, res);
+    // ========== CHAT WIDGET ENDPOINTS ==========
+    } else if (path === 'widget/session' || path === 'widget/session/') {
+      return await handleWidgetSession(req, res);
+    } else if (path === 'widget/session/validate' || path === 'widget/session/validate/') {
+      return await handleWidgetSessionValidate(req, res);
+    } else if (path === 'widget/users/search' || path === 'widget/users/search/') {
+      return await handleWidgetUsersSearch(req, res);
+    } else if (path.match(/^widget\/users\/[^/]+$/)) {
+      const userId = path.split('/')[2];
+      return await handleWidgetUserById(req, res, userId);
+    } else if (path === 'widget/conversations' || path === 'widget/conversations/') {
+      return await handleWidgetConversations(req, res);
+    } else if (path.match(/^widget\/conversations\/[^/]+$/)) {
+      const conversationId = path.split('/')[2];
+      return await handleWidgetConversationById(req, res, conversationId);
+    } else if (path.match(/^widget\/conversations\/[^/]+\/messages$/)) {
+      const conversationId = path.split('/')[2];
+      return await handleWidgetMessages(req, res, conversationId);
+    } else if (path.match(/^widget\/conversations\/[^/]+\/messages\/poll$/)) {
+      const conversationId = path.split('/')[2];
+      return await handleWidgetMessagesPoll(req, res, conversationId);
+    } else if (path.match(/^widget\/conversations\/[^/]+\/read$/)) {
+      const conversationId = path.split('/')[2];
+      return await handleWidgetMarkRead(req, res, conversationId);
+    } else if (path.match(/^widget\/conversations\/[^/]+\/typing$/)) {
+      const conversationId = path.split('/')[2];
+      return await handleWidgetTyping(req, res, conversationId);
+    } else if (path === 'widget/platforms' || path === 'widget/platforms/') {
+      return await handleWidgetPlatforms(req, res);
+    } else if (path === 'widget/upload' || path === 'widget/upload/') {
+      return await handleWidgetUpload(req, res);
     // ========== CRON ENDPOINTS ==========
     } else if (path === 'cron/keepalive' || path === 'cron/keepalive/') {
       return await handleCronKeepalive(req, res);
@@ -520,66 +421,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } else if (path.match(/^v1\/payment-intents\/[^/]+\/qr$/)) {
       const intentId = path.split('/')[2];
       return await handlePaymentIntentQr(req, res, intentId);
-    }
-
-    // ==================== PUBLIC API - Third Party Integration ====================
-    // POS Products
-    else if (path === 'v1/pos/products' || path === 'v1/pos/products/') {
-      return await handlePosProducts(req, res);
-    } else if (path.match(/^v1\/pos\/products\/[^/]+$/)) {
-      const productId = path.split('/')[3];
-      return await handlePosProductById(req, res, productId);
-    }
-    // POS Categories
-    else if (path === 'v1/pos/categories' || path === 'v1/pos/categories/') {
-      return await handlePosCategories(req, res);
-    } else if (path.match(/^v1\/pos\/categories\/[^/]+$/)) {
-      const categoryId = path.split('/')[3];
-      return await handlePosCategoryById(req, res, categoryId);
-    }
-    // POS Sales
-    else if (path === 'v1/pos/sales' || path === 'v1/pos/sales/') {
-      return await handlePosSales(req, res);
-    } else if (path.match(/^v1\/pos\/sales\/[^/]+\/void$/)) {
-      const saleId = path.split('/')[3];
-      return await handlePosSaleVoid(req, res, saleId);
-    } else if (path.match(/^v1\/pos\/sales\/[^/]+$/)) {
-      const saleId = path.split('/')[3];
-      return await handlePosSaleById(req, res, saleId);
-    }
-    // POS Inventory
-    else if (path === 'v1/pos/inventory' || path === 'v1/pos/inventory/') {
-      return await handlePosInventory(req, res);
-    } else if (path.match(/^v1\/pos\/inventory\/[^/]+\/adjust$/)) {
-      const productId = path.split('/')[3];
-      return await handlePosInventoryAdjust(req, res, productId);
-    }
-    // Invoices
-    else if (path === 'v1/invoices' || path === 'v1/invoices/') {
-      return await handleInvoices(req, res);
-    } else if (path.match(/^v1\/invoices\/[^/]+\/send$/)) {
-      const invoiceId = path.split('/')[2];
-      return await handleInvoiceSend(req, res, invoiceId);
-    } else if (path.match(/^v1\/invoices\/[^/]+$/)) {
-      const invoiceId = path.split('/')[2];
-      return await handleInvoiceById(req, res, invoiceId);
-    }
-    // Events
-    else if (path === 'v1/events' || path === 'v1/events/') {
-      return await handleEvents(req, res);
-    } else if (path.match(/^v1\/events\/[^/]+\/tickets$/)) {
-      const eventId = path.split('/')[2];
-      return await handleEventTickets(req, res, eventId);
-    } else if (path.match(/^v1\/events\/tickets\/[^/]+\/scan$/)) {
-      const ticketId = path.split('/')[3];
-      return await handleEventTicketScan(req, res, ticketId);
-    } else if (path.match(/^v1\/events\/[^/]+$/)) {
-      const eventId = path.split('/')[2];
-      return await handleEventById(req, res, eventId);
-    }
-    // ==================== END PUBLIC API ====================
-
-    else {
+    } else {
       return res.status(404).json({ error: 'Not found', path });
     }
   } catch (error: any) {
@@ -622,9 +464,6 @@ async function handleMobileAuth(req: VercelRequest, res: VercelResponse) {
       return await handleGetCards(data, res);
     case 'transactions':
       return await handleGetTransactions(data, res);
-    case 'userData':
-      // Batch endpoint: fetch profile, wallets, cards, and transactions in parallel
-      return await handleGetUserData(data, res);
     default:
       return res.status(400).json({ error: 'Invalid action' });
   }
@@ -742,44 +581,6 @@ async function handleGetTransactions(data: { userId: string; limit?: number }, r
   return res.status(200).json({ transactions: transactions || [] });
 }
 
-/**
- * Batch endpoint to fetch all user data in parallel
- * Reduces 4 API calls to 1 for app initialization
- */
-async function handleGetUserData(data: { userId: string; transactionLimit?: number }, res: VercelResponse) {
-  const { userId, transactionLimit = 20 } = data;
-
-  try {
-    // Fetch all data in parallel
-    const [userResult, walletsResult, cardsResult, transactionsResult] = await Promise.all([
-      supabaseAnon.from('users').select('*').eq('id', userId).limit(1),
-      supabaseAnon.from('wallets').select('*').eq('user_id', userId),
-      supabaseAnon.from('cards').select('*').eq('user_id', userId),
-      supabaseAnon
-        .from('transactions')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(transactionLimit),
-    ]);
-
-    const users = userResult.data;
-    if (!users || users.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    return res.status(200).json({
-      user: mapUser(users[0]),
-      wallets: walletsResult.data || [],
-      cards: cardsResult.data || [],
-      transactions: transactionsResult.data || [],
-    });
-  } catch (error: any) {
-    console.error('[GetUserData] Error:', error);
-    return res.status(500).json({ error: error.message || 'Failed to fetch user data' });
-  }
-}
-
 function generateTokens(user: any) {
   const accessToken = Buffer.from(
     JSON.stringify({
@@ -841,12 +642,6 @@ async function handleSettings(req: VercelRequest, res: VercelResponse) {
 }
 
 async function handleGetSettings(res: VercelResponse) {
-  // Check cache first
-  const cached = getCached<any>('settings');
-  if (cached) {
-    return res.status(200).json(cached);
-  }
-
   let { data: settings, error } = await supabase
     .from('payment_settings')
     .select('*')
@@ -894,7 +689,7 @@ async function handleGetSettings(res: VercelResponse) {
     }
   }
 
-  const response = {
+  return res.status(200).json({
     monimeConfig: {
       accessToken: settings.monime_access_token || '',
       spaceId: settings.monime_space_id || '',
@@ -923,25 +718,26 @@ async function handleGetSettings(res: VercelResponse) {
       minDepositAmount: Number(settings.min_deposit_amount),
       maxDepositAmount: Number(settings.max_deposit_amount),
     },
+    // All fee settings for the Fees page
     feeSettings: {
+      // Withdrawal fees
       withdrawalFeePercent: Number(settings.withdrawal_fee_percent || 2),
       withdrawalFeeFlat: Number(settings.withdrawal_fee_flat || 0),
+      // P2P transfer fees
       p2pFeePercent: Number(settings.p2p_fee_percent || 0),
       p2pFeeFlat: Number(settings.p2p_fee_flat || 0),
+      // Card fees
       cardTxnFeePercent: Number(settings.card_txn_fee_percent || 1.5),
       cardTxnFeeFlat: Number(settings.card_txn_fee_flat || 0),
       virtualCardFee: Number(settings.virtual_card_fee || 1),
       physicalCardFee: Number(settings.physical_card_fee || 10),
+      // Checkout/merchant fees
       checkoutFeePercent: Number(settings.checkout_fee_percent || 2.9),
       checkoutFeeFlat: Number(settings.checkout_fee_flat || 0.30),
       merchantPayoutFeePercent: Number(settings.merchant_payout_fee_percent || 0.25),
       merchantPayoutFeeFlat: Number(settings.merchant_payout_fee_flat || 0),
     },
-  };
-
-  // Cache the response for 5 minutes
-  setCache('settings', response, CACHE_TTL.SETTINGS);
-  return res.status(200).json(response);
+  });
 }
 
 async function handleUpdateSettings(req: VercelRequest, res: VercelResponse) {
@@ -1216,25 +1012,18 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
         });
 
         if (pendingTx) {
-          const grossAmount = parseFloat(pendingTx.amount?.toString() || '0');
+          amount = parseFloat(pendingTx.amount?.toString() || '0');
           currency = pendingTx.currency || 'SLE';
 
-          // Calculate Monime fees - they charge 1.5% on mobile money
-          // For deposits, we don't charge platform fees (applyPlatformFee = false)
-          const fees = await calculateMobileMoneyFees(grossAmount, false);
-          amount = fees.netAmount; // This is what gets credited after Monime fee
-
-          console.log('[Deposit Success] Processing deposit with fee calculation:', {
+          // No fees on deposits - we charge fees on withdrawals/payouts only
+          console.log('[Deposit Success] Processing deposit:', {
             transactionId: pendingTx.id,
-            grossAmount: fees.grossAmount,
-            monimeFee: fees.monimeFee.toFixed(2),
-            netAmount: fees.netAmount.toFixed(2),
-            floatAmount: fees.floatAmount.toFixed(2),
+            amount,
             currency,
             walletId
           });
 
-          // Credit the wallet with NET amount (after Monime fee)
+          // Credit the wallet with full amount (no deposit fees)
           const { data: wallet, error: walletError } = await supabase
             .from('wallets')
             .select('balance')
@@ -1247,17 +1036,15 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
 
           if (wallet) {
             const currentBalance = parseFloat(wallet.balance?.toString() || '0');
-            newBalance = currentBalance + fees.netAmount; // Credit NET amount after Monime fee
+            newBalance = currentBalance + amount; // Credit full amount
 
             console.log('[Deposit Success] Updating wallet balance:', {
               currentBalance,
-              grossAmount: fees.grossAmount,
-              monimeFee: fees.monimeFee.toFixed(2),
-              netDeposit: fees.netAmount.toFixed(2),
-              newBalance: newBalance.toFixed(2)
+              depositAmount: amount,
+              newBalance
             });
 
-            // Update wallet balance with net amount
+            // Update wallet balance
             const { error: updateError } = await supabase
               .from('wallets')
               .update({
@@ -1272,24 +1059,15 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
               console.log('[Deposit Success] Wallet balance updated successfully');
             }
 
-            // Update transaction status with fee breakdown
+            // Update transaction status (no fees on deposits)
             const { error: txUpdateError } = await supabase
               .from('transactions')
               .update({
                 status: 'COMPLETED',
-                fee: fees.monimeFee, // Track gateway fee
                 metadata: {
                   ...pendingTx.metadata,
                   completedAt: new Date().toISOString(),
-                  completedVia: 'callback',
                   monimeStatus: sessionStatus.status,
-                  grossAmount: fees.grossAmount,
-                  monimeFee: fees.monimeFee,
-                  netAmount: fees.netAmount,
-                  feeBreakdown: {
-                    gateway: { percent: fees.monimeFeePercent, amount: fees.monimeFee },
-                    platform: { percent: fees.peeapFeePercent, flat: fees.peeapFeeFlat, amount: fees.peeapFee },
-                  },
                 }
               })
               .eq('id', pendingTx.id);
@@ -1298,48 +1076,36 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
               console.error('[Deposit Success] Failed to update transaction:', txUpdateError);
             }
 
-            console.log('[Deposit Success] Wallet credited:', {
-              walletId,
-              grossAmount: fees.grossAmount,
-              monimeFee: fees.monimeFee.toFixed(2),
-              netAmount: fees.netAmount.toFixed(2),
-              newBalance: newBalance.toFixed(2)
-            });
+            console.log('[Deposit Success] Wallet credited:', { walletId, amount, newBalance });
 
-            // Credit the system float with what we ACTUALLY received (after Monime fee)
+            // Credit the system float - money came into the platform via mobile money
             try {
               const { error: floatError } = await supabase.rpc('credit_system_float', {
                 p_currency: currency,
-                p_amount: fees.floatAmount, // Only credit what Monime actually sent us
+                p_amount: amount,
                 p_transaction_id: pendingTx.id,
-                p_description: `Mobile Money Deposit - Gross: ${fees.grossAmount.toFixed(2)}, Monime Fee: ${fees.monimeFee.toFixed(2)}, Net: ${fees.floatAmount.toFixed(2)}`,
+                p_description: `Mobile Money Deposit - ${pendingTx.description || 'User deposit'}`,
               });
               if (floatError) {
                 console.error('[Deposit Success] Float RPC error:', floatError);
               } else {
-                console.log('[Deposit Success] System float credited:', { floatAmount: fees.floatAmount.toFixed(2), currency });
+                console.log('[Deposit Success] System float credited:', { amount, currency });
               }
             } catch (floatErr) {
               console.error('[Deposit Success] Failed to credit system float:', floatErr);
               // Don't fail the deposit if float update fails
             }
 
-            // Create notification for the user - show net amount they received
+            // Create notification for the user
             try {
               await supabase.from('notifications').insert({
                 user_id: pendingTx.user_id,
                 type: 'deposit',
                 title: 'Deposit Successful',
-                message: `Your deposit of Le ${fees.netAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} has been credited to your wallet (Le ${fees.monimeFee.toFixed(2)} gateway fee deducted from Le ${fees.grossAmount.toFixed(2)}).`,
+                message: `Your deposit of Le ${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} has been credited to your wallet.`,
                 icon: 'wallet',
                 action_url: '/wallets',
-                action_data: {
-                  grossAmount: fees.grossAmount,
-                  netAmount: fees.netAmount,
-                  monimeFee: fees.monimeFee,
-                  currency,
-                  transactionId: pendingTx.id
-                },
+                action_data: { amount, currency, transactionId: pendingTx.id },
                 source_service: 'deposit',
                 source_id: pendingTx.id,
                 is_read: false,
@@ -1350,7 +1116,7 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
               console.error('[Deposit Success] Failed to create notification:', notifErr);
             }
 
-            // Create admin notification for the deposit with fee details
+            // Create admin notification for the deposit
             try {
               const { data: userData } = await supabase
                 .from('users')
@@ -1362,19 +1128,17 @@ async function handleDepositSuccess(req: VercelRequest, res: VercelResponse) {
               await supabase.from('admin_notifications').insert({
                 type: 'deposit',
                 title: 'New Deposit Received',
-                message: `${userName} deposited Le ${fees.grossAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} via Mobile Money (Fee: ${fees.monimeFee.toFixed(2)}, Net: ${fees.netAmount.toFixed(2)})`,
-                priority: fees.grossAmount >= 1000 ? 'high' : 'medium',
+                message: `${userName} deposited Le ${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} via Mobile Money`,
+                priority: amount >= 1000 ? 'high' : 'medium',
                 related_entity_type: 'transaction',
                 related_entity_id: pendingTx.id,
                 action_url: `/admin/transactions?id=${pendingTx.id}`,
                 metadata: {
                   userId: pendingTx.user_id,
                   userName,
-                  grossAmount: fees.grossAmount,
-                  monimeFee: fees.monimeFee,
-                  netAmount: fees.netAmount,
+                  amount,
                   currency,
-                  method: 'Mobile Money (Callback)',
+                  method: 'Mobile Money',
                 },
               });
               console.log('[Deposit Success] Admin notification created');
@@ -1687,19 +1451,12 @@ async function handleMonimeBalance(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Check cache first
-    const cacheKey = 'monime_balance';
-    const cached = getCached<any>(cacheKey);
-    if (cached) {
-      return res.status(200).json({ ...cached, fromCache: true });
-    }
-
     // Get Monime credentials using the shared modular function
     // No auth required - matches other float endpoints (handleFloatSummary, handleFloatToday)
     const credentials = await getMonimeCredentials(supabase, SETTINGS_ID);
 
     // Fetch financial accounts directly from Monime API
-    const monimeRes = await fetch('https://api.monime.io/v1/financial-accounts?withBalance=true', {
+    const response = await fetch('https://api.monime.io/v1/financial-accounts?withBalance=true', {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${credentials.accessToken}`,
@@ -1708,16 +1465,16 @@ async function handleMonimeBalance(req: VercelRequest, res: VercelResponse) {
       },
     });
 
-    if (!monimeRes.ok) {
-      const errorData = await monimeRes.json().catch(() => ({}));
-      console.error('[Monime Balance] Monime API error:', monimeRes.status, errorData);
-      return res.status(monimeRes.status).json({
-        error: errorData.message || `Monime API error: ${monimeRes.status}`,
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('[Monime Balance] Monime API error:', response.status, errorData);
+      return res.status(response.status).json({
+        error: errorData.message || `Monime API error: ${response.status}`,
         code: 'MONIME_API_ERROR'
       });
     }
 
-    const data = await monimeRes.json();
+    const data = await response.json();
     const accounts = data.result || [];
 
     // Calculate total balance per currency
@@ -1762,18 +1519,13 @@ async function handleMonimeBalance(req: VercelRequest, res: VercelResponse) {
     const primaryCurrency = 'SLE';
     const primaryBalance = balancesByCurrency[primaryCurrency]?.totalBalance || 0;
 
-    const response = {
+    return res.status(200).json({
       success: true,
       balance: primaryBalance,
       balancesByCurrency,
       accountCount: accounts.length,
       updatedAt: new Date().toISOString(),
-    };
-
-    // Cache the response
-    setCache(cacheKey, response, CACHE_TTL.MONIME_BALANCE);
-
-    return res.status(200).json(response);
+    });
   } catch (error: any) {
     console.error('[Monime Balance] Error:', error);
 
@@ -1786,219 +1538,6 @@ async function handleMonimeBalance(req: VercelRequest, res: VercelResponse) {
 }
 
 /**
- * GET /monime/deposits - List all deposit transactions for admin
- * Returns deposits from the transactions table with type DEPOSIT
- */
-async function handleMonimeDeposits(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  try {
-    const limit = parseInt(req.query.limit as string) || 50;
-    const offset = parseInt(req.query.offset as string) || 0;
-
-    // Get deposit transactions from local database
-    const { data: deposits, count, error } = await supabase
-      .from('transactions')
-      .select('*', { count: 'exact' })
-      .in('type', ['DEPOSIT', 'deposit', 'TOP_UP', 'top_up'])
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
-
-    if (error) {
-      console.error('[Monime Deposits] Database error:', error);
-      return res.status(500).json({ error: error.message });
-    }
-
-    // Get user info for each deposit
-    const userIds = [...new Set((deposits || []).map(d => d.user_id).filter(Boolean))];
-    let users: Record<string, any> = {};
-
-    if (userIds.length > 0) {
-      const { data: userData } = await supabase
-        .from('users')
-        .select('id, first_name, last_name, email, phone')
-        .in('id', userIds);
-
-      if (userData) {
-        users = userData.reduce((acc: any, u: any) => {
-          acc[u.id] = u;
-          return acc;
-        }, {});
-      }
-    }
-
-    // Map to MonimeTransaction format expected by frontend
-    const mappedDeposits = (deposits || []).map(d => ({
-      id: d.id,
-      type: 'DEPOSIT',
-      status: d.status?.toUpperCase() || 'PENDING',
-      monimeReference: d.reference || d.external_id || null,
-      walletId: d.wallet_id,
-      userId: d.user_id,
-      amount: parseFloat(d.amount) || 0,
-      currency: d.currency || 'SLE',
-      fee: parseFloat(d.fee) || 0,
-      netAmount: (parseFloat(d.amount) || 0) - (parseFloat(d.fee) || 0),
-      depositMethod: d.metadata?.paymentMethod || d.metadata?.depositMethod || null,
-      createdAt: d.created_at,
-      completedAt: d.completed_at || d.updated_at,
-      user: users[d.user_id] || null,
-      metadata: d.metadata || {},
-    }));
-
-    return res.status(200).json({
-      data: mappedDeposits,
-      total: count || 0,
-      limit,
-      offset,
-    });
-  } catch (error: any) {
-    console.error('[Monime Deposits] Error:', error);
-    return res.status(500).json({ error: error.message || 'Failed to fetch deposits' });
-  }
-}
-
-/**
- * GET /merchant/transactions - Get merchant transactions (bypasses RLS)
- * Used by merchant dashboard to view all their transactions
- */
-async function handleMerchantTransactions(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  try {
-    const merchantId = req.query.merchantId as string;
-    const limit = parseInt(req.query.limit as string) || 100;
-    const offset = parseInt(req.query.offset as string) || 0;
-    const status = req.query.status as string;
-
-    if (!merchantId) {
-      return res.status(400).json({ error: 'merchantId is required' });
-    }
-
-    // Get merchant's wallet ID for wallet transactions
-    const { data: wallet } = await supabase
-      .from('wallets')
-      .select('id')
-      .eq('user_id', merchantId)
-      .eq('wallet_type', 'primary')
-      .single();
-
-    const walletId = wallet?.id;
-
-    // Query checkout_sessions for merchant payments (incoming payments)
-    let checkoutQuery = supabase
-      .from('checkout_sessions')
-      .select('*', { count: 'exact' })
-      .eq('merchant_id', merchantId)
-      .order('created_at', { ascending: false });
-
-    if (status && status !== 'all') {
-      // Map frontend status to checkout_session status
-      const statusMap: Record<string, string> = {
-        'completed': 'PAID',
-        'pending': 'OPEN',
-        'failed': 'CANCELLED',
-      };
-      const mappedStatus = statusMap[status.toLowerCase()] || status.toUpperCase();
-      checkoutQuery = checkoutQuery.eq('status', mappedStatus);
-    }
-
-    checkoutQuery = checkoutQuery.range(offset, offset + limit - 1);
-
-    const { data: sessions, count: sessionCount, error: sessionError } = await checkoutQuery;
-
-    if (sessionError) {
-      console.error('[Merchant Transactions] Session query error:', sessionError);
-    }
-
-    // Also get wallet transactions if wallet exists
-    let walletTxns: any[] = [];
-    let walletCount = 0;
-    if (walletId) {
-      const { data: txns, count, error: txnError } = await supabase
-        .from('transactions')
-        .select('*', { count: 'exact' })
-        .eq('wallet_id', walletId)
-        .order('created_at', { ascending: false })
-        .range(0, 50);
-
-      if (!txnError && txns) {
-        walletTxns = txns;
-        walletCount = count || 0;
-      }
-    }
-
-    // Map checkout sessions to transaction format
-    const checkoutTransactions = (sessions || []).map(s => ({
-      id: s.id,
-      external_id: s.external_id,
-      type: 'PAYMENT',
-      status: s.status === 'PAID' ? 'completed' : s.status === 'OPEN' ? 'pending' : 'failed',
-      amount: parseFloat(s.amount) || 0,
-      currency: s.currency_code || 'SLE',
-      description: s.description || 'Checkout payment',
-      customer_email: s.metadata?.customer_email || null,
-      customer_name: s.metadata?.customer_name || null,
-      payment_method: s.payment_method || null,
-      reference: s.reference || s.payment_reference || null,
-      created_at: s.created_at,
-      completed_at: s.completed_at,
-      metadata: s.metadata,
-    }));
-
-    // Map wallet transactions
-    const mappedWalletTxns = walletTxns.map(t => ({
-      id: t.id,
-      external_id: t.external_id,
-      type: t.type,
-      status: t.status?.toLowerCase() || 'pending',
-      amount: parseFloat(t.amount) || 0,
-      currency: t.currency || 'SLE',
-      description: t.description,
-      customer_email: null,
-      customer_name: t.metadata?.recipient_name || null,
-      payment_method: null,
-      reference: t.reference,
-      created_at: t.created_at,
-      completed_at: t.updated_at,
-      metadata: t.metadata,
-    }));
-
-    // Combine and sort by date
-    const allTransactions = [...checkoutTransactions, ...mappedWalletTxns]
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      .slice(0, limit);
-
-    // Calculate stats from checkout sessions (primary source for merchant revenue)
-    const allSessions = sessions || [];
-    const stats = {
-      total: (sessionCount || 0) + walletCount,
-      completed: allSessions.filter(s => s.status === 'PAID').length,
-      pending: allSessions.filter(s => s.status === 'OPEN').length,
-      failed: allSessions.filter(s => s.status === 'CANCELLED' || s.status === 'EXPIRED').length,
-      totalVolume: allSessions
-        .filter(s => s.status === 'PAID')
-        .reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0),
-    };
-
-    return res.status(200).json({
-      transactions: allTransactions,
-      total: (sessionCount || 0) + walletCount,
-      stats,
-      limit,
-      offset,
-    });
-  } catch (error: any) {
-    console.error('[Merchant Transactions] Error:', error);
-    return res.status(500).json({ error: error.message || 'Failed to fetch transactions' });
-  }
-}
-
-/**
  * Get float summary - uses service role to bypass RLS
  */
 async function handleFloatSummary(req: VercelRequest, res: VercelResponse) {
@@ -2007,13 +1546,6 @@ async function handleFloatSummary(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Check cache first
-    const cacheKey = 'float_summary';
-    const cached = getCached<any>(cacheKey);
-    if (cached) {
-      return res.status(200).json({ ...cached, fromCache: true });
-    }
-
     // Get float data with service role (bypasses RLS)
     const { data: floats, error: floatError } = await supabase
       .from('system_float')
@@ -2025,15 +1557,10 @@ async function handleFloatSummary(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: floatError.message });
     }
 
-    const response = {
+    return res.status(200).json({
       success: true,
       floats: floats || [],
-    };
-
-    // Cache the response
-    setCache(cacheKey, response, CACHE_TTL.FLOAT_SUMMARY);
-
-    return res.status(200).json(response);
+    });
   } catch (error: any) {
     console.error('[Float Summary] Error:', error);
     return res.status(500).json({ error: error.message || 'Failed to fetch float summary' });
@@ -2049,13 +1576,6 @@ async function handleFloatToday(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Check cache first
-    const cacheKey = 'float_today';
-    const cached = getCached<any>(cacheKey);
-    if (cached) {
-      return res.status(200).json({ ...cached, fromCache: true });
-    }
-
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -2084,18 +1604,13 @@ async function handleFloatToday(req: VercelRequest, res: VercelResponse) {
       }
     });
 
-    const response = {
+    return res.status(200).json({
       success: true,
       deposits,
       payouts,
       fees: 0,
       movementCount: (movements || []).length,
-    };
-
-    // Cache the response
-    setCache(cacheKey, response, CACHE_TTL.FLOAT_TODAY);
-
-    return res.status(200).json(response);
+    });
   } catch (error: any) {
     console.error('[Float Today] Error:', error);
     return res.status(500).json({ error: error.message || 'Failed to fetch today movements' });
@@ -2653,23 +2168,10 @@ async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse
       }
 
       if (merchantWallet) {
-        const grossAmount = parseFloat(session.amount);
+        const paymentAmount = parseFloat(session.amount);
+        const newMerchantBalance = Number(merchantWallet.balance) + paymentAmount;
 
-        // Calculate Monime fees - they charge 1.5% on mobile money
-        // For checkout payments, we don't charge additional platform fees (customer pays what they see)
-        const fees = await calculateMobileMoneyFees(grossAmount, false);
-        const netAmount = fees.netAmount; // What merchant actually receives after Monime fee
-
-        console.log('[CheckoutPay] Fee calculation:', {
-          grossAmount: fees.grossAmount,
-          monimeFee: fees.monimeFee.toFixed(2),
-          netAmount: fees.netAmount.toFixed(2),
-          floatAmount: fees.floatAmount.toFixed(2),
-        });
-
-        const newMerchantBalance = Number(merchantWallet.balance) + netAmount;
-
-        // Credit merchant's wallet with NET amount (after Monime fee)
+        // Credit merchant's wallet
         const { error: creditError } = await supabase
           .from('wallets')
           .update({ balance: newMerchantBalance, updated_at: new Date().toISOString() })
@@ -2684,8 +2186,7 @@ async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse
             external_id: merchantTxExternalId,
             wallet_id: merchantWallet.id,
             type: 'PAYMENT_RECEIVED',
-            amount: netAmount, // Store net amount received
-            fee: fees.monimeFee, // Track the gateway fee
+            amount: paymentAmount,
             currency: session.currency_code || 'SLE',
             status: 'COMPLETED',
             description: session.description || `Mobile payment received`,
@@ -2697,51 +2198,37 @@ async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse
               paymentMethod: 'monime_mobile',
               payerName: session.metadata?.payerName || 'Mobile Money Customer',
               payerEmail: session.metadata?.payerEmail,
-              grossAmount: fees.grossAmount,
-              monimeFee: fees.monimeFee,
-              netAmount: fees.netAmount,
-              feeBreakdown: {
-                gateway: { percent: fees.monimeFeePercent, amount: fees.monimeFee },
-              },
             },
           });
 
           if (txError) {
             console.error('[CheckoutPay] Transaction insert error:', txError);
           }
-          console.log('[CheckoutPay] Merchant wallet credited:', {
-            merchantOwnerId,
-            grossAmount: fees.grossAmount,
-            monimeFee: fees.monimeFee.toFixed(2),
-            netAmount: fees.netAmount.toFixed(2),
-            ref: transactionRef
-          });
+          console.log('[CheckoutPay] Merchant wallet credited:', { merchantOwnerId, amount: paymentAmount, ref: transactionRef });
 
-          // Credit system float with what we ACTUALLY received (after Monime fee)
+          // Credit system float - money came into the platform via mobile money checkout
           try {
             await supabase.rpc('credit_system_float', {
               p_currency: session.currency_code || 'SLE',
-              p_amount: fees.floatAmount, // Only credit what Monime actually sent us
+              p_amount: paymentAmount,
               p_transaction_id: null,
-              p_description: `Mobile Money Checkout - ${session.merchant_name} - Gross: ${fees.grossAmount.toFixed(2)}, Fee: ${fees.monimeFee.toFixed(2)}, Net: ${fees.floatAmount.toFixed(2)}`,
+              p_description: `Mobile Money Checkout - ${session.merchant_name} - ${session.description || 'Payment'}`,
             });
-            console.log('[CheckoutPay] System float credited:', { floatAmount: fees.floatAmount.toFixed(2) });
+            console.log('[CheckoutPay] System float credited:', { amount: paymentAmount });
           } catch (floatErr) {
             console.error('[CheckoutPay] Failed to credit system float:', floatErr);
             // Don't fail the payment if float update fails
           }
 
-          // Send notification to merchant with fee details
+          // Send notification to merchant (use owner's user_id)
           await supabase.from('user_notifications').insert({
             user_id: merchantOwnerId,
             type: 'payment_received',
             title: 'Payment Received',
-            message: `You received ${currency} ${netAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} via mobile money for "${session.description || 'Purchase'}" (${currency} ${fees.monimeFee.toFixed(2)} gateway fee on ${currency} ${fees.grossAmount.toFixed(2)})`,
+            message: `You received a payment of ${currency} ${paymentAmount.toLocaleString()} via mobile money for "${session.description || 'Purchase'}"`,
             read: false,
             metadata: {
-              grossAmount: fees.grossAmount,
-              netAmount: fees.netAmount,
-              monimeFee: fees.monimeFee,
+              amount: paymentAmount,
               currency: currency,
               reference: transactionRef,
               session_id: session.external_id,
@@ -2778,14 +2265,14 @@ async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse
             }
 
             if (payerWallet) {
-              // Create payer's outgoing transaction record - show gross amount paid
+              // Create payer's outgoing transaction record (for their transaction history) - MUST include external_id
               const payerTxExternalId = `tx_payer_${randomUUID().replace(/-/g, '').substring(0, 24)}`;
 
               const { error: payerTxError } = await supabase.from('transactions').insert({
                 external_id: payerTxExternalId,
                 wallet_id: payerWallet.id,
                 type: 'PAYMENT_SENT',
-                amount: -grossAmount, // Negative, and show what customer actually paid
+                amount: -paymentAmount, // Negative to show as outgoing
                 currency: session.currency_code || 'SLE',
                 status: 'COMPLETED',
                 description: `Payment to ${session.merchant_name || 'Merchant'} - ${session.description || 'Purchase'}`,
@@ -2795,25 +2282,23 @@ async function handleCheckoutPayRedirect(req: VercelRequest, res: VercelResponse
                   merchantId: session.merchant_id,
                   merchantName: session.merchant_name,
                   paymentMethod: 'monime_mobile',
-                  grossAmount: fees.grossAmount,
-                  monimeFee: fees.monimeFee,
                 },
               });
 
               if (payerTxError) {
                 console.error('[CheckoutPay] Payer transaction insert error:', payerTxError);
               }
-              console.log('[CheckoutPay] Payer transaction created:', { payerId, grossAmount: fees.grossAmount, ref: transactionRef });
+              console.log('[CheckoutPay] Payer transaction created:', { payerId, amount: paymentAmount, ref: transactionRef });
 
-              // Send notification to payer (show gross amount they paid)
+              // Send notification to payer
               await supabase.from('user_notifications').insert({
                 user_id: payerId,
                 type: 'payment_sent',
                 title: 'Payment Successful',
-                message: `You paid ${currency} ${grossAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} to ${session.merchant_name || 'Merchant'} for "${session.description || 'Purchase'}"`,
+                message: `You paid ${currency} ${paymentAmount.toLocaleString()} to ${session.merchant_name || 'Merchant'} for "${session.description || 'Purchase'}"`,
                 read: false,
                 metadata: {
-                  amount: grossAmount,
+                  amount: paymentAmount,
                   currency: currency,
                   reference: transactionRef,
                   session_id: session.external_id,
@@ -5282,7 +4767,10 @@ async function handleNotificationSend(req: VercelRequest, res: VercelResponse) {
       // Store notification history
       await storeNotification(userData.id, request, result);
 
-      return res.status(200).json(result);
+      return res.status(200).json({
+        success: true,
+        ...result,
+      });
     }
 
     // Check if user is admin (via Supabase auth)
@@ -5319,7 +4807,10 @@ async function handleNotificationSend(req: VercelRequest, res: VercelResponse) {
     // Store notification history
     await storeNotification(userData.id, request, result);
 
-    return res.status(200).json(result);
+    return res.status(200).json({
+      success: true,
+      ...result,
+    });
   } catch (error: any) {
     console.error('[NotificationSend] Error:', error);
     return res.status(500).json({ error: error.message || 'Failed to send notification' });
@@ -5409,13 +4900,6 @@ async function handleMobileMoneyProviders(req: VercelRequest, res: VercelRespons
   try {
     const country = (req.query.country as string) || 'SL';
 
-    // Check cache first - providers rarely change
-    const cacheKey = `providers_${country}`;
-    const cached = getCached<any>(cacheKey);
-    if (cached) {
-      return res.status(200).json(cached);
-    }
-
     // Create Monime service
     const monimeService = await createMonimeService(supabase, SETTINGS_ID);
 
@@ -5427,7 +4911,7 @@ async function handleMobileMoneyProviders(req: VercelRequest, res: VercelRespons
       p => p.status?.active && p.featureSet?.payout?.canPayTo
     );
 
-    const response = {
+    return res.status(200).json({
       success: true,
       providers: activeProviders.map(p => ({
         providerId: p.providerId,
@@ -5436,11 +4920,7 @@ async function handleMobileMoneyProviders(req: VercelRequest, res: VercelRespons
         canPayout: p.featureSet?.payout?.canPayTo || false,
         canPayment: p.featureSet?.payment?.canPayFrom || false,
       })),
-    };
-
-    // Cache for 1 hour
-    setCache(cacheKey, response, CACHE_TTL.PROVIDERS);
-    return res.status(200).json(response);
+    });
   } catch (error: any) {
     console.error('[MobileMoneyProviders] Error:', error);
     if (error instanceof MonimeError) {
@@ -7116,24 +6596,18 @@ async function handlePayoutBanks(req: VercelRequest, res: VercelResponse) {
     const url = new URL(req.url || '', `http://${req.headers.host}`);
     const country = url.searchParams.get('country') || 'SL';
 
-    // Check cache first - banks rarely change
-    const cacheKey = `banks_${country}`;
-    const cached = getCached<any>(cacheKey);
-    if (cached) {
-      return res.status(200).json(cached);
-    }
-
     let monimeService;
     try {
       monimeService = await createMonimeService(supabase, SETTINGS_ID);
     } catch (err: any) {
+      // If Monime is not configured, return empty banks list
       console.log('[PayoutBanks] Monime not configured, returning empty banks list');
       return res.status(200).json({ banks: [] });
     }
 
     const banks = await monimeService.getBanks(country);
 
-    const response = {
+    return res.status(200).json({
       banks: banks.map((b: any) => ({
         providerId: b.providerId || b.id,
         name: b.name,
@@ -7145,11 +6619,7 @@ async function handlePayoutBanks(req: VercelRequest, res: VercelResponse) {
           kycVerification: { canVerifyAccount: false },
         },
       })),
-    };
-
-    // Cache for 1 hour
-    setCache(cacheKey, response, CACHE_TTL.BANKS);
-    return res.status(200).json(response);
+    });
   } catch (error: any) {
     console.error('[PayoutBanks] Error:', error);
     if (error instanceof MonimeError) {
@@ -7177,6 +6647,255 @@ function generateSecureToken(length: number = 64): string {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return result;
+}
+
+/**
+ * PIN Verification Endpoint
+ * Verify user's wallet PIN for quick access from school dashboard
+ *
+ * POST /api/auth/verify-pin
+ * Body: { user_id, pin }
+ */
+async function handleAuthVerifyPin(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'method_not_allowed' });
+  }
+
+  try {
+    const { user_id, pin } = req.body;
+
+    if (!user_id || !pin) {
+      return res.status(400).json({
+        error: 'invalid_request',
+        error_description: 'user_id and pin are required',
+      });
+    }
+
+    if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+      return res.status(400).json({
+        error: 'invalid_pin',
+        error_description: 'PIN must be 4 digits',
+      });
+    }
+
+    // Get user and verify PIN
+    const { data: users, error: userError } = await supabase
+      .from('users')
+      .select('id, email, first_name, last_name, phone, roles, transaction_pin')
+      .eq('id', user_id)
+      .limit(1);
+
+    if (userError || !users || users.length === 0) {
+      return res.status(404).json({
+        error: 'user_not_found',
+        error_description: 'User not found',
+      });
+    }
+
+    const user = users[0];
+
+    // Verify PIN (stored as hashed or plain depending on setup)
+    // For now, we'll do a simple comparison - in production, use bcrypt
+    if (user.transaction_pin !== pin) {
+      return res.status(401).json({
+        error: 'invalid_pin',
+        error_description: 'Invalid PIN',
+      });
+    }
+
+    // Generate tokens for the user
+    const accessToken = generateSecureToken(64);
+    const refreshToken = generateSecureToken(64);
+    const expiresIn = 3600; // 1 hour
+
+    // Store the access token in oauth_access_tokens for consistency
+    await supabase.from('oauth_access_tokens').insert({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      client_id: 'school_saas',
+      user_id: user.id,
+      scope: 'profile email wallet:read school:manage',
+      expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
+    });
+
+    return res.status(200).json({
+      success: true,
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      token_type: 'Bearer',
+      expires_in: expiresIn,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+        phone: user.phone,
+        roles: user.roles,
+      },
+    });
+  } catch (error: any) {
+    console.error('[Auth Verify PIN] Error:', error);
+    return res.status(500).json({
+      error: 'server_error',
+      error_description: error.message || 'Internal server error',
+    });
+  }
+}
+
+/**
+ * SSO Exchange Endpoint for School Portal
+ * Exchanges authorization code for tokens and returns school admin data
+ *
+ * POST /api/auth/sso/exchange
+ * Body: { code, redirect_uri, client_id }
+ */
+async function handleSsoExchange(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'method_not_allowed' });
+  }
+
+  try {
+    const { code, redirect_uri, client_id } = req.body;
+
+    if (!code || !redirect_uri || !client_id) {
+      return res.status(400).json({
+        error: 'invalid_request',
+        message: 'code, redirect_uri, and client_id are required',
+      });
+    }
+
+    // Find and validate the authorization code
+    const { data: codes, error: codeError } = await supabase
+      .from('oauth_authorization_codes')
+      .select('*')
+      .eq('code', code)
+      .eq('client_id', client_id)
+      .eq('redirect_uri', redirect_uri)
+      .is('used_at', null)
+      .limit(1);
+
+    if (codeError || !codes || codes.length === 0) {
+      return res.status(400).json({
+        error: 'invalid_grant',
+        message: 'Invalid or expired authorization code',
+      });
+    }
+
+    const authCode = codes[0];
+
+    // Check expiration
+    if (new Date(authCode.expires_at) < new Date()) {
+      return res.status(400).json({
+        error: 'invalid_grant',
+        message: 'Authorization code expired',
+      });
+    }
+
+    // Mark code as used
+    await supabase
+      .from('oauth_authorization_codes')
+      .update({ used_at: new Date().toISOString() })
+      .eq('id', authCode.id);
+
+    // Get user data
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('id, email, phone, first_name, last_name, roles')
+      .eq('id', authCode.user_id)
+      .limit(1);
+
+    if (userError || !userData || userData.length === 0) {
+      return res.status(400).json({
+        error: 'user_not_found',
+        message: 'User not found',
+      });
+    }
+
+    const user = userData[0];
+
+    // Check if user is a school admin (either by role or by school connection)
+    let schoolAdmin = null;
+
+    // First check if user has school_admin role
+    if (user.roles && (user.roles.includes('school_admin') || user.roles === 'school_admin')) {
+      // Find their connected school
+      const { data: connections } = await supabase
+        .from('school_connections')
+        .select('*')
+        .eq('connected_by_user_id', user.id)
+        .eq('status', 'active')
+        .limit(1);
+
+      if (connections && connections.length > 0) {
+        schoolAdmin = {
+          schoolId: connections[0].peeap_school_id,
+          role: 'admin',
+          schoolName: connections[0].school_name,
+        };
+      }
+    }
+
+    // Also check school_connections table directly
+    if (!schoolAdmin) {
+      const { data: connections } = await supabase
+        .from('school_connections')
+        .select('*')
+        .eq('connected_by_user_id', user.id)
+        .eq('status', 'active')
+        .limit(1);
+
+      if (connections && connections.length > 0) {
+        schoolAdmin = {
+          schoolId: connections[0].peeap_school_id,
+          role: 'admin',
+          schoolName: connections[0].school_name,
+        };
+      }
+    }
+
+    // Generate tokens
+    const accessToken = generateSecureToken(64);
+    const refreshToken = generateSecureToken(64);
+    const expiresIn = 3600; // 1 hour
+
+    // Store the access token
+    await supabase.from('oauth_access_tokens').insert({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      client_id: client_id,
+      user_id: user.id,
+      scope: authCode.scope,
+      expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
+    });
+
+    // Prepare response
+    const response: Record<string, any> = {
+      tokens: {
+        accessToken,
+        refreshToken,
+        expiresIn,
+      },
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+      },
+    };
+
+    // Add school admin data if user is a school admin
+    if (schoolAdmin) {
+      response.schoolAdmin = schoolAdmin;
+    }
+
+    return res.status(200).json(response);
+
+  } catch (error: any) {
+    console.error('[SSO Exchange] Error:', error);
+    return res.status(500).json({
+      error: 'server_error',
+      message: error.message || 'Internal server error',
+    });
+  }
 }
 
 /**
@@ -7289,13 +7008,91 @@ async function handleOAuthToken(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      return res.status(200).json({
+      // Fetch user data for enhanced response (for school integration)
+      const { data: userData } = await supabase
+        .from('users')
+        .select('id, email, phone, first_name, last_name, roles')
+        .eq('id', authCode.user_id)
+        .limit(1);
+
+      const user = userData?.[0];
+
+      // Fetch wallet data if wallet scopes are requested
+      let walletData = null;
+      const scopes = authCode.scope.split(' ');
+      if (scopes.includes('wallet:read') || scopes.includes('wallet:write')) {
+        const { data: wallets } = await supabase
+          .from('wallets')
+          .select('id, balance, currency, status, daily_limit, daily_spent')
+          .eq('user_id', authCode.user_id)
+          .eq('type', 'personal')
+          .limit(1);
+
+        if (wallets && wallets.length > 0) {
+          walletData = {
+            wallet_id: wallets[0].id,
+            balance: wallets[0].balance || 0,
+            currency: wallets[0].currency || 'NLE',
+            status: wallets[0].status || 'active',
+            daily_limit: wallets[0].daily_limit || 100,
+            daily_spent: wallets[0].daily_spent || 0,
+          };
+        }
+      }
+
+      // Build response with user and wallet data
+      const response: Record<string, any> = {
         access_token: accessToken,
         token_type: 'Bearer',
         expires_in: expiresIn,
         refresh_token: newRefreshToken,
         scope: authCode.scope,
-      });
+      };
+
+      // Add user data
+      if (user) {
+        response.user = {
+          peeap_id: user.id,
+          email: user.email,
+          phone: user.phone,
+          name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+          is_new_account: false,
+        };
+      }
+
+      // Add wallet data if available
+      if (walletData) {
+        response.wallet = walletData;
+      }
+
+      // Add link info from authorization code metadata if present
+      if (authCode.metadata) {
+        try {
+          const metadata = typeof authCode.metadata === 'string'
+            ? JSON.parse(authCode.metadata)
+            : authCode.metadata;
+          if (metadata.index_number || metadata.school_id) {
+            response.link = {
+              index_number: metadata.index_number,
+              school_id: metadata.school_id,
+              linked_at: new Date().toISOString(),
+            };
+          }
+          // For school admin connection
+          if (metadata.user_type === 'admin') {
+            response.school_connection = {
+              peeap_school_id: `sch_${authCode.user_id.substring(0, 8)}`,
+              connected_by: response.user,
+              connected_at: new Date().toISOString(),
+              status: 'active',
+            };
+          }
+        } catch (e) {
+          // Ignore metadata parsing errors
+        }
+      }
+
+      return res.status(200).json(response);
 
     } else if (grant_type === 'refresh_token') {
       if (!refresh_token) {
@@ -11132,10 +10929,6 @@ async function handleKycVerificationStatus(req: VercelRequest, res: VercelRespon
   try {
     const { userId, user } = auth;
 
-    // Check if user is already approved/verified by admin
-    const kycStatus = user.kyc_status?.toUpperCase();
-    const isAdminApproved = kycStatus === 'APPROVED' || kycStatus === 'VERIFIED';
-
     // Get the latest KYC application
     const { data: kycApplication } = await supabase
       .from('kyc_applications')
@@ -11148,21 +10941,19 @@ async function handleKycVerificationStatus(req: VercelRequest, res: VercelRespon
     const metadata = user.metadata || {};
     const slVerification = kycApplication?.verification_result?.slVerification;
 
-    const hasIdVerification = isAdminApproved || !!(
+    const hasIdVerification = !!(
       slVerification?.nin ||
       kycApplication?.verification_result?.extractedData?.documentNumber ||
       metadata.nin
     );
 
-    const hasPhoneVerification = isAdminApproved || !!(
+    const hasPhoneVerification = !!(
       slVerification?.phoneVerified ||
       metadata.phoneVerifiedAt
     );
 
-    const hasNameMatch = isAdminApproved || (slVerification?.nameMatchScore || 0) >= 70;
-
-    // User is verified if admin approved OR all checks pass
-    const overallVerified = isAdminApproved || (hasIdVerification && hasPhoneVerification && hasNameMatch);
+    const hasNameMatch = (slVerification?.nameMatchScore || 0) >= 70;
+    const overallVerified = hasIdVerification && hasPhoneVerification && hasNameMatch;
 
     // Calculate verification percentage
     let percentage = 0;
@@ -11667,26 +11458,18 @@ async function handleKycSierraLeoneVerification(req: VercelRequest, res: VercelR
       kycApplicationId = newApp?.id || '';
     }
 
-    // Update user kyc_status to PENDING and metadata
-    const updateData: Record<string, any> = {
-      kyc_status: 'PENDING',
-    };
-
+    // If phone verified, update user metadata
     if (phoneVerified) {
-      updateData.metadata = {
-        ...user.metadata,
-        phoneVerifiedAt: new Date().toISOString(),
-        phoneVerifiedNumber: normalized,
-      };
-    }
-
-    const { error: userUpdateError } = await supabase
-      .from('users')
-      .update(updateData)
-      .eq('id', userId);
-
-    if (userUpdateError) {
-      console.error('[KYC] Error updating user kyc_status:', userUpdateError);
+      await supabase
+        .from('users')
+        .update({
+          metadata: {
+            ...user.metadata,
+            phoneVerifiedAt: new Date().toISOString(),
+            phoneVerifiedNumber: normalized,
+          },
+        })
+        .eq('id', userId);
     }
 
     return res.status(200).json({
@@ -12349,4 +12132,793 @@ async function handlePaymentIntentQr(req: VercelRequest, res: VercelResponse, in
     return res.status(500).json({ error: error.message || 'Internal server error' });
   }
 }
-// Deployed: 2025-12-29T00:48:29Z
+
+// =============================================
+// CHAT WIDGET HANDLERS
+// =============================================
+
+/**
+ * Validate widget API key
+ */
+async function validateWidgetApiKey(apiKey: string): Promise<{
+  valid: boolean;
+  platform?: any;
+  error?: string;
+}> {
+  if (!apiKey?.startsWith('pk_')) {
+    return { valid: false, error: 'Invalid API key format' };
+  }
+
+  // Hash the API key for lookup
+  const keyHash = require('crypto').createHash('sha256').update(apiKey).digest('hex');
+
+  const { data: apiKeyData, error } = await supabase
+    .from('api_keys')
+    .select('*, chat_widget_platforms(*)')
+    .eq('key_hash', keyHash)
+    .eq('is_active', true)
+    .single();
+
+  if (error || !apiKeyData) {
+    return { valid: false, error: 'Invalid API key' };
+  }
+
+  // Check for widget scope
+  const hasWidgetScope = apiKeyData.scopes?.includes('chat.widget') ||
+                         apiKeyData.scopes?.includes('*');
+
+  if (!hasWidgetScope) {
+    return { valid: false, error: 'API key does not have chat.widget scope' };
+  }
+
+  return {
+    valid: true,
+    platform: apiKeyData.chat_widget_platforms?.[0] || null,
+  };
+}
+
+/**
+ * Validate widget session
+ */
+async function validateWidgetSession(sessionToken: string): Promise<any | null> {
+  if (!sessionToken) return null;
+
+  const { data, error } = await supabase
+    .from('widget_anonymous_sessions')
+    .select('*, chat_widget_platforms(*)')
+    .eq('session_token', sessionToken)
+    .gt('expires_at', new Date().toISOString())
+    .single();
+
+  if (error || !data) return null;
+
+  // Update last activity
+  await supabase
+    .from('widget_anonymous_sessions')
+    .update({ last_activity_at: new Date().toISOString() })
+    .eq('id', data.id);
+
+  return data;
+}
+
+/**
+ * Widget Session - POST /widget/session, PATCH /widget/session
+ */
+async function handleWidgetSession(req: VercelRequest, res: VercelResponse) {
+  const apiKey = req.headers['x-api-key'] as string;
+  const keyValidation = await validateWidgetApiKey(apiKey);
+
+  if (!keyValidation.valid) {
+    return res.status(401).json({ error: keyValidation.error });
+  }
+
+  if (req.method === 'POST') {
+    // Create new session
+    const { fingerprint, domain, origin, referrer, name, email, metadata } = req.body;
+
+    // Get or create platform for this domain
+    let platformId = keyValidation.platform?.id;
+
+    if (!platformId) {
+      // Auto-create platform entry
+      const { data: apiKeyData } = await supabase
+        .from('api_keys')
+        .select('id, user_id')
+        .eq('key_hash', require('crypto').createHash('sha256').update(apiKey).digest('hex'))
+        .single();
+
+      const { data: platform } = await supabase
+        .from('chat_widget_platforms')
+        .insert({
+          developer_id: apiKeyData?.user_id,
+          api_key_id: apiKeyData?.id,
+          name: domain || 'Unknown',
+          domain: domain || 'unknown',
+        })
+        .select()
+        .single();
+
+      platformId = platform?.id;
+    }
+
+    // Check for existing session with fingerprint
+    if (fingerprint) {
+      const { data: existing } = await supabase
+        .from('widget_anonymous_sessions')
+        .select('*')
+        .eq('platform_id', platformId)
+        .eq('fingerprint', fingerprint)
+        .gt('expires_at', new Date().toISOString())
+        .single();
+
+      if (existing) {
+        await supabase
+          .from('widget_anonymous_sessions')
+          .update({ last_activity_at: new Date().toISOString() })
+          .eq('id', existing.id);
+
+        return res.json({
+          sessionId: existing.session_token,
+          name: existing.name,
+          email: existing.email,
+          createdAt: existing.created_at,
+          expiresAt: existing.expires_at,
+        });
+      }
+    }
+
+    // Generate session token
+    const sessionToken = require('crypto').randomBytes(48).toString('hex');
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+
+    const { data: session, error } = await supabase
+      .from('widget_anonymous_sessions')
+      .insert({
+        platform_id: platformId,
+        session_token: sessionToken,
+        fingerprint,
+        name,
+        email,
+        metadata,
+        origin_url: origin,
+        referrer,
+        user_agent: req.headers['user-agent'],
+        expires_at: expiresAt.toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[Widget] Session creation error:', error);
+      return res.status(500).json({ error: 'Failed to create session' });
+    }
+
+    return res.json({
+      sessionId: session.session_token,
+      name: session.name,
+      email: session.email,
+      createdAt: session.created_at,
+      expiresAt: session.expires_at,
+    });
+  }
+
+  if (req.method === 'PATCH') {
+    // Update session
+    const sessionToken = req.headers['x-widget-session'] as string;
+    const session = await validateWidgetSession(sessionToken);
+
+    if (!session) {
+      return res.status(401).json({ error: 'Invalid session' });
+    }
+
+    const { name, email, phone, metadata } = req.body;
+
+    const { data: updated, error } = await supabase
+      .from('widget_anonymous_sessions')
+      .update({
+        name: name || session.name,
+        email: email || session.email,
+        phone: phone || session.phone,
+        metadata: { ...session.metadata, ...metadata },
+      })
+      .eq('id', session.id)
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(500).json({ error: 'Failed to update session' });
+    }
+
+    return res.json({
+      sessionId: updated.session_token,
+      name: updated.name,
+      email: updated.email,
+      createdAt: updated.created_at,
+      expiresAt: updated.expires_at,
+    });
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Validate Widget Session - POST /widget/session/validate
+ */
+async function handleWidgetSessionValidate(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const sessionToken = req.headers['x-widget-session'] as string;
+  const session = await validateWidgetSession(sessionToken);
+
+  if (!session) {
+    return res.status(401).json({ valid: false });
+  }
+
+  return res.json({ valid: true });
+}
+
+/**
+ * Search Users - GET /widget/users/search
+ */
+async function handleWidgetUsersSearch(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const sessionToken = req.headers['x-widget-session'] as string;
+  const session = await validateWidgetSession(sessionToken);
+
+  if (!session) {
+    return res.status(401).json({ error: 'Invalid session' });
+  }
+
+  const query = (req.query.q as string || '').trim();
+  const limit = Math.min(parseInt(req.query.limit as string) || 10, 20);
+
+  if (query.length < 2) {
+    return res.status(400).json({ error: 'Query must be at least 2 characters' });
+  }
+
+  const { data: users, error } = await supabase
+    .from('users')
+    .select('id, first_name, last_name, profile_picture')
+    .or(`email.ilike.%${query}%,phone.ilike.%${query}%,first_name.ilike.%${query}%,last_name.ilike.%${query}%`)
+    .limit(limit);
+
+  if (error) {
+    return res.status(500).json({ error: 'Search failed' });
+  }
+
+  return res.json({
+    users: (users || []).map(u => ({
+      id: u.id,
+      name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || 'Unknown',
+      avatar: u.profile_picture,
+    })),
+  });
+}
+
+/**
+ * Get User by ID - GET /widget/users/:id
+ */
+async function handleWidgetUserById(req: VercelRequest, res: VercelResponse, userId: string) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const sessionToken = req.headers['x-widget-session'] as string;
+  const session = await validateWidgetSession(sessionToken);
+
+  if (!session) {
+    return res.status(401).json({ error: 'Invalid session' });
+  }
+
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('id, first_name, last_name, profile_picture')
+    .eq('id', userId)
+    .single();
+
+  if (error || !user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  return res.json({
+    id: user.id,
+    name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Unknown',
+    avatar: user.profile_picture,
+  });
+}
+
+/**
+ * Widget Conversations - GET/POST /widget/conversations
+ */
+async function handleWidgetConversations(req: VercelRequest, res: VercelResponse) {
+  const sessionToken = req.headers['x-widget-session'] as string;
+  const session = await validateWidgetSession(sessionToken);
+
+  if (!session) {
+    return res.status(401).json({ error: 'Invalid session' });
+  }
+
+  if (req.method === 'GET') {
+    // Get conversations for this session
+    const { data: conversations, error } = await supabase
+      .from('conversations')
+      .select(`
+        *,
+        messages(id, content, created_at, sender_type, sender_name)
+      `)
+      .eq('widget_session_id', session.id)
+      .order('last_message_at', { ascending: false });
+
+    if (error) {
+      return res.status(500).json({ error: 'Failed to load conversations' });
+    }
+
+    return res.json({
+      conversations: (conversations || []).map(c => ({
+        id: c.id,
+        type: c.type,
+        subject: c.subject,
+        status: c.status,
+        participantIds: c.participant_ids || [],
+        lastMessage: c.messages?.[0] ? {
+          id: c.messages[0].id,
+          content: c.messages[0].content,
+          createdAt: c.messages[0].created_at,
+        } : null,
+        lastMessageAt: c.last_message_at,
+        unreadCount: 0, // TODO: Calculate properly
+        createdAt: c.created_at,
+        updatedAt: c.updated_at,
+      })),
+    });
+  }
+
+  if (req.method === 'POST') {
+    // Start new conversation
+    const { targetUserId, subject, message } = req.body;
+
+    if (!targetUserId) {
+      // Check for platform default target
+      const platformTargetId = session.chat_widget_platforms?.target_user_id;
+      if (!platformTargetId) {
+        return res.status(400).json({ error: 'targetUserId is required' });
+      }
+    }
+
+    const recipientId = targetUserId || session.chat_widget_platforms?.target_user_id;
+
+    // Create conversation
+    const { data: conversation, error } = await supabase
+      .from('conversations')
+      .insert({
+        type: 'general',
+        subject: subject || 'Chat from website',
+        participant_ids: [recipientId],
+        widget_session_id: session.id,
+        platform_id: session.platform_id,
+        source: 'widget',
+        status: 'open',
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[Widget] Conversation creation error:', error);
+      return res.status(500).json({ error: 'Failed to create conversation' });
+    }
+
+    // Send initial message if provided
+    if (message) {
+      await supabase.from('messages').insert({
+        conversation_id: conversation.id,
+        content: message,
+        sender_type: 'anonymous',
+        sender_name: session.name || 'Website Visitor',
+        widget_session_id: session.id,
+      });
+
+      // Update conversation last message
+      await supabase
+        .from('conversations')
+        .update({
+          last_message_at: new Date().toISOString(),
+          last_message_preview: message.substring(0, 100),
+        })
+        .eq('id', conversation.id);
+    }
+
+    return res.json({
+      conversation: {
+        id: conversation.id,
+        type: conversation.type,
+        subject: conversation.subject,
+        status: conversation.status,
+        participantIds: conversation.participant_ids || [],
+        createdAt: conversation.created_at,
+      },
+    });
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Get Conversation by ID - GET/PATCH /widget/conversations/:id
+ */
+async function handleWidgetConversationById(req: VercelRequest, res: VercelResponse, conversationId: string) {
+  const sessionToken = req.headers['x-widget-session'] as string;
+  const session = await validateWidgetSession(sessionToken);
+
+  if (!session) {
+    return res.status(401).json({ error: 'Invalid session' });
+  }
+
+  // Verify conversation belongs to session
+  const { data: conversation, error } = await supabase
+    .from('conversations')
+    .select('*')
+    .eq('id', conversationId)
+    .eq('widget_session_id', session.id)
+    .single();
+
+  if (error || !conversation) {
+    return res.status(404).json({ error: 'Conversation not found' });
+  }
+
+  if (req.method === 'GET') {
+    return res.json({
+      id: conversation.id,
+      type: conversation.type,
+      subject: conversation.subject,
+      status: conversation.status,
+      participantIds: conversation.participant_ids || [],
+      lastMessageAt: conversation.last_message_at,
+      createdAt: conversation.created_at,
+      updatedAt: conversation.updated_at,
+    });
+  }
+
+  if (req.method === 'PATCH') {
+    const { status } = req.body;
+
+    const { data: updated, error: updateError } = await supabase
+      .from('conversations')
+      .update({ status })
+      .eq('id', conversationId)
+      .select()
+      .single();
+
+    if (updateError) {
+      return res.status(500).json({ error: 'Failed to update conversation' });
+    }
+
+    return res.json({ success: true });
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Widget Messages - GET/POST /widget/conversations/:id/messages
+ */
+async function handleWidgetMessages(req: VercelRequest, res: VercelResponse, conversationId: string) {
+  const sessionToken = req.headers['x-widget-session'] as string;
+  const session = await validateWidgetSession(sessionToken);
+
+  if (!session) {
+    return res.status(401).json({ error: 'Invalid session' });
+  }
+
+  // Verify conversation belongs to session
+  const { data: conversation } = await supabase
+    .from('conversations')
+    .select('id')
+    .eq('id', conversationId)
+    .eq('widget_session_id', session.id)
+    .single();
+
+  if (!conversation) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  if (req.method === 'GET') {
+    const cursor = req.query.cursor as string;
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+
+    let query = supabase
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .eq('is_deleted', false)
+      .order('created_at', { ascending: true })
+      .limit(limit);
+
+    if (cursor) {
+      query = query.gt('created_at', cursor);
+    }
+
+    const { data: messages, error } = await query;
+
+    if (error) {
+      return res.status(500).json({ error: 'Failed to load messages' });
+    }
+
+    return res.json({
+      messages: (messages || []).map(m => ({
+        id: m.id,
+        conversationId: m.conversation_id,
+        content: m.content,
+        senderType: m.sender_type,
+        senderId: m.sender_id,
+        senderSessionId: m.widget_session_id,
+        senderName: m.sender_name,
+        messageType: m.message_type || 'text',
+        attachments: m.attachments || [],
+        createdAt: m.created_at,
+      })),
+      hasMore: (messages || []).length === limit,
+      cursor: messages?.length ? messages[messages.length - 1].created_at : null,
+    });
+  }
+
+  if (req.method === 'POST') {
+    const { content, attachments } = req.body;
+
+    if (!content?.trim()) {
+      return res.status(400).json({ error: 'Message content is required' });
+    }
+
+    const { data: message, error } = await supabase
+      .from('messages')
+      .insert({
+        conversation_id: conversationId,
+        content: content.trim(),
+        sender_type: 'anonymous',
+        sender_name: session.name || 'Website Visitor',
+        widget_session_id: session.id,
+        message_type: 'text',
+        attachments: attachments || [],
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[Widget] Message send error:', error);
+      return res.status(500).json({ error: 'Failed to send message' });
+    }
+
+    // Update conversation
+    await supabase
+      .from('conversations')
+      .update({
+        last_message_at: new Date().toISOString(),
+        last_message_preview: content.substring(0, 100),
+      })
+      .eq('id', conversationId);
+
+    // Broadcast message via Supabase realtime
+    const channel = supabase.channel(`chat-${conversationId}`);
+    await channel.send({
+      type: 'broadcast',
+      event: 'new_message',
+      payload: {
+        id: message.id,
+        conversationId: message.conversation_id,
+        content: message.content,
+        senderType: message.sender_type,
+        senderSessionId: message.widget_session_id,
+        senderName: message.sender_name,
+        messageType: message.message_type,
+        createdAt: message.created_at,
+      },
+    });
+
+    return res.json({
+      message: {
+        id: message.id,
+        conversationId: message.conversation_id,
+        content: message.content,
+        senderType: message.sender_type,
+        senderSessionId: message.widget_session_id,
+        senderName: message.sender_name,
+        messageType: message.message_type,
+        createdAt: message.created_at,
+      },
+    });
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Poll for new messages - GET /widget/conversations/:id/messages/poll
+ */
+async function handleWidgetMessagesPoll(req: VercelRequest, res: VercelResponse, conversationId: string) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const sessionToken = req.headers['x-widget-session'] as string;
+  const session = await validateWidgetSession(sessionToken);
+
+  if (!session) {
+    return res.status(401).json({ error: 'Invalid session' });
+  }
+
+  const afterId = req.query.after as string;
+
+  let query = supabase
+    .from('messages')
+    .select('*')
+    .eq('conversation_id', conversationId)
+    .eq('is_deleted', false)
+    .order('created_at', { ascending: true });
+
+  if (afterId) {
+    query = query.gt('id', afterId);
+  }
+
+  const { data: messages, error } = await query.limit(50);
+
+  if (error) {
+    return res.status(500).json({ error: 'Failed to poll messages' });
+  }
+
+  return res.json({
+    messages: (messages || []).map(m => ({
+      id: m.id,
+      conversationId: m.conversation_id,
+      content: m.content,
+      senderType: m.sender_type,
+      senderSessionId: m.widget_session_id,
+      senderName: m.sender_name,
+      messageType: m.message_type || 'text',
+      createdAt: m.created_at,
+    })),
+  });
+}
+
+/**
+ * Mark conversation as read - POST /widget/conversations/:id/read
+ */
+async function handleWidgetMarkRead(req: VercelRequest, res: VercelResponse, conversationId: string) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const sessionToken = req.headers['x-widget-session'] as string;
+  const session = await validateWidgetSession(sessionToken);
+
+  if (!session) {
+    return res.status(401).json({ error: 'Invalid session' });
+  }
+
+  // Just acknowledge - actual read tracking can be implemented later
+  return res.json({ success: true });
+}
+
+/**
+ * Typing indicator - POST /widget/conversations/:id/typing
+ */
+async function handleWidgetTyping(req: VercelRequest, res: VercelResponse, conversationId: string) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const sessionToken = req.headers['x-widget-session'] as string;
+  const session = await validateWidgetSession(sessionToken);
+
+  if (!session) {
+    return res.status(401).json({ error: 'Invalid session' });
+  }
+
+  const { isTyping } = req.body;
+
+  // Broadcast typing via Supabase realtime
+  const channel = supabase.channel(`chat-${conversationId}`);
+  await channel.send({
+    type: 'broadcast',
+    event: 'typing',
+    payload: {
+      conversationId,
+      sessionId: session.session_token,
+      name: session.name || 'Website Visitor',
+      isTyping: !!isTyping,
+    },
+  });
+
+  return res.json({ success: true });
+}
+
+/**
+ * Widget Platforms - GET/POST /widget/platforms
+ */
+async function handleWidgetPlatforms(req: VercelRequest, res: VercelResponse) {
+  const apiKey = req.headers['x-api-key'] as string;
+  const keyValidation = await validateWidgetApiKey(apiKey);
+
+  if (!keyValidation.valid) {
+    return res.status(401).json({ error: keyValidation.error });
+  }
+
+  // Get developer ID from API key
+  const keyHash = require('crypto').createHash('sha256').update(apiKey).digest('hex');
+  const { data: apiKeyData } = await supabase
+    .from('api_keys')
+    .select('id, user_id')
+    .eq('key_hash', keyHash)
+    .single();
+
+  if (!apiKeyData) {
+    return res.status(401).json({ error: 'Invalid API key' });
+  }
+
+  if (req.method === 'GET') {
+    const { data: platforms, error } = await supabase
+      .from('chat_widget_platforms')
+      .select('*')
+      .eq('developer_id', apiKeyData.user_id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      return res.status(500).json({ error: 'Failed to load platforms' });
+    }
+
+    return res.json({ platforms });
+  }
+
+  if (req.method === 'POST') {
+    const { name, domain, config, targetUserId } = req.body;
+
+    if (!name || !domain) {
+      return res.status(400).json({ error: 'name and domain are required' });
+    }
+
+    const { data: platform, error } = await supabase
+      .from('chat_widget_platforms')
+      .insert({
+        developer_id: apiKeyData.user_id,
+        api_key_id: apiKeyData.id,
+        name,
+        domain,
+        config,
+        target_user_id: targetUserId,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[Widget] Platform creation error:', error);
+      return res.status(500).json({ error: 'Failed to create platform' });
+    }
+
+    return res.json({ platform });
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+/**
+ * Widget File Upload - POST /widget/upload
+ */
+async function handleWidgetUpload(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const sessionToken = req.headers['x-widget-session'] as string;
+  const session = await validateWidgetSession(sessionToken);
+
+  if (!session) {
+    return res.status(401).json({ error: 'Invalid session' });
+  }
+
+  // File upload handling would go here
+  // For now, return a placeholder
+  return res.status(501).json({ error: 'File upload not yet implemented' });
+}

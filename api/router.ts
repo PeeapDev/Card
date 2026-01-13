@@ -180,6 +180,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handlePayoutById(req, res, payoutId);
     } else if (path === 'auth/verify-pin' || path === 'auth/verify-pin/') {
       return await handleAuthVerifyPin(req, res);
+    } else if (path === 'auth/sso/exchange' || path === 'auth/sso/exchange/') {
+      return await handleSsoExchange(req, res);
     } else if (path === 'oauth/token' || path === 'oauth/token/') {
       return await handleOAuthToken(req, res);
     } else if (path === 'oauth/userinfo' || path === 'oauth/userinfo/') {
@@ -6735,6 +6737,163 @@ async function handleAuthVerifyPin(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({
       error: 'server_error',
       error_description: error.message || 'Internal server error',
+    });
+  }
+}
+
+/**
+ * SSO Exchange Endpoint for School Portal
+ * Exchanges authorization code for tokens and returns school admin data
+ *
+ * POST /api/auth/sso/exchange
+ * Body: { code, redirect_uri, client_id }
+ */
+async function handleSsoExchange(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'method_not_allowed' });
+  }
+
+  try {
+    const { code, redirect_uri, client_id } = req.body;
+
+    if (!code || !redirect_uri || !client_id) {
+      return res.status(400).json({
+        error: 'invalid_request',
+        message: 'code, redirect_uri, and client_id are required',
+      });
+    }
+
+    // Find and validate the authorization code
+    const { data: codes, error: codeError } = await supabase
+      .from('oauth_authorization_codes')
+      .select('*')
+      .eq('code', code)
+      .eq('client_id', client_id)
+      .eq('redirect_uri', redirect_uri)
+      .is('used_at', null)
+      .limit(1);
+
+    if (codeError || !codes || codes.length === 0) {
+      return res.status(400).json({
+        error: 'invalid_grant',
+        message: 'Invalid or expired authorization code',
+      });
+    }
+
+    const authCode = codes[0];
+
+    // Check expiration
+    if (new Date(authCode.expires_at) < new Date()) {
+      return res.status(400).json({
+        error: 'invalid_grant',
+        message: 'Authorization code expired',
+      });
+    }
+
+    // Mark code as used
+    await supabase
+      .from('oauth_authorization_codes')
+      .update({ used_at: new Date().toISOString() })
+      .eq('id', authCode.id);
+
+    // Get user data
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('id, email, phone, first_name, last_name, roles')
+      .eq('id', authCode.user_id)
+      .limit(1);
+
+    if (userError || !userData || userData.length === 0) {
+      return res.status(400).json({
+        error: 'user_not_found',
+        message: 'User not found',
+      });
+    }
+
+    const user = userData[0];
+
+    // Check if user is a school admin (either by role or by school connection)
+    let schoolAdmin = null;
+
+    // First check if user has school_admin role
+    if (user.roles && (user.roles.includes('school_admin') || user.roles === 'school_admin')) {
+      // Find their connected school
+      const { data: connections } = await supabase
+        .from('school_connections')
+        .select('*')
+        .eq('connected_by_user_id', user.id)
+        .eq('status', 'active')
+        .limit(1);
+
+      if (connections && connections.length > 0) {
+        schoolAdmin = {
+          schoolId: connections[0].peeap_school_id,
+          role: 'admin',
+          schoolName: connections[0].school_name,
+        };
+      }
+    }
+
+    // Also check school_connections table directly
+    if (!schoolAdmin) {
+      const { data: connections } = await supabase
+        .from('school_connections')
+        .select('*')
+        .eq('connected_by_user_id', user.id)
+        .eq('status', 'active')
+        .limit(1);
+
+      if (connections && connections.length > 0) {
+        schoolAdmin = {
+          schoolId: connections[0].peeap_school_id,
+          role: 'admin',
+          schoolName: connections[0].school_name,
+        };
+      }
+    }
+
+    // Generate tokens
+    const accessToken = generateSecureToken(64);
+    const refreshToken = generateSecureToken(64);
+    const expiresIn = 3600; // 1 hour
+
+    // Store the access token
+    await supabase.from('oauth_access_tokens').insert({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      client_id: client_id,
+      user_id: user.id,
+      scope: authCode.scope,
+      expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
+    });
+
+    // Prepare response
+    const response: Record<string, any> = {
+      tokens: {
+        accessToken,
+        refreshToken,
+        expiresIn,
+      },
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+      },
+    };
+
+    // Add school admin data if user is a school admin
+    if (schoolAdmin) {
+      response.schoolAdmin = schoolAdmin;
+    }
+
+    return res.status(200).json(response);
+
+  } catch (error: any) {
+    console.error('[SSO Exchange] Error:', error);
+    return res.status(500).json({
+      error: 'server_error',
+      message: error.message || 'Internal server error',
     });
   }
 }

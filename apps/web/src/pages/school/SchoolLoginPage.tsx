@@ -354,13 +354,27 @@ export function SchoolLoginPage() {
               </div>
 
               <div className="space-y-3">
-                <a
-                  href={`https://my.peeap.com/auth/authorize?client_id=school-portal&redirect_uri=${encodeURIComponent(window.location.origin + '/auth/callback')}&response_type=code&scope=school_admin`}
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Generate CSRF state token
+                    const state = crypto.randomUUID();
+                    sessionStorage.setItem('peeap_oauth_state', state);
+                    // Redirect to OAuth authorization
+                    const params = new URLSearchParams({
+                      client_id: 'school-portal',
+                      redirect_uri: window.location.origin + '/auth/callback',
+                      response_type: 'code',
+                      scope: 'school_admin',
+                      state: state,
+                    });
+                    window.location.href = `https://my.peeap.com/auth/authorize?${params.toString()}`;
+                  }}
                   className="w-full flex items-center justify-center gap-3 py-3 px-4 border border-gray-300 rounded-xl text-gray-700 font-medium hover:bg-gray-50 transition-colors"
                 >
                   <Building2 className="h-5 w-5 text-blue-600" />
                   Sign in with Peeap Account
-                </a>
+                </button>
 
                 {/* Demo Admin Button - For Testing */}
                 <button

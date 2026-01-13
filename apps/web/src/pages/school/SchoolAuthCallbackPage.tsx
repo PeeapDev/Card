@@ -14,6 +14,7 @@ export function SchoolAuthCallbackPage() {
   useEffect(() => {
     const handleCallback = async () => {
       const code = searchParams.get('code');
+      const state = searchParams.get('state');
       const error = searchParams.get('error');
       const errorDescription = searchParams.get('error_description');
 
@@ -22,6 +23,17 @@ export function SchoolAuthCallbackPage() {
         setMessage(errorDescription || 'Authentication failed');
         return;
       }
+
+      // Validate CSRF state token
+      const savedState = sessionStorage.getItem('peeap_oauth_state');
+      if (state && savedState && state !== savedState) {
+        setStatus('error');
+        setMessage('Invalid state parameter - possible CSRF attack');
+        sessionStorage.removeItem('peeap_oauth_state');
+        return;
+      }
+      // Clear the state after validation
+      sessionStorage.removeItem('peeap_oauth_state');
 
       if (!code) {
         setStatus('error');
@@ -126,7 +138,7 @@ export function SchoolAuthCallbackPage() {
               </div>
               <p className="text-red-700">{message}</p>
               <button
-                onClick={() => navigate('/login')}
+                onClick={() => navigate('/school/login')}
                 className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Back to Login
