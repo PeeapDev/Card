@@ -20,6 +20,7 @@ import {
 const DEFAULT_USER_APPS = {
   events: false,
   cashbox: false,
+  school_utilities: false,
 };
 
 interface UserAppsContextType {
@@ -73,6 +74,8 @@ export function UserAppsProvider({ children }: UserAppsProviderProps) {
         events: settings.events_enabled,
         // Cash Box is only enabled if setup is completed
         cashbox: settings.cashbox_enabled && settings.cashbox_setup_completed,
+        // School Utilities
+        school_utilities: settings.school_utilities_enabled,
       });
 
       setHasLoadedFromDB(true);
@@ -106,7 +109,7 @@ export function UserAppsProvider({ children }: UserAppsProviderProps) {
     if (!user?.id) return;
 
     try {
-      await userSettingsService.enableApp(user.id, appId as 'events' | 'cashbox');
+      await userSettingsService.enableApp(user.id, appId as 'events' | 'cashbox' | 'school_utilities');
 
       // If enabling cashbox without setup, don't set enabled state yet
       // The setup wizard will complete the process
@@ -131,7 +134,7 @@ export function UserAppsProvider({ children }: UserAppsProviderProps) {
     if (!user?.id) return;
 
     try {
-      await userSettingsService.disableApp(user.id, appId as 'events' | 'cashbox');
+      await userSettingsService.disableApp(user.id, appId as 'events' | 'cashbox' | 'school_utilities');
 
       setEnabledApps(prev => ({ ...prev, [appId]: false }));
 
@@ -140,6 +143,12 @@ export function UserAppsProvider({ children }: UserAppsProviderProps) {
           ...prev,
           cashbox_enabled: false,
           cashbox_setup_completed: false,
+        } : null);
+      } else if (appId === 'school_utilities') {
+        setAppsSettings(prev => prev ? {
+          ...prev,
+          school_utilities_enabled: false,
+          school_utilities_setup_completed: false,
         } : null);
       }
     } catch (error) {

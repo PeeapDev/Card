@@ -180,6 +180,7 @@ import { StaffEventScannerPage } from '@/pages/user/StaffEventScannerPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { CashBoxSetupWizard } from '@/components/cashbox/CashBoxSetupWizard';
 import { StudentConnectPage } from '@/pages/apps/StudentConnectPage';
+import { SchoolUtilitiesPage } from '@/pages/SchoolUtilitiesPage';
 // Agent Pages
 import { AgentDashboard } from '@/pages/agent/AgentDashboard';
 import { AgentNotificationsPage } from '@/pages/agent/AgentNotificationsPage';
@@ -207,6 +208,7 @@ import {
   SchoolLoginPage,
   SchoolRegisterPage,
   SchoolAuthCallbackPage,
+  SchoolConnectionSetupPage,
 } from '@/pages/school';
 
 const queryClient = new QueryClient({
@@ -317,6 +319,9 @@ function App() {
                   <Route path="/school/login" element={<SchoolLoginPage />} />
                   <Route path="/school/register" element={<SchoolRegisterPage />} />
                   <Route path="/auth/callback" element={<SchoolAuthCallbackPage />} />
+
+                  {/* School Connection Setup - Wizard after SSO from school SaaS */}
+                  <Route path="/school/connection-setup" element={<SchoolConnectionSetupPage />} />
 
                   {/* School Onboarding - Session-based registration */}
                   <Route path="/onboard" element={<SchoolOnboardingPage />} />
@@ -1677,6 +1682,7 @@ function App() {
                   <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
                   <Route path="/cashbox/setup" element={<ProtectedRoute><CashBoxSetupWizard /></ProtectedRoute>} />
                   <Route path="/student-connect" element={<ProtectedRoute><StudentConnectPage /></ProtectedRoute>} />
+                  <Route path="/school-utilities" element={<ProtectedRoute><SchoolUtilitiesPage /></ProtectedRoute>} />
                   <Route path="/support" element={<ProtectedRoute><SupportPage /></ProtectedRoute>} />
                   <Route path="/disputes" element={<ProtectedRoute><UserDisputesPage /></ProtectedRoute>} />
                   <Route path="/verify" element={<ProtectedRoute><VerifyPage /></ProtectedRoute>} />

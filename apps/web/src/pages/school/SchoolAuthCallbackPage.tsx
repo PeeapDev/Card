@@ -18,6 +18,17 @@ export function SchoolAuthCallbackPage() {
       const error = searchParams.get('error');
       const errorDescription = searchParams.get('error_description');
 
+      // Check if this is a new connection from school SaaS
+      // These params are passed from the school system
+      const originUrl = searchParams.get('origin') || sessionStorage.getItem('school_origin_url');
+      const schoolId = searchParams.get('school_id') || sessionStorage.getItem('connection_school_id');
+      const isNewConnection = searchParams.get('connection') === 'new' || sessionStorage.getItem('is_new_connection') === 'true';
+
+      // Store for later use in setup wizard
+      if (originUrl) sessionStorage.setItem('school_origin_url', originUrl);
+      if (schoolId) sessionStorage.setItem('connection_school_id', schoolId);
+      if (isNewConnection) sessionStorage.setItem('is_new_connection', 'true');
+
       if (error) {
         setStatus('error');
         setMessage(errorDescription || 'Authentication failed');
@@ -64,13 +75,6 @@ export function SchoolAuthCallbackPage() {
 
         const data = await response.json();
 
-        // Check if user has school admin access
-        if (!data.schoolAdmin) {
-          setStatus('error');
-          setMessage('Your Peeap account is not connected to any school. Please contact your school administrator to get access.');
-          return;
-        }
-
         // Store tokens using auth service
         authService.setTokens({
           accessToken: data.tokens.accessToken,
@@ -78,20 +82,43 @@ export function SchoolAuthCallbackPage() {
           expiresIn: data.tokens.expiresIn || 3600,
         });
 
-        // Store school ID for the portal
-        localStorage.setItem('schoolId', data.schoolAdmin.schoolId);
-        localStorage.setItem('schoolRole', data.schoolAdmin.role);
-
         // Refresh user profile in auth context
         await refreshUser();
 
         setStatus('success');
-        setMessage('Sign in successful! Redirecting...');
 
-        // Redirect to dashboard
-        setTimeout(() => {
-          navigate('/school');
-        }, 1500);
+        // Check if this is a new connection from school SaaS
+        // If so, redirect to setup wizard instead of dashboard
+        if (originUrl || isNewConnection) {
+          setMessage('Authentication successful! Redirecting to setup...');
+
+          // Build setup wizard URL with params
+          const setupParams = new URLSearchParams();
+          if (originUrl) setupParams.set('origin', originUrl);
+          if (schoolId) setupParams.set('school_id', schoolId);
+
+          setTimeout(() => {
+            navigate(`/school/connection-setup?${setupParams.toString()}`);
+          }, 1000);
+        } else {
+          // Existing login - check for school admin access
+          if (!data.schoolAdmin) {
+            setStatus('error');
+            setMessage('Your Peeap account is not connected to any school. Please contact your school administrator to get access.');
+            return;
+          }
+
+          // Store school ID for the portal
+          localStorage.setItem('schoolId', data.schoolAdmin.schoolId);
+          localStorage.setItem('schoolRole', data.schoolAdmin.role);
+
+          setMessage('Sign in successful! Redirecting...');
+
+          // Redirect to dashboard
+          setTimeout(() => {
+            navigate('/school');
+          }, 1500);
+        }
 
       } catch (err: any) {
         console.error('SSO callback error:', err);

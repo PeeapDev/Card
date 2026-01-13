@@ -121,6 +121,22 @@ $register_url = 'https://my.peeap.com/register?redirect=' . urlencode($school_re
 // <a href="<?= $register_url ?>" target="_blank">Register on Peeap</a>
 ```
 
+### Connection Flow Diagram
+
+```
+┌─────────────────────────┐     ┌─────────────────────────┐     ┌─────────────────────────┐
+│   SCHOOL SAAS           │     │      MY.PEEAP.COM       │     │   SCHOOL.PEEAP.COM      │
+│   (ses.gov.school.edu.sl)│     │   (Authentication)      │     │   (Setup Wizard)        │
+│                         │     │                         │     │                         │
+│   [Connect with Peeap]  │────▶│   User Login/Register   │────▶│   Setup Wizard          │
+│                         │     │                         │     │   - Verify school data  │
+│                         │     │                         │     │   - Upload logo         │
+│                         │     │                         │     │   - Configure settings  │
+│                         │◀────────────────────────────────────│   [Complete Setup]      │
+│   ?peeap_connected=true │     │                         │     │                         │
+└─────────────────────────┘     └─────────────────────────┘     └─────────────────────────┘
+```
+
 ### PHP Implementation for "Connect with Peeap" Button
 
 ```php
@@ -144,21 +160,20 @@ function getPeeapConnectionState($school_id) {
 
 // Handle "Connect with Peeap" button click
 function initiatePeeapConnection() {
-    // Configure session for cross-domain compatibility
-    ini_set('session.cookie_samesite', 'Lax');
-    ini_set('session.cookie_secure', '1');
-    session_start();
+    // Get current school's subdomain (e.g., "ses.gov.school.edu.sl")
+    $origin = $_SERVER['HTTP_HOST'];
+    $school_id = getCurrentSchoolId();
 
-    $state = bin2hex(random_bytes(32));
-    $_SESSION['peeap_oauth_state'] = $state;
-
+    // IMPORTANT: redirect_uri points to school.peeap.com, NOT back to this site
+    // school.peeap.com will show a setup wizard and then redirect back here
     $params = [
         'response_type' => 'code',
         'client_id' => 'school_saas',
-        'redirect_uri' => 'https://' . $_SERVER['HTTP_HOST'] . '/peeap/callback',
+        'redirect_uri' => 'https://school.peeap.com/auth/callback',
         'scope' => 'school:connect school:manage wallet:read',
-        'state' => $state,
-        'school_id' => getCurrentSchoolId(),
+        'origin' => $origin,           // Pass the school's subdomain
+        'school_id' => $school_id,     // Pass the school ID
+        'connection' => 'new',         // Indicates this is a new connection
         'user_type' => 'admin'
     ];
 
@@ -167,6 +182,47 @@ function initiatePeeapConnection() {
     header('Location: ' . $sso_url);
     exit;
 }
+```
+
+### What Happens After "Connect with Peeap"
+
+1. **User authenticates on my.peeap.com** (login or register)
+2. **Redirected to school.peeap.com/auth/callback** with authorization code
+3. **school.peeap.com shows Setup Wizard**:
+   - Fetches school data from your API (`https://ses.gov.school.edu.sl/api/peeap/school-info`)
+   - Displays school name, student count, fees for verification
+   - Lets admin upload school logo (for receipts)
+   - Configures payment settings
+4. **After setup complete, redirects back** to `https://ses.gov.school.edu.sl/settings/payment?peeap_connected=true`
+
+### API Endpoint for School Data (Required)
+
+You must expose an endpoint on your school SaaS for Peeap to fetch school information:
+
+```php
+// /api/peeap/school-info.php
+
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: https://school.peeap.com');
+header('Access-Control-Allow-Methods: GET');
+
+$school_id = getCurrentSchoolId();
+$school = getSchool($school_id);
+
+echo json_encode([
+    'school_id' => $school['id'],
+    'school_name' => $school['name'],
+    'school_type' => $school['type'],
+    'subdomain' => explode('.', $_SERVER['HTTP_HOST'])[0],
+    'address' => $school['address'] ?? null,
+    'phone' => $school['phone'] ?? null,
+    'email' => $school['email'] ?? null,
+    'student_count' => getStudentCount($school_id),
+    'staff_count' => getStaffCount($school_id),
+    'fees' => getSchoolFees($school_id),
+    'academic_year' => getCurrentAcademicYear(),
+    'term' => getCurrentTerm(),
+]);
 ```
 
 ### Database Fields for School SaaS
@@ -186,93 +242,62 @@ ALTER TABLE schools ADD COLUMN peeap_connected_at DATETIME NULL;
 CREATE INDEX idx_schools_peeap ON schools(peeap_school_id);
 ```
 
-### Callback Handler (peeap/callback.php)
+### Handling the Return from Peeap
+
+After setup completes on school.peeap.com, the user is redirected back to your school with query params.
 
 ```php
 <?php
-// /peeap/callback.php
+// /settings/payment.php
 
-// IMPORTANT: Configure session BEFORE session_start() to prevent CSRF issues
-ini_set('session.cookie_samesite', 'Lax');
-ini_set('session.cookie_secure', '1');
-session_start();
+// Check if returning from Peeap connection
+if (isset($_GET['peeap_connected']) && $_GET['peeap_connected'] === 'true') {
+    // Connection successful!
+    // school.peeap.com has already stored the connection data
+    // You may want to fetch the connection status from Peeap API
 
-// 1. Verify state (CSRF protection)
-if (!isset($_GET['state']) || !isset($_SESSION['peeap_oauth_state']) ||
-    $_GET['state'] !== $_SESSION['peeap_oauth_state']) {
-    die('Invalid state - security error');
+    $school_id = getCurrentSchoolId();
+
+    // Optionally verify the connection by calling Peeap API
+    $connection_status = verifyPeeapConnection($school_id);
+
+    if ($connection_status['connected']) {
+        // Update local database to mark as connected
+        $db->query("
+            UPDATE schools SET
+                peeap_connected = 1,
+                peeap_school_id = ?,
+                peeap_connected_at = NOW()
+            WHERE id = ?
+        ", [
+            $connection_status['peeap_school_id'],
+            $school_id
+        ]);
+
+        $success_message = "Successfully connected to Peeap Pay!";
+    }
 }
-// Clear the state after validation (one-time use)
-unset($_SESSION['peeap_oauth_state']);
 
-// 2. Check for errors
 if (isset($_GET['error'])) {
-    $error_msg = $_GET['error_description'] ?? $_GET['error'];
-    header('Location: /settings/payment?error=' . urlencode($error_msg));
-    exit;
+    $error_message = urldecode($_GET['error']);
 }
 
-// 3. Exchange authorization code for tokens
-$code = $_GET['code'];
-$token_response = exchangeCodeForTokens($code);
-
-if (isset($token_response['error'])) {
-    header('Location: /settings/payment?error=' . urlencode($token_response['error']));
-    exit;
-}
-
-// 4. Save connection to database
-$school_id = getCurrentSchoolId();
-$db->query("
-    UPDATE schools SET
-        peeap_school_id = ?,
-        peeap_user_id = ?,
-        peeap_access_token = ?,
-        peeap_refresh_token = ?,
-        peeap_token_expires_at = ?,
-        peeap_connected_by = ?,
-        peeap_connected_at = NOW()
-    WHERE id = ?
-", [
-    $token_response['school_connection']['peeap_school_id'] ?? null,
-    $token_response['user']['peeap_id'] ?? null,
-    $token_response['access_token'],
-    $token_response['refresh_token'],
-    date('Y-m-d H:i:s', time() + $token_response['expires_in']),
-    $token_response['user']['email'] ?? 'Unknown',
-    $school_id
-]);
-
-// 5. Redirect to settings with success
-header('Location: /settings/payment?peeap_connected=true');
-
-function exchangeCodeForTokens($code) {
-    $ch = curl_init('https://api.peeap.com/api/oauth/token');
+function verifyPeeapConnection($school_id) {
+    // Call Peeap API to verify connection status
+    $ch = curl_init("https://api.peeap.com/api/school/connection/status?school_id={$school_id}");
     curl_setopt_array($ch, [
-        CURLOPT_POST => true,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
-        CURLOPT_POSTFIELDS => json_encode([
-            'grant_type' => 'authorization_code',
-            'code' => $code,
-            'client_id' => 'school_saas',
-            'client_secret' => PEEAP_CLIENT_SECRET // = 'peeap_school_integration_2024_sl', // From config
-            'redirect_uri' => 'https://' . $_SERVER['HTTP_HOST'] . '/peeap/callback'
-        ])
+        CURLOPT_HTTPHEADER => [
+            'Content-Type: application/json',
+            'X-Client-ID: school_saas',
+            'X-Client-Secret: ' . PEEAP_CLIENT_SECRET
+        ]
     ]);
 
     $response = curl_exec($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    $data = json_decode($response, true);
-
-    // Handle HTTP errors
-    if ($http_code !== 200) {
-        return ['error' => $data['error_description'] ?? $data['error'] ?? 'Token exchange failed'];
-    }
-
-    return $data;
+    return json_decode($response, true);
 }
 ```
 
@@ -992,6 +1017,263 @@ client_secret: peeap_school_integration_2024_sl
 ```
 
 > **Note:** This is a fixed secret for internal integration. Do not share outside the organization.
+
+---
+
+## Required API Endpoints for School SaaS
+
+The School SaaS system must expose these API endpoints for Peeap integration to work properly. These endpoints are called by both school.peeap.com (during connection setup) and the Peeap mobile app (for parent/guardian access via School Utilities).
+
+### 1. School Information Endpoint
+
+**Endpoint:** `GET /api/peeap/school-info`
+
+Called during connection setup to fetch school details.
+
+```php
+<?php
+// /api/peeap/school-info.php
+
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: https://school.peeap.com');
+header('Access-Control-Allow-Methods: GET');
+
+$school_id = getCurrentSchoolId(); // From subdomain or config
+$school = getSchoolDetails($school_id);
+
+echo json_encode([
+    'school_id' => $school['id'],
+    'school_name' => $school['name'],
+    'school_type' => $school['type'], // 'Primary', 'Secondary', etc.
+    'subdomain' => getSubdomain(), // e.g., 'ses' from ses.gov.school.edu.sl
+    'address' => $school['address'] ?? null,
+    'phone' => $school['phone'] ?? null,
+    'email' => $school['email'] ?? null,
+    'logo_url' => $school['logo_url'] ?? null,
+    'student_count' => getStudentCount($school_id),
+    'staff_count' => getStaffCount($school_id),
+    'fees' => getCurrentFees($school_id),
+    'academic_year' => '2024/2025',
+    'term' => 'Term 1',
+]);
+
+function getCurrentFees($school_id) {
+    // Return array of current term fees
+    return [
+        ['name' => 'Tuition Fee', 'amount' => 500, 'term' => 'Term 1'],
+        ['name' => 'Development Levy', 'amount' => 100, 'term' => 'Term 1'],
+        ['name' => 'Sports Fee', 'amount' => 50, 'term' => 'Term 1'],
+    ];
+}
+```
+
+### 2. Student Verification Endpoint
+
+**Endpoint:** `POST /api/peeap/verify-student`
+
+Called when parents add their children in the Peeap app. Verifies the student exists.
+
+```php
+<?php
+// /api/peeap/verify-student.php
+
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: POST');
+header('Access-Control-Allow-Headers: Content-Type');
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
+
+$input = json_decode(file_get_contents('php://input'), true);
+$index_number = $input['index_number'] ?? '';
+
+if (empty($index_number)) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Index number is required']);
+    exit;
+}
+
+$student = findStudentByIndexNumber($index_number);
+
+if (!$student) {
+    http_response_code(404);
+    echo json_encode([
+        'found' => false,
+        'error' => 'Student not found with this index number'
+    ]);
+    exit;
+}
+
+echo json_encode([
+    'found' => true,
+    'student_id' => $student['id'],
+    'student_name' => $student['full_name'],
+    'class_name' => $student['class_name'],
+    'admission_number' => $student['admission_number'],
+    'profile_photo_url' => $student['photo_url'] ?? null,
+]);
+```
+
+### 3. Student Financials Endpoint
+
+**Endpoint:** `POST /api/peeap/student-financials`
+
+Called by the Peeap app to fetch a student's financial data (fees, wallet balance, lunch, transport).
+
+```php
+<?php
+// /api/peeap/student-financials.php
+
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: POST');
+header('Access-Control-Allow-Headers: Content-Type');
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
+
+$input = json_decode(file_get_contents('php://input'), true);
+$index_number = $input['index_number'] ?? '';
+
+if (empty($index_number)) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Index number is required']);
+    exit;
+}
+
+$student = findStudentByIndexNumber($index_number);
+
+if (!$student) {
+    http_response_code(404);
+    echo json_encode(['error' => 'Student not found']);
+    exit;
+}
+
+$student_id = $student['id'];
+
+// Get financial data
+$fees = getStudentFees($student_id);
+$wallet_balance = getStudentWalletBalance($student_id);
+$lunch_balance = getStudentLunchBalance($student_id);
+$transport_balance = getStudentTransportBalance($student_id);
+$transactions = getRecentTransactions($student_id, 10);
+
+echo json_encode([
+    'wallet_balance' => $wallet_balance,
+    'lunch_balance' => $lunch_balance,
+    'transport_balance' => $transport_balance,
+    'fees' => array_map(function($fee) {
+        return [
+            'id' => $fee['id'],
+            'name' => $fee['name'],
+            'amount' => $fee['amount'],
+            'paid' => $fee['amount_paid'],
+            'due_date' => $fee['due_date'],
+            'status' => determineFeeStatus($fee),
+        ];
+    }, $fees),
+    'recent_transactions' => array_map(function($tx) {
+        return [
+            'id' => $tx['id'],
+            'type' => $tx['type'], // 'purchase', 'topup', 'fee_payment'
+            'amount' => $tx['amount'],
+            'description' => $tx['description'],
+            'date' => $tx['created_at'],
+        ];
+    }, $transactions),
+]);
+
+function determineFeeStatus($fee) {
+    if ($fee['amount_paid'] >= $fee['amount']) return 'paid';
+    if ($fee['amount_paid'] > 0) return 'partial';
+    if (strtotime($fee['due_date']) < time()) return 'overdue';
+    return 'unpaid';
+}
+```
+
+### 4. Schools Search Endpoint (Central API)
+
+**Endpoint:** `GET /api/schools/search`
+
+This endpoint should be on a central domain (e.g., `api.gov.school.edu.sl`) to allow searching all schools.
+
+```php
+<?php
+// /api/schools/search.php
+
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+
+$query = $_GET['q'] ?? '';
+
+if (strlen($query) < 2) {
+    echo json_encode([]);
+    exit;
+}
+
+// Search schools by name
+$schools = searchSchools($query);
+
+echo json_encode(array_map(function($school) {
+    return [
+        'id' => $school['id'],
+        'subdomain' => $school['subdomain'],
+        'name' => $school['name'],
+        'school_type' => $school['type'],
+        'logo_url' => $school['logo_url'],
+        'student_count' => $school['student_count'],
+        'is_peeap_connected' => !empty($school['peeap_connected']),
+    ];
+}, $schools));
+```
+
+### API Response Formats
+
+#### Success Response
+```json
+{
+    "success": true,
+    "data": { ... }
+}
+```
+
+#### Error Response
+```json
+{
+    "success": false,
+    "error": "Error message here",
+    "code": "ERROR_CODE"
+}
+```
+
+### CORS Configuration
+
+All endpoints must allow CORS from Peeap domains:
+
+```php
+// Add to all API files
+header('Access-Control-Allow-Origin: *'); // Or specific Peeap domains
+header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+
+// Handle preflight requests
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
+```
+
+### Security Recommendations
+
+1. **Rate Limiting** - Implement rate limiting to prevent abuse
+2. **Input Validation** - Always validate and sanitize inputs
+3. **Logging** - Log all API requests for audit purposes
+4. **HTTPS Only** - All endpoints must use HTTPS
 
 ---
 

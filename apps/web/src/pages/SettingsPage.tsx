@@ -343,7 +343,7 @@ export function SettingsPage() {
                 )}
               </div>
 
-              {/* Student Connect App */}
+              {/* School Utilities App */}
               <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -351,26 +351,67 @@ export function SettingsPage() {
                       <GraduationCap className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900 dark:text-white">Student Connect</p>
+                      <p className="font-medium text-gray-900 dark:text-white">School Utilities</p>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Link to your children's school wallets
+                        Manage your children's school finances
                       </p>
                     </div>
                   </div>
                   <button
-                    onClick={() => navigate('/student-connect')}
-                    className="px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                    onClick={async () => {
+                      try {
+                        await toggleApp('school_utilities');
+                        setMessage({
+                          type: 'success',
+                          text: enabledApps.school_utilities ? 'School Utilities disabled' : 'School Utilities enabled!'
+                        });
+                        setTimeout(() => setMessage(null), 3000);
+                      } catch (error: any) {
+                        setMessage({ type: 'error', text: error.message || 'Failed to update. Please try again.' });
+                      }
+                    }}
+                    disabled={appsLoading}
+                    className="flex items-center gap-2"
                   >
-                    Open
+                    {enabledApps.school_utilities ? (
+                      <ToggleRight className="w-10 h-10 text-blue-600 dark:text-blue-400" />
+                    ) : (
+                      <ToggleLeft className="w-10 h-10 text-gray-400" />
+                    )}
                   </button>
                 </div>
-                <motion.p
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="mt-3 text-sm text-gray-500 dark:text-gray-400"
-                >
-                  Top up student wallets, view transactions, and pay school fees for your children
-                </motion.p>
+
+                {enabledApps.school_utilities && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="mt-3"
+                  >
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      School Utilities is enabled! Manage your children's school finances from the{' '}
+                      <a href="/school-utilities" className="text-blue-600 dark:text-blue-400 hover:underline font-medium">
+                        School Utilities page
+                      </a>
+                      .
+                    </p>
+                    <button
+                      onClick={() => navigate('/school-utilities')}
+                      className="mt-3 text-sm text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                    >
+                      Go to School Utilities →
+                    </button>
+                  </motion.div>
+                )}
+
+                {!enabledApps.school_utilities && (
+                  <motion.p
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="mt-3 text-sm text-gray-500 dark:text-gray-400"
+                  >
+                    Link your children's schools to view fees, wallet balances, lunch credits, and more
+                  </motion.p>
+                )}
               </div>
             </div>
           </MotionCard>
