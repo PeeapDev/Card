@@ -93,6 +93,11 @@ export function OAuthAuthorizePage() {
   const studentName = searchParams.get('student_name');
   const studentPhone = searchParams.get('student_phone');
 
+  // Extract pass-through params for school SaaS integration
+  // These need to be forwarded to the redirect_uri so school.peeap.com knows where to redirect back
+  const origin = searchParams.get('origin');
+  const connection = searchParams.get('connection');
+
   useEffect(() => {
     const validateRequest = async () => {
       // Wait for auth to load
@@ -169,6 +174,18 @@ export function OAuthAuthorizePage() {
       redirectUrl.searchParams.set('code', code);
       if (state) {
         redirectUrl.searchParams.set('state', state);
+      }
+
+      // Pass through school SaaS integration params
+      // These allow school.peeap.com to know where to redirect back after setup
+      if (origin) {
+        redirectUrl.searchParams.set('origin', origin);
+      }
+      if (schoolId) {
+        redirectUrl.searchParams.set('school_id', schoolId);
+      }
+      if (connection) {
+        redirectUrl.searchParams.set('connection', connection);
       }
 
       // Redirect after a brief delay

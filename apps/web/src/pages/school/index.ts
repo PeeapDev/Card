@@ -15,3 +15,4 @@ export { SchoolLoginPage } from './SchoolLoginPage';
 export { SchoolRegisterPage } from './SchoolRegisterPage';
 export { SchoolAuthCallbackPage } from './SchoolAuthCallbackPage';
 export { SchoolConnectionSetupPage } from './SchoolConnectionSetupPage';
+export { QuickAccessPage } from './QuickAccessPage';

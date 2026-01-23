@@ -211,13 +211,26 @@ export function SchoolConnectionSetupPage() {
 
   const handleReturnToSchool = () => {
     const returnUrl = sessionStorage.getItem('school_origin_url');
+    const state = sessionStorage.getItem('external_oauth_state');
+
     // Clear session storage
     sessionStorage.removeItem('school_origin_url');
     sessionStorage.removeItem('connection_school_id');
+    sessionStorage.removeItem('is_new_connection');
+    sessionStorage.removeItem('external_oauth_state');
 
     if (returnUrl) {
+      // Build redirect URL with success parameters
+      const redirectUrl = new URL(`https://${returnUrl}/settings/payment`);
+      redirectUrl.searchParams.set('peeap_connected', 'true');
+
+      // Include the state for CSRF validation on the SaaS side
+      if (state) {
+        redirectUrl.searchParams.set('state', state);
+      }
+
       // Redirect back to school with success
-      window.location.href = `https://${returnUrl}/settings/payment?peeap_connected=true`;
+      window.location.href = redirectUrl.toString();
     } else {
       navigate('/school');
     }

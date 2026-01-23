@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { GraduationCap, Mail, Lock, Eye, EyeOff, ArrowRight, Building2, UserCircle, KeyRound, ArrowLeft } from 'lucide-react';
+import { GraduationCap, Mail, Lock, Eye, EyeOff, ArrowRight, Building2, KeyRound, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 type LoginMode = 'credentials' | 'pin';
@@ -115,17 +115,6 @@ export function SchoolLoginPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleDemoLogin = () => {
-    // Demo mode - bypass authentication for testing
-    // Store mock school data in localStorage
-    localStorage.setItem('schoolId', 'demo-school-001');
-    localStorage.setItem('schoolRole', 'admin');
-    localStorage.setItem('demoMode', 'true');
-
-    // Navigate directly to dashboard
-    navigate('/school');
   };
 
   return (
@@ -353,40 +342,27 @@ export function SchoolLoginPage() {
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    // Generate CSRF state token
-                    const state = crypto.randomUUID();
-                    sessionStorage.setItem('peeap_oauth_state', state);
-                    // Redirect to OAuth authorization
-                    const params = new URLSearchParams({
-                      client_id: 'school-portal',
-                      redirect_uri: window.location.origin + '/auth/callback',
-                      response_type: 'code',
-                      scope: 'school_admin',
-                      state: state,
-                    });
-                    window.location.href = `https://my.peeap.com/auth/authorize?${params.toString()}`;
-                  }}
-                  className="w-full flex items-center justify-center gap-3 py-3 px-4 border border-gray-300 rounded-xl text-gray-700 font-medium hover:bg-gray-50 transition-colors"
-                >
-                  <Building2 className="h-5 w-5 text-blue-600" />
-                  Sign in with Peeap Account
-                </button>
-
-                {/* Demo Admin Button - For Testing */}
-                <button
-                  type="button"
-                  onClick={handleDemoLogin}
-                  disabled={loading}
-                  className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl font-medium hover:from-emerald-600 hover:to-teal-600 transition-all disabled:opacity-50"
-                >
-                  <UserCircle className="h-5 w-5" />
-                  Demo Admin Account
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  // Generate CSRF state token
+                  const state = crypto.randomUUID();
+                  sessionStorage.setItem('peeap_oauth_state', state);
+                  // Redirect to OAuth authorization
+                  const params = new URLSearchParams({
+                    client_id: 'school-portal',
+                    redirect_uri: window.location.origin + '/auth/callback',
+                    response_type: 'code',
+                    scope: 'school_admin',
+                    state: state,
+                  });
+                  window.location.href = `https://my.peeap.com/auth/authorize?${params.toString()}`;
+                }}
+                className="w-full flex items-center justify-center gap-3 py-3 px-4 border border-gray-300 rounded-xl text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+              >
+                <Building2 className="h-5 w-5 text-blue-600" />
+                Sign in with Peeap Account
+              </button>
             </div>
 
             <p className="mt-6 text-center text-gray-600 text-sm">

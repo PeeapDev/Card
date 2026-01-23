@@ -79,6 +79,50 @@ class LinkStudentDto {
   wallet_id: string;
 }
 
+// Quick Access DTOs
+class VerifyTokenDto {
+  token: string;
+}
+
+class VerifyPinDto {
+  token: string;
+  pin: string;
+  user_id: string;
+}
+
+// Wallet Creation DTOs
+class CreateWalletDto {
+  index_number: string;
+  student_name: string;
+  student_phone?: string;
+  student_email?: string;
+  class?: string;
+  section?: string;
+  school_id: number;
+  pin: string;
+  daily_limit?: number;
+  parent_phone?: string;
+  parent_email?: string;
+}
+
+class LinkWalletDto {
+  phone_or_email: string;
+  pin: string;
+  index_number: string;
+  student_id: number;
+  school_id: number;
+}
+
+class TopupWalletDto {
+  wallet_id: string;
+  amount: number;
+  currency: string;
+  source: string;
+  payment_method: string;
+  reference?: string;
+  initiated_by: string;
+}
+
 @ApiTags('School Integration')
 @Controller('school')
 export class SchoolController {
@@ -309,6 +353,159 @@ export class SchoolController {
     return {
       success: true,
       data: { products },
+    };
+  }
+
+  // ============================================
+  // Quick Access Authentication (Flow 2)
+  // ============================================
+
+  /**
+   * Verify JWT token from SaaS for quick dashboard access
+   */
+  @Post('auth/verify-token')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Verify SaaS JWT token',
+    description: 'Verifies a JWT token from the school SaaS system for quick dashboard access',
+  })
+  async verifyQuickAccessToken(
+    @Body() body: VerifyTokenDto,
+  ): Promise<{ success: boolean; payload: any }> {
+    const payload = await this.schoolService.verifyQuickAccessToken(body.token);
+
+    return {
+      success: true,
+      payload,
+    };
+  }
+
+  /**
+   * Verify PIN for quick access authentication
+   */
+  @Post('auth/verify-pin')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Verify PIN for quick access',
+    description: 'Verifies user PIN and returns session tokens for dashboard access',
+  })
+  async verifyQuickAccessPin(
+    @Body() body: VerifyPinDto,
+  ): Promise<{ success: boolean; access_token: string; refresh_token: string; expires_in: number }> {
+    const result = await this.schoolService.verifyQuickAccessPin(body.token, body.pin, body.user_id);
+
+    return {
+      success: true,
+      access_token: result.accessToken,
+      refresh_token: result.refreshToken,
+      expires_in: result.expiresIn,
+    };
+  }
+
+  // ============================================
+  // Wallet Management (Flow 3)
+  // ============================================
+
+  /**
+   * Create a new wallet for a student
+   */
+  @Post('wallets/create')
+  @Public()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Create student wallet',
+    description: 'Creates a new Peeap wallet for a student using their index number as primary identifier',
+  })
+  @ApiBearerAuth()
+  async createStudentWallet(
+    @Body() body: CreateWalletDto,
+    @Headers('authorization') authHeader: string,
+  ): Promise<{ success: boolean; data: { peeap_user_id: string; wallet_id: string } }> {
+    await this.validateToken(authHeader);
+
+    const result = await this.schoolService.createStudentWallet({
+      indexNumber: body.index_number,
+      studentName: body.student_name,
+      studentPhone: body.student_phone,
+      studentEmail: body.student_email,
+      className: body.class,
+      section: body.section,
+      schoolId: body.school_id,
+      pin: body.pin,
+      dailyLimit: body.daily_limit || 50000,
+      parentPhone: body.parent_phone,
+      parentEmail: body.parent_email,
+    });
+
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  /**
+   * Link an existing Peeap wallet to a student
+   */
+  @Post('wallets/link')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Link existing wallet to student',
+    description: 'Links an existing Peeap account to a student using phone/email and PIN verification',
+  })
+  @ApiBearerAuth()
+  async linkExistingWallet(
+    @Body() body: LinkWalletDto,
+    @Headers('authorization') authHeader: string,
+  ): Promise<{ success: boolean; data: { peeap_user_id: string; wallet_id: string } }> {
+    await this.validateToken(authHeader);
+
+    const result = await this.schoolService.linkExistingWallet({
+      phoneOrEmail: body.phone_or_email,
+      pin: body.pin,
+      indexNumber: body.index_number,
+      studentId: body.student_id,
+      schoolId: body.school_id,
+    });
+
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  /**
+   * Top up a student wallet
+   */
+  @Post('wallets/topup')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Top up student wallet',
+    description: 'Adds funds to a student wallet (school admin initiated)',
+  })
+  @ApiBearerAuth()
+  async topupWallet(
+    @Body() body: TopupWalletDto,
+    @Headers('authorization') authHeader: string,
+  ): Promise<{ success: boolean; data: { transaction_id: string; new_balance: number } }> {
+    await this.validateToken(authHeader);
+
+    const result = await this.schoolService.topupWallet({
+      walletId: body.wallet_id,
+      amount: body.amount,
+      currency: body.currency,
+      source: body.source,
+      paymentMethod: body.payment_method,
+      reference: body.reference,
+      initiatedBy: body.initiated_by,
+    });
+
+    return {
+      success: true,
+      data: result,
     };
   }
 }

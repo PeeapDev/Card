@@ -551,4 +551,327 @@ export class SchoolService {
 
     return products || [];
   }
+
+  // ============================================
+  // Quick Access Authentication (Flow 2)
+  // ============================================
+
+  /**
+   * Verify JWT token from SaaS for quick dashboard access
+   */
+  async verifyQuickAccessToken(token: string): Promise<any> {
+    const jwtSecret = this.configService.get<string>('PEEAP_JWT_SECRET');
+
+    if (!jwtSecret) {
+      throw new BadRequestException('JWT secret not configured');
+    }
+
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) {
+        throw new UnauthorizedException('Invalid token format');
+      }
+
+      const [base64Header, base64Payload, base64Signature] = parts;
+
+      // Verify signature
+      const expectedSignature = crypto
+        .createHmac('sha256', jwtSecret)
+        .update(`${base64Header}.${base64Payload}`)
+        .digest('base64url');
+
+      if (expectedSignature !== base64Signature) {
+        throw new UnauthorizedException('Invalid token signature');
+      }
+
+      // Decode payload
+      const payload = JSON.parse(Buffer.from(base64Payload, 'base64url').toString('utf8'));
+
+      // Check expiry
+      if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+        throw new UnauthorizedException('Token has expired');
+      }
+
+      return payload;
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      throw new UnauthorizedException('Failed to verify token');
+    }
+  }
+
+  /**
+   * Verify PIN for quick access and return session tokens
+   */
+  async verifyQuickAccessPin(
+    token: string,
+    pin: string,
+    userId: string,
+  ): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
+    // First verify the token
+    const tokenPayload = await this.verifyQuickAccessToken(token);
+
+    // Verify the user ID matches
+    if (tokenPayload.user_id !== userId) {
+      throw new UnauthorizedException('User ID mismatch');
+    }
+
+    // Get the user's wallet and verify PIN
+    const { data: user, error: userError } = await this.supabase
+      .from('users')
+      .select('id, wallet_pin_hash, email, full_name')
+      .eq('id', userId)
+      .single();
+
+    if (userError || !user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Verify PIN (assuming PIN is stored as a hash)
+    const pinHash = crypto.createHash('sha256').update(pin).digest('hex');
+    if (user.wallet_pin_hash !== pinHash) {
+      throw new UnauthorizedException('Invalid PIN');
+    }
+
+    // Generate session tokens
+    const accessToken = this.generateToken(64);
+    const refreshToken = this.generateToken(64);
+    const expiresIn = 3600; // 1 hour
+
+    // Store the access token
+    await this.supabase.from('oauth_access_tokens').insert({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      user_id: userId,
+      client_id: 'school-portal',
+      scope: 'school_admin',
+      expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
+    });
+
+    return { accessToken, refreshToken, expiresIn };
+  }
+
+  private generateToken(length: number): string {
+    return crypto.randomBytes(length).toString('hex');
+  }
+
+  // ============================================
+  // Wallet Management (Flow 3)
+  // ============================================
+
+  /**
+   * Create a new wallet for a student
+   */
+  async createStudentWallet(params: {
+    indexNumber: string;
+    studentName: string;
+    studentPhone?: string;
+    studentEmail?: string;
+    className?: string;
+    section?: string;
+    schoolId: number;
+    pin: string;
+    dailyLimit: number;
+    parentPhone?: string;
+    parentEmail?: string;
+  }): Promise<{ peeap_user_id: string; wallet_id: string }> {
+    // Check if a wallet already exists for this index number
+    const { data: existingLink } = await this.supabase
+      .from('student_wallet_links')
+      .select('*')
+      .eq('index_number', params.indexNumber)
+      .single();
+
+    if (existingLink) {
+      throw new BadRequestException('A wallet already exists for this index number');
+    }
+
+    // Create user account
+    const userId = `usr_${crypto.randomBytes(12).toString('hex')}`;
+    const walletId = `wal_${crypto.randomBytes(12).toString('hex')}`;
+    const pinHash = crypto.createHash('sha256').update(params.pin).digest('hex');
+
+    // Create user
+    const { error: userError } = await this.supabase.from('users').insert({
+      id: userId,
+      email: params.studentEmail || `${params.indexNumber}@student.peeap.local`,
+      phone: params.studentPhone || params.parentPhone,
+      full_name: params.studentName,
+      wallet_pin_hash: pinHash,
+      account_type: 'student',
+      is_verified: true, // School-created accounts are pre-verified
+      created_at: new Date().toISOString(),
+    });
+
+    if (userError) {
+      throw new BadRequestException(`Failed to create user: ${userError.message}`);
+    }
+
+    // Create wallet
+    const { error: walletError } = await this.supabase.from('wallets').insert({
+      id: walletId,
+      user_id: userId,
+      balance: 0,
+      currency: 'SLE',
+      daily_limit: params.dailyLimit,
+      status: 'active',
+      created_at: new Date().toISOString(),
+    });
+
+    if (walletError) {
+      // Rollback user creation
+      await this.supabase.from('users').delete().eq('id', userId);
+      throw new BadRequestException(`Failed to create wallet: ${walletError.message}`);
+    }
+
+    // Create student wallet link
+    const { error: linkError } = await this.supabase.from('student_wallet_links').insert({
+      index_number: params.indexNumber,
+      peeap_user_id: userId,
+      wallet_id: walletId,
+      current_school_id: params.schoolId.toString(),
+      student_name: params.studentName,
+      student_phone: params.studentPhone,
+      status: 'active',
+      linked_at: new Date().toISOString(),
+    });
+
+    if (linkError) {
+      // Rollback
+      await this.supabase.from('wallets').delete().eq('id', walletId);
+      await this.supabase.from('users').delete().eq('id', userId);
+      throw new BadRequestException(`Failed to link wallet: ${linkError.message}`);
+    }
+
+    return { peeap_user_id: userId, wallet_id: walletId };
+  }
+
+  /**
+   * Link an existing Peeap wallet to a student
+   */
+  async linkExistingWallet(params: {
+    phoneOrEmail: string;
+    pin: string;
+    indexNumber: string;
+    studentId: number;
+    schoolId: number;
+  }): Promise<{ peeap_user_id: string; wallet_id: string }> {
+    // Find user by phone or email
+    const { data: user, error: userError } = await this.supabase
+      .from('users')
+      .select('id, wallet_pin_hash')
+      .or(`email.eq.${params.phoneOrEmail},phone.eq.${params.phoneOrEmail}`)
+      .single();
+
+    if (userError || !user) {
+      throw new NotFoundException('No Peeap account found with this phone or email');
+    }
+
+    // Verify PIN
+    const pinHash = crypto.createHash('sha256').update(params.pin).digest('hex');
+    if (user.wallet_pin_hash !== pinHash) {
+      throw new UnauthorizedException('Invalid PIN');
+    }
+
+    // Get the user's wallet
+    const { data: wallet, error: walletError } = await this.supabase
+      .from('wallets')
+      .select('id')
+      .eq('user_id', user.id)
+      .single();
+
+    if (walletError || !wallet) {
+      throw new NotFoundException('No wallet found for this account');
+    }
+
+    // Check if already linked
+    const { data: existingLink } = await this.supabase
+      .from('student_wallet_links')
+      .select('*')
+      .eq('index_number', params.indexNumber)
+      .single();
+
+    if (existingLink) {
+      throw new BadRequestException('This index number is already linked to a wallet');
+    }
+
+    // Create the link
+    const { error: linkError } = await this.supabase.from('student_wallet_links').insert({
+      index_number: params.indexNumber,
+      peeap_user_id: user.id,
+      wallet_id: wallet.id,
+      current_school_id: params.schoolId.toString(),
+      status: 'active',
+      linked_at: new Date().toISOString(),
+    });
+
+    if (linkError) {
+      throw new BadRequestException(`Failed to link wallet: ${linkError.message}`);
+    }
+
+    return { peeap_user_id: user.id, wallet_id: wallet.id };
+  }
+
+  /**
+   * Top up a student wallet
+   */
+  async topupWallet(params: {
+    walletId: string;
+    amount: number;
+    currency: string;
+    source: string;
+    paymentMethod: string;
+    reference?: string;
+    initiatedBy: string;
+  }): Promise<{ transaction_id: string; new_balance: number }> {
+    // Get current wallet
+    const { data: wallet, error: walletError } = await this.supabase
+      .from('wallets')
+      .select('*')
+      .eq('id', params.walletId)
+      .single();
+
+    if (walletError || !wallet) {
+      throw new NotFoundException('Wallet not found');
+    }
+
+    // Calculate new balance
+    const newBalance = parseFloat(wallet.balance) + params.amount;
+
+    // Create transaction
+    const transactionId = `txn_${crypto.randomBytes(12).toString('hex')}`;
+
+    const { error: txnError } = await this.supabase.from('transactions').insert({
+      id: transactionId,
+      wallet_id: params.walletId,
+      type: 'topup',
+      amount: params.amount,
+      currency: params.currency,
+      balance_before: wallet.balance,
+      balance_after: newBalance,
+      status: 'completed',
+      source: params.source,
+      payment_method: params.paymentMethod,
+      reference: params.reference,
+      initiated_by: params.initiatedBy,
+      completed_at: new Date().toISOString(),
+    });
+
+    if (txnError) {
+      throw new BadRequestException(`Failed to create transaction: ${txnError.message}`);
+    }
+
+    // Update wallet balance
+    const { error: updateError } = await this.supabase
+      .from('wallets')
+      .update({ balance: newBalance, updated_at: new Date().toISOString() })
+      .eq('id', params.walletId);
+
+    if (updateError) {
+      throw new BadRequestException(`Failed to update balance: ${updateError.message}`);
+    }
+
+    return { transaction_id: transactionId, new_balance: newBalance };
+  }
 }

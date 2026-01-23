@@ -117,6 +117,7 @@ import { DepositCancelPage } from '@/pages/DepositCancelPage';
 import { BusinessCheckoutPage } from '@/pages/BusinessCheckoutPage';
 import { CheckoutPage } from '@/pages/CheckoutPage';
 import { HostedCheckoutPage } from '@/pages/HostedCheckoutPage';
+import { EmbedCheckoutPage } from '@/pages/EmbedCheckoutPage';
 import { PaymentIntentPage } from '@/pages/PaymentIntentPage';
 import { SubscriptionCheckoutPage } from '@/pages/SubscriptionCheckoutPage';
 import { CheckoutSuccessPage } from '@/pages/CheckoutSuccessPage';
@@ -209,6 +210,7 @@ import {
   SchoolRegisterPage,
   SchoolAuthCallbackPage,
   SchoolConnectionSetupPage,
+  QuickAccessPage,
 } from '@/pages/school';
 
 const queryClient = new QueryClient({
@@ -292,6 +294,9 @@ function App() {
                   {/* Hosted Checkout Page - Universal developer checkout like Stripe/PayPal */}
                   <Route path="/checkout/pay/:sessionId" element={<HostedCheckoutPage />} />
 
+                  {/* Embed Checkout Page - For iframe-based checkout on merchant sites */}
+                  <Route path="/embed/checkout" element={<EmbedCheckoutPage />} />
+
                   {/* Subscription Checkout Page - For recurring subscriptions */}
                   <Route path="/subscribe/:planId" element={<SubscriptionCheckoutPage />} />
 
@@ -319,6 +324,9 @@ function App() {
                   <Route path="/school/login" element={<SchoolLoginPage />} />
                   <Route path="/school/register" element={<SchoolRegisterPage />} />
                   <Route path="/auth/callback" element={<SchoolAuthCallbackPage />} />
+
+                  {/* Quick Access - PIN-based login from SaaS dashboard */}
+                  <Route path="/auth/quick-access" element={<QuickAccessPage />} />
 
                   {/* School Connection Setup - Wizard after SSO from school SaaS */}
                   <Route path="/school/connection-setup" element={<SchoolConnectionSetupPage />} />
@@ -1649,6 +1657,7 @@ function App() {
                   <Route path="/deposit/cancel" element={<DepositCancelPage />} />
                   <Route path="/checkout/:businessId" element={<BusinessCheckoutPage />} />
                   <Route path="/checkout/pay/:sessionId" element={<HostedCheckoutPage />} />
+                  <Route path="/embed/checkout" element={<EmbedCheckoutPage />} />
                   <Route path="/subscribe/:planId" element={<SubscriptionCheckoutPage />} />
                   <Route path="/checkout/success" element={<CheckoutSuccessPage />} />
                   <Route path="/scan-pay/:sessionId" element={<ScanPayPage />} />

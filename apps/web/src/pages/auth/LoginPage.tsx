@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -25,8 +25,13 @@ export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
 
+  // Check for redirect from location state OR query parameter (for OAuth flow)
   const fromState = (location.state as { from?: { pathname: string } })?.from?.pathname;
+  const redirectParam = searchParams.get('redirect');
+  // searchParams.get() already decodes the value, so no need to decode again
+  const redirectTo = fromState || redirectParam || null;
 
   const {
     register,
@@ -50,9 +55,15 @@ export function LoginPage() {
 
       // Login successful - cast to User since we know MFA isn't required at this point
       const user = result as { roles: UserRole[] };
-      const redirectPath = fromState || getUserDashboard(user.roles);
-      console.log('[Login] Redirect decision:', { roles: user.roles, fromState, redirectPath });
-      navigate(redirectPath, { replace: true });
+      const redirectPath = redirectTo || getUserDashboard(user.roles);
+      console.log('[Login] Redirect decision:', { roles: user.roles, redirectTo, redirectPath });
+
+      // Use window.location for full URLs (OAuth redirects), navigate() for internal paths
+      if (redirectPath.startsWith('http://') || redirectPath.startsWith('https://') || redirectPath.startsWith('/auth/')) {
+        window.location.href = redirectPath;
+      } else {
+        navigate(redirectPath, { replace: true });
+      }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Invalid credentials';
       setError(errorMessage);
@@ -74,9 +85,15 @@ export function LoginPage() {
 
       // Login successful
       const user = result as { roles: UserRole[] };
-      const redirectPath = fromState || getUserDashboard(user.roles);
-      console.log('[Login MFA] Redirect decision:', { roles: user.roles, fromState, redirectPath });
-      navigate(redirectPath, { replace: true });
+      const redirectPath = redirectTo || getUserDashboard(user.roles);
+      console.log('[Login MFA] Redirect decision:', { roles: user.roles, redirectTo, redirectPath });
+
+      // Use window.location for full URLs (OAuth redirects), navigate() for internal paths
+      if (redirectPath.startsWith('http://') || redirectPath.startsWith('https://') || redirectPath.startsWith('/auth/')) {
+        window.location.href = redirectPath;
+      } else {
+        navigate(redirectPath, { replace: true });
+      }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Invalid verification code';
       setError(errorMessage);
