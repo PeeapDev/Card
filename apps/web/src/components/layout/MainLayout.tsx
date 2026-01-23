@@ -211,45 +211,26 @@ export function MainLayout({ children }: MainLayoutProps) {
   };
 
   // Define all available user apps for the app launcher
+  // These apps are ONLY accessible via the app launcher, not the sidebar
   const allUserApps = [
     { id: 'cashbox', label: 'Cash Box', icon: Package, path: '/pots', color: 'from-amber-500 to-orange-500', enabled: isAppEnabled('cashbox') },
     { id: 'events', label: 'Events', icon: Calendar, path: '/events', color: 'from-purple-500 to-pink-500', enabled: isAppEnabled('events') },
+    { id: 'tickets', label: 'My Tickets', icon: Ticket, path: '/my-tickets', color: 'from-violet-500 to-purple-500', enabled: isAppEnabled('events') }, // Part of Events app
     { id: 'school_utilities', label: 'School', icon: GraduationCap, path: '/school-utilities', color: 'from-blue-500 to-cyan-500', enabled: isAppEnabled('school_utilities') },
   ];
 
   const enabledApps = allUserApps.filter(app => app.enabled);
   const enabledAppsCount = enabledApps.length;
 
-  // Build nav items dynamically - add POS, Events, Cash Box, and School Utilities based on user settings
+  // Build nav items dynamically - only add Staff POS (job-related, not an "app")
+  // Apps like Events, Cash Box, School Utilities are accessed via the App Launcher only
   const dynamicNavItems = (() => {
     let items = [...navItems];
     const insertIndex = 6; // After Shop (index 5 in base array)
-    let addedCount = 0;
 
-    // Add Staff POS if user has staff positions
+    // Add Staff POS if user has staff positions (this is job-related, not an optional app)
     if (hasStaffPositions) {
-      items.splice(insertIndex + addedCount, 0, { path: '/dashboard/pos', label: 'Staff POS', icon: Store });
-      addedCount++;
-    }
-
-    // Add Events if enabled in user apps
-    if (isAppEnabled('events')) {
-      items.splice(insertIndex + addedCount, 0, { path: '/events', label: 'Events', icon: Calendar });
-      addedCount++;
-      items.splice(insertIndex + addedCount, 0, { path: '/my-tickets', label: 'My Tickets', icon: Ticket });
-      addedCount++;
-    }
-
-    // Add Cash Box if enabled in user apps (setup completed)
-    if (isAppEnabled('cashbox')) {
-      items.splice(insertIndex + addedCount, 0, { path: '/pots', label: 'Cash Box', icon: Package });
-      addedCount++;
-    }
-
-    // Add School Utilities if enabled
-    if (isAppEnabled('school_utilities')) {
-      items.splice(insertIndex + addedCount, 0, { path: '/school-utilities', label: 'School Utilities', icon: GraduationCap });
-      addedCount++;
+      items.splice(insertIndex, 0, { path: '/dashboard/pos', label: 'Staff POS', icon: Store });
     }
 
     return items;
