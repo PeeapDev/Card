@@ -56,8 +56,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (storedRole && user.roles.includes(storedRole)) {
         setActiveRole(storedRole);
       } else {
-        // Default to highest privilege role first (superadmin > admin > developer > merchant > agent > user)
-        const priorityOrder: UserRole[] = ['superadmin', 'admin', 'developer', 'merchant', 'agent', 'user'];
+        // Default to highest privilege role first - must match getUserDashboard() in RoleBasedRoute.tsx
+        const priorityOrder: UserRole[] = ['superadmin', 'admin', 'merchant', 'developer', 'agent', 'user'];
         const firstRole = priorityOrder.find(r => user.roles.includes(r)) || user.roles[0];
         setActiveRole(firstRole);
         localStorage.setItem(ACTIVE_ROLE_KEY, firstRole);

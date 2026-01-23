@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useUserApps } from '@/context/UserAppsContext';
+import type { UserRole } from '@/types';
 import { useThemeColor } from '@/context/ThemeColorContext';
 import { NotificationBell } from '@/components/ui/NotificationBell';
 import { MessageBell } from '@/components/ui/MessageBell';
@@ -71,8 +72,15 @@ export function MainLayout({ children }: MainLayoutProps) {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const appsMenuRef = useRef<HTMLDivElement>(null);
-  const { user, logout } = useAuth();
+  const { user, logout, activeRole, switchRole } = useAuth();
   const { isAppEnabled } = useUserApps();
+
+  // Sync activeRole to 'user' when on personal dashboard
+  useEffect(() => {
+    if (activeRole !== 'user' && user?.roles?.includes('user' as UserRole)) {
+      switchRole('user' as UserRole);
+    }
+  }, []);
   const { getGlassColors } = useThemeColor();
   const location = useLocation();
   const navigate = useNavigate();

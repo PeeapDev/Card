@@ -205,8 +205,15 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [activeBusiness, setActiveBusiness] = useState<{ id: string; name: string; logo_url?: string } | null>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
-  const { user, logout } = useAuth();
+  const { user, logout, activeRole, switchRole } = useAuth();
   const { isDeveloperMode, checkBusinesses, hasBusinesses, businessCount } = useDeveloperMode();
+
+  // Sync activeRole to 'merchant' when on merchant dashboard
+  useEffect(() => {
+    if (activeRole !== 'merchant' && user?.roles?.includes('merchant')) {
+      switchRole('merchant');
+    }
+  }, []);
   const { isAppEnabled, isAppPinned, pinnedApps } = useApps();
   const { getGlassColors } = useThemeColor();
 
