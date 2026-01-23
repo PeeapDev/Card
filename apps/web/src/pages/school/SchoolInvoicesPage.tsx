@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   FileText,
@@ -19,7 +19,9 @@ import {
   User,
   MoreVertical,
   Copy,
-  Mail
+  Mail,
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 
 interface Invoice {
@@ -52,106 +54,94 @@ export function SchoolInvoicesPage() {
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const invoices: Invoice[] = [
-    {
-      id: '1',
-      invoiceNumber: 'INV-2026-001',
-      recipient: {
-        name: 'John Kamara',
-        email: 'parent.kamara@email.com',
-        phone: '+232 76 123456',
-        type: 'parent'
-      },
-      items: [
-        { description: 'School Fees - Term 1', quantity: 1, unitPrice: 2500000, total: 2500000 },
-        { description: 'Uniform (Complete Set)', quantity: 2, unitPrice: 350000, total: 700000 },
-        { description: 'Books & Materials', quantity: 1, unitPrice: 450000, total: 450000 }
-      ],
-      subtotal: 3650000,
-      tax: 0,
-      total: 3650000,
-      status: 'paid',
-      issueDate: '2026-01-02',
-      dueDate: '2026-01-15',
-      paidDate: '2026-01-08'
-    },
-    {
-      id: '2',
-      invoiceNumber: 'INV-2026-002',
-      recipient: {
-        name: 'Mary Johnson',
-        email: 'mary.j@email.com',
-        type: 'parent'
-      },
-      items: [
-        { description: 'School Fees - Term 1', quantity: 1, unitPrice: 2500000, total: 2500000 },
-        { description: 'Sports Equipment', quantity: 1, unitPrice: 150000, total: 150000 }
-      ],
-      subtotal: 2650000,
-      tax: 0,
-      total: 2650000,
-      status: 'sent',
-      issueDate: '2026-01-05',
-      dueDate: '2026-01-20'
-    },
-    {
-      id: '3',
-      invoiceNumber: 'INV-2026-003',
-      recipient: {
-        name: 'ABC Supplies Ltd',
-        email: 'orders@abcsupplies.com',
-        type: 'vendor'
-      },
-      items: [
-        { description: 'Office Supplies - January', quantity: 1, unitPrice: 850000, total: 850000 },
-        { description: 'Cleaning Materials', quantity: 1, unitPrice: 320000, total: 320000 }
-      ],
-      subtotal: 1170000,
-      tax: 175500,
-      total: 1345500,
-      status: 'overdue',
-      issueDate: '2025-12-20',
-      dueDate: '2026-01-05'
-    },
-    {
-      id: '4',
-      invoiceNumber: 'INV-2026-004',
-      recipient: {
-        name: 'James Williams',
-        email: 'james.w@email.com',
-        type: 'parent'
-      },
-      items: [
-        { description: 'School Fees - Term 1', quantity: 1, unitPrice: 2500000, total: 2500000 }
-      ],
-      subtotal: 2500000,
-      tax: 0,
-      total: 2500000,
-      status: 'draft',
-      issueDate: '2026-01-10',
-      dueDate: '2026-01-25'
-    },
-    {
-      id: '5',
-      invoiceNumber: 'INV-2026-005',
-      recipient: {
-        name: 'Sarah Koroma',
-        email: 'sarah.k@email.com',
-        type: 'parent'
-      },
-      items: [
-        { description: 'School Fees - Term 1 (Partial)', quantity: 1, unitPrice: 1250000, total: 1250000 },
-        { description: 'Library Fee', quantity: 1, unitPrice: 50000, total: 50000 }
-      ],
-      subtotal: 1300000,
-      tax: 0,
-      total: 1300000,
-      status: 'sent',
-      issueDate: '2026-01-08',
-      dueDate: '2026-01-22'
+  // Get school domain from localStorage
+  const getSchoolDomain = () => {
+    const schoolDomain = localStorage.getItem('school_domain');
+    const schoolId = localStorage.getItem('schoolId');
+    return schoolDomain || schoolId || null;
+  };
+
+  const fetchInvoices = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const schoolDomain = getSchoolDomain();
+      if (!schoolDomain) {
+        setError('School information not found. Please log in again.');
+        setLoading(false);
+        return;
+      }
+
+      // Fetch invoices from SDSL2 sync API
+      const response = await fetch(
+        `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/invoices`,
+        {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const invoiceList = (data.invoices || data || []).map((inv: any) => {
+          // Calculate status based on dates and payment
+          let status: Invoice['status'] = 'draft';
+          if (inv.status) {
+            status = inv.status;
+          } else if (inv.paid_amount >= inv.total_amount) {
+            status = 'paid';
+          } else if (inv.sent_at && new Date(inv.due_date) < new Date()) {
+            status = 'overdue';
+          } else if (inv.sent_at) {
+            status = 'sent';
+          }
+
+          return {
+            id: inv.id,
+            invoiceNumber: inv.invoice_number || inv.reference || `INV-${inv.id}`,
+            recipient: {
+              name: inv.recipient_name || inv.student_name || inv.parent_name || 'Unknown',
+              email: inv.recipient_email || inv.email,
+              phone: inv.recipient_phone || inv.phone,
+              type: inv.recipient_type || 'parent',
+            },
+            items: (inv.items || inv.line_items || []).map((item: any) => ({
+              description: item.description || item.name,
+              quantity: item.quantity || 1,
+              unitPrice: item.unit_price || item.amount,
+              total: item.total || item.amount,
+            })),
+            subtotal: inv.subtotal || inv.total_amount,
+            tax: inv.tax || 0,
+            total: inv.total || inv.total_amount,
+            status,
+            issueDate: inv.issue_date || inv.created_at,
+            dueDate: inv.due_date,
+            paidDate: inv.paid_date || inv.paid_at,
+            notes: inv.notes,
+          };
+        });
+        setInvoices(invoiceList);
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        setError(errorData.message || 'Failed to load invoices');
+      }
+    } catch (err) {
+      console.error('Error fetching invoices:', err);
+      setError('Could not connect to school system. Please try again.');
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
+
+  useEffect(() => {
+    fetchInvoices();
+  }, []);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-SL', {
@@ -248,6 +238,14 @@ export function SchoolInvoicesPage() {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              <button
+                onClick={fetchInvoices}
+                disabled={loading}
+                className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
               <button className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
                 <Download className="h-4 w-4" />
                 Export
@@ -265,6 +263,29 @@ export function SchoolInvoicesPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Error State */}
+        {error && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 mb-6 flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+            <p className="text-red-700 dark:text-red-300">{error}</p>
+            <button
+              onClick={fetchInvoices}
+              className="ml-auto text-red-600 hover:text-red-700 font-medium"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+          </div>
+        )}
+
+        {!loading && !error && (
+        <>
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
@@ -433,9 +454,12 @@ export function SchoolInvoicesPage() {
             <div className="text-center py-12">
               <FileText className="h-12 w-12 text-gray-300 mx-auto mb-4" />
               <p className="text-gray-500 dark:text-gray-400">No invoices found</p>
+              <p className="text-sm text-gray-400 mt-1">Invoices from your school system will appear here</p>
             </div>
           )}
         </div>
+        </>
+        )}
       </main>
 
       {/* Invoice Detail Modal */}

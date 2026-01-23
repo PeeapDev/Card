@@ -82,6 +82,20 @@ export function SchoolUtilitiesPage() {
 
   // Add child modal state
   const [showAddModal, setShowAddModal] = useState(false);
+
+  // Pay fee modal state
+  const [showPayModal, setShowPayModal] = useState(false);
+  const [selectedFee, setSelectedFee] = useState<{
+    id: string;
+    name: string;
+    amount: number;
+    paid: number;
+    remaining: number;
+  } | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [processing, setProcessing] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<School[]>([]);
   const [searching, setSearching] = useState(false);
@@ -130,7 +144,7 @@ export function SchoolUtilitiesPage() {
     }
   };
 
-  // Search schools from school SaaS
+  // Search schools from school SaaS registry
   const searchSchools = useCallback(async (query: string) => {
     if (query.length < 2) {
       setSearchResults([]);
@@ -145,6 +159,7 @@ export function SchoolUtilitiesPage() {
         .from('school_registry')
         .select('*')
         .ilike('name', `%${query}%`)
+        .eq('is_peeap_connected', true)
         .limit(10);
 
       if (cachedSchools && cachedSchools.length > 0) {
@@ -158,17 +173,25 @@ export function SchoolUtilitiesPage() {
           is_peeap_connected: s.is_peeap_connected,
         })));
       } else {
-        // If no cached results, try the school SaaS API
-        // This would be an endpoint that lists all schools
+        // If no cached results, try the school SaaS central API
         try {
           const response = await fetch(
-            `https://api.gov.school.edu.sl/api/schools/search?q=${encodeURIComponent(query)}`,
+            `https://api.gov.school.edu.sl/api/schools/search?q=${encodeURIComponent(query)}&peeap_connected=true`,
             { headers: { 'Accept': 'application/json' } }
           );
 
           if (response.ok) {
-            const schools = await response.json();
-            setSearchResults(schools);
+            const data = await response.json();
+            const schools = data.schools || data;
+            setSearchResults(schools.map((school: any) => ({
+              id: school.id,
+              subdomain: school.subdomain,
+              name: school.name,
+              school_type: school.school_type || school.type,
+              logo_url: school.logo_url,
+              student_count: school.student_count,
+              is_peeap_connected: school.is_peeap_connected ?? true,
+            })));
 
             // Cache the results
             for (const school of schools) {
@@ -176,38 +199,25 @@ export function SchoolUtilitiesPage() {
                 school_id: school.id,
                 subdomain: school.subdomain,
                 name: school.name,
-                school_type: school.school_type,
+                school_type: school.school_type || school.type,
                 logo_url: school.logo_url,
                 student_count: school.student_count,
-                is_peeap_connected: school.is_peeap_connected || false,
+                is_peeap_connected: school.is_peeap_connected ?? true,
                 last_synced_at: new Date().toISOString(),
               }, { onConflict: 'school_id' });
             }
+          } else {
+            // No schools found
+            setSearchResults([]);
           }
-        } catch {
-          // If API fails, show demo schools for testing
-          setSearchResults([
-            {
-              id: 'ses-001',
-              subdomain: 'ses',
-              name: 'Sierra Leone Education School',
-              school_type: 'Secondary School',
-              student_count: 450,
-              is_peeap_connected: true,
-            },
-            {
-              id: 'fyp-001',
-              subdomain: 'fyp',
-              name: 'First Year Primary School',
-              school_type: 'Primary School',
-              student_count: 320,
-              is_peeap_connected: true,
-            },
-          ].filter(s => s.name.toLowerCase().includes(query.toLowerCase())));
+        } catch (err) {
+          console.error('Error searching schools API:', err);
+          setSearchResults([]);
         }
       }
     } catch (error) {
       console.error('Error searching schools:', error);
+      setSearchResults([]);
     } finally {
       setSearching(false);
     }
@@ -224,7 +234,7 @@ export function SchoolUtilitiesPage() {
     return () => clearTimeout(timer);
   }, [searchQuery, searchSchools]);
 
-  // Verify student index number with school
+  // Verify student index number with school using SDSL2 sync API
   const verifyIndexNumber = async () => {
     if (!selectedSchool || !indexNumber) return;
 
@@ -232,30 +242,37 @@ export function SchoolUtilitiesPage() {
       setVerifying(true);
       setVerificationResult(null);
 
-      // Call school SaaS API to verify student
+      // Call SDSL2 sync API to search for student by index number
       const response = await fetch(
-        `https://${selectedSchool.subdomain}.gov.school.edu.sl/api/peeap/verify-student`,
+        `https://${selectedSchool.subdomain}.gov.school.edu.sl/api/peeap/sync/students?search=${encodeURIComponent(indexNumber)}`,
         {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ index_number: indexNumber }),
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
         }
       );
 
       if (response.ok) {
         const data = await response.json();
-        setVerificationResult({
-          success: true,
-          child_name: data.student_name,
-          class_name: data.class_name,
-        });
-      } else {
-        // Demo fallback
-        if (indexNumber.startsWith('SL')) {
+
+        // Find exact match by index number
+        const student = data.students?.find(
+          (s: any) => s.index_number?.toLowerCase() === indexNumber.toLowerCase() ||
+                       s.admission_number?.toLowerCase() === indexNumber.toLowerCase()
+        );
+
+        if (student) {
           setVerificationResult({
             success: true,
-            child_name: 'Demo Student',
-            class_name: 'Class 10A',
+            child_name: student.name || `${student.first_name || ''} ${student.last_name || ''}`.trim(),
+            class_name: student.class_name || student.grade,
+            // Store student ID for later use when adding child
+            student_id: student.id,
+          } as any);
+        } else if (data.students?.length > 0) {
+          // Found students but no exact match
+          setVerificationResult({
+            success: false,
+            error: `No exact match found for index number "${indexNumber}". Please verify the number.`,
           });
         } else {
           setVerificationResult({
@@ -263,21 +280,19 @@ export function SchoolUtilitiesPage() {
             error: 'Student not found. Please check the index number.',
           });
         }
-      }
-    } catch {
-      // Demo mode fallback
-      if (indexNumber.length >= 5) {
-        setVerificationResult({
-          success: true,
-          child_name: 'Demo Student',
-          class_name: 'Class 10A',
-        });
       } else {
+        const errorData = await response.json().catch(() => ({}));
         setVerificationResult({
           success: false,
-          error: 'Could not connect to school. Please try again.',
+          error: errorData.message || 'Student not found. Please check the index number.',
         });
       }
+    } catch (err) {
+      console.error('Error verifying student:', err);
+      setVerificationResult({
+        success: false,
+        error: 'Could not connect to school. Please try again.',
+      });
     } finally {
       setVerifying(false);
     }
@@ -338,63 +353,97 @@ export function SchoolUtilitiesPage() {
     }
   };
 
-  // Load financial data for a child
+  // Load financial data for a child using SDSL2 sync API
   const loadChildFinancialData = async (child: LinkedChild) => {
     try {
       setLoadingChildData(true);
       setChildData(null);
 
-      // Call school SaaS API to get financial data
-      const response = await fetch(
-        `https://${child.school_subdomain}.gov.school.edu.sl/api/peeap/student-financials`,
+      // First, we need to get the student's internal ID from SDSL2
+      // Search by index number to get the student ID
+      const searchResponse = await fetch(
+        `https://${child.school_subdomain}.gov.school.edu.sl/api/peeap/sync/students?search=${encodeURIComponent(child.index_number)}`,
         {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ index_number: child.index_number }),
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+        }
+      );
+
+      if (!searchResponse.ok) {
+        throw new Error('Failed to find student');
+      }
+
+      const searchData = await searchResponse.json();
+      const student = searchData.students?.find(
+        (s: any) => s.index_number?.toLowerCase() === child.index_number.toLowerCase() ||
+                     s.admission_number?.toLowerCase() === child.index_number.toLowerCase()
+      );
+
+      if (!student) {
+        throw new Error('Student not found in school system');
+      }
+
+      // Now get the financial data using the student ID
+      const response = await fetch(
+        `https://${child.school_subdomain}.gov.school.edu.sl/api/peeap/sync/student-financials/${student.id}`,
+        {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
         }
       );
 
       if (response.ok) {
         const data = await response.json();
-        setChildData(data);
+
+        // Transform the SDSL2 response to match our interface
+        const financialData: ChildFinancialData = {
+          wallet_balance: data.wallet_balance || data.balance || 0,
+          fees: (data.invoices || data.fees || []).map((invoice: any) => ({
+            id: invoice.id,
+            name: invoice.title || invoice.name || invoice.description,
+            amount: invoice.amount || invoice.total_amount,
+            paid: invoice.paid_amount || invoice.amount_paid || 0,
+            due_date: invoice.due_date,
+            status: calculateFeeStatus(
+              invoice.amount || invoice.total_amount,
+              invoice.paid_amount || invoice.amount_paid || 0,
+              invoice.due_date
+            ),
+          })),
+          lunch_balance: data.lunch_balance || data.canteen_balance || 0,
+          transport_balance: data.transport_balance || 0,
+          recent_transactions: (data.transactions || data.recent_transactions || []).map((tx: any) => ({
+            id: tx.id,
+            type: tx.type || (tx.amount > 0 ? 'topup' : 'purchase'),
+            amount: tx.amount,
+            description: tx.description || tx.narration || tx.title,
+            date: tx.date || tx.created_at,
+          })),
+        };
+
+        setChildData(financialData);
       } else {
-        // Demo data fallback
-        setChildData({
-          wallet_balance: 150.00,
-          fees: [
-            { id: '1', name: 'Tuition Fee - Term 1', amount: 500, paid: 500, status: 'paid' },
-            { id: '2', name: 'Development Levy', amount: 100, paid: 50, due_date: '2024-02-15', status: 'partial' },
-            { id: '3', name: 'Sports Fee', amount: 50, paid: 0, due_date: '2024-02-28', status: 'unpaid' },
-          ],
-          lunch_balance: 25.50,
-          transport_balance: 40.00,
-          recent_transactions: [
-            { id: '1', type: 'purchase', amount: -15, description: 'Canteen - Lunch', date: '2024-01-10' },
-            { id: '2', type: 'topup', amount: 50, description: 'Wallet Top-up', date: '2024-01-08' },
-            { id: '3', type: 'purchase', amount: -10, description: 'Canteen - Snacks', date: '2024-01-05' },
-          ],
-        });
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Error loading financial data:', errorData);
+        setChildData(null);
       }
-    } catch {
-      // Demo data fallback
-      setChildData({
-        wallet_balance: 150.00,
-        fees: [
-          { id: '1', name: 'Tuition Fee - Term 1', amount: 500, paid: 500, status: 'paid' },
-          { id: '2', name: 'Development Levy', amount: 100, paid: 50, due_date: '2024-02-15', status: 'partial' },
-          { id: '3', name: 'Sports Fee', amount: 50, paid: 0, due_date: '2024-02-28', status: 'unpaid' },
-        ],
-        lunch_balance: 25.50,
-        transport_balance: 40.00,
-        recent_transactions: [
-          { id: '1', type: 'purchase', amount: -15, description: 'Canteen - Lunch', date: '2024-01-10' },
-          { id: '2', type: 'topup', amount: 50, description: 'Wallet Top-up', date: '2024-01-08' },
-          { id: '3', type: 'purchase', amount: -10, description: 'Canteen - Snacks', date: '2024-01-05' },
-        ],
-      });
+    } catch (err) {
+      console.error('Error loading child financial data:', err);
+      setChildData(null);
     } finally {
       setLoadingChildData(false);
     }
+  };
+
+  // Helper function to calculate fee status
+  const calculateFeeStatus = (amount: number, paid: number, dueDate?: string): 'paid' | 'partial' | 'unpaid' | 'overdue' => {
+    if (paid >= amount) return 'paid';
+    if (paid > 0) {
+      if (dueDate && new Date(dueDate) < new Date()) return 'overdue';
+      return 'partial';
+    }
+    if (dueDate && new Date(dueDate) < new Date()) return 'overdue';
+    return 'unpaid';
   };
 
   // Remove linked child
@@ -415,6 +464,76 @@ export function SchoolUtilitiesPage() {
       await loadLinkedChildren();
     } catch (error) {
       console.error('Error removing child:', error);
+    }
+  };
+
+  // Open pay modal for a fee
+  const openPayModal = (fee: { id: string; name: string; amount: number; paid: number }) => {
+    const remaining = fee.amount - fee.paid;
+    setSelectedFee({ ...fee, remaining });
+    setPaymentAmount(remaining.toString());
+    setPaymentError(null);
+    setPaymentSuccess(false);
+    setShowPayModal(true);
+  };
+
+  // Process fee payment via SDSL2 API
+  const processPayment = async () => {
+    if (!selectedChild || !selectedFee || !user?.id) return;
+
+    const amount = parseFloat(paymentAmount);
+    if (isNaN(amount) || amount <= 0) {
+      setPaymentError('Please enter a valid amount');
+      return;
+    }
+    if (amount > selectedFee.remaining) {
+      setPaymentError(`Amount cannot exceed ${formatCurrency(selectedFee.remaining)}`);
+      return;
+    }
+
+    try {
+      setProcessing(true);
+      setPaymentError(null);
+
+      // Call the SDSL2 API to process fee payment
+      const response = await fetch(
+        `https://${selectedChild.school_subdomain}.gov.school.edu.sl/api/peeap/pay-fee`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            invoice_id: selectedFee.id,
+            fee_id: selectedFee.id,
+            amount: amount,
+            student_index: selectedChild.index_number,
+            payer_id: user.id,
+            payer_email: user.email,
+            payer_name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email,
+            payment_method: 'peeap_wallet',
+          }),
+        }
+      );
+
+      const result = await response.json().catch(() => ({}));
+
+      if (response.ok && result.success) {
+        setPaymentSuccess(true);
+        // Reload child data to show updated fee status
+        setTimeout(() => {
+          setShowPayModal(false);
+          setPaymentSuccess(false);
+          setSelectedFee(null);
+          setPaymentAmount('');
+          loadChildFinancialData(selectedChild);
+        }, 2000);
+      } else {
+        setPaymentError(result.message || result.error || 'Payment failed. Please try again.');
+      }
+    } catch (error) {
+      console.error('Payment error:', error);
+      setPaymentError('Could not process payment. Please check your connection and try again.');
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -623,7 +742,6 @@ export function SchoolUtilitiesPage() {
                       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
                         <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                           <h3 className="font-semibold text-gray-900 dark:text-white">School Fees</h3>
-                          <button className="text-sm text-blue-600 hover:text-blue-700">Pay Now</button>
                         </div>
                         <div className="divide-y divide-gray-200 dark:divide-gray-700">
                           {childData.fees.map((fee) => (
@@ -634,13 +752,23 @@ export function SchoolUtilitiesPage() {
                                   <p className="text-sm text-gray-500">Due: {fee.due_date}</p>
                                 )}
                               </div>
-                              <div className="text-right">
-                                <p className="font-semibold text-gray-900 dark:text-white">
-                                  {formatCurrency(fee.amount)}
-                                </p>
-                                <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(fee.status)}`}>
-                                  {fee.status === 'partial' ? `${formatCurrency(fee.paid)} paid` : fee.status}
-                                </span>
+                              <div className="flex items-center gap-4">
+                                <div className="text-right">
+                                  <p className="font-semibold text-gray-900 dark:text-white">
+                                    {formatCurrency(fee.amount)}
+                                  </p>
+                                  <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(fee.status)}`}>
+                                    {fee.status === 'partial' ? `${formatCurrency(fee.paid)} paid` : fee.status}
+                                  </span>
+                                </div>
+                                {fee.status !== 'paid' && (
+                                  <button
+                                    onClick={() => openPayModal(fee)}
+                                    className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+                                  >
+                                    Pay
+                                  </button>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -909,6 +1037,142 @@ export function SchoolUtilitiesPage() {
                       )}
                     </button>
                   )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Pay Fee Modal */}
+        {showPayModal && selectedFee && selectedChild && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+              {/* Modal Header */}
+              <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Pay School Fee
+                </h3>
+                <button
+                  onClick={() => setShowPayModal(false)}
+                  className="p-2 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-6 space-y-6">
+                {paymentSuccess ? (
+                  <div className="text-center py-8">
+                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <CheckCircle className="h-8 w-8 text-green-600" />
+                    </div>
+                    <h4 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                      Payment Successful!
+                    </h4>
+                    <p className="text-gray-500">
+                      Your payment of {formatCurrency(parseFloat(paymentAmount))} for {selectedFee.name} has been processed.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Fee Details */}
+                    <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
+                          <Receipt className="h-5 w-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900 dark:text-white">{selectedFee.name}</p>
+                          <p className="text-sm text-gray-500">For: {selectedChild.child_name}</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-4 text-center">
+                        <div>
+                          <p className="text-xs text-gray-500">Total</p>
+                          <p className="font-semibold text-gray-900 dark:text-white">
+                            {formatCurrency(selectedFee.amount)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Paid</p>
+                          <p className="font-semibold text-green-600">
+                            {formatCurrency(selectedFee.paid)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Remaining</p>
+                          <p className="font-semibold text-amber-600">
+                            {formatCurrency(selectedFee.remaining)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Amount Input */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Payment Amount
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">NLE</span>
+                        <input
+                          type="number"
+                          value={paymentAmount}
+                          onChange={(e) => setPaymentAmount(e.target.value)}
+                          className="w-full pl-14 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 text-lg font-semibold"
+                          placeholder="0.00"
+                        />
+                      </div>
+                      <div className="flex gap-2 mt-2">
+                        <button
+                          onClick={() => setPaymentAmount((selectedFee.remaining / 2).toFixed(2))}
+                          className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200"
+                        >
+                          50%
+                        </button>
+                        <button
+                          onClick={() => setPaymentAmount(selectedFee.remaining.toFixed(2))}
+                          className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200"
+                        >
+                          Full Amount
+                        </button>
+                      </div>
+                    </div>
+
+                    {paymentError && (
+                      <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg flex items-center gap-2 text-red-700 dark:text-red-300">
+                        <AlertCircle className="h-5 w-5" />
+                        <span className="text-sm">{paymentError}</span>
+                      </div>
+                    )}
+
+                    {/* School Info */}
+                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                      <Building2 className="h-4 w-4" />
+                      <span>Paying to: {selectedChild.school_name}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              {!paymentSuccess && (
+                <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+                  <button
+                    onClick={processPayment}
+                    disabled={processing || !paymentAmount}
+                    className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {processing ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <>
+                        <CreditCard className="h-5 w-5" />
+                        Pay {paymentAmount ? formatCurrency(parseFloat(paymentAmount)) : 'Now'}
+                      </>
+                    )}
+                  </button>
                 </div>
               )}
             </div>

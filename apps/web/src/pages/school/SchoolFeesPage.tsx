@@ -15,7 +15,9 @@ import {
   XCircle,
   AlertCircle,
   Edit,
-  Trash2
+  Trash2,
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 
 interface FeeStructure {
@@ -49,114 +51,117 @@ export function SchoolFeesPage() {
   const [feeStructures, setFeeStructures] = useState<FeeStructure[]>([]);
   const [payments, setPayments] = useState<FeePayment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
 
+  // Get school domain from localStorage
+  const getSchoolDomain = () => {
+    const schoolDomain = localStorage.getItem('school_domain');
+    const schoolId = localStorage.getItem('schoolId');
+    return schoolDomain || schoolId || null;
+  };
+
+  const fetchFees = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const schoolDomain = getSchoolDomain();
+      if (!schoolDomain) {
+        setError('School information not found. Please log in again.');
+        setLoading(false);
+        return;
+      }
+
+      // Fetch invoices/fees from SDSL2 sync API
+      const response = await fetch(
+        `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/invoices`,
+        {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+
+        // Group invoices by fee type to create fee structures
+        const feeMap = new Map<string, FeeStructure>();
+        const paymentsList: FeePayment[] = [];
+
+        (data.invoices || data || []).forEach((inv: any) => {
+          const feeName = inv.fee_name || inv.title || inv.description || 'Fee';
+          const feeId = inv.fee_id || inv.fee_type_id || feeName;
+
+          // Add to fee structure
+          if (!feeMap.has(feeId)) {
+            feeMap.set(feeId, {
+              id: feeId,
+              name: feeName,
+              description: inv.fee_description || inv.description || '',
+              amount: inv.amount || inv.total_amount || 0,
+              frequency: inv.frequency || 'termly',
+              dueDate: inv.due_date || '',
+              applicableTo: inv.applicable_to || 'All Students',
+              status: inv.fee_status || 'active',
+              paidCount: 0,
+              pendingCount: 0,
+              totalStudents: 0,
+            });
+          }
+
+          const structure = feeMap.get(feeId)!;
+          structure.totalStudents++;
+
+          const paidAmount = inv.paid_amount || inv.amount_paid || 0;
+          const totalAmount = inv.amount || inv.total_amount || 0;
+
+          if (paidAmount >= totalAmount) {
+            structure.paidCount++;
+          } else {
+            structure.pendingCount++;
+          }
+
+          // Add to payments list
+          let status: FeePayment['status'] = 'pending';
+          if (paidAmount >= totalAmount) {
+            status = 'paid';
+          } else if (paidAmount > 0) {
+            status = 'partial';
+          } else if (inv.due_date && new Date(inv.due_date) < new Date()) {
+            status = 'overdue';
+          }
+
+          paymentsList.push({
+            id: inv.id,
+            studentName: inv.student_name || `${inv.first_name || ''} ${inv.last_name || ''}`.trim() || 'Unknown',
+            studentId: inv.student_id || inv.index_number || '',
+            feeName: feeName,
+            amount: totalAmount,
+            paidAmount: paidAmount,
+            status: status,
+            dueDate: inv.due_date || '',
+            paidDate: inv.paid_date || inv.paid_at || null,
+          });
+        });
+
+        setFeeStructures(Array.from(feeMap.values()));
+        setPayments(paymentsList);
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        setError(errorData.message || 'Failed to load fees');
+      }
+    } catch (err) {
+      console.error('Error fetching fees:', err);
+      setError('Could not connect to school system. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    // TODO: Fetch from API
-    setFeeStructures([
-      {
-        id: '1',
-        name: 'Tuition Fee',
-        description: 'Term 1 Tuition Fee 2024',
-        amount: 50000000,
-        frequency: 'termly',
-        dueDate: '2024-02-15',
-        applicableTo: 'All Students',
-        status: 'active',
-        paidCount: 850,
-        pendingCount: 400,
-        totalStudents: 1250,
-      },
-      {
-        id: '2',
-        name: 'Examination Fee',
-        description: 'Mid-term examination fee',
-        amount: 5000000,
-        frequency: 'termly',
-        dueDate: '2024-03-01',
-        applicableTo: 'All Students',
-        status: 'active',
-        paidCount: 1100,
-        pendingCount: 150,
-        totalStudents: 1250,
-      },
-      {
-        id: '3',
-        name: 'Library Fee',
-        description: 'Annual library access fee',
-        amount: 2500000,
-        frequency: 'yearly',
-        dueDate: '2024-01-31',
-        applicableTo: 'All Students',
-        status: 'active',
-        paidCount: 1200,
-        pendingCount: 50,
-        totalStudents: 1250,
-      },
-      {
-        id: '4',
-        name: 'Sports Fee',
-        description: 'Annual sports activities fee',
-        amount: 3000000,
-        frequency: 'yearly',
-        dueDate: '2024-02-28',
-        applicableTo: 'All Students',
-        status: 'active',
-        paidCount: 600,
-        pendingCount: 650,
-        totalStudents: 1250,
-      },
-    ]);
-
-    setPayments([
-      {
-        id: 'pay_001',
-        studentName: 'John Doe',
-        studentId: 'STU-2024-001',
-        feeName: 'Tuition Fee',
-        amount: 50000000,
-        paidAmount: 50000000,
-        status: 'paid',
-        dueDate: '2024-02-15',
-        paidDate: '2024-01-20',
-      },
-      {
-        id: 'pay_002',
-        studentName: 'Jane Smith',
-        studentId: 'STU-2024-002',
-        feeName: 'Tuition Fee',
-        amount: 50000000,
-        paidAmount: 25000000,
-        status: 'partial',
-        dueDate: '2024-02-15',
-        paidDate: '2024-01-25',
-      },
-      {
-        id: 'pay_003',
-        studentName: 'Bob Wilson',
-        studentId: 'STU-2024-003',
-        feeName: 'Tuition Fee',
-        amount: 50000000,
-        paidAmount: 0,
-        status: 'pending',
-        dueDate: '2024-02-15',
-        paidDate: null,
-      },
-      {
-        id: 'pay_004',
-        studentName: 'Alice Brown',
-        studentId: 'STU-2024-004',
-        feeName: 'Tuition Fee',
-        amount: 50000000,
-        paidAmount: 0,
-        status: 'overdue',
-        dueDate: '2024-01-15',
-        paidDate: null,
-      },
-    ]);
-
-    setLoading(false);
+    fetchFees();
   }, []);
 
   const getStatusBadge = (status: string) => {
@@ -222,13 +227,23 @@ export function SchoolFeesPage() {
                 </div>
               </div>
             </div>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              <Plus className="h-4 w-4" />
-              Create Fee
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={fetchFees}
+                disabled={loading}
+                className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <Plus className="h-4 w-4" />
+                Create Fee
+              </button>
+            </div>
           </div>
         </div>
       </header>

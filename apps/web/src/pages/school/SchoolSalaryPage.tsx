@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Wallet,
@@ -16,7 +16,9 @@ import {
   Send,
   ChevronDown,
   Building2,
-  TrendingUp
+  TrendingUp,
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 
 interface StaffSalary {
@@ -53,108 +55,85 @@ export function SchoolSalaryPage() {
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [showPayrollModal, setShowPayrollModal] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState<string[]>([]);
+  const [salaries, setSalaries] = useState<StaffSalary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const departments = ['Teaching', 'Administration', 'Support', 'Security', 'Finance'];
 
-  const summary: PayrollSummary = {
-    totalStaff: 45,
-    totalBaseSalary: 125000000,
-    totalAllowances: 18500000,
-    totalDeductions: 12300000,
-    totalNetPayable: 131200000,
-    paid: 38,
-    pending: 7
+  // Get school domain from localStorage
+  const getSchoolDomain = () => {
+    const schoolDomain = localStorage.getItem('school_domain');
+    const schoolId = localStorage.getItem('schoolId');
+    return schoolDomain || schoolId || null;
   };
 
-  const salaries: StaffSalary[] = [
-    {
-      id: '1',
-      staffId: 'STF001',
-      name: 'John Smith',
-      role: 'Principal',
-      department: 'Administration',
-      baseSalary: 8500000,
-      allowances: 2500000,
-      deductions: 850000,
-      netSalary: 10150000,
-      status: 'paid',
-      paymentDate: '2026-01-05',
-      accountNumber: '****4521',
-      bankName: 'Rokel Commercial Bank'
-    },
-    {
-      id: '2',
-      staffId: 'STF002',
-      name: 'Sarah Johnson',
-      role: 'Vice Principal',
-      department: 'Administration',
-      baseSalary: 6500000,
-      allowances: 1800000,
-      deductions: 650000,
-      netSalary: 7650000,
-      status: 'paid',
-      paymentDate: '2026-01-05',
-      accountNumber: '****7832',
-      bankName: 'Sierra Leone Commercial Bank'
-    },
-    {
-      id: '3',
-      staffId: 'STF003',
-      name: 'Michael Brown',
-      role: 'Mathematics Teacher',
-      department: 'Teaching',
-      baseSalary: 3500000,
-      allowances: 500000,
-      deductions: 350000,
-      netSalary: 3650000,
-      status: 'paid',
-      paymentDate: '2026-01-05',
-      accountNumber: '****2145',
-      bankName: 'Rokel Commercial Bank'
-    },
-    {
-      id: '4',
-      staffId: 'STF004',
-      name: 'Emily Davis',
-      role: 'English Teacher',
-      department: 'Teaching',
-      baseSalary: 3500000,
-      allowances: 500000,
-      deductions: 350000,
-      netSalary: 3650000,
-      status: 'pending',
-      accountNumber: '****9876',
-      bankName: 'UBA Sierra Leone'
-    },
-    {
-      id: '5',
-      staffId: 'STF005',
-      name: 'James Wilson',
-      role: 'Accountant',
-      department: 'Finance',
-      baseSalary: 4000000,
-      allowances: 800000,
-      deductions: 400000,
-      netSalary: 4400000,
-      status: 'processing',
-      accountNumber: '****3456',
-      bankName: 'Ecobank'
-    },
-    {
-      id: '6',
-      staffId: 'STF006',
-      name: 'Grace Kamara',
-      role: 'Science Teacher',
-      department: 'Teaching',
-      baseSalary: 3500000,
-      allowances: 600000,
-      deductions: 350000,
-      netSalary: 3750000,
-      status: 'pending',
-      accountNumber: '****6543',
-      bankName: 'GT Bank'
+  const fetchSalaries = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const schoolDomain = getSchoolDomain();
+      if (!schoolDomain) {
+        setError('School information not found. Please log in again.');
+        setLoading(false);
+        return;
+      }
+
+      // Fetch salaries from SDSL2 sync API
+      const response = await fetch(
+        `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/salaries?month=${selectedMonth}`,
+        {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const salaryList = (data.salaries || data || []).map((s: any) => ({
+          id: s.id,
+          staffId: s.staff_id || s.employee_id || `STF${s.id}`,
+          name: s.staff_name || s.name || `${s.first_name || ''} ${s.last_name || ''}`.trim(),
+          role: s.role || s.position || s.job_title || 'Staff',
+          department: s.department || 'General',
+          avatar: s.avatar_url,
+          baseSalary: s.base_salary || s.gross_salary || 0,
+          allowances: s.allowances || s.total_allowances || 0,
+          deductions: s.deductions || s.total_deductions || 0,
+          netSalary: s.net_salary || s.net_pay || 0,
+          status: s.status || (s.paid_at ? 'paid' : 'pending'),
+          paymentDate: s.payment_date || s.paid_at,
+          accountNumber: s.account_number ? `****${s.account_number.slice(-4)}` : undefined,
+          bankName: s.bank_name,
+        }));
+        setSalaries(salaryList);
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        setError(errorData.message || 'Failed to load salaries');
+      }
+    } catch (err) {
+      console.error('Error fetching salaries:', err);
+      setError('Could not connect to school system. Please try again.');
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
+
+  useEffect(() => {
+    fetchSalaries();
+  }, [selectedMonth]);
+
+  // Calculate summary from loaded salaries
+  const summary: PayrollSummary = {
+    totalStaff: salaries.length,
+    totalBaseSalary: salaries.reduce((sum, s) => sum + s.baseSalary, 0),
+    totalAllowances: salaries.reduce((sum, s) => sum + s.allowances, 0),
+    totalDeductions: salaries.reduce((sum, s) => sum + s.deductions, 0),
+    totalNetPayable: salaries.reduce((sum, s) => sum + s.netSalary, 0),
+    paid: salaries.filter(s => s.status === 'paid').length,
+    pending: salaries.filter(s => s.status === 'pending' || s.status === 'processing').length,
+  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-SL', {
@@ -244,6 +223,14 @@ export function SchoolSalaryPage() {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              <button
+                onClick={fetchSalaries}
+                disabled={loading}
+                className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
               <button className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
                 <Download className="h-4 w-4" />
                 Export Payroll
@@ -261,6 +248,29 @@ export function SchoolSalaryPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Error State */}
+        {error && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 mb-6 flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+            <p className="text-red-700 dark:text-red-300">{error}</p>
+            <button
+              onClick={fetchSalaries}
+              className="ml-auto text-red-600 hover:text-red-700 font-medium"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-green-600" />
+          </div>
+        )}
+
+        {!loading && !error && (
+        <>
         {/* Month Selector */}
         <div className="mb-6 flex items-center gap-4">
           <div className="flex items-center gap-2">
@@ -559,6 +569,7 @@ export function SchoolSalaryPage() {
             <div className="text-center py-12">
               <Wallet className="h-12 w-12 text-gray-300 mx-auto mb-4" />
               <p className="text-gray-500 dark:text-gray-400">No salary records found</p>
+              <p className="text-sm text-gray-400 mt-1">Salary data from your school system will appear here</p>
             </div>
           )}
         </div>
@@ -586,6 +597,8 @@ export function SchoolSalaryPage() {
             </div>
           </div>
         </div>
+        </>
+        )}
       </main>
 
       {/* Run Payroll Modal */}

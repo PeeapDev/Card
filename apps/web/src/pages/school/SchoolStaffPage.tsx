@@ -14,7 +14,9 @@ import {
   XCircle,
   UserPlus,
   X,
-  Loader2
+  Loader2,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 
 interface StaffMember {
@@ -42,6 +44,7 @@ interface SearchResult {
 export function SchoolStaffPage() {
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -59,71 +62,63 @@ export function SchoolStaffPage() {
   const departments = ['Administration', 'Teaching', 'Finance', 'IT', 'Maintenance', 'Security'];
   const roles = ['Teacher', 'Administrator', 'Accountant', 'IT Support', 'Security Guard', 'Cleaner', 'Principal', 'Vice Principal'];
 
+  // Get school domain from localStorage
+  const getSchoolDomain = () => {
+    const schoolDomain = localStorage.getItem('school_domain');
+    const schoolId = localStorage.getItem('schoolId');
+    return schoolDomain || schoolId || null;
+  };
+
+  const fetchStaff = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const schoolDomain = getSchoolDomain();
+      if (!schoolDomain) {
+        setError('School information not found. Please log in again.');
+        setLoading(false);
+        return;
+      }
+
+      // Fetch staff from SDSL2 sync API
+      const response = await fetch(
+        `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/staff`,
+        {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const staffList = (data.staff || data || []).map((s: any) => ({
+          id: s.id,
+          name: s.name || `${s.first_name || ''} ${s.last_name || ''}`.trim(),
+          email: s.email || '',
+          phone: s.phone || s.phone_number || '',
+          role: s.role || s.position || s.job_title || 'Staff',
+          department: s.department || 'General',
+          joinDate: s.join_date || s.hired_date || s.created_at,
+          salary: s.salary || s.monthly_salary || 0,
+          status: s.status === 'inactive' ? 'inactive' : 'active',
+          avatar: s.avatar_url || s.photo_url || null,
+        }));
+        setStaff(staffList);
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        setError(errorData.message || 'Failed to load staff');
+      }
+    } catch (err) {
+      console.error('Error fetching staff:', err);
+      setError('Could not connect to school system. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    // TODO: Fetch from API
-    setStaff([
-      {
-        id: '1',
-        name: 'James Smith',
-        email: 'james@school.edu',
-        phone: '+232 76 111 2222',
-        role: 'Principal',
-        department: 'Administration',
-        joinDate: '2020-01-15',
-        salary: 15000000,
-        status: 'active',
-        avatar: null,
-      },
-      {
-        id: '2',
-        name: 'Mary Johnson',
-        email: 'mary@school.edu',
-        phone: '+232 76 333 4444',
-        role: 'Teacher',
-        department: 'Teaching',
-        joinDate: '2021-09-01',
-        salary: 8000000,
-        status: 'active',
-        avatar: null,
-      },
-      {
-        id: '3',
-        name: 'Peter Williams',
-        email: 'peter@school.edu',
-        phone: '+232 76 555 6666',
-        role: 'Accountant',
-        department: 'Finance',
-        joinDate: '2019-03-20',
-        salary: 10000000,
-        status: 'active',
-        avatar: null,
-      },
-      {
-        id: '4',
-        name: 'Sarah Davis',
-        email: 'sarah@school.edu',
-        phone: '+232 76 777 8888',
-        role: 'Teacher',
-        department: 'Teaching',
-        joinDate: '2022-01-10',
-        salary: 7500000,
-        status: 'active',
-        avatar: null,
-      },
-      {
-        id: '5',
-        name: 'John Brown',
-        email: 'john@school.edu',
-        phone: '+232 76 999 0000',
-        role: 'IT Support',
-        department: 'IT',
-        joinDate: '2023-06-15',
-        salary: 6000000,
-        status: 'inactive',
-        avatar: null,
-      },
-    ]);
-    setLoading(false);
+    fetchStaff();
   }, []);
 
   // Search users from Peeap system
@@ -238,18 +233,51 @@ export function SchoolStaffPage() {
                 </div>
               </div>
             </div>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              <UserPlus className="h-4 w-4" />
-              Add Staff
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={fetchStaff}
+                disabled={loading}
+                className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <UserPlus className="h-4 w-4" />
+                Add Staff
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Error State */}
+        {error && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 mb-6 flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+            <p className="text-red-700 dark:text-red-300">{error}</p>
+            <button
+              onClick={fetchStaff}
+              className="ml-auto text-red-600 hover:text-red-700 font-medium"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          </div>
+        )}
+
+        {!loading && !error && (
+        <>
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm">
@@ -360,7 +388,17 @@ export function SchoolStaffPage() {
               </div>
             </div>
           ))}
+
+          {filteredStaff.length === 0 && (
+            <div className="col-span-full text-center py-12">
+              <Users className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-500 dark:text-gray-400">No staff members found</p>
+              <p className="text-sm text-gray-400 mt-1">Staff from your school system will appear here</p>
+            </div>
+          )}
         </div>
+        </>
+        )}
       </main>
 
       {/* Add Staff Modal */}

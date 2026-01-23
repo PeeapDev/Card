@@ -7,7 +7,10 @@ import {
   Filter,
   Download,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  Loader2,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 
 interface Transaction {
@@ -19,48 +22,71 @@ interface Transaction {
   type: 'payment' | 'refund';
   status: 'completed' | 'pending' | 'failed';
   createdAt: string;
+  description?: string;
 }
 
 export function SchoolTransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
+  // Get school domain from localStorage
+  const getSchoolDomain = () => {
+    const schoolDomain = localStorage.getItem('school_domain');
+    const schoolId = localStorage.getItem('schoolId');
+    return schoolDomain || schoolId || null;
+  };
+
+  const fetchTransactions = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const schoolDomain = getSchoolDomain();
+      if (!schoolDomain) {
+        setError('School information not found. Please log in again.');
+        setLoading(false);
+        return;
+      }
+
+      // Fetch transactions from SDSL2 sync API
+      const response = await fetch(
+        `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/summary`,
+        {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const txList = (data.recent_transactions || data.transactions || []).map((tx: any) => ({
+          id: tx.id,
+          studentName: tx.student_name || tx.name || 'Unknown',
+          studentId: tx.student_id || tx.index_number || '',
+          vendorName: tx.vendor_name || tx.recipient || tx.description || 'School',
+          amount: tx.amount,
+          type: tx.type === 'refund' ? 'refund' : 'payment',
+          status: tx.status || 'completed',
+          createdAt: tx.created_at || tx.date || tx.timestamp,
+          description: tx.description || tx.narration,
+        }));
+        setTransactions(txList);
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        setError(errorData.message || 'Failed to load transactions');
+      }
+    } catch (err) {
+      console.error('Error fetching transactions:', err);
+      setError('Could not connect to school system. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    // TODO: Fetch from API
-    setTransactions([
-      {
-        id: 'txn_001',
-        studentName: 'John Doe',
-        studentId: 'STU-2024-001',
-        vendorName: 'School Canteen',
-        amount: 150000,
-        type: 'payment',
-        status: 'completed',
-        createdAt: '2024-01-15T12:30:00Z',
-      },
-      {
-        id: 'txn_002',
-        studentName: 'Jane Smith',
-        studentId: 'STU-2024-002',
-        vendorName: 'Bookshop',
-        amount: 450000,
-        type: 'payment',
-        status: 'completed',
-        createdAt: '2024-01-15T11:45:00Z',
-      },
-      {
-        id: 'txn_003',
-        studentName: 'Bob Wilson',
-        studentId: 'STU-2024-003',
-        vendorName: 'School Canteen',
-        amount: 75000,
-        type: 'refund',
-        status: 'completed',
-        createdAt: '2024-01-15T10:15:00Z',
-      },
-    ]);
-    setLoading(false);
+    fetchTransactions();
   }, []);
 
   const getStatusBadge = (status: Transaction['status']) => {
@@ -108,15 +134,48 @@ export function SchoolTransactionsPage() {
                 </div>
               </div>
             </div>
-            <button className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
-              <Download className="h-4 w-4" />
-              Export
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={fetchTransactions}
+                disabled={loading}
+                className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+              <button className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
+                <Download className="h-4 w-4" />
+                Export
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Error State */}
+        {error && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 mb-6 flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+            <p className="text-red-700 dark:text-red-300">{error}</p>
+            <button
+              onClick={fetchTransactions}
+              className="ml-auto text-red-600 hover:text-red-700 font-medium"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-orange-600" />
+          </div>
+        )}
+
+        {!loading && !error && (
+        <>
         {/* Search & Filter */}
         <div className="flex gap-4 mb-6">
           <div className="flex-1 relative">
@@ -210,7 +269,17 @@ export function SchoolTransactionsPage() {
               ))}
             </tbody>
           </table>
+
+          {transactions.length === 0 && (
+            <div className="text-center py-12">
+              <CreditCard className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-500 dark:text-gray-400">No transactions found</p>
+              <p className="text-sm text-gray-400 mt-1">Transactions from your school system will appear here</p>
+            </div>
+          )}
         </div>
+        </>
+        )}
       </main>
     </div>
   );

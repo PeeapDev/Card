@@ -11,7 +11,10 @@ import {
   Filter,
   CheckCircle,
   XCircle,
-  Clock
+  Clock,
+  Loader2,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 
 interface Student {
@@ -20,6 +23,7 @@ interface Student {
   name: string;
   email: string;
   phone: string;
+  class_name?: string;
   walletId: string | null;
   walletBalance: number;
   status: 'linked' | 'pending' | 'unlinked';
@@ -30,50 +34,68 @@ interface Student {
 export function SchoolStudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'linked' | 'pending' | 'unlinked'>('all');
 
+  // Get school domain from localStorage
+  const getSchoolDomain = () => {
+    const schoolDomain = localStorage.getItem('school_domain');
+    const schoolId = localStorage.getItem('schoolId');
+    return schoolDomain || schoolId || null;
+  };
+
+  const fetchStudents = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const schoolDomain = getSchoolDomain();
+      if (!schoolDomain) {
+        setError('School information not found. Please log in again.');
+        setLoading(false);
+        return;
+      }
+
+      // Fetch students from SDSL2 sync API
+      const response = await fetch(
+        `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/students`,
+        {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const studentList = (data.students || data || []).map((s: any) => ({
+          id: s.id,
+          externalId: s.index_number || s.admission_number || s.student_id,
+          name: s.name || `${s.first_name || ''} ${s.last_name || ''}`.trim(),
+          email: s.email || '',
+          phone: s.phone || s.phone_number || '',
+          class_name: s.class_name || s.grade,
+          walletId: s.peeap_wallet_id || null,
+          walletBalance: s.wallet_balance || 0,
+          status: s.peeap_wallet_id ? 'linked' : (s.peeap_user_id ? 'pending' : 'unlinked'),
+          linkedAt: s.peeap_linked_at || s.wallet_linked_at || null,
+          createdAt: s.created_at || s.enrolled_at,
+        }));
+        setStudents(studentList);
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        setError(errorData.message || 'Failed to load students');
+      }
+    } catch (err) {
+      console.error('Error fetching students:', err);
+      setError('Could not connect to school system. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    // TODO: Fetch from API
-    setStudents([
-      {
-        id: '1',
-        externalId: 'STU-2024-001',
-        name: 'John Doe',
-        email: 'john@student.edu',
-        phone: '+232 76 123 4567',
-        walletId: 'wal_abc123',
-        walletBalance: 5000000,
-        status: 'linked',
-        linkedAt: '2024-01-15T10:00:00Z',
-        createdAt: '2024-01-10T10:00:00Z',
-      },
-      {
-        id: '2',
-        externalId: 'STU-2024-002',
-        name: 'Jane Smith',
-        email: 'jane@student.edu',
-        phone: '+232 76 234 5678',
-        walletId: 'wal_def456',
-        walletBalance: 2500000,
-        status: 'linked',
-        linkedAt: '2024-01-14T10:00:00Z',
-        createdAt: '2024-01-10T10:00:00Z',
-      },
-      {
-        id: '3',
-        externalId: 'STU-2024-003',
-        name: 'Bob Wilson',
-        email: 'bob@student.edu',
-        phone: '+232 76 345 6789',
-        walletId: null,
-        walletBalance: 0,
-        status: 'pending',
-        linkedAt: null,
-        createdAt: '2024-01-12T10:00:00Z',
-      },
-    ]);
-    setLoading(false);
+    fetchStudents();
   }, []);
 
   const filteredStudents = students.filter((student) => {
@@ -136,13 +158,17 @@ export function SchoolStudentsPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={fetchStudents}
+                disabled={loading}
+                className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
               <button className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
                 <Download className="h-4 w-4" />
                 Export
-              </button>
-              <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                <Plus className="h-4 w-4" />
-                Invite Students
               </button>
             </div>
           </div>
@@ -150,6 +176,29 @@ export function SchoolStudentsPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Error State */}
+        {error && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 mb-6 flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+            <p className="text-red-700 dark:text-red-300">{error}</p>
+            <button
+              onClick={fetchStudents}
+              className="ml-auto text-red-600 hover:text-red-700 font-medium"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          </div>
+        )}
+
+        {!loading && !error && (
+          <>
         {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-4 mb-6">
           <div className="flex-1 relative">
@@ -250,9 +299,12 @@ export function SchoolStudentsPage() {
             <div className="text-center py-12">
               <Users className="h-12 w-12 text-gray-300 mx-auto mb-4" />
               <p className="text-gray-500 dark:text-gray-400">No students found</p>
+              <p className="text-sm text-gray-400 mt-1">Students from your school system will appear here</p>
             </div>
           )}
         </div>
+          </>
+        )}
       </main>
     </div>
   );

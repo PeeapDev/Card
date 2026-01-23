@@ -16,3 +16,4 @@ export { SchoolRegisterPage } from './SchoolRegisterPage';
 export { SchoolAuthCallbackPage } from './SchoolAuthCallbackPage';
 export { SchoolConnectionSetupPage } from './SchoolConnectionSetupPage';
 export { QuickAccessPage } from './QuickAccessPage';
+export { SsoCallbackPage } from './SsoCallbackPage';
