@@ -23,6 +23,9 @@ import {
   ChevronDown,
   ShieldAlert,
   MessageSquare,
+  GraduationCap,
+  Grid3X3,
+  ChevronUp,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useUserApps } from '@/context/UserAppsContext';
@@ -61,11 +64,13 @@ const navItems = [
 export function MainLayout({ children }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [appsMenuOpen, setAppsMenuOpen] = useState(false);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
   const [hasStaffPositions, setHasStaffPositions] = useState(false);
   const [hasEventStaffPositions, setHasEventStaffPositions] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const appsMenuRef = useRef<HTMLDivElement>(null);
   const { user, logout } = useAuth();
   const { isAppEnabled } = useUserApps();
   const { getGlassColors } = useThemeColor();
@@ -103,11 +108,14 @@ export function MainLayout({ children }: MainLayoutProps) {
     closeVerificationModal,
   } = useVerification();
 
-  // Close user menu when clicking outside
+  // Close menus when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setUserMenuOpen(false);
+      }
+      if (appsMenuRef.current && !appsMenuRef.current.contains(event.target as Node)) {
+        setAppsMenuOpen(false);
       }
     };
 
@@ -194,7 +202,17 @@ export function MainLayout({ children }: MainLayoutProps) {
     navigate('/login');
   };
 
-  // Build nav items dynamically - add POS, Events, and Cash Box based on user settings
+  // Define all available user apps for the app launcher
+  const allUserApps = [
+    { id: 'cashbox', label: 'Cash Box', icon: Package, path: '/pots', color: 'from-amber-500 to-orange-500', enabled: isAppEnabled('cashbox') },
+    { id: 'events', label: 'Events', icon: Calendar, path: '/events', color: 'from-purple-500 to-pink-500', enabled: isAppEnabled('events') },
+    { id: 'school_utilities', label: 'School', icon: GraduationCap, path: '/school-utilities', color: 'from-blue-500 to-cyan-500', enabled: isAppEnabled('school_utilities') },
+  ];
+
+  const enabledApps = allUserApps.filter(app => app.enabled);
+  const enabledAppsCount = enabledApps.length;
+
+  // Build nav items dynamically - add POS, Events, Cash Box, and School Utilities based on user settings
   const dynamicNavItems = (() => {
     let items = [...navItems];
     const insertIndex = 6; // After Shop (index 5 in base array)
@@ -217,6 +235,12 @@ export function MainLayout({ children }: MainLayoutProps) {
     // Add Cash Box if enabled in user apps (setup completed)
     if (isAppEnabled('cashbox')) {
       items.splice(insertIndex + addedCount, 0, { path: '/pots', label: 'Cash Box', icon: Package });
+      addedCount++;
+    }
+
+    // Add School Utilities if enabled
+    if (isAppEnabled('school_utilities')) {
+      items.splice(insertIndex + addedCount, 0, { path: '/school-utilities', label: 'School Utilities', icon: GraduationCap });
       addedCount++;
     }
 
@@ -313,6 +337,100 @@ export function MainLayout({ children }: MainLayoutProps) {
               );
             })}
           </nav>
+
+          {/* App Launcher */}
+          <div className="px-4 py-4 border-t border-gray-200 dark:border-gray-700/50" ref={appsMenuRef}>
+            <div className="relative">
+              <button
+                onClick={() => setAppsMenuOpen(!appsMenuOpen)}
+                className={clsx(
+                  'w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors',
+                  appsMenuOpen
+                    ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
+                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                )}
+              >
+                <div className="flex items-center">
+                  <Grid3X3 className="w-5 h-5 mr-3" />
+                  <span>Apps</span>
+                  {enabledAppsCount > 0 && (
+                    <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-primary-100 dark:bg-primary-900/50 text-primary-600 dark:text-primary-400 rounded-full">
+                      {enabledAppsCount}
+                    </span>
+                  )}
+                </div>
+                <ChevronUp className={clsx('w-4 h-4 transition-transform', !appsMenuOpen && 'rotate-180')} />
+              </button>
+
+              {/* Apps Popup Menu */}
+              {appsMenuOpen && (
+                <div
+                  className={clsx(
+                    'absolute bottom-full left-0 right-0 mb-2 p-4 rounded-xl shadow-lg border z-50',
+                    !isDarkMode && 'bg-white border-gray-200'
+                  )}
+                  style={isDarkMode ? {
+                    backgroundColor: glassColors.bg,
+                    borderColor: glassColors.border,
+                    backdropFilter: 'blur(24px)',
+                    WebkitBackdropFilter: 'blur(24px)',
+                  } : undefined}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-medium text-gray-900 dark:text-white">Your Apps</span>
+                    <Link
+                      to="/settings"
+                      className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
+                      onClick={() => setAppsMenuOpen(false)}
+                    >
+                      Manage
+                    </Link>
+                  </div>
+
+                  {enabledAppsCount > 0 ? (
+                    <div className="grid grid-cols-3 gap-3">
+                      {enabledApps.map((app) => {
+                        const Icon = app.icon;
+                        return (
+                          <Link
+                            key={app.id}
+                            to={app.path}
+                            onClick={() => {
+                              setAppsMenuOpen(false);
+                              setSidebarOpen(false);
+                            }}
+                            className="flex flex-col items-center p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors group"
+                          >
+                            <div className={clsx(
+                              'w-12 h-12 rounded-xl bg-gradient-to-br flex items-center justify-center mb-2 shadow-lg group-hover:scale-105 transition-transform',
+                              app.color
+                            )}>
+                              <Icon className="w-6 h-6 text-white" />
+                            </div>
+                            <span className="text-xs font-medium text-gray-700 dark:text-gray-300 text-center">
+                              {app.label}
+                            </span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4">
+                      <Grid3X3 className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
+                      <p className="text-sm text-gray-500 dark:text-gray-400">No apps enabled</p>
+                      <Link
+                        to="/settings"
+                        onClick={() => setAppsMenuOpen(false)}
+                        className="text-sm text-primary-600 dark:text-primary-400 hover:underline mt-1 inline-block"
+                      >
+                        Enable apps in settings
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </aside>
 

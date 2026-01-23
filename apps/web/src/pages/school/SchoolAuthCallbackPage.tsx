@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { GraduationCap, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { authService } from '@/services/auth.service';
+import { API_URL } from '@/config/urls';
 
 export function SchoolAuthCallbackPage() {
   const [searchParams] = useSearchParams();
@@ -88,7 +89,7 @@ export function SchoolAuthCallbackPage() {
         const clientId = isExternalSaasConnection ? 'school_saas' : 'school-portal';
 
         // Exchange code for tokens with the Peeap API
-        const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/auth/sso/exchange`, {
+        const response = await fetch(`${API_URL}/api/auth/sso/exchange`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

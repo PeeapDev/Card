@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AuthLayout } from '@/components/layout/AuthLayout';
 import { Button } from '@/components/ui';
 import { supabase } from '@/lib/supabase';
@@ -27,9 +27,13 @@ const normalizePhoneNumber = (phone: string): string => {
 
 export function RegisterPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { login } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Get redirect URL for OAuth flow preservation
+  const redirectTo = searchParams.get('redirect');
 
   // Form data
   const [formData, setFormData] = useState({
@@ -268,10 +272,24 @@ export function RegisterPage() {
       // Auto-login after registration
       try {
         await login({ email: formData.email, password: formData.password });
-        navigate('/dashboard');
+        // If there's a redirect URL (e.g., from OAuth flow), go there; otherwise go to dashboard
+        if (redirectTo) {
+          // Use window.location for full URLs (OAuth redirects), navigate() for internal paths
+          if (redirectTo.startsWith('http://') || redirectTo.startsWith('https://') || redirectTo.startsWith('/auth/')) {
+            window.location.href = redirectTo;
+          } else {
+            navigate(redirectTo, { replace: true });
+          }
+        } else {
+          navigate('/dashboard');
+        }
       } catch {
-        // If auto-login fails, redirect to login page
-        navigate('/login');
+        // If auto-login fails, redirect to login page (with redirect preserved)
+        if (redirectTo) {
+          navigate(`/login?redirect=${encodeURIComponent(redirectTo)}`);
+        } else {
+          navigate('/login');
+        }
       }
     } catch (err: unknown) {
       console.error('Registration error:', err);
@@ -412,7 +430,10 @@ export function RegisterPage() {
 
         <p className="text-center text-sm text-gray-600">
           Already have an account?{' '}
-          <Link to="/login" className="text-primary-600 hover:text-primary-700 font-medium">
+          <Link
+            to={redirectTo ? `/login?redirect=${encodeURIComponent(redirectTo)}` : '/login'}
+            className="text-primary-600 hover:text-primary-700 font-medium"
+          >
             Sign in
           </Link>
         </p>

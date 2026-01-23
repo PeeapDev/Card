@@ -477,7 +477,7 @@ export function SchoolUtilitiesPage() {
     setShowPayModal(true);
   };
 
-  // Process fee payment via SDSL2 API
+  // Process fee payment via Peeap API
   const processPayment = async () => {
     if (!selectedChild || !selectedFee || !user?.id) return;
 
@@ -495,24 +495,22 @@ export function SchoolUtilitiesPage() {
       setProcessing(true);
       setPaymentError(null);
 
-      // Call the SDSL2 API to process fee payment
-      const response = await fetch(
-        `https://${selectedChild.school_subdomain}.gov.school.edu.sl/api/peeap/pay-fee`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            invoice_id: selectedFee.id,
-            fee_id: selectedFee.id,
-            amount: amount,
-            student_index: selectedChild.index_number,
-            payer_id: user.id,
-            payer_email: user.email,
-            payer_name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email,
-            payment_method: 'peeap_wallet',
-          }),
-        }
-      );
+      // Call Peeap API to process fee payment
+      // This will deduct from wallet and notify the school
+      const response = await fetch('/api/school/pay-fee', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoice_id: selectedFee.id,
+          fee_id: selectedFee.id,
+          amount: amount,
+          student_index: selectedChild.index_number,
+          school_subdomain: selectedChild.school_subdomain,
+          payer_id: user.id,
+          payer_email: user.email,
+          payer_name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+        }),
+      });
 
       const result = await response.json().catch(() => ({}));
 

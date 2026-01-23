@@ -2,14 +2,15 @@
  * Settings Page
  *
  * Comprehensive settings hub for user preferences:
- * - Apps (Cash Box, Events)
+ * - Apps (Cash Box, Events, School Utilities)
  * - Bank Accounts
  * - Payment Preferences
  * - Notifications
+ * - Theme
  */
 
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Settings,
@@ -29,6 +30,11 @@ import {
   Palette,
   ArrowUpCircle,
   GraduationCap,
+  Building2,
+  Shield,
+  ChevronRight,
+  User,
+  Landmark,
 } from 'lucide-react';
 import { MotionCard } from '@/components/ui/Card';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -68,6 +74,60 @@ interface UserWallet {
   status: string;
 }
 
+// Settings section card component
+function SettingCard({
+  icon: Icon,
+  iconBg,
+  iconColor,
+  title,
+  description,
+  onClick,
+  href,
+  badge,
+  children,
+}: {
+  icon: React.ElementType;
+  iconBg: string;
+  iconColor: string;
+  title: string;
+  description: string;
+  onClick?: () => void;
+  href?: string;
+  badge?: React.ReactNode;
+  children?: React.ReactNode;
+}) {
+  const content = (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-200 dark:border-gray-700 hover:shadow-lg hover:border-gray-300 dark:hover:border-gray-600 transition-all cursor-pointer group h-full">
+      <div className="flex items-start gap-4">
+        <div className={clsx('w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0', iconBg)}>
+          <Icon className={clsx('w-6 h-6', iconColor)} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-gray-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
+              {title}
+            </h3>
+            {badge}
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{description}</p>
+        </div>
+        {!children && <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 group-hover:translate-x-1 transition-all flex-shrink-0 mt-1" />}
+      </div>
+      {children && <div className="mt-4">{children}</div>}
+    </div>
+  );
+
+  if (href) {
+    return <Link to={href}>{content}</Link>;
+  }
+
+  if (onClick) {
+    return <button onClick={onClick} className="w-full text-left">{content}</button>;
+  }
+
+  return content;
+}
+
 export function SettingsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -83,6 +143,7 @@ export function SettingsPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [defaultWalletId, setDefaultWalletId] = useState<string | undefined>();
+  const [expandedSection, setExpandedSection] = useState<string | null>(null);
 
   // Wallet state
   const [wallets, setWallets] = useState<UserWallet[]>([]);
@@ -130,36 +191,24 @@ export function SettingsPage() {
     }
   };
 
-  // Handle Cash Box toggle
-  const handleCashBoxToggle = async () => {
+  // Handle app toggles
+  const handleAppToggle = async (appId: string, redirectOnEnable?: string) => {
     try {
-      if (isAppEnabled('cashbox')) {
-        // Disabling - just toggle off
-        await toggleApp('cashbox');
-        setMessage({ type: 'success', text: 'Cash Box disabled' });
-        setTimeout(() => setMessage(null), 3000);
+      if (isAppEnabled(appId)) {
+        await toggleApp(appId);
+        setMessage({ type: 'success', text: `App disabled` });
       } else {
-        // Enabling - redirect to setup wizard
-        navigate('/cashbox/setup');
+        if (redirectOnEnable) {
+          navigate(redirectOnEnable);
+        } else {
+          await toggleApp(appId);
+          setMessage({ type: 'success', text: `App enabled!` });
+        }
       }
-    } catch (error: any) {
-      console.error('Error toggling Cash Box:', error);
-      setMessage({ type: 'error', text: error.message || 'Failed to update Cash Box. Please try again.' });
-    }
-  };
-
-  // Handle Events toggle
-  const handleEventsToggle = async () => {
-    try {
-      await toggleApp('events');
-      setMessage({
-        type: 'success',
-        text: enabledApps.events ? 'Events app disabled' : 'Events app enabled!'
-      });
       setTimeout(() => setMessage(null), 3000);
     } catch (error: any) {
-      console.error('Error toggling Events:', error);
-      setMessage({ type: 'error', text: error.message || 'Failed to update Events app. Please try again.' });
+      console.error('Error toggling app:', error);
+      setMessage({ type: 'error', text: error.message || 'Failed to update. Please try again.' });
     }
   };
 
@@ -173,23 +222,30 @@ export function SettingsPage() {
     );
   }
 
+  // Count enabled apps
+  const enabledAppsCount = [
+    isAppEnabled('cashbox'),
+    isAppEnabled('events'),
+    isAppEnabled('school_utilities'),
+  ].filter(Boolean).length;
+
   return (
     <MainLayout>
       <motion.div
-        className="space-y-6"
+        className="max-w-5xl mx-auto space-y-8"
         variants={containerVariants}
         initial="hidden"
         animate="visible"
       >
         {/* Header */}
         <motion.div variants={itemVariants}>
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary-100 dark:bg-primary-900/30 rounded-lg">
-              <Settings className="w-6 h-6 text-primary-600 dark:text-primary-400" />
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-gradient-to-br from-primary-500 to-primary-600 rounded-2xl shadow-lg">
+              <Settings className="w-8 h-8 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Settings</h1>
-              <p className="text-gray-500 dark:text-gray-400">Manage your apps, preferences, and security</p>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Settings</h1>
+              <p className="text-gray-500 dark:text-gray-400">Manage your account, apps, and preferences</p>
             </div>
           </div>
         </motion.div>
@@ -220,238 +276,216 @@ export function SettingsPage() {
 
         {/* Apps Section */}
         <motion.div variants={itemVariants}>
-          <MotionCard className="p-6" glowEffect>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                <Sparkles className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+          <div className="flex items-center gap-3 mb-4">
+            <Sparkles className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Apps</h2>
+            {enabledAppsCount > 0 && (
+              <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 rounded-full">
+                {enabledAppsCount} enabled
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Cash Box App */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-200 dark:border-gray-700">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center shadow-lg">
+                    <Package className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-white">Cash Box</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Savings & interest</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleAppToggle('cashbox', '/cashbox/setup')}
+                  disabled={appsLoading}
+                  className="flex-shrink-0"
+                >
+                  {isAppEnabled('cashbox') ? (
+                    <ToggleRight className="w-10 h-10 text-amber-500" />
+                  ) : (
+                    <ToggleLeft className="w-10 h-10 text-gray-400" />
+                  )}
+                </button>
               </div>
-              <div>
-                <h3 className="font-semibold text-gray-900 dark:text-white">Apps</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Enable features and apps for your account</p>
-              </div>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                Lock away savings and earn interest on your money
+              </p>
+              {isAppEnabled('cashbox') && (
+                <Link
+                  to="/pots"
+                  className="inline-flex items-center text-sm text-amber-600 dark:text-amber-400 hover:underline font-medium"
+                >
+                  Open Cash Box <ChevronRight className="w-4 h-4" />
+                </Link>
+              )}
             </div>
 
-            <div className="space-y-4">
-              {/* Cash Box App */}
-              <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 rounded-xl flex items-center justify-center">
-                      <Package className="w-6 h-6 text-amber-600 dark:text-amber-400" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-900 dark:text-white">Cash Box</p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Lock away savings and earn interest
-                      </p>
-                    </div>
+            {/* Events App */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-200 dark:border-gray-700">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg">
+                    <Calendar className="w-6 h-6 text-white" />
                   </div>
-                  <button
-                    onClick={handleCashBoxToggle}
-                    disabled={appsLoading}
-                    className="flex items-center gap-2"
-                  >
-                    {isAppEnabled('cashbox') ? (
-                      <ToggleRight className="w-10 h-10 text-amber-600 dark:text-amber-400" />
-                    ) : (
-                      <ToggleLeft className="w-10 h-10 text-gray-400" />
-                    )}
-                  </button>
-                </div>
-
-                {isAppEnabled('cashbox') && isCashBoxSetupCompleted() && cashBoxSettings && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600"
-                  >
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600 dark:text-gray-400">Auto-deposit:</span>
-                      <span className="font-medium text-gray-900 dark:text-white">
-                        {cashBoxSettings.autoDepositEnabled ? 'Enabled' : 'Disabled'}
-                      </span>
-                    </div>
-                    {cashBoxSettings.autoDepositEnabled && cashBoxSettings.autoDepositAmount && (
-                      <div className="flex items-center justify-between text-sm mt-1">
-                        <span className="text-gray-600 dark:text-gray-400">Amount:</span>
-                        <span className="font-medium text-gray-900 dark:text-white">
-                          SLE {cashBoxSettings.autoDepositAmount.toFixed(2)} / {cashBoxSettings.autoDepositFrequency}
-                        </span>
-                      </div>
-                    )}
-                    <button
-                      onClick={() => navigate('/pots')}
-                      className="mt-3 text-sm text-amber-600 dark:text-amber-400 hover:underline font-medium"
-                    >
-                      Go to Cash Box →
-                    </button>
-                  </motion.div>
-                )}
-
-                {!isAppEnabled('cashbox') && (
-                  <motion.p
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="mt-3 text-sm text-gray-500 dark:text-gray-400"
-                  >
-                    Toggle on to start the setup wizard and create your first savings box
-                  </motion.p>
-                )}
-              </div>
-
-              {/* Events App */}
-              <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center">
-                      <Calendar className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-900 dark:text-white">Events</p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Browse events, buy tickets, and manage bookings
-                      </p>
-                    </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-white">Events</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Tickets & bookings</p>
                   </div>
-                  <button
-                    onClick={handleEventsToggle}
-                    disabled={appsLoading}
-                    className="flex items-center gap-2"
-                  >
-                    {enabledApps.events ? (
-                      <ToggleRight className="w-10 h-10 text-purple-600 dark:text-purple-400" />
-                    ) : (
-                      <ToggleLeft className="w-10 h-10 text-gray-400" />
-                    )}
-                  </button>
                 </div>
-
-                {enabledApps.events && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    className="mt-3"
-                  >
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Events app is enabled! Browse and purchase tickets from the{' '}
-                      <a href="/events" className="text-purple-600 dark:text-purple-400 hover:underline font-medium">
-                        Events page
-                      </a>
-                      .
-                    </p>
-                  </motion.div>
-                )}
+                <button
+                  onClick={() => handleAppToggle('events')}
+                  disabled={appsLoading}
+                  className="flex-shrink-0"
+                >
+                  {isAppEnabled('events') ? (
+                    <ToggleRight className="w-10 h-10 text-purple-500" />
+                  ) : (
+                    <ToggleLeft className="w-10 h-10 text-gray-400" />
+                  )}
+                </button>
               </div>
-
-              {/* School Utilities App */}
-              <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
-                      <GraduationCap className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-900 dark:text-white">School Utilities</p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Manage your children's school finances
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={async () => {
-                      try {
-                        await toggleApp('school_utilities');
-                        setMessage({
-                          type: 'success',
-                          text: enabledApps.school_utilities ? 'School Utilities disabled' : 'School Utilities enabled!'
-                        });
-                        setTimeout(() => setMessage(null), 3000);
-                      } catch (error: any) {
-                        setMessage({ type: 'error', text: error.message || 'Failed to update. Please try again.' });
-                      }
-                    }}
-                    disabled={appsLoading}
-                    className="flex items-center gap-2"
-                  >
-                    {enabledApps.school_utilities ? (
-                      <ToggleRight className="w-10 h-10 text-blue-600 dark:text-blue-400" />
-                    ) : (
-                      <ToggleLeft className="w-10 h-10 text-gray-400" />
-                    )}
-                  </button>
-                </div>
-
-                {enabledApps.school_utilities && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    className="mt-3"
-                  >
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      School Utilities is enabled! Manage your children's school finances from the{' '}
-                      <a href="/school-utilities" className="text-blue-600 dark:text-blue-400 hover:underline font-medium">
-                        School Utilities page
-                      </a>
-                      .
-                    </p>
-                    <button
-                      onClick={() => navigate('/school-utilities')}
-                      className="mt-3 text-sm text-blue-600 dark:text-blue-400 hover:underline font-medium"
-                    >
-                      Go to School Utilities →
-                    </button>
-                  </motion.div>
-                )}
-
-                {!enabledApps.school_utilities && (
-                  <motion.p
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="mt-3 text-sm text-gray-500 dark:text-gray-400"
-                  >
-                    Link your children's schools to view fees, wallet balances, lunch credits, and more
-                  </motion.p>
-                )}
-              </div>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                Browse events, buy tickets, and manage bookings
+              </p>
+              {isAppEnabled('events') && (
+                <Link
+                  to="/events"
+                  className="inline-flex items-center text-sm text-purple-600 dark:text-purple-400 hover:underline font-medium"
+                >
+                  Browse Events <ChevronRight className="w-4 h-4" />
+                </Link>
+              )}
             </div>
-          </MotionCard>
+
+            {/* School Utilities App */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-200 dark:border-gray-700">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg">
+                    <GraduationCap className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-white">School Utilities</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">School finances</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleAppToggle('school_utilities')}
+                  disabled={appsLoading}
+                  className="flex-shrink-0"
+                >
+                  {isAppEnabled('school_utilities') ? (
+                    <ToggleRight className="w-10 h-10 text-blue-500" />
+                  ) : (
+                    <ToggleLeft className="w-10 h-10 text-gray-400" />
+                  )}
+                </button>
+              </div>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                Manage your children's school fees, lunch, and transport
+              </p>
+              {isAppEnabled('school_utilities') && (
+                <Link
+                  to="/school-utilities"
+                  className="inline-flex items-center text-sm text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                >
+                  Open School Utilities <ChevronRight className="w-4 h-4" />
+                </Link>
+              )}
+            </div>
+          </div>
         </motion.div>
 
-        {/* Upgrade Your Account Section */}
+        {/* Account & Preferences Section */}
         <motion.div variants={itemVariants}>
           <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 bg-gradient-to-br from-purple-100 to-orange-100 dark:from-purple-900/30 dark:to-orange-900/30 rounded-lg">
-              <ArrowUpCircle className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900 dark:text-white">Upgrade Your Account</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Unlock more features by becoming a merchant or agent</p>
-            </div>
+            <User className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Account & Preferences</h2>
           </div>
-          <div className="space-y-4">
-            <BecomeMerchantCard />
-            <BecomeAgentCard />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <SettingCard
+              icon={CreditCard}
+              iconBg="bg-indigo-100 dark:bg-indigo-900/30"
+              iconColor="text-indigo-600 dark:text-indigo-400"
+              title="Payment Preferences"
+              description="Set default wallet and payment methods"
+              onClick={() => setExpandedSection(expandedSection === 'payment' ? null : 'payment')}
+            />
+
+            <SettingCard
+              icon={Landmark}
+              iconBg="bg-emerald-100 dark:bg-emerald-900/30"
+              iconColor="text-emerald-600 dark:text-emerald-400"
+              title="Bank Accounts"
+              description="Manage linked bank accounts"
+              onClick={() => setExpandedSection(expandedSection === 'bank' ? null : 'bank')}
+            />
+
+            <SettingCard
+              icon={Bell}
+              iconBg="bg-blue-100 dark:bg-blue-900/30"
+              iconColor="text-blue-600 dark:text-blue-400"
+              title="Notifications"
+              description="Push, email, and SMS preferences"
+              onClick={() => setExpandedSection(expandedSection === 'notifications' ? null : 'notifications')}
+            />
+
+            <SettingCard
+              icon={Palette}
+              iconBg="bg-pink-100 dark:bg-pink-900/30"
+              iconColor="text-pink-600 dark:text-pink-400"
+              title="Theme & Colors"
+              description="Customize your dashboard appearance"
+              onClick={() => setExpandedSection(expandedSection === 'theme' ? null : 'theme')}
+            />
+
+            <SettingCard
+              icon={Shield}
+              iconBg="bg-red-100 dark:bg-red-900/30"
+              iconColor="text-red-600 dark:text-red-400"
+              title="Security"
+              description="Password, PIN, and 2FA settings"
+              href="/profile"
+            />
+
+            <SettingCard
+              icon={User}
+              iconBg="bg-gray-100 dark:bg-gray-700"
+              iconColor="text-gray-600 dark:text-gray-400"
+              title="Profile"
+              description="Edit your personal information"
+              href="/profile"
+            />
           </div>
         </motion.div>
 
-        {/* Bank Accounts Section */}
-        <motion.div variants={itemVariants}>
-          <BankAccountsSection />
-        </motion.div>
-
-        {/* Two Column Layout for Preferences and Security */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Payment Preferences */}
-          <motion.div variants={itemVariants}>
-            <MotionCard className="p-6 h-full" glowEffect>
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
-                  <CreditCard className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+        {/* Expanded Sections */}
+        {expandedSection === 'payment' && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            variants={itemVariants}
+          >
+            <MotionCard className="p-6" glowEffect>
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+                    <CreditCard className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-white">Payment Preferences</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Set your default wallet</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white">Payment Preferences</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Set your default wallet</p>
-                </div>
+                <button onClick={() => setExpandedSection(null)} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-5 h-5" />
+                </button>
               </div>
 
               <div className="space-y-4">
@@ -526,40 +560,92 @@ export function SettingsPage() {
               </div>
             </MotionCard>
           </motion.div>
-        </div>
+        )}
 
-        {/* Notifications Section */}
-        <motion.div variants={itemVariants}>
-          <MotionCard className="p-6" glowEffect>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                <Bell className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900 dark:text-white">Notifications</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Manage your notification preferences</p>
-              </div>
+        {expandedSection === 'bank' && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            variants={itemVariants}
+          >
+            <div className="relative">
+              <button
+                onClick={() => setExpandedSection(null)}
+                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 z-10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <BankAccountsSection />
             </div>
+          </motion.div>
+        )}
 
-            <NotificationSettings />
-          </MotionCard>
-        </motion.div>
+        {expandedSection === 'notifications' && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            variants={itemVariants}
+          >
+            <MotionCard className="p-6" glowEffect>
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                    <Bell className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-white">Notifications</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Manage your notification preferences</p>
+                  </div>
+                </div>
+                <button onClick={() => setExpandedSection(null)} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <NotificationSettings />
+            </MotionCard>
+          </motion.div>
+        )}
 
-        {/* Theme Color Section */}
+        {expandedSection === 'theme' && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            variants={itemVariants}
+          >
+            <MotionCard className="p-6" glowEffect>
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-pink-100 dark:bg-pink-900/30 rounded-lg">
+                    <Palette className="w-5 h-5 text-pink-600 dark:text-pink-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-white">Color Theme</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Choose your preferred color theme</p>
+                  </div>
+                </div>
+                <button onClick={() => setExpandedSection(null)} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <ThemeColorSelector type="user" />
+            </MotionCard>
+          </motion.div>
+        )}
+
+        {/* Upgrade Your Account Section */}
         <motion.div variants={itemVariants}>
-          <MotionCard className="p-6" glowEffect>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-pink-100 dark:bg-pink-900/30 rounded-lg">
-                <Palette className="w-5 h-5 text-pink-600 dark:text-pink-400" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900 dark:text-white">Color Theme</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Choose your preferred color theme for cards and UI elements</p>
-              </div>
-            </div>
+          <div className="flex items-center gap-3 mb-4">
+            <ArrowUpCircle className="w-5 h-5 text-gradient-to-r from-purple-600 to-orange-600" />
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Upgrade Your Account</h2>
+          </div>
 
-            <ThemeColorSelector type="user" />
-          </MotionCard>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <BecomeMerchantCard />
+            <BecomeAgentCard />
+          </div>
         </motion.div>
       </motion.div>
     </MainLayout>

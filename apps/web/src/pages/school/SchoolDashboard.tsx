@@ -355,6 +355,94 @@ export function SchoolDashboard() {
               </div>
             </div>
 
+            {/* Fee Collection Analytics Chart */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm mb-8">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Fee Collection Analytics</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Circular Progress */}
+                <div className="flex items-center justify-center">
+                  <div className="relative w-48 h-48">
+                    {/* Background circle */}
+                    <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="40"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="12"
+                        className="text-gray-200 dark:text-gray-700"
+                      />
+                      {/* Progress circle */}
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="40"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="12"
+                        strokeLinecap="round"
+                        className="text-emerald-500"
+                        strokeDasharray={`${((stats.collectedFees / (stats.collectedFees + stats.pendingFees || 1)) * 251.2).toFixed(0)} 251.2`}
+                      />
+                    </svg>
+                    {/* Center text */}
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-3xl font-bold text-gray-900 dark:text-white">
+                        {stats.collectedFees + stats.pendingFees > 0
+                          ? Math.round((stats.collectedFees / (stats.collectedFees + stats.pendingFees)) * 100)
+                          : 0}%
+                      </span>
+                      <span className="text-sm text-gray-500 dark:text-gray-400">Collected</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Stats breakdown */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-3 h-3 bg-emerald-500 rounded-full"></div>
+                      <span className="text-gray-700 dark:text-gray-300">Collected Fees</span>
+                    </div>
+                    <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                      {formatCurrency(stats.collectedFees)}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
+                      <span className="text-gray-700 dark:text-gray-300">Pending Fees</span>
+                    </div>
+                    <span className="font-semibold text-amber-600 dark:text-amber-400">
+                      {formatCurrency(stats.pendingFees)}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                      <span className="text-gray-700 dark:text-gray-300">Total Expected</span>
+                    </div>
+                    <span className="font-semibold text-blue-600 dark:text-blue-400">
+                      {formatCurrency(stats.collectedFees + stats.pendingFees)}
+                    </span>
+                  </div>
+
+                  <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {stats.totalStudents > 0 && (
+                        <>
+                          Based on {stats.totalStudents.toLocaleString()} enrolled students
+                        </>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Quick Actions */}
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Quick Actions</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

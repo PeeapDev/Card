@@ -93,10 +93,19 @@ export function OAuthAuthorizePage() {
   const studentName = searchParams.get('student_name');
   const studentPhone = searchParams.get('student_phone');
 
+  // NEW: Extract school details for display on authorization page
+  // These come from the school's SaaS system (e.g., SDSL2)
+  const schoolName = searchParams.get('school_name');
+  const schoolLogoUrl = searchParams.get('school_logo_url');
+  const schoolDomain = searchParams.get('school_domain');
+
   // Extract pass-through params for school SaaS integration
   // These need to be forwarded to the redirect_uri so school.peeap.com knows where to redirect back
   const origin = searchParams.get('origin');
   const connection = searchParams.get('connection');
+
+  // Is this a school connection request?
+  const isSchoolConnection = clientId === 'school_saas' || !!schoolName || !!origin;
 
   useEffect(() => {
     const validateRequest = async () => {
@@ -106,7 +115,8 @@ export function OAuthAuthorizePage() {
       // Redirect to login if not authenticated
       if (!isAuthenticated) {
         const returnUrl = window.location.href;
-        navigate(`/login?redirect=${encodeURIComponent(returnUrl)}`, { replace: true });
+        // Use window.location for more reliable URL handling with complex query strings
+        window.location.href = `/login?redirect=${encodeURIComponent(returnUrl)}`;
         return;
       }
 
@@ -153,6 +163,10 @@ export function OAuthAuthorizePage() {
       // Build metadata for school integration
       const metadata: Record<string, any> = {};
       if (schoolId) metadata.school_id = schoolId;
+      if (schoolName) metadata.school_name = schoolName;
+      if (schoolLogoUrl) metadata.school_logo_url = schoolLogoUrl;
+      if (schoolDomain) metadata.school_domain = schoolDomain;
+      if (origin) metadata.origin = origin;
       if (userType) metadata.user_type = userType;
       if (indexNumber) metadata.index_number = indexNumber;
       if (studentName) metadata.student_name = studentName;
@@ -247,31 +261,45 @@ export function OAuthAuthorizePage() {
 
   // Success state
   if (status === 'success') {
+    const successName = isSchoolConnection && schoolName ? schoolName : client?.name;
     return (
       <AuthLayout title="Authorization Successful" subtitle="">
         <div className="text-center py-8">
           <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
-          <p className="text-gray-600 mb-2">You have authorized {client?.name}.</p>
+          <p className="text-gray-600 mb-2">You have authorized {successName}.</p>
           <p className="text-sm text-gray-500">Redirecting you back...</p>
         </div>
       </AuthLayout>
     );
   }
 
+  // Determine what to display - school info or generic client info
+  const displayName = isSchoolConnection && schoolName ? schoolName : client?.name;
+  const displayLogo = isSchoolConnection && schoolLogoUrl ? schoolLogoUrl : client?.logo_url;
+  const displayUrl = isSchoolConnection && schoolDomain
+    ? `https://${schoolDomain}`
+    : isSchoolConnection && origin
+    ? `https://${origin}`
+    : client?.website_url;
+
   // Authorization form
   return (
     <AuthLayout
       title="Authorize Application"
-      subtitle={`${client?.name} is requesting access to your account`}
+      subtitle={`${displayName} is requesting access to your account`}
     >
       <div className="space-y-6">
-        {/* App Info */}
+        {/* App/School Info */}
         <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
-          {client?.logo_url ? (
+          {displayLogo ? (
             <img
-              src={client.logo_url}
-              alt={client.name}
-              className="w-12 h-12 rounded-lg"
+              src={displayLogo}
+              alt={displayName || 'Application'}
+              className="w-12 h-12 rounded-lg object-cover"
+              onError={(e) => {
+                // Fallback if logo fails to load
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
             />
           ) : (
             <div className="w-12 h-12 bg-primary-100 rounded-lg flex items-center justify-center">
@@ -279,9 +307,9 @@ export function OAuthAuthorizePage() {
             </div>
           )}
           <div>
-            <h3 className="font-semibold text-gray-900">{client?.name}</h3>
-            {client?.website_url && (
-              <p className="text-sm text-gray-500">{client.website_url}</p>
+            <h3 className="font-semibold text-gray-900">{displayName}</h3>
+            {displayUrl && (
+              <p className="text-sm text-gray-500">{displayUrl}</p>
             )}
           </div>
         </div>
