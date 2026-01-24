@@ -82,10 +82,10 @@ export function SchoolStaffPage() {
         return;
       }
 
-      // Try to fetch staff from SaaS sync API with school_id parameter
+      // Try to fetch staff from SaaS sync API
+      // Note: Don't pass school_id for single-school SaaS instances as it may filter incorrectly
       try {
         const params = new URLSearchParams();
-        if (schoolId) params.append('school_id', schoolId);
         params.append('page', '1');
         params.append('per_page', '500');
 
@@ -96,24 +96,27 @@ export function SchoolStaffPage() {
             headers: {
               'Accept': 'application/json',
               'X-School-Domain': schoolDomain,
-              ...(schoolId ? { 'X-School-ID': schoolId } : {}),
             },
           }
         );
 
         if (response.ok) {
-          const data = await response.json();
-          const staffList = (data.staff || data.data || data || []).map((s: any) => ({
-            id: s.id,
-            name: s.name || `${s.first_name || ''} ${s.last_name || ''}`.trim(),
+          const result = await response.json();
+          // API returns { success: true, data: [...staff...] }
+          const staffData = result.data || result.staff || result || [];
+          console.log('[SchoolStaff] API returned', staffData.length, 'staff members');
+
+          const staffList = staffData.map((s: any) => ({
+            id: s.id?.toString() || String(Math.random()),
+            name: s.full_name || s.name || `${s.first_name || ''} ${s.last_name || ''}`.trim(),
             email: s.email || '',
-            phone: s.phone || s.phone_number || '',
-            role: s.role || s.position || s.job_title || 'Staff',
+            phone: s.phone || '',
+            role: s.role || s.designation || s.position || 'Staff',
             department: s.department || 'General',
-            joinDate: s.join_date || s.hired_date || s.created_at,
-            salary: s.salary || s.monthly_salary || 0,
+            joinDate: s.joining_date || s.join_date || s.created_at,
+            salary: s.basic_salary || s.salary || 0,
             status: s.status === 'inactive' ? 'inactive' : 'active',
-            avatar: s.avatar_url || s.photo_url || null,
+            avatar: s.photo || s.avatar_url || null,
           }));
           setStaff(staffList);
           return;

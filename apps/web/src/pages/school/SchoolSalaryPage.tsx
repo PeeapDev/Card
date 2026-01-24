@@ -81,10 +81,10 @@ export function SchoolSalaryPage() {
         return;
       }
 
-      // Try to fetch salaries from SaaS sync API with school_id parameter
+      // Try to fetch salaries from SaaS sync API
+      // Note: Don't pass school_id for single-school SaaS instances as it may filter incorrectly
       try {
         const params = new URLSearchParams();
-        if (schoolId) params.append('school_id', schoolId);
         params.append('month', selectedMonth);
 
         const response = await fetch(
@@ -94,7 +94,6 @@ export function SchoolSalaryPage() {
             headers: {
               'Accept': 'application/json',
               'X-School-Domain': schoolDomain,
-              ...(schoolId ? { 'X-School-ID': schoolId } : {}),
             },
           }
         );

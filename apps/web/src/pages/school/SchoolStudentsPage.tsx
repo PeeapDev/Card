@@ -58,10 +58,10 @@ export function SchoolStudentsPage() {
         return;
       }
 
-      // Try to fetch students from SaaS sync API with school_id parameter
+      // Try to fetch students from SaaS sync API
+      // Note: Don't pass school_id for single-school SaaS instances as it may filter incorrectly
       try {
         const params = new URLSearchParams();
-        if (schoolId) params.append('school_id', schoolId);
         params.append('page', '1');
         params.append('per_page', '500');
 
@@ -72,25 +72,28 @@ export function SchoolStudentsPage() {
             headers: {
               'Accept': 'application/json',
               'X-School-Domain': schoolDomain,
-              ...(schoolId ? { 'X-School-ID': schoolId } : {}),
             },
           }
         );
 
         if (response.ok) {
-          const data = await response.json();
-          const studentList = (data.students || data.data || data || []).map((s: any) => ({
+          const result = await response.json();
+          // API returns { success: true, data: [...students...] }
+          const studentsData = result.data || result.students || result || [];
+          console.log('[SchoolStudents] API returned', studentsData.length, 'students');
+
+          const studentList = studentsData.map((s: any) => ({
             id: s.id?.toString() || s.student_id?.toString() || String(Math.random()),
-            externalId: s.index_number || s.admission_no || s.admission_number || s.student_id || '',
-            name: s.name || s.student_name || `${s.first_name || ''} ${s.last_name || ''}`.trim() || 'Unknown',
+            externalId: s.index_number || s.admission_number || s.admission_no || '',
+            name: s.full_name || s.name || s.student_name || `${s.first_name || ''} ${s.last_name || ''}`.trim() || 'Unknown',
             email: s.email || '',
-            phone: s.phone || s.phone_number || s.guardian_phone || '',
-            class_name: s.class_name || s.class || s.grade || '',
-            walletId: s.peeap_wallet_id || s.wallet_id || null,
+            phone: s.phone || s.guardian_phone || s.parent?.guardian_phone || '',
+            class_name: s.class || s.class_name || s.grade || '',
+            walletId: s.wallet_id || s.peeap_wallet_id || null,
             walletBalance: s.wallet_balance || 0,
-            status: (s.peeap_wallet_id || s.wallet_id) ? 'linked' : (s.peeap_user_id ? 'pending' : 'unlinked'),
+            status: s.wallet_linked ? 'linked' : (s.peeap_user_id ? 'pending' : 'unlinked'),
             linkedAt: s.peeap_linked_at || s.wallet_linked_at || null,
-            createdAt: s.created_at || s.enrolled_at || new Date().toISOString(),
+            createdAt: s.created_at || new Date().toISOString(),
           }));
           setStudents(studentList);
           return;

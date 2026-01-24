@@ -307,34 +307,71 @@ export function SchoolDashboard() {
         }));
       }
 
-      // Step 4: Try to fetch summary from school system (optional - may fail for local testing)
+      // Step 4: Fetch stats from school system endpoints
+      // Note: Don't pass school_id for single-school SaaS instances as it may filter incorrectly
       const schoolDomain = connection.peeap_school_id || localStorage.getItem('school_domain');
       if (schoolDomain) {
-        try {
-          const response = await fetch(
-            `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/summary`,
-            {
-              method: 'GET',
-              headers: { 'Accept': 'application/json' },
-            }
-          );
+        const headers = {
+          'Accept': 'application/json',
+          'X-School-Domain': schoolDomain,
+        };
 
-          if (response.ok) {
-            const data = await response.json();
+        // Fetch students count
+        try {
+          const studentsRes = await fetch(
+            `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/students?per_page=1`,
+            { method: 'GET', headers }
+          );
+          if (studentsRes.ok) {
+            const data = await studentsRes.json();
+            const total = data.pagination?.total || data.total || (data.data?.length || 0);
             setStats(prev => ({
               ...prev,
-              totalStudents: data.total_students || data.students_count || prev.totalStudents,
-              activeStudents: data.active_students || data.enrolled_students || prev.activeStudents,
-              totalStaff: data.total_staff || data.staff_count || prev.totalStaff,
-              totalVendors: data.total_vendors || data.vendors_count || prev.totalVendors,
-              pendingFees: data.pending_fees || data.outstanding_invoices || prev.pendingFees,
-              pendingSalaries: data.pending_salaries || data.unpaid_salaries || prev.pendingSalaries,
-              paidSalaries: data.paid_salaries || prev.paidSalaries,
+              totalStudents: total,
+              activeStudents: total,
             }));
           }
         } catch (err) {
-          // External school API is optional - don't show error for this
-          console.log('Could not fetch from external school system (optional):', err);
+          console.log('Could not fetch students count:', err);
+        }
+
+        // Fetch staff count
+        try {
+          const staffRes = await fetch(
+            `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/staff?per_page=1`,
+            { method: 'GET', headers }
+          );
+          if (staffRes.ok) {
+            const data = await staffRes.json();
+            const total = data.pagination?.total || data.total || (data.data?.length || 0);
+            setStats(prev => ({
+              ...prev,
+              totalStaff: total,
+            }));
+          }
+        } catch (err) {
+          console.log('Could not fetch staff count:', err);
+        }
+
+        // Try summary endpoint (may fail but that's OK)
+        try {
+          const summaryRes = await fetch(
+            `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/summary`,
+            { method: 'GET', headers }
+          );
+          if (summaryRes.ok) {
+            const data = await summaryRes.json();
+            if (data.success && data.data) {
+              setStats(prev => ({
+                ...prev,
+                pendingFees: data.data.pending_fees || data.data.outstanding_invoices || prev.pendingFees,
+                pendingSalaries: data.data.pending_salaries || prev.pendingSalaries,
+                paidSalaries: data.data.paid_salaries || prev.paidSalaries,
+              }));
+            }
+          }
+        } catch (err) {
+          console.log('Summary endpoint not available:', err);
         }
       }
 
