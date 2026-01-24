@@ -11,20 +11,25 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    allowedHosts: true,  // Allow ngrok and other external hosts
+    allowedHosts: true,
     proxy: {
+      '/_school-proxy': {
+        target: 'https://gov.school.edu.sl',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/_school-proxy/, '/api/peeap'),
+      },
       '/monime-api': {
         target: 'https://api.monime.io',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/monime-api/, ''),
-        secure: true,
+        secure: false,
       },
-      // Proxy /api/* to the actual API server
       '/api': {
         target: 'https://api.peeap.com',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/router/, '').replace(/^\/api/, ''),
-        secure: true,
+        secure: false,
       },
     },
   },
