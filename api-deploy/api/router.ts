@@ -193,6 +193,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleSchoolCreateSession(req, res);
     } else if (path === 'school/pay-fee' || path === 'school/pay-fee/') {
       return await handleSchoolPayFee(req, res);
+    // ========== PEEAP SCHOOL API PROXY (for my.peeap.com) ==========
+    } else if (path === 'school/peeap/verify-student' || path === 'school/peeap/verify-student/') {
+      return await handlePeeapVerifyStudent(req, res);
+    } else if (path === 'school/peeap/student-financials' || path === 'school/peeap/student-financials/') {
+      return await handlePeeapStudentFinancials(req, res);
+    } else if (path === 'school/peeap/pay-fee' || path === 'school/peeap/pay-fee/') {
+      return await handlePeeapPayFee(req, res);
     } else if (path === 'oauth/token' || path === 'oauth/token/') {
       return await handleOAuthToken(req, res);
     } else if (path === 'oauth/userinfo' || path === 'oauth/userinfo/') {
@@ -7855,6 +7862,93 @@ async function handleSchoolPayFee(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({
       success: false,
       message: error.message || 'Payment failed. Please try again.',
+    });
+  }
+}
+
+// ============================================
+// PEEAP School API Proxy Handlers
+// Proxies requests to gov.school.edu.sl/api/peeap
+// Used by my.peeap.com frontend
+// ============================================
+
+const SCHOOL_API_BASE = 'https://gov.school.edu.sl/api/peeap';
+
+/**
+ * Proxy verify-student to external school API
+ * POST /api/school/peeap/verify-student
+ */
+async function handlePeeapVerifyStudent(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ success: false, message: 'Method not allowed' });
+  }
+
+  try {
+    const response = await fetch(`${SCHOOL_API_BASE}/verify-student`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body),
+    });
+    const data = await response.json();
+    return res.status(response.status).json(data);
+  } catch (error: any) {
+    console.error('[Peeap Proxy] verify-student error:', error);
+    return res.status(500).json({
+      success: false,
+      found: false,
+      message: `Failed to connect to school system: ${error.message}`,
+    });
+  }
+}
+
+/**
+ * Proxy student-financials to external school API
+ * POST /api/school/peeap/student-financials
+ */
+async function handlePeeapStudentFinancials(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ success: false, message: 'Method not allowed' });
+  }
+
+  try {
+    const response = await fetch(`${SCHOOL_API_BASE}/student-financials`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body),
+    });
+    const data = await response.json();
+    return res.status(response.status).json(data);
+  } catch (error: any) {
+    console.error('[Peeap Proxy] student-financials error:', error);
+    return res.status(500).json({
+      success: false,
+      message: `Failed to connect to school system: ${error.message}`,
+    });
+  }
+}
+
+/**
+ * Proxy pay-fee to external school API
+ * POST /api/school/peeap/pay-fee
+ */
+async function handlePeeapPayFee(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ success: false, message: 'Method not allowed' });
+  }
+
+  try {
+    const response = await fetch(`${SCHOOL_API_BASE}/pay-fee`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body),
+    });
+    const data = await response.json();
+    return res.status(response.status).json(data);
+  } catch (error: any) {
+    console.error('[Peeap Proxy] pay-fee error:', error);
+    return res.status(500).json({
+      success: false,
+      message: `Failed to connect to school system: ${error.message}`,
     });
   }
 }
