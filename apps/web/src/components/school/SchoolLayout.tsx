@@ -22,6 +22,7 @@ import {
   Bell,
   Moon,
   Sun,
+  MessageSquare,
 } from 'lucide-react';
 
 interface SchoolLayoutProps {
@@ -34,6 +35,7 @@ const navigationTemplate = [
   { name: 'Students', path: '/students', icon: Users },
   { name: 'Staff', path: '/staff', icon: UserCog },
   { name: 'Fees', path: '/fees', icon: Receipt },
+  { name: 'Messages', path: '/messages', icon: MessageSquare },
   { name: 'Salary', path: '/salary', icon: Banknote },
   { name: 'Accounting', path: '/accounting', icon: Calculator },
   { name: 'Invoices', path: '/invoices', icon: FileText },

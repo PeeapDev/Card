@@ -184,6 +184,7 @@ import { CashBoxSetupWizard } from '@/components/cashbox/CashBoxSetupWizard';
 import { StudentConnectPage } from '@/pages/apps/StudentConnectPage';
 import { SchoolUtilitiesPage } from '@/pages/SchoolUtilitiesPage';
 import { MyChildrenPage } from '@/pages/MyChildrenPage';
+import { SchoolMessagesPage } from '@/pages/SchoolMessagesPage';
 // Agent Pages
 import { AgentDashboard } from '@/pages/agent/AgentDashboard';
 import { AgentNotificationsPage } from '@/pages/agent/AgentNotificationsPage';
@@ -208,6 +209,7 @@ import {
   SchoolSalaryPage,
   SchoolInvoicesPage,
   SchoolReportsPage,
+  SchoolMessagesPage as SchoolMessagesPageAdmin,
   SchoolLoginPage,
   SchoolRegisterPage,
   SchoolAuthCallbackPage,
@@ -458,6 +460,14 @@ function App() {
                     element={
                       <ProtectedRoute>
                         <SchoolInvoicesPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/:schoolSlug/messages"
+                    element={
+                      <ProtectedRoute>
+                        <SchoolMessagesPageAdmin />
                       </ProtectedRoute>
                     }
                   />
@@ -1739,6 +1749,7 @@ function App() {
                   <Route path="/student-connect" element={<ProtectedRoute><StudentConnectPage /></ProtectedRoute>} />
                   <Route path="/school-utilities" element={<ProtectedRoute><SchoolUtilitiesPage /></ProtectedRoute>} />
                   <Route path="/my-children" element={<ProtectedRoute><MyChildrenPage /></ProtectedRoute>} />
+                  <Route path="/school-messages" element={<ProtectedRoute><SchoolMessagesPage /></ProtectedRoute>} />
                   <Route path="/support" element={<ProtectedRoute><SupportPage /></ProtectedRoute>} />
                   <Route path="/disputes" element={<ProtectedRoute><UserDisputesPage /></ProtectedRoute>} />
                   <Route path="/verify" element={<ProtectedRoute><VerifyPage /></ProtectedRoute>} />

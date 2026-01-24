@@ -21,8 +21,12 @@ import {
   RefreshCw,
   AlertCircle,
   Building2,
-  ArrowDownRight
+  ArrowDownRight,
+  MessageSquare,
+  Send,
+  Clock
 } from 'lucide-react';
+import { schoolChatService, type ChatMessage } from '@/services/schoolChat.service';
 
 interface DashboardStats {
   totalStudents: number;
@@ -85,6 +89,7 @@ export function SchoolDashboard() {
     paidSalaries: 0,
   });
   const [recentTransactions, setRecentTransactions] = useState<RecentTransaction[]>([]);
+  const [recentMessages, setRecentMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -313,7 +318,6 @@ export function SchoolDashboard() {
       if (schoolDomain) {
         const headers = {
           'Accept': 'application/json',
-          'X-School-Domain': schoolDomain,
         };
 
         // Fetch students count
@@ -373,6 +377,14 @@ export function SchoolDashboard() {
         } catch (err) {
           console.log('Summary endpoint not available:', err);
         }
+
+        // Fetch recent messages sent by this school
+        try {
+          const messages = await schoolChatService.getMessagesForSchool(schoolDomain, 10);
+          setRecentMessages(messages);
+        } catch (err) {
+          console.log('Could not fetch messages:', err);
+        }
       }
 
     } catch (err) {
@@ -390,33 +402,36 @@ export function SchoolDashboard() {
     }
   }, [user, schoolSlug]);
 
+  // Use school slug from URL or fallback to stored domain
+  const currentSchoolSlug = schoolSlug || localStorage.getItem('school_domain') || 'school';
+
   const quickActions = [
     {
       title: 'Students',
       description: 'Manage student wallets',
       icon: Users,
-      href: '/school/students',
+      href: `/${currentSchoolSlug}/students`,
       color: 'bg-blue-500'
     },
     {
       title: 'Fees',
       description: 'Fee collection & tracking',
       icon: Receipt,
-      href: '/school/fees',
+      href: `/${currentSchoolSlug}/fees`,
       color: 'bg-emerald-500'
     },
     {
-      title: 'Staff',
-      description: 'Manage school staff',
-      icon: UserCog,
-      href: '/school/staff',
-      color: 'bg-indigo-500'
+      title: 'Messages',
+      description: 'Parent communication',
+      icon: MessageSquare,
+      href: `/${currentSchoolSlug}/messages`,
+      color: 'bg-purple-500'
     },
     {
       title: 'Salary',
       description: 'Payroll management',
       icon: Banknote,
-      href: '/school/salary',
+      href: `/${currentSchoolSlug}/salary`,
       color: 'bg-green-500'
     },
   ];
@@ -426,42 +441,42 @@ export function SchoolDashboard() {
       title: 'Accounting',
       description: 'Income & expenses',
       icon: Calculator,
-      href: '/school/accounting',
+      href: `/${currentSchoolSlug}/accounting`,
       color: 'bg-cyan-500'
     },
     {
       title: 'Invoices',
       description: 'Create & manage invoices',
       icon: FileText,
-      href: '/school/invoices',
+      href: `/${currentSchoolSlug}/invoices`,
       color: 'bg-purple-500'
     },
     {
       title: 'Reports',
       description: 'Analytics & insights',
       icon: BarChart3,
-      href: '/school/reports',
+      href: `/${currentSchoolSlug}/reports`,
       color: 'bg-rose-500'
     },
     {
       title: 'Transactions',
       description: 'Payment history',
       icon: CreditCard,
-      href: '/school/transactions',
+      href: `/${currentSchoolSlug}/transactions`,
       color: 'bg-orange-500'
     },
     {
       title: 'Vendors',
       description: 'School shops & canteens',
       icon: Store,
-      href: '/school/vendors',
+      href: `/${currentSchoolSlug}/vendors`,
       color: 'bg-teal-500'
     },
     {
       title: 'Shop',
       description: 'Products & marketplace',
       icon: ShoppingBag,
-      href: '/school/shop',
+      href: `/${currentSchoolSlug}/shop`,
       color: 'bg-pink-500'
     },
   ];
@@ -765,6 +780,79 @@ export function SchoolDashboard() {
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{action.description}</p>
                 </Link>
               ))}
+            </div>
+
+            {/* Recent Messages to Parents */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 mb-8">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5 text-purple-600" />
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Messages</h2>
+                </div>
+                <Link to={`/${currentSchoolSlug}/messages`} className="text-sm text-purple-600 hover:text-purple-700">
+                  View All
+                </Link>
+              </div>
+              {recentMessages.length > 0 ? (
+                <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {recentMessages.slice(0, 5).map((msg) => (
+                    <div key={msg.id} className="py-3 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                          msg.type === 'receipt' ? 'bg-green-100 dark:bg-green-900' :
+                          msg.type === 'invoice' ? 'bg-blue-100 dark:bg-blue-900' :
+                          msg.type === 'reminder' ? 'bg-red-100 dark:bg-red-900' :
+                          'bg-purple-100 dark:bg-purple-900'
+                        }`}>
+                          {msg.type === 'receipt' ? (
+                            <Receipt className="h-5 w-5 text-green-600 dark:text-green-400" />
+                          ) : msg.type === 'invoice' ? (
+                            <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                          ) : msg.type === 'reminder' ? (
+                            <Clock className="h-5 w-5 text-red-600 dark:text-red-400" />
+                          ) : (
+                            <Send className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900 dark:text-white text-sm">
+                            {msg.type === 'receipt' ? 'Payment Receipt' :
+                             msg.type === 'invoice' ? 'Invoice Sent' :
+                             msg.type === 'reminder' ? 'Payment Reminder' :
+                             msg.type === 'salary_slip' ? 'Salary Slip' : 'Message'}
+                            {msg.metadata?.student_name && ` - ${msg.metadata.student_name}`}
+                            {msg.metadata?.staff_name && ` - ${msg.metadata.staff_name}`}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {msg.metadata?.amount && `SLE ${(msg.metadata.amount / 100).toLocaleString()} • `}
+                            {new Date(msg.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      <span className={`px-2 py-1 rounded-full text-xs ${
+                        msg.status === 'read' ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300' :
+                        msg.status === 'delivered' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' :
+                        'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+                      }`}>
+                        {msg.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p>No messages sent yet</p>
+                  <p className="text-sm mt-1">Send invoices and receipts to parents via Peeap Chat</p>
+                  <Link
+                    to="/school/invoices"
+                    className="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm"
+                  >
+                    <FileText className="h-4 w-4" />
+                    Create Invoice
+                  </Link>
+                </div>
+              )}
             </div>
 
             {/* Recent Activity */}

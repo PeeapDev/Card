@@ -11,6 +11,7 @@ export { SchoolAccountingPage } from './SchoolAccountingPage';
 export { SchoolSalaryPage } from './SchoolSalaryPage';
 export { SchoolInvoicesPage } from './SchoolInvoicesPage';
 export { SchoolReportsPage } from './SchoolReportsPage';
+export { SchoolMessagesPage } from './SchoolMessagesPage';
 export { SchoolLoginPage } from './SchoolLoginPage';
 export { SchoolRegisterPage } from './SchoolRegisterPage';
 export { SchoolAuthCallbackPage } from './SchoolAuthCallbackPage';
