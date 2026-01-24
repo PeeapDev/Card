@@ -1378,4 +1378,75 @@ export class SchoolService {
       },
     };
   }
+
+  // ============================================
+  // External School API Proxy (PEEAP endpoints)
+  // ============================================
+
+  private readonly SCHOOL_API_BASE = 'https://gov.school.edu.sl/api/peeap';
+
+  /**
+   * Proxy verify-student request to external school API
+   */
+  async proxyVerifyStudent(body: { index_number?: string; admission_no?: string; school_id?: number }): Promise<any> {
+    try {
+      const response = await fetch(`${this.SCHOOL_API_BASE}/verify-student`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      return await response.json();
+    } catch (error: any) {
+      return {
+        success: false,
+        found: false,
+        message: `Failed to connect to school system: ${error.message}`,
+      };
+    }
+  }
+
+  /**
+   * Proxy student-financials request to external school API
+   */
+  async proxyStudentFinancials(body: { student_id: number; school_id: number }): Promise<any> {
+    try {
+      const response = await fetch(`${this.SCHOOL_API_BASE}/student-financials`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      return await response.json();
+    } catch (error: any) {
+      return {
+        success: false,
+        message: `Failed to connect to school system: ${error.message}`,
+      };
+    }
+  }
+
+  /**
+   * Proxy pay-fee request to external school API
+   */
+  async proxyPayFee(body: {
+    student_id: number;
+    fee_id: number;
+    amount: number;
+    transaction_id: string;
+    payer_email?: string;
+    school_id: number;
+  }): Promise<any> {
+    try {
+      const response = await fetch(`${this.SCHOOL_API_BASE}/pay-fee`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      return await response.json();
+    } catch (error: any) {
+      return {
+        success: false,
+        message: `Failed to connect to school system: ${error.message}`,
+      };
+    }
+  }
 }

@@ -14,8 +14,8 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { MainLayout } from '@/components/layout/MainLayout';
 
-// API base URL - direct call (school API has CORS enabled)
-const API_BASE = 'https://gov.school.edu.sl/api/peeap';
+// API base URL - use api.peeap.com proxy for reliable JSON responses
+const API_BASE = 'https://api.peeap.com/school/peeap';
 
 interface StudentData {
   student_id: number;

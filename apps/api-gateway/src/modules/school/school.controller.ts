@@ -159,6 +159,27 @@ class StudentWalletInfoDto {
   school_id: number;
 }
 
+// DTOs for PEEAP proxy endpoints
+class VerifyStudentDto {
+  index_number?: string;
+  admission_no?: string;
+  school_id?: number;
+}
+
+class StudentFinancialsDto {
+  student_id: number;
+  school_id: number;
+}
+
+class PayFeeProxyDto {
+  student_id: number;
+  fee_id: number;
+  amount: number;
+  transaction_id: string;
+  payer_email?: string;
+  school_id: number;
+}
+
 @ApiTags('School Integration')
 @Controller('school')
 export class SchoolController {
@@ -634,6 +655,54 @@ export class SchoolController {
       success: true,
       data: result,
     };
+  }
+
+  // ============================================
+  // PEEAP Proxy Endpoints (for PeEAP web app)
+  // These proxy to gov.school.edu.sl/api/peeap
+  // ============================================
+
+  /**
+   * Proxy verify-student to external school API
+   * Used by PeEAP web app to verify students before fee payment
+   */
+  @Post('peeap/verify-student')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Verify student (proxy to school API)',
+    description: 'Proxies request to gov.school.edu.sl to verify student by index number',
+  })
+  async proxyVerifyStudent(@Body() body: VerifyStudentDto): Promise<any> {
+    return this.schoolService.proxyVerifyStudent(body);
+  }
+
+  /**
+   * Proxy student-financials to external school API
+   */
+  @Post('peeap/student-financials')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get student financials (proxy to school API)',
+    description: 'Proxies request to gov.school.edu.sl to get student fees and balances',
+  })
+  async proxyStudentFinancials(@Body() body: StudentFinancialsDto): Promise<any> {
+    return this.schoolService.proxyStudentFinancials(body);
+  }
+
+  /**
+   * Proxy pay-fee to external school API
+   */
+  @Post('peeap/pay-fee')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Pay fee (proxy to school API)',
+    description: 'Proxies payment request to gov.school.edu.sl',
+  })
+  async proxyPayFee(@Body() body: PayFeeProxyDto): Promise<any> {
+    return this.schoolService.proxyPayFee(body);
   }
 }
 
