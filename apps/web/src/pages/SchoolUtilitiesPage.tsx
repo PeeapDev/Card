@@ -14,8 +14,8 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { MainLayout } from '@/components/layout/MainLayout';
 
-// API base URL - proxied to gov.school.edu.sl/api/peeap via Vercel rewrite
-const API_BASE = '/school-api';
+// API base URL - direct call (school API has CORS enabled)
+const API_BASE = 'https://gov.school.edu.sl/api/peeap';
 
 interface StudentData {
   student_id: number;

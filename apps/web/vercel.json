@@ -6,7 +6,6 @@
   "outputDirectory": "dist",
   "installCommand": "npm install --legacy-peer-deps",
   "rewrites": [
-    { "source": "/school-api/:path*", "destination": "https://gov.school.edu.sl/api/peeap/:path*" },
     { "source": "/api/(.*)", "destination": "https://peeap-merchant.vercel.app/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
