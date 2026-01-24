@@ -126,7 +126,16 @@ export function SchoolLoginPage() {
     setError('');
 
     try {
-      const userData = await login({ email, password });
+      const loginResult = await login({ email, password });
+
+      // Check if MFA is required
+      if (loginResult && 'mfa_required' in loginResult && loginResult.mfa_required) {
+        setError('MFA is required. Please complete MFA authentication.');
+        return;
+      }
+
+      // Cast to User type after MFA check
+      const userData = loginResult as { id: string; email?: string } | null;
 
       if (!userData?.id) {
         setError('Login failed. Please try again.');

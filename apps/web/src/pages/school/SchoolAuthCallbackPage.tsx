@@ -9,7 +9,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 export function SchoolAuthCallbackPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { refreshUser } = useAuth();
+  const { refreshUser, user: authUser } = useAuth();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('Completing sign in...');
 
@@ -123,7 +123,7 @@ export function SchoolAuthCallbackPage() {
         });
 
         // Refresh user profile in auth context
-        const userData = await refreshUser();
+        await refreshUser();
 
         setStatus('success');
 
@@ -200,8 +200,8 @@ export function SchoolAuthCallbackPage() {
                   school_name: schoolName,
                   peeap_school_id: schoolSlug,
                   school_domain: fullSchoolDomain,
-                  connected_by_user_id: userData?.id || data.user?.id || null,
-                  connected_by_email: userData?.email || data.user?.email || null,
+                  connected_by_user_id: authUser?.id || null,
+                  connected_by_email: authUser?.email || null,
                   wallet_id: wallet.id,
                   status: 'active',
                   saas_origin: originUrl,
