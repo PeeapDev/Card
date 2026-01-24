@@ -1,21 +1,18 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import { SchoolLayout } from '@/components/school';
 import {
   FileText,
-  ArrowLeft,
   Search,
-  Filter,
   Plus,
   Download,
   Send,
-  Eye,
   Printer,
   CheckCircle,
   Clock,
   AlertCircle,
   XCircle,
   Calendar,
-  DollarSign,
   User,
   MoreVertical,
   Copy,
@@ -50,6 +47,7 @@ interface Invoice {
 }
 
 export function SchoolInvoicesPage() {
+  const { schoolSlug } = useParams<{ schoolSlug: string }>();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -77,17 +75,25 @@ export function SchoolInvoicesPage() {
         return;
       }
 
-      // Fetch invoices from SDSL2 sync API
-      const response = await fetch(
-        `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/invoices`,
-        {
-          method: 'GET',
-          headers: { 'Accept': 'application/json' },
-        }
-      );
+      // Try to fetch invoices from SDSL2 sync API
+      let data: any = null;
+      try {
+        const response = await fetch(
+          `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/invoices`,
+          {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+          }
+        );
 
-      if (response.ok) {
-        const data = await response.json();
+        if (response.ok) {
+          data = await response.json();
+        }
+      } catch (apiErr) {
+        console.log('SaaS API not available:', apiErr);
+      }
+
+      if (data) {
         const invoiceList = (data.invoices || data || []).map((inv: any) => {
           // Calculate status based on dates and payment
           let status: Invoice['status'] = 'draft';
@@ -128,12 +134,12 @@ export function SchoolInvoicesPage() {
         });
         setInvoices(invoiceList);
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        setError(errorData.message || 'Failed to load invoices');
+        // If SaaS API fails, show empty state
+        setInvoices([]);
       }
     } catch (err) {
       console.error('Error fetching invoices:', err);
-      setError('Could not connect to school system. Please try again.');
+      setError('Could not load invoices. The school system sync may not be configured yet.');
     } finally {
       setLoading(false);
     }
@@ -216,251 +222,240 @@ export function SchoolInvoicesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link to="/school" className="text-gray-500 hover:text-gray-700 dark:text-gray-400">
-                <ArrowLeft className="h-5 w-5" />
-              </Link>
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                  <FileText className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-bold text-gray-900 dark:text-white">Invoices</h1>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Create and manage invoices
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={fetchInvoices}
-                disabled={loading}
-                className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
-              >
-                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                Refresh
-              </button>
-              <button className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
-                <Download className="h-4 w-4" />
-                Export
-              </button>
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-              >
-                <Plus className="h-4 w-4" />
-                New Invoice
-              </button>
-            </div>
+    <SchoolLayout>
+      {/* Page Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+            <FileText className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">Invoices</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Create and manage invoices
+            </p>
           </div>
         </div>
-      </header>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={fetchInvoices}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+          <button className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
+            <Download className="h-4 w-4" />
+            Export
+          </button>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+          >
+            <Plus className="h-4 w-4" />
+            New Invoice
+          </button>
+        </div>
+      </div>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Error State */}
-        {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 mb-6 flex items-center gap-3">
-            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
-            <p className="text-red-700 dark:text-red-300">{error}</p>
-            <button
-              onClick={fetchInvoices}
-              className="ml-auto text-red-600 hover:text-red-700 font-medium"
-            >
-              Retry
-            </button>
-          </div>
-        )}
+      {/* Error State */}
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 mb-6 flex items-center gap-3">
+          <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+          <p className="text-red-700 dark:text-red-300">{error}</p>
+          <button
+            onClick={fetchInvoices}
+            className="ml-auto text-red-600 hover:text-red-700 font-medium"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
-        {/* Loading State */}
-        {loading && (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
-          </div>
-        )}
+      {/* Loading State */}
+      {loading && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+        </div>
+      )}
 
-        {!loading && !error && (
-        <>
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Total Invoices</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.total}</p>
-              </div>
+      {!loading && !error && (
+      <>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+              <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             </div>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Paid</p>
-                <p className="text-xl font-bold text-green-600 dark:text-green-400">
-                  {formatCurrency(stats.paidAmount)}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
-                <Clock className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Pending</p>
-                <p className="text-xl font-bold text-yellow-600 dark:text-yellow-400">
-                  {formatCurrency(stats.pendingAmount)}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
-                <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Overdue</p>
-                <p className="text-xl font-bold text-red-600 dark:text-red-400">{stats.overdue}</p>
-              </div>
+            <div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Total Invoices</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.total}</p>
             </div>
           </div>
         </div>
 
-        {/* Status Tabs */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-6">
-          <div className="border-b border-gray-200 dark:border-gray-700">
-            <div className="flex overflow-x-auto">
-              {[
-                { id: 'all', label: 'All', count: stats.total },
-                { id: 'draft', label: 'Draft', count: stats.draft },
-                { id: 'sent', label: 'Sent', count: stats.sent },
-                { id: 'paid', label: 'Paid', count: stats.paid },
-                { id: 'overdue', label: 'Overdue', count: stats.overdue }
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setSelectedStatus(tab.id)}
-                  className={`flex items-center gap-2 px-6 py-4 border-b-2 whitespace-nowrap ${
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+              <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Paid</p>
+              <p className="text-xl font-bold text-green-600 dark:text-green-400">
+                {formatCurrency(stats.paidAmount)}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
+              <Clock className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Pending</p>
+              <p className="text-xl font-bold text-yellow-600 dark:text-yellow-400">
+                {formatCurrency(stats.pendingAmount)}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
+              <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Overdue</p>
+              <p className="text-xl font-bold text-red-600 dark:text-red-400">{stats.overdue}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Status Tabs */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-6">
+        <div className="border-b border-gray-200 dark:border-gray-700">
+          <div className="flex overflow-x-auto">
+            {[
+              { id: 'all', label: 'All', count: stats.total },
+              { id: 'draft', label: 'Draft', count: stats.draft },
+              { id: 'sent', label: 'Sent', count: stats.sent },
+              { id: 'paid', label: 'Paid', count: stats.paid },
+              { id: 'overdue', label: 'Overdue', count: stats.overdue }
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setSelectedStatus(tab.id)}
+                className={`flex items-center gap-2 px-6 py-4 border-b-2 whitespace-nowrap ${
+                  selectedStatus === tab.id
+                    ? 'border-purple-600 text-purple-600 dark:text-purple-400'
+                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                {tab.label}
+                <span
+                  className={`px-2 py-0.5 rounded-full text-xs ${
                     selectedStatus === tab.id
-                      ? 'border-purple-600 text-purple-600 dark:text-purple-400'
-                      : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                      ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                      : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
                   }`}
                 >
-                  {tab.label}
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-xs ${
-                      selectedStatus === tab.id
-                        ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                        : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
-                    }`}
-                  >
-                    {tab.count}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Search */}
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search invoices by number or recipient..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              />
-            </div>
-          </div>
-
-          {/* Invoice List */}
-          <div className="divide-y divide-gray-200 dark:divide-gray-700">
-            {filteredInvoices.map((invoice) => (
-              <div
-                key={invoice.id}
-                className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
-                onClick={() => setSelectedInvoice(invoice)}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center">
-                      <FileText className="h-6 w-6 text-gray-400" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-gray-900 dark:text-white">
-                          {invoice.invoiceNumber}
-                        </p>
-                        <span
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
-                            invoice.status
-                          )}`}
-                        >
-                          {getStatusIcon(invoice.status)}
-                          {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-4 mt-1">
-                        <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
-                          <User className="h-4 w-4" />
-                          {invoice.recipient.name}
-                        </div>
-                        <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
-                          <Calendar className="h-4 w-4" />
-                          Due: {formatDate(invoice.dueDate)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <p className="font-semibold text-gray-900 dark:text-white">
-                        {formatCurrency(invoice.total)}
-                      </p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        {invoice.items.length} item{invoice.items.length > 1 ? 's' : ''}
-                      </p>
-                    </div>
-                    <button
-                      onClick={(e) => e.stopPropagation()}
-                      className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                    >
-                      <MoreVertical className="h-5 w-5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
+                  {tab.count}
+                </span>
+              </button>
             ))}
           </div>
-
-          {filteredInvoices.length === 0 && (
-            <div className="text-center py-12">
-              <FileText className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500 dark:text-gray-400">No invoices found</p>
-              <p className="text-sm text-gray-400 mt-1">Invoices from your school system will appear here</p>
-            </div>
-          )}
         </div>
-        </>
+
+        {/* Search */}
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search invoices by number or recipient..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            />
+          </div>
+        </div>
+
+        {/* Invoice List */}
+        <div className="divide-y divide-gray-200 dark:divide-gray-700">
+          {filteredInvoices.map((invoice) => (
+            <div
+              key={invoice.id}
+              className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
+              onClick={() => setSelectedInvoice(invoice)}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center">
+                    <FileText className="h-6 w-6 text-gray-400" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        {invoice.invoiceNumber}
+                      </p>
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
+                          invoice.status
+                        )}`}
+                      >
+                        {getStatusIcon(invoice.status)}
+                        {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-4 mt-1">
+                      <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
+                        <User className="h-4 w-4" />
+                        {invoice.recipient.name}
+                      </div>
+                      <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
+                        <Calendar className="h-4 w-4" />
+                        Due: {formatDate(invoice.dueDate)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="text-right">
+                    <p className="font-semibold text-gray-900 dark:text-white">
+                      {formatCurrency(invoice.total)}
+                    </p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {invoice.items.length} item{invoice.items.length > 1 ? 's' : ''}
+                    </p>
+                  </div>
+                  <button
+                    onClick={(e) => e.stopPropagation()}
+                    className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  >
+                    <MoreVertical className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {filteredInvoices.length === 0 && (
+          <div className="text-center py-12">
+            <FileText className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+            <p className="text-gray-500 dark:text-gray-400">No invoices found</p>
+            <p className="text-sm text-gray-400 mt-1">Invoices from your school system will appear here</p>
+          </div>
         )}
-      </main>
+      </div>
+      </>
+      )}
 
       {/* Invoice Detail Modal */}
       {selectedInvoice && (
@@ -720,6 +715,6 @@ export function SchoolInvoicesPage() {
           </div>
         </div>
       )}
-    </div>
+    </SchoolLayout>
   );
 }

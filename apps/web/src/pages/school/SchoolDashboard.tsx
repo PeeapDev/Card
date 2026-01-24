@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { SchoolLayout } from '@/components/school';
+import { supabaseAdmin } from '@/lib/supabase';
 import {
   Users,
   Store,
@@ -18,7 +19,9 @@ import {
   BarChart3,
   Loader2,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  Building2,
+  ArrowDownRight
 } from 'lucide-react';
 
 interface DashboardStats {
@@ -46,9 +49,27 @@ interface RecentTransaction {
   staff_name?: string;
 }
 
+interface SchoolConnection {
+  id: string;
+  school_id: string;
+  school_name: string;
+  peeap_school_id: string;
+  wallet_id: string | null;
+  status: string;
+}
+
+interface SchoolWallet {
+  id: string;
+  balance: number;
+  currency: string;
+}
+
 export function SchoolDashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { schoolSlug } = useParams<{ schoolSlug: string }>();
+  const [schoolConnection, setSchoolConnection] = useState<SchoolConnection | null>(null);
+  const [schoolWallet, setSchoolWallet] = useState<SchoolWallet | null>(null);
   const [stats, setStats] = useState<DashboardStats>({
     totalStudents: 0,
     activeStudents: 0,
@@ -67,30 +88,164 @@ export function SchoolDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Get school domain from URL params or localStorage (set during SSO login)
-  const getSchoolDomain = () => {
-    // First, check URL params (school slug from dynamic route)
-    if (schoolSlug && schoolSlug !== 'school') {
-      // Store it for future use
-      localStorage.setItem('school_domain', schoolSlug);
-      return schoolSlug;
+  // Fetch school info from SaaS API and create connection if needed
+  const fetchOrCreateSchoolConnection = async () => {
+    const domain = schoolSlug && schoolSlug !== 'school' ? schoolSlug : localStorage.getItem('school_domain');
+
+    if (!domain) {
+      console.log('[SchoolDashboard] No school domain available');
+      return null;
     }
 
-    // Try to get from various possible storage keys
-    const schoolId = localStorage.getItem('schoolId');
-    const schoolDomain = localStorage.getItem('school_domain');
+    console.log('[SchoolDashboard] Looking for school:', domain);
 
-    // If we have a school domain stored, use it
-    if (schoolDomain) return schoolDomain;
+    try {
+      // First, check if connection already exists
+      let { data: connection } = await supabaseAdmin
+        .from('school_connections')
+        .select('*')
+        .eq('peeap_school_id', domain)
+        .maybeSingle();
 
-    // Try to extract from schoolId if it contains domain info
-    if (schoolId) {
-      // The school domain format is typically: subdomain.gov.school.edu.sl
-      // For now, we'll need to get this from the school registry or SSO context
-      return schoolId;
+      if (!connection) {
+        // Try by school_id
+        const result = await supabaseAdmin
+          .from('school_connections')
+          .select('*')
+          .eq('school_id', domain)
+          .maybeSingle();
+        connection = result.data;
+      }
+
+      if (connection) {
+        console.log('[SchoolDashboard] Found existing connection:', connection);
+        localStorage.setItem('schoolId', connection.school_id);
+        localStorage.setItem('school_domain', connection.peeap_school_id || domain);
+        localStorage.setItem('schoolName', connection.school_name);
+        return connection;
+      }
+
+      // No connection exists - fetch from SaaS API and create one
+      console.log('[SchoolDashboard] No connection found, fetching from SaaS API...');
+
+      let schoolData: any = null;
+
+      try {
+        const schoolInfoUrl = `https://${domain}.gov.school.edu.sl/api/peeap/school-info`;
+        console.log('[SchoolDashboard] Fetching school info from:', schoolInfoUrl);
+
+        const response = await fetch(schoolInfoUrl, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+        });
+
+        if (response.ok) {
+          schoolData = await response.json();
+          console.log('[SchoolDashboard] School data from SaaS:', schoolData);
+        }
+      } catch (fetchErr) {
+        console.log('[SchoolDashboard] Could not fetch from SaaS API:', fetchErr);
+      }
+
+      // If we couldn't get data from SaaS, create with domain name
+      if (!schoolData || !schoolData.school_name) {
+        console.log('[SchoolDashboard] Using domain as school name');
+        schoolData = {
+          school_id: domain,
+          school_name: domain.charAt(0).toUpperCase() + domain.slice(1) + ' School',
+        };
+      }
+
+      // Create wallet for school (no user_id for school wallets)
+      const { data: wallet, error: walletError } = await supabaseAdmin
+        .from('wallets')
+        .insert({
+          currency: 'SLE',
+          balance: 0,
+          status: 'ACTIVE',
+          wallet_type: 'school',
+          name: `${schoolData.school_name} Wallet`,
+          external_id: `SCH-${domain}`,
+        })
+        .select()
+        .single();
+
+      if (walletError) {
+        console.error('[SchoolDashboard] Failed to create wallet:', walletError);
+        return null;
+      }
+
+      console.log('[SchoolDashboard] Created wallet:', wallet);
+
+      // Create school connection with correct column names
+      const { data: newConnection, error: connectionError } = await supabaseAdmin
+        .from('school_connections')
+        .insert({
+          school_id: schoolData.school_id?.toString() || domain,
+          school_name: schoolData.school_name,
+          peeap_school_id: domain,
+          school_domain: `${domain}.gov.school.edu.sl`,
+          connected_by_user_id: user?.id || null,
+          connected_by_email: user?.email || null,
+          wallet_id: wallet.id,
+          status: 'active',
+          saas_origin: `${domain}.gov.school.edu.sl`,
+          connected_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (connectionError) {
+        console.error('[SchoolDashboard] Failed to create connection:', connectionError);
+        // Clean up wallet
+        await supabaseAdmin.from('wallets').delete().eq('id', wallet.id);
+        return null;
+      }
+
+      console.log('[SchoolDashboard] Created connection:', newConnection);
+
+      localStorage.setItem('schoolId', newConnection.school_id);
+      localStorage.setItem('school_domain', domain);
+      localStorage.setItem('schoolName', newConnection.school_name);
+
+      return newConnection;
+    } catch (err) {
+      console.error('[SchoolDashboard] Error:', err);
+      return null;
+    }
+  };
+
+  // Fetch school wallet data
+  const fetchSchoolWallet = async (walletId: string) => {
+    const { data, error } = await supabaseAdmin
+      .from('wallets')
+      .select('id, balance, currency')
+      .eq('id', walletId)
+      .single();
+
+    if (error) {
+      console.error('Error fetching school wallet:', error);
+      return null;
     }
 
-    return null;
+    return data;
+  };
+
+  // Fetch recent transactions for the school wallet
+  const fetchSchoolTransactions = async (walletId: string) => {
+    const { data, error } = await supabaseAdmin
+      .from('transactions')
+      .select('*')
+      .eq('wallet_id', walletId)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (error) {
+      console.error('Error fetching transactions:', error);
+      return [];
+    }
+
+    return data || [];
   };
 
   const fetchDashboardData = async () => {
@@ -98,69 +253,105 @@ export function SchoolDashboard() {
     setError(null);
 
     try {
-      const schoolDomain = getSchoolDomain();
+      // Step 1: Get or create school connection from SaaS API
+      const connection = await fetchOrCreateSchoolConnection();
 
-      if (!schoolDomain) {
-        setError('School information not found. Please log in again.');
+      if (!connection) {
+        setError('School information not found. Please log in again or contact support to link your school account.');
         setLoading(false);
         return;
       }
 
-      // Fetch summary data from SDSL2 sync API
-      const response = await fetch(
-        `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/summary`,
-        {
-          method: 'GET',
-          headers: { 'Accept': 'application/json' },
-        }
-      );
+      setSchoolConnection(connection);
 
-      if (response.ok) {
-        const data = await response.json();
-
-        // Map SDSL2 response to our stats interface
-        setStats({
-          totalStudents: data.total_students || data.students_count || 0,
-          activeStudents: data.active_students || data.enrolled_students || 0,
-          totalStaff: data.total_staff || data.staff_count || 0,
-          totalVendors: data.total_vendors || data.vendors_count || 0,
-          totalTransactions: data.total_transactions || 0,
-          totalVolume: data.total_volume || data.total_revenue || 0,
-          todayTransactions: data.today_transactions || 0,
-          todayVolume: data.today_volume || data.today_revenue || 0,
-          pendingFees: data.pending_fees || data.outstanding_invoices || 0,
-          collectedFees: data.collected_fees || data.paid_invoices || 0,
-          pendingSalaries: data.pending_salaries || data.unpaid_salaries || 0,
-          paidSalaries: data.paid_salaries || 0,
-        });
-
-        // Get recent transactions if included
-        if (data.recent_transactions) {
-          setRecentTransactions(data.recent_transactions.slice(0, 5).map((tx: any) => ({
-            id: tx.id,
-            type: tx.type || 'payment',
-            amount: tx.amount,
-            description: tx.description || tx.narration || tx.title,
-            date: tx.date || tx.created_at,
-            student_name: tx.student_name,
-            staff_name: tx.staff_name,
-          })));
-        }
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        setError(errorData.message || 'Failed to load dashboard data');
+      // If we're on /school or /school/dashboard but have a proper domain, redirect
+      const properDomain = connection.peeap_school_id || connection.school_id;
+      if (properDomain && (!schoolSlug || schoolSlug === 'school')) {
+        console.log('[SchoolDashboard] Redirecting to proper school URL:', `/${properDomain}`);
+        navigate(`/${properDomain}`, { replace: true });
+        return;
       }
+
+      // Step 2: Get school wallet if exists
+      if (connection.wallet_id) {
+        const wallet = await fetchSchoolWallet(connection.wallet_id);
+        if (wallet) {
+          setSchoolWallet({
+            id: wallet.id,
+            balance: parseFloat(wallet.balance) || 0,
+            currency: wallet.currency || 'SLE',
+          });
+        }
+
+        // Step 3: Get recent transactions
+        const transactions = await fetchSchoolTransactions(connection.wallet_id);
+        setRecentTransactions(transactions.map((tx: any) => ({
+          id: tx.id,
+          type: tx.type || 'payment',
+          amount: parseFloat(tx.amount) || 0,
+          description: tx.description || tx.reference || 'Transaction',
+          date: tx.created_at,
+          student_name: tx.metadata?.student_index,
+        })));
+
+        // Calculate stats from transactions
+        const feeReceived = transactions
+          .filter((tx: any) => tx.type === 'FEE_RECEIVED')
+          .reduce((sum: number, tx: any) => sum + Math.abs(parseFloat(tx.amount) || 0), 0);
+
+        setStats(prev => ({
+          ...prev,
+          collectedFees: feeReceived,
+          totalVolume: feeReceived,
+          totalTransactions: transactions.length,
+        }));
+      }
+
+      // Step 4: Try to fetch summary from school system (optional - may fail for local testing)
+      const schoolDomain = connection.peeap_school_id || localStorage.getItem('school_domain');
+      if (schoolDomain) {
+        try {
+          const response = await fetch(
+            `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/summary`,
+            {
+              method: 'GET',
+              headers: { 'Accept': 'application/json' },
+            }
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+            setStats(prev => ({
+              ...prev,
+              totalStudents: data.total_students || data.students_count || prev.totalStudents,
+              activeStudents: data.active_students || data.enrolled_students || prev.activeStudents,
+              totalStaff: data.total_staff || data.staff_count || prev.totalStaff,
+              totalVendors: data.total_vendors || data.vendors_count || prev.totalVendors,
+              pendingFees: data.pending_fees || data.outstanding_invoices || prev.pendingFees,
+              pendingSalaries: data.pending_salaries || data.unpaid_salaries || prev.pendingSalaries,
+              paidSalaries: data.paid_salaries || prev.paidSalaries,
+            }));
+          }
+        } catch (err) {
+          // External school API is optional - don't show error for this
+          console.log('Could not fetch from external school system (optional):', err);
+        }
+      }
+
     } catch (err) {
       console.error('Error fetching dashboard data:', err);
-      setError('Could not connect to school system. Please try again.');
+      setError('Could not load dashboard data. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchDashboardData();
-  }, []);
+    // Fetch data when user is available or when schoolSlug changes
+    if (user || schoolSlug) {
+      fetchDashboardData();
+    }
+  }, [user, schoolSlug]);
 
   const quickActions = [
     {
@@ -268,15 +459,31 @@ export function SchoolDashboard() {
 
         {/* Error State */}
         {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 flex items-center gap-3">
-            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
-            <p className="text-red-700 dark:text-red-300">{error}</p>
-            <button
-              onClick={fetchDashboardData}
-              className="ml-auto text-red-600 hover:text-red-700 font-medium"
-            >
-              Retry
-            </button>
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-red-100 dark:bg-red-900 rounded-lg">
+                <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-red-800 dark:text-red-300 mb-1">Could Not Connect to School</h3>
+                <p className="text-red-700 dark:text-red-400 text-sm mb-2">{error}</p>
+                {schoolSlug && schoolSlug !== 'school' && (
+                  <p className="text-red-600 dark:text-red-400 text-sm mb-4">
+                    School domain: <strong>{schoolSlug}.gov.school.edu.sl</strong>
+                  </p>
+                )}
+                <p className="text-gray-600 dark:text-gray-400 text-sm mb-4">
+                  Make sure the school's API endpoint is accessible and returns valid school info.
+                </p>
+                <button
+                  onClick={fetchDashboardData}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm flex items-center gap-2"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Try Again
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -289,6 +496,42 @@ export function SchoolDashboard() {
 
         {!loading && !error && (
           <>
+            {/* School Wallet Card */}
+            {schoolWallet && (
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-6 text-white mb-6 shadow-lg">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-blue-100 text-sm font-medium mb-1">School Wallet Balance</p>
+                    <p className="text-4xl font-bold">
+                      {schoolWallet.currency === 'SLE' ? 'Le' : '$'} {schoolWallet.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-blue-200 text-sm mt-2">
+                      {schoolConnection?.school_name || 'Your School'} • {schoolWallet.currency}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-white/20 rounded-xl">
+                    <Wallet className="h-8 w-8" />
+                  </div>
+                </div>
+                <div className="flex gap-3 mt-4">
+                  <Link
+                    to="/school/transactions"
+                    className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <CreditCard className="h-4 w-4" />
+                    View Transactions
+                  </Link>
+                  <Link
+                    to="/school/withdraw"
+                    className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-white/90 text-blue-600 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <ArrowDownRight className="h-4 w-4" />
+                    Withdraw Funds
+                  </Link>
+                </div>
+              </div>
+            )}
+
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
               <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm">

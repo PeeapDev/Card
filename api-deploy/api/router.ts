@@ -8072,6 +8072,82 @@ async function handleOAuthToken(req: VercelRequest, res: VercelResponse) {
 
       const user = userData?.[0];
 
+      // ===== SAVE SCHOOL CONNECTION =====
+      // Extract school slug from redirect_uri (e.g., https://ses.gov.school.edu.sl/... -> ses)
+      let schoolSlug: string | null = null;
+      try {
+        const redirectUrl = new URL(redirect_uri);
+        const hostParts = redirectUrl.hostname.split('.');
+        if (hostParts.length > 0 && redirectUrl.hostname.includes('gov.school.edu.sl')) {
+          schoolSlug = hostParts[0]; // e.g., 'ses' from 'ses.gov.school.edu.sl'
+        }
+      } catch (e) {
+        console.error('[OAuth] Failed to parse redirect URI:', e);
+      }
+
+      // Save school connection if this is a school SaaS connection
+      if (schoolSlug && client_id === 'school_saas') {
+        console.log('[OAuth] Creating school connection for:', schoolSlug);
+
+        // Check if connection already exists
+        const { data: existingConnection } = await supabase
+          .from('school_connections')
+          .select('*')
+          .eq('peeap_school_id', schoolSlug)
+          .maybeSingle();
+
+        if (!existingConnection) {
+          // Create wallet for the school
+          const { data: schoolWallet, error: walletError } = await supabase
+            .from('wallets')
+            .insert({
+              currency: 'SLE',
+              balance: 0,
+              status: 'ACTIVE',
+              wallet_type: 'school',
+              name: `${schoolSlug.charAt(0).toUpperCase() + schoolSlug.slice(1)} School Wallet`,
+              external_id: `SCH-${schoolSlug}`,
+            })
+            .select()
+            .single();
+
+          if (walletError) {
+            console.error('[OAuth] Failed to create school wallet:', walletError);
+          } else {
+            console.log('[OAuth] Created school wallet:', schoolWallet.id);
+
+            // Create school connection
+            const { data: newConnection, error: connectionError } = await supabase
+              .from('school_connections')
+              .insert({
+                school_id: authCode.metadata?.school_id?.toString() || schoolSlug,
+                school_name: `${schoolSlug.charAt(0).toUpperCase() + schoolSlug.slice(1)} School`,
+                peeap_school_id: schoolSlug,
+                school_domain: `${schoolSlug}.gov.school.edu.sl`,
+                connected_by_user_id: authCode.user_id,
+                connected_by_email: user?.email || null,
+                wallet_id: schoolWallet.id,
+                status: 'active',
+                saas_origin: `${schoolSlug}.gov.school.edu.sl`,
+                connected_at: new Date().toISOString(),
+              })
+              .select()
+              .single();
+
+            if (connectionError) {
+              console.error('[OAuth] Failed to create school connection:', connectionError);
+              // Clean up wallet
+              await supabase.from('wallets').delete().eq('id', schoolWallet.id);
+            } else {
+              console.log('[OAuth] Created school connection:', newConnection.id);
+            }
+          }
+        } else {
+          console.log('[OAuth] School connection already exists:', existingConnection.id);
+        }
+      }
+      // ===== END SCHOOL CONNECTION =====
+
       // Fetch wallet data if wallet scopes are requested
       let walletData = null;
       const scopes = authCode.scope.split(' ');

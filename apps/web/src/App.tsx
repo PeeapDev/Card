@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Analytics } from '@vercel/analytics/react';
 import { HelmetProvider } from 'react-helmet-async';
@@ -182,6 +183,7 @@ import { SettingsPage } from '@/pages/SettingsPage';
 import { CashBoxSetupWizard } from '@/components/cashbox/CashBoxSetupWizard';
 import { StudentConnectPage } from '@/pages/apps/StudentConnectPage';
 import { SchoolUtilitiesPage } from '@/pages/SchoolUtilitiesPage';
+import { MyChildrenPage } from '@/pages/MyChildrenPage';
 // Agent Pages
 import { AgentDashboard } from '@/pages/agent/AgentDashboard';
 import { AgentNotificationsPage } from '@/pages/agent/AgentNotificationsPage';
@@ -210,17 +212,31 @@ import {
   SchoolRegisterPage,
   SchoolAuthCallbackPage,
   SchoolConnectionSetupPage,
+  SchoolSetupPage,
   QuickAccessPage,
   SsoCallbackPage,
 } from '@/pages/school';
 
-// School home redirect - navigates to the school-specific URL based on stored domain
+// School home redirect - navigates to the school-specific URL or login
 function SchoolHomeRedirect() {
+  const { isAuthenticated, isLoading } = useAuth();
   const schoolDomain = localStorage.getItem('school_domain');
-  // Redirect to school-specific URL if domain is stored, otherwise to login
-  if (schoolDomain) {
+
+  // Wait for auth check
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // If authenticated and has a school domain, go to school dashboard
+  if (isAuthenticated && schoolDomain) {
     return <Navigate to={`/${schoolDomain}`} replace />;
   }
+
+  // Otherwise, go to login
   return <Navigate to="/login" replace />;
 }
 
@@ -344,6 +360,13 @@ function App() {
 
                   {/* School Connection Setup - Wizard after SSO from school SaaS */}
                   <Route path="/school/connection-setup" element={<SchoolConnectionSetupPage />} />
+
+                  {/* Quick School Setup - For local testing and simple setup */}
+                  <Route path="/school/setup" element={<ProtectedRoute><SchoolSetupPage /></ProtectedRoute>} />
+
+                  {/* School Dashboard - Direct access */}
+                  <Route path="/school/dashboard" element={<ProtectedRoute><SchoolDashboard /></ProtectedRoute>} />
+                  <Route path="/school" element={<ProtectedRoute><SchoolDashboard /></ProtectedRoute>} />
 
                   {/* School Onboarding - Session-based registration */}
                   <Route path="/onboard" element={<SchoolOnboardingPage />} />
@@ -1715,6 +1738,7 @@ function App() {
                   <Route path="/cashbox/setup" element={<ProtectedRoute><CashBoxSetupWizard /></ProtectedRoute>} />
                   <Route path="/student-connect" element={<ProtectedRoute><StudentConnectPage /></ProtectedRoute>} />
                   <Route path="/school-utilities" element={<ProtectedRoute><SchoolUtilitiesPage /></ProtectedRoute>} />
+                  <Route path="/my-children" element={<ProtectedRoute><MyChildrenPage /></ProtectedRoute>} />
                   <Route path="/support" element={<ProtectedRoute><SupportPage /></ProtectedRoute>} />
                   <Route path="/disputes" element={<ProtectedRoute><UserDisputesPage /></ProtectedRoute>} />
                   <Route path="/verify" element={<ProtectedRoute><VerifyPage /></ProtectedRoute>} />

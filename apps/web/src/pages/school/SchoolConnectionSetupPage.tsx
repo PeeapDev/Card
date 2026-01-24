@@ -17,6 +17,7 @@ import {
   DollarSign
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { supabaseAdmin } from '@/lib/supabase';
 
 interface SchoolData {
   school_id: string;
@@ -173,37 +174,104 @@ export function SchoolConnectionSetupPage() {
   };
 
   const handleComplete = async () => {
+    if (!user?.id || !schoolData) {
+      setError('User or school data missing');
+      return;
+    }
+
     setSubmitting(true);
+    setError(null);
+
     try {
-      // Save the connection to Peeap
-      const formData = new FormData();
-      formData.append('school_id', schoolData?.school_id || '');
-      formData.append('school_name', schoolData?.school_name || '');
-      formData.append('origin_url', originUrl || '');
-      formData.append('primary_color', setupData.primaryColor);
-      formData.append('receipt_prefix', setupData.receiptPrefix);
-      formData.append('enable_student_wallets', String(setupData.enableStudentWallets));
-      formData.append('enable_fee_payments', String(setupData.enableFeePayments));
-      formData.append('enable_vendor_payments', String(setupData.enableVendorPayments));
-      if (setupData.logo) {
-        formData.append('logo', setupData.logo);
+      // Extract school domain/slug from origin URL (e.g., samstead.gov.school.edu.sl -> samstead)
+      const schoolSlug = originUrl?.split('.')[0] || schoolData.subdomain || schoolData.school_id;
+      const fullSchoolDomain = originUrl || `${schoolSlug}.gov.school.edu.sl`;
+
+      // Check if connection already exists for this school
+      const { data: existingConnection } = await supabaseAdmin
+        .from('school_connections')
+        .select('*')
+        .eq('peeap_school_id', schoolSlug)
+        .maybeSingle();
+
+      if (existingConnection) {
+        console.log('Connection already exists:', existingConnection);
+        // Store in localStorage for future use
+        localStorage.setItem('school_domain', schoolSlug);
+        localStorage.setItem('schoolId', schoolData.school_id);
+        localStorage.setItem('schoolName', schoolData.school_name);
+        setCurrentStep(3);
+        return;
       }
 
-      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/school/connection/complete`, {
-        method: 'POST',
-        body: formData,
-      });
+      // Step 1: Create a wallet for the school (no user_id for school wallets)
+      const { data: wallet, error: walletError } = await supabaseAdmin
+        .from('wallets')
+        .insert({
+          currency: 'SLE',
+          balance: 0,
+          status: 'ACTIVE',
+          wallet_type: 'school',
+          name: `${schoolData.school_name} Wallet`,
+          external_id: `SCH-${schoolSlug}`,
+        })
+        .select()
+        .single();
 
-      if (!response.ok) {
-        throw new Error('Failed to save connection settings');
+      if (walletError) {
+        throw new Error(`Failed to create wallet: ${walletError.message}`);
       }
+
+      console.log('Created wallet:', wallet);
+
+      // Step 2: Create the school_connections record
+      const { data: connection, error: connectionError } = await supabaseAdmin
+        .from('school_connections')
+        .insert({
+          school_id: schoolData.school_id,
+          school_name: schoolData.school_name,
+          peeap_school_id: schoolSlug,
+          school_domain: fullSchoolDomain,
+          connected_by_user_id: user.id,
+          connected_by_email: user.email,
+          wallet_id: wallet.id,
+          status: 'active',
+          saas_origin: originUrl,
+          connected_at: new Date().toISOString(),
+          // Store additional settings as metadata
+          settings: {
+            primary_color: setupData.primaryColor,
+            receipt_prefix: setupData.receiptPrefix,
+            enable_student_wallets: setupData.enableStudentWallets,
+            enable_fee_payments: setupData.enableFeePayments,
+            enable_vendor_payments: setupData.enableVendorPayments,
+            school_type: schoolData.school_type,
+            student_count: schoolData.student_count,
+            staff_count: schoolData.staff_count,
+          },
+        })
+        .select()
+        .single();
+
+      if (connectionError) {
+        // If connection failed, delete the wallet we just created
+        console.error('Connection error, rolling back wallet:', connectionError);
+        await supabaseAdmin.from('wallets').delete().eq('id', wallet.id);
+        throw new Error(`Failed to create school connection: ${connectionError.message}`);
+      }
+
+      console.log('Created school connection:', connection);
+
+      // Store in localStorage for future use
+      localStorage.setItem('school_domain', schoolSlug);
+      localStorage.setItem('schoolId', schoolData.school_id);
+      localStorage.setItem('schoolName', schoolData.school_name);
 
       // Move to complete step
       setCurrentStep(3);
     } catch (err: any) {
       console.error('Error completing setup:', err);
-      // For demo, just move to complete step
-      setCurrentStep(3);
+      setError(err.message || 'Failed to complete setup. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -434,6 +502,13 @@ export function SchoolConnectionSetupPage() {
                     Customize how Peeap Pay works with your school
                   </p>
                 </div>
+
+                {error && (
+                  <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-start gap-2">
+                    <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                    <span>{error}</span>
+                  </div>
+                )}
 
                 {/* Logo Upload */}
                 <div>

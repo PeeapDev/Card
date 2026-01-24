@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
+import { SchoolLayout } from '@/components/school';
 import {
   Users,
   ArrowLeft,
@@ -81,37 +82,42 @@ export function SchoolStaffPage() {
         return;
       }
 
-      // Fetch staff from SDSL2 sync API
-      const response = await fetch(
-        `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/staff`,
-        {
-          method: 'GET',
-          headers: { 'Accept': 'application/json' },
-        }
-      );
+      // Try to fetch staff from SDSL2 sync API
+      try {
+        const response = await fetch(
+          `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/staff`,
+          {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+          }
+        );
 
-      if (response.ok) {
-        const data = await response.json();
-        const staffList = (data.staff || data || []).map((s: any) => ({
-          id: s.id,
-          name: s.name || `${s.first_name || ''} ${s.last_name || ''}`.trim(),
-          email: s.email || '',
-          phone: s.phone || s.phone_number || '',
-          role: s.role || s.position || s.job_title || 'Staff',
-          department: s.department || 'General',
-          joinDate: s.join_date || s.hired_date || s.created_at,
-          salary: s.salary || s.monthly_salary || 0,
-          status: s.status === 'inactive' ? 'inactive' : 'active',
-          avatar: s.avatar_url || s.photo_url || null,
-        }));
-        setStaff(staffList);
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        setError(errorData.message || 'Failed to load staff');
+        if (response.ok) {
+          const data = await response.json();
+          const staffList = (data.staff || data.data || data || []).map((s: any) => ({
+            id: s.id,
+            name: s.name || `${s.first_name || ''} ${s.last_name || ''}`.trim(),
+            email: s.email || '',
+            phone: s.phone || s.phone_number || '',
+            role: s.role || s.position || s.job_title || 'Staff',
+            department: s.department || 'General',
+            joinDate: s.join_date || s.hired_date || s.created_at,
+            salary: s.salary || s.monthly_salary || 0,
+            status: s.status === 'inactive' ? 'inactive' : 'active',
+            avatar: s.avatar_url || s.photo_url || null,
+          }));
+          setStaff(staffList);
+          return;
+        }
+      } catch (apiErr) {
+        console.log('SaaS API not available:', apiErr);
       }
+
+      // If SaaS API fails, show empty state
+      setStaff([]);
     } catch (err) {
       console.error('Error fetching staff:', err);
-      setError('Could not connect to school system. Please try again.');
+      setError('Could not load staff. The school system sync may not be configured yet.');
     } finally {
       setLoading(false);
     }
@@ -211,50 +217,45 @@ export function SchoolStaffPage() {
 
   const totalSalary = staff.filter(s => s.status === 'active').reduce((sum, s) => sum + s.salary, 0);
 
+  const { schoolSlug } = useParams<{ schoolSlug: string }>();
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link to="/school" className="text-gray-500 hover:text-gray-700 dark:text-gray-400">
-                <ArrowLeft className="h-5 w-5" />
-              </Link>
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-indigo-100 dark:bg-indigo-900 rounded-lg">
-                  <Users className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-bold text-gray-900 dark:text-white">Staff Management</h1>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {staff.length} staff members
-                  </p>
-                </div>
-              </div>
+    <SchoolLayout>
+      {/* Page Header */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-indigo-100 dark:bg-indigo-900 rounded-lg">
+              <Users className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={fetchStaff}
-                disabled={loading}
-                className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
-              >
-                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                Refresh
-              </button>
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                <UserPlus className="h-4 w-4" />
-                Add Staff
-              </button>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white">Staff Management</h1>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {staff.length} staff members
+              </p>
             </div>
           </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={fetchStaff}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              <UserPlus className="h-4 w-4" />
+              Add Staff
+            </button>
+          </div>
         </div>
-      </header>
+      </div>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div>
         {/* Error State */}
         {error && (
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 mb-6 flex items-center gap-3">
@@ -399,7 +400,6 @@ export function SchoolStaffPage() {
         </div>
         </>
         )}
-      </main>
 
       {/* Add Staff Modal */}
       {showAddModal && (
@@ -562,6 +562,7 @@ export function SchoolStaffPage() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </SchoolLayout>
   );
 }

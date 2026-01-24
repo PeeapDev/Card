@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import {
   Users,
   Search,
@@ -16,6 +16,7 @@ import {
   RefreshCw,
   AlertCircle
 } from 'lucide-react';
+import { SchoolLayout } from '@/components/school';
 
 interface Student {
   id: string;
@@ -57,38 +58,45 @@ export function SchoolStudentsPage() {
         return;
       }
 
-      // Fetch students from SDSL2 sync API
-      const response = await fetch(
-        `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/students`,
-        {
-          method: 'GET',
-          headers: { 'Accept': 'application/json' },
-        }
-      );
+      // Try to fetch students from SDSL2 sync API
+      try {
+        const response = await fetch(
+          `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/students`,
+          {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+          }
+        );
 
-      if (response.ok) {
-        const data = await response.json();
-        const studentList = (data.students || data || []).map((s: any) => ({
-          id: s.id,
-          externalId: s.index_number || s.admission_number || s.student_id,
-          name: s.name || `${s.first_name || ''} ${s.last_name || ''}`.trim(),
-          email: s.email || '',
-          phone: s.phone || s.phone_number || '',
-          class_name: s.class_name || s.grade,
-          walletId: s.peeap_wallet_id || null,
-          walletBalance: s.wallet_balance || 0,
-          status: s.peeap_wallet_id ? 'linked' : (s.peeap_user_id ? 'pending' : 'unlinked'),
-          linkedAt: s.peeap_linked_at || s.wallet_linked_at || null,
-          createdAt: s.created_at || s.enrolled_at,
-        }));
-        setStudents(studentList);
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        setError(errorData.message || 'Failed to load students');
+        if (response.ok) {
+          const data = await response.json();
+          const studentList = (data.students || data.data || data || []).map((s: any) => ({
+            id: s.id?.toString() || String(Math.random()),
+            externalId: s.index_number || s.admission_number || s.student_id || '',
+            name: s.name || `${s.first_name || ''} ${s.last_name || ''}`.trim() || 'Unknown',
+            email: s.email || '',
+            phone: s.phone || s.phone_number || '',
+            class_name: s.class_name || s.grade || s.class || '',
+            walletId: s.peeap_wallet_id || null,
+            walletBalance: s.wallet_balance || 0,
+            status: s.peeap_wallet_id ? 'linked' : (s.peeap_user_id ? 'pending' : 'unlinked'),
+            linkedAt: s.peeap_linked_at || s.wallet_linked_at || null,
+            createdAt: s.created_at || s.enrolled_at || new Date().toISOString(),
+          }));
+          setStudents(studentList);
+          return;
+        }
+      } catch (apiErr) {
+        console.log('SaaS API not available, using local data:', apiErr);
       }
+
+      // If SaaS API fails, try to get linked students from Peeap database
+      // For now, show empty state - students will appear as they link their wallets
+      setStudents([]);
+
     } catch (err) {
       console.error('Error fetching students:', err);
-      setError('Could not connect to school system. Please try again.');
+      setError('Could not load students. The school system sync may not be configured yet.');
     } finally {
       setLoading(false);
     }
@@ -135,47 +143,42 @@ export function SchoolStudentsPage() {
     }
   };
 
+  const { schoolSlug } = useParams<{ schoolSlug: string }>();
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link to="/school" className="text-gray-500 hover:text-gray-700 dark:text-gray-400">
-                <ArrowLeft className="h-5 w-5" />
-              </Link>
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
-                  <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-bold text-gray-900 dark:text-white">Students</h1>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {students.length} total students
-                  </p>
-                </div>
-              </div>
+    <SchoolLayout>
+      {/* Page Header */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
+              <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={fetchStudents}
-                disabled={loading}
-                className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
-              >
-                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                Refresh
-              </button>
-              <button className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
-                <Download className="h-4 w-4" />
-                Export
-              </button>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white">Students</h1>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {students.length} total students
+              </p>
             </div>
           </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={fetchStudents}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+            <button className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
+              <Download className="h-4 w-4" />
+              Export
+            </button>
+          </div>
         </div>
-      </header>
+      </div>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div>
         {/* Error State */}
         {error && (
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 mb-6 flex items-center gap-3">
@@ -305,7 +308,7 @@ export function SchoolStudentsPage() {
         </div>
           </>
         )}
-      </main>
-    </div>
+      </div>
+    </SchoolLayout>
   );
 }

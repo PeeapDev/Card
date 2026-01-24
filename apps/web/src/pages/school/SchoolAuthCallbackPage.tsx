@@ -4,6 +4,7 @@ import { GraduationCap, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { authService } from '@/services/auth.service';
 import { API_URL } from '@/config/urls';
+import { supabaseAdmin } from '@/lib/supabase';
 
 export function SchoolAuthCallbackPage() {
   const [searchParams] = useSearchParams();
@@ -122,24 +123,140 @@ export function SchoolAuthCallbackPage() {
         });
 
         // Refresh user profile in auth context
-        await refreshUser();
+        const userData = await refreshUser();
 
         setStatus('success');
 
         // Check if this is a new connection from school SaaS
-        // If so, redirect to setup wizard instead of dashboard
+        // If so, save the connection immediately to Supabase
         if (isExternalSaasConnection || isNewConnection) {
-          setMessage('Authentication successful! Redirecting to setup...');
+          setMessage('Saving school connection...');
 
-          // Build setup wizard URL with params
-          const setupParams = new URLSearchParams();
-          if (originUrl) setupParams.set('origin', originUrl);
-          if (schoolId) setupParams.set('school_id', schoolId);
-          if (state) setupParams.set('state', state); // Pass state for final redirect back to SaaS
+          // Extract school slug from origin URL (e.g., samstead.gov.school.edu.sl -> samstead)
+          const schoolSlug = originUrl?.split('.')[0] || schoolId || 'unknown';
+          const fullSchoolDomain = originUrl || `${schoolSlug}.gov.school.edu.sl`;
 
-          setTimeout(() => {
-            navigate(`/school/connection-setup?${setupParams.toString()}`);
-          }, 1000);
+          console.log('[SchoolAuthCallback] Saving connection for school:', schoolSlug);
+
+          try {
+            // Check if connection already exists
+            const { data: existingConnection } = await supabaseAdmin
+              .from('school_connections')
+              .select('*')
+              .eq('peeap_school_id', schoolSlug)
+              .maybeSingle();
+
+            if (existingConnection) {
+              console.log('[SchoolAuthCallback] Connection already exists:', existingConnection);
+              localStorage.setItem('school_domain', schoolSlug);
+              localStorage.setItem('schoolId', existingConnection.school_id);
+              localStorage.setItem('schoolName', existingConnection.school_name);
+            } else {
+              // Fetch school info from SaaS API
+              let schoolData: any = null;
+              try {
+                const schoolInfoUrl = `https://${fullSchoolDomain}/api/peeap/school-info`;
+                console.log('[SchoolAuthCallback] Fetching school info from:', schoolInfoUrl);
+                const schoolInfoResponse = await fetch(schoolInfoUrl);
+                if (schoolInfoResponse.ok) {
+                  const result = await schoolInfoResponse.json();
+                  schoolData = result.data || result;
+                  console.log('[SchoolAuthCallback] School data:', schoolData);
+                }
+              } catch (fetchErr) {
+                console.log('[SchoolAuthCallback] Could not fetch school info:', fetchErr);
+              }
+
+              // Use fetched data or defaults
+              const schoolName = schoolData?.school_name || `${schoolSlug.charAt(0).toUpperCase() + schoolSlug.slice(1)} School`;
+              const schoolIdValue = schoolData?.school_id?.toString() || schoolId || schoolSlug;
+
+              // Create wallet for the school
+              const { data: wallet, error: walletError } = await supabaseAdmin
+                .from('wallets')
+                .insert({
+                  currency: 'SLE',
+                  balance: 0,
+                  status: 'ACTIVE',
+                  wallet_type: 'school',
+                  name: `${schoolName} Wallet`,
+                  external_id: `SCH-${schoolSlug}`,
+                })
+                .select()
+                .single();
+
+              if (walletError) {
+                console.error('[SchoolAuthCallback] Wallet creation error:', walletError);
+                throw new Error(`Failed to create wallet: ${walletError.message}`);
+              }
+
+              console.log('[SchoolAuthCallback] Created wallet:', wallet);
+
+              // Create school connection
+              const { data: newConnection, error: connectionError } = await supabaseAdmin
+                .from('school_connections')
+                .insert({
+                  school_id: schoolIdValue,
+                  school_name: schoolName,
+                  peeap_school_id: schoolSlug,
+                  school_domain: fullSchoolDomain,
+                  connected_by_user_id: userData?.id || data.user?.id || null,
+                  connected_by_email: userData?.email || data.user?.email || null,
+                  wallet_id: wallet.id,
+                  status: 'active',
+                  saas_origin: originUrl,
+                  connected_at: new Date().toISOString(),
+                  settings: {
+                    school_type: schoolData?.school_type,
+                    student_count: schoolData?.student_count,
+                    staff_count: schoolData?.staff_count,
+                  },
+                })
+                .select()
+                .single();
+
+              if (connectionError) {
+                console.error('[SchoolAuthCallback] Connection creation error:', connectionError);
+                // Clean up wallet
+                await supabaseAdmin.from('wallets').delete().eq('id', wallet.id);
+                throw new Error(`Failed to create connection: ${connectionError.message}`);
+              }
+
+              console.log('[SchoolAuthCallback] Created connection:', newConnection);
+
+              localStorage.setItem('school_domain', schoolSlug);
+              localStorage.setItem('schoolId', schoolIdValue);
+              localStorage.setItem('schoolName', schoolName);
+            }
+
+            setMessage('Connection saved! Redirecting...');
+
+            // Redirect back to SaaS with success or to setup wizard
+            if (originUrl && state) {
+              // Redirect back to SaaS
+              const redirectUrl = new URL(`https://${originUrl}/settings/payment`);
+              redirectUrl.searchParams.set('peeap_connected', 'true');
+              redirectUrl.searchParams.set('state', state);
+              setTimeout(() => {
+                window.location.href = redirectUrl.toString();
+              }, 1500);
+            } else {
+              // Go to setup wizard for customization
+              const setupParams = new URLSearchParams();
+              if (originUrl) setupParams.set('origin', originUrl);
+              if (schoolId) setupParams.set('school_id', schoolId);
+              if (state) setupParams.set('state', state);
+              setTimeout(() => {
+                navigate(`/school/connection-setup?${setupParams.toString()}`);
+              }, 1000);
+            }
+            return; // Don't fall through to else branch
+          } catch (saveErr: any) {
+            console.error('[SchoolAuthCallback] Error saving connection:', saveErr);
+            setStatus('error');
+            setMessage(saveErr.message || 'Failed to save school connection');
+            return;
+          }
         } else {
           // Existing login - check for school admin access
           if (!data.schoolAdmin) {

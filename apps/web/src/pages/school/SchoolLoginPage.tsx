@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { GraduationCap, Mail, Lock, Eye, EyeOff, ArrowRight, Building2, KeyRound, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { supabaseAdmin } from '@/lib/supabase';
 
 type LoginMode = 'credentials' | 'pin';
 
@@ -125,9 +126,132 @@ export function SchoolLoginPage() {
     setError('');
 
     try {
-      await login({ email, password });
-      navigate('/school');
+      const userData = await login({ email, password });
+
+      if (!userData?.id) {
+        setError('Login failed. Please try again.');
+        return;
+      }
+
+      console.log('[SchoolLogin] User logged in:', userData.id, userData.email);
+
+      // Check for existing school connection by connected_by_user_id
+      let { data: connection } = await supabaseAdmin
+        .from('school_connections')
+        .select('*')
+        .eq('connected_by_user_id', userData.id)
+        .maybeSingle();
+
+      console.log('[SchoolLogin] Connection by connected_by_user_id:', connection);
+
+      // If no connection, check for any active connection with matching email
+      if (!connection && userData.email) {
+        const { data: emailConnection } = await supabaseAdmin
+          .from('school_connections')
+          .select('*')
+          .eq('connected_by_email', userData.email)
+          .eq('status', 'active')
+          .maybeSingle();
+
+        if (emailConnection) {
+          console.log('[SchoolLogin] Found connection by email:', emailConnection);
+          // Update the connection with the user ID
+          await supabaseAdmin
+            .from('school_connections')
+            .update({ connected_by_user_id: userData.id })
+            .eq('id', emailConnection.id);
+          connection = emailConnection;
+        }
+      }
+
+      // If still no connection, fetch from SaaS API and create one
+      if (!connection) {
+        console.log('[SchoolLogin] No connection found, fetching from SaaS API...');
+
+        // Get school domain from session or try common ones
+        const intendedDomain = sessionStorage.getItem('intended_school_domain') || 'ses';
+        sessionStorage.removeItem('intended_school_domain');
+
+        try {
+          // Fetch school info from SaaS API
+          const schoolInfoUrl = `https://${intendedDomain}.gov.school.edu.sl/api/peeap/school-info`;
+          console.log('[SchoolLogin] Fetching school info from:', schoolInfoUrl);
+
+          const response = await fetch(schoolInfoUrl, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            const schoolData = result.data || result;
+            console.log('[SchoolLogin] School data from SaaS:', schoolData);
+
+            if (schoolData?.school_name) {
+              // Create wallet for school (no user_id for school wallets)
+              const { data: wallet, error: walletError } = await supabaseAdmin
+                .from('wallets')
+                .insert({
+                  currency: 'SLE',
+                  balance: 0,
+                  status: 'ACTIVE',
+                  wallet_type: 'school',
+                  name: `${schoolData.school_name} Wallet`,
+                  external_id: `SCH-${intendedDomain}`,
+                })
+                .select()
+                .single();
+
+              if (walletError) {
+                console.error('[SchoolLogin] Wallet creation error:', walletError);
+              }
+
+              // Create school connection with correct column names
+              const { data: newConnection, error: connError } = await supabaseAdmin
+                .from('school_connections')
+                .insert({
+                  school_id: schoolData.school_id?.toString() || intendedDomain,
+                  school_name: schoolData.school_name,
+                  peeap_school_id: intendedDomain,
+                  school_domain: `${intendedDomain}.gov.school.edu.sl`,
+                  connected_by_user_id: userData.id,
+                  connected_by_email: userData.email,
+                  wallet_id: wallet?.id || null,
+                  status: 'active',
+                  saas_origin: `${intendedDomain}.gov.school.edu.sl`,
+                  connected_at: new Date().toISOString(),
+                })
+                .select()
+                .single();
+
+              if (connError) {
+                console.error('[SchoolLogin] Connection creation error:', connError);
+              } else {
+                console.log('[SchoolLogin] Created new connection:', newConnection);
+                connection = newConnection;
+              }
+            }
+          } else {
+            console.log('[SchoolLogin] SaaS API returned:', response.status);
+          }
+        } catch (apiErr) {
+          console.error('[SchoolLogin] SaaS API error:', apiErr);
+        }
+      }
+
+      if (connection) {
+        const schoolDomain = connection.peeap_school_id || connection.school_id;
+        localStorage.setItem('schoolId', connection.school_id);
+        localStorage.setItem('school_domain', schoolDomain);
+        localStorage.setItem('schoolName', connection.school_name);
+        navigate(`/${schoolDomain}`);
+        return;
+      }
+
+      // Still no connection - show error with more details
+      setError('Could not connect to school. Please ensure your school is registered with Peeap.');
     } catch (err: any) {
+      console.error('[SchoolLogin] Error:', err);
       setError(err.message || 'Failed to sign in');
     } finally {
       setLoading(false);

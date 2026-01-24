@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import {
   Receipt,
   ArrowLeft,
@@ -19,6 +19,7 @@ import {
   Loader2,
   RefreshCw
 } from 'lucide-react';
+import { SchoolLayout } from '@/components/school';
 
 interface FeeStructure {
   id: string;
@@ -74,87 +75,93 @@ export function SchoolFeesPage() {
         return;
       }
 
-      // Fetch invoices/fees from SDSL2 sync API
-      const response = await fetch(
-        `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/invoices`,
-        {
-          method: 'GET',
-          headers: { 'Accept': 'application/json' },
-        }
-      );
+      // Try to fetch invoices/fees from SDSL2 sync API
+      try {
+        const response = await fetch(
+          `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/invoices`,
+          {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+          }
+        );
 
-      if (response.ok) {
-        const data = await response.json();
+        if (response.ok) {
+          const data = await response.json();
 
-        // Group invoices by fee type to create fee structures
-        const feeMap = new Map<string, FeeStructure>();
-        const paymentsList: FeePayment[] = [];
+          // Group invoices by fee type to create fee structures
+          const feeMap = new Map<string, FeeStructure>();
+          const paymentsList: FeePayment[] = [];
 
-        (data.invoices || data || []).forEach((inv: any) => {
-          const feeName = inv.fee_name || inv.title || inv.description || 'Fee';
-          const feeId = inv.fee_id || inv.fee_type_id || feeName;
+          (data.invoices || data.data || data || []).forEach((inv: any) => {
+            const feeName = inv.fee_name || inv.title || inv.description || 'Fee';
+            const feeId = inv.fee_id || inv.fee_type_id || feeName;
 
-          // Add to fee structure
-          if (!feeMap.has(feeId)) {
-            feeMap.set(feeId, {
-              id: feeId,
-              name: feeName,
-              description: inv.fee_description || inv.description || '',
-              amount: inv.amount || inv.total_amount || 0,
-              frequency: inv.frequency || 'termly',
+            // Add to fee structure
+            if (!feeMap.has(feeId)) {
+              feeMap.set(feeId, {
+                id: feeId,
+                name: feeName,
+                description: inv.fee_description || inv.description || '',
+                amount: inv.amount || inv.total_amount || 0,
+                frequency: inv.frequency || 'termly',
+                dueDate: inv.due_date || '',
+                applicableTo: inv.applicable_to || 'All Students',
+                status: inv.fee_status || 'active',
+                paidCount: 0,
+                pendingCount: 0,
+                totalStudents: 0,
+              });
+            }
+
+            const structure = feeMap.get(feeId)!;
+            structure.totalStudents++;
+
+            const paidAmount = inv.paid_amount || inv.amount_paid || 0;
+            const totalAmount = inv.amount || inv.total_amount || 0;
+
+            if (paidAmount >= totalAmount) {
+              structure.paidCount++;
+            } else {
+              structure.pendingCount++;
+            }
+
+            // Add to payments list
+            let status: FeePayment['status'] = 'pending';
+            if (paidAmount >= totalAmount) {
+              status = 'paid';
+            } else if (paidAmount > 0) {
+              status = 'partial';
+            } else if (inv.due_date && new Date(inv.due_date) < new Date()) {
+              status = 'overdue';
+            }
+
+            paymentsList.push({
+              id: inv.id,
+              studentName: inv.student_name || `${inv.first_name || ''} ${inv.last_name || ''}`.trim() || 'Unknown',
+              studentId: inv.student_id || inv.index_number || '',
+              feeName: feeName,
+              amount: totalAmount,
+              paidAmount: paidAmount,
+              status: status,
               dueDate: inv.due_date || '',
-              applicableTo: inv.applicable_to || 'All Students',
-              status: inv.fee_status || 'active',
-              paidCount: 0,
-              pendingCount: 0,
-              totalStudents: 0,
+              paidDate: inv.paid_date || inv.paid_at || null,
             });
-          }
-
-          const structure = feeMap.get(feeId)!;
-          structure.totalStudents++;
-
-          const paidAmount = inv.paid_amount || inv.amount_paid || 0;
-          const totalAmount = inv.amount || inv.total_amount || 0;
-
-          if (paidAmount >= totalAmount) {
-            structure.paidCount++;
-          } else {
-            structure.pendingCount++;
-          }
-
-          // Add to payments list
-          let status: FeePayment['status'] = 'pending';
-          if (paidAmount >= totalAmount) {
-            status = 'paid';
-          } else if (paidAmount > 0) {
-            status = 'partial';
-          } else if (inv.due_date && new Date(inv.due_date) < new Date()) {
-            status = 'overdue';
-          }
-
-          paymentsList.push({
-            id: inv.id,
-            studentName: inv.student_name || `${inv.first_name || ''} ${inv.last_name || ''}`.trim() || 'Unknown',
-            studentId: inv.student_id || inv.index_number || '',
-            feeName: feeName,
-            amount: totalAmount,
-            paidAmount: paidAmount,
-            status: status,
-            dueDate: inv.due_date || '',
-            paidDate: inv.paid_date || inv.paid_at || null,
           });
-        });
 
-        setFeeStructures(Array.from(feeMap.values()));
-        setPayments(paymentsList);
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        setError(errorData.message || 'Failed to load fees');
+          setFeeStructures(Array.from(feeMap.values()));
+          setPayments(paymentsList);
+          return;
+        }
+      } catch (apiErr) {
+        console.log('SaaS API not available:', apiErr);
       }
+
+      // If SaaS API fails, show empty state
+      setFeeStructures([]);
+      setPayments([]);
     } catch (err) {
       console.error('Error fetching fees:', err);
-      setError('Could not connect to school system. Please try again.');
+      setError('Could not load fees. The school system sync may not be configured yet.');
     } finally {
       setLoading(false);
     }
@@ -205,50 +212,45 @@ export function SchoolFeesPage() {
     pendingAmount: feeStructures.reduce((sum, f) => sum + f.amount * f.pendingCount, 0),
   };
 
+  const { schoolSlug } = useParams<{ schoolSlug: string }>();
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link to="/school" className="text-gray-500 hover:text-gray-700 dark:text-gray-400">
-                <ArrowLeft className="h-5 w-5" />
-              </Link>
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-100 dark:bg-green-900 rounded-lg">
-                  <Receipt className="h-5 w-5 text-green-600 dark:text-green-400" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-bold text-gray-900 dark:text-white">Fee Management</h1>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Manage school fees and payments
-                  </p>
-                </div>
-              </div>
+    <SchoolLayout>
+      {/* Page Header */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-green-100 dark:bg-green-900 rounded-lg">
+              <Receipt className="h-5 w-5 text-green-600 dark:text-green-400" />
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={fetchFees}
-                disabled={loading}
-                className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
-              >
-                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                Refresh
-              </button>
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                <Plus className="h-4 w-4" />
-                Create Fee
-              </button>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white">Fee Management</h1>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Manage school fees and payments
+              </p>
             </div>
           </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={fetchFees}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              <Plus className="h-4 w-4" />
+              Create Fee
+            </button>
+          </div>
         </div>
-      </header>
+      </div>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div>
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm">
@@ -455,7 +457,7 @@ export function SchoolFeesPage() {
             </table>
           </div>
         )}
-      </main>
-    </div>
+      </div>
+    </SchoolLayout>
   );
 }

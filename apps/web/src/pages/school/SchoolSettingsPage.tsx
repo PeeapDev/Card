@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import {
   Settings,
   ArrowLeft,
@@ -24,6 +24,8 @@ import {
   ExternalLink,
   Loader2
 } from 'lucide-react';
+import { SchoolLayout } from '@/components/school';
+import { supabaseAdmin } from '@/lib/supabase';
 
 interface PeeapConnection {
   connected: boolean;
@@ -44,31 +46,119 @@ interface PeeapConnection {
   };
 }
 
+interface SchoolData {
+  name: string;
+  type: string;
+  address: string;
+  phone: string;
+  email: string;
+  logoUrl: string | null;
+}
+
 export function SchoolSettingsPage() {
+  const { schoolSlug } = useParams<{ schoolSlug: string }>();
   const [activeTab, setActiveTab] = useState('general');
   const [copied, setCopied] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // Mock connection state - in real app, fetch from API
+  // School data from database/SaaS
+  const [schoolData, setSchoolData] = useState<SchoolData>({
+    name: '',
+    type: 'Secondary School',
+    address: '',
+    phone: '',
+    email: '',
+    logoUrl: null,
+  });
+
+  // Connection state from database
   const [peeapConnection, setPeeapConnection] = useState<PeeapConnection>({
-    connected: true,
-    schoolId: 'school_001',
-    schoolName: 'Government Secondary School',
-    connectedAt: '2024-01-15T10:00:00Z',
-    lastSync: '2024-01-20T14:30:00Z',
+    connected: false,
     syncSettings: {
-      students: true,
-      fees: true,
-      transport: true,
-      vendors: true,
-    },
-    stats: {
-      studentsLinked: 450,
-      walletsActive: 380,
-      transactionsToday: 45,
+      students: false,
+      fees: false,
+      transport: false,
+      vendors: false,
     },
   });
+
+  // Fetch school connection and data on mount
+  useEffect(() => {
+    const fetchSchoolData = async () => {
+      setLoading(true);
+      try {
+        const domain = schoolSlug || localStorage.getItem('school_domain');
+        if (!domain) return;
+
+        // Fetch from Supabase school_connections
+        const { data: connection } = await supabaseAdmin
+          .from('school_connections')
+          .select('*')
+          .eq('peeap_school_id', domain)
+          .maybeSingle();
+
+        if (connection) {
+          const settings = connection.settings || {};
+          const stats = connection.stats || {};
+
+          setPeeapConnection({
+            connected: true,
+            schoolId: connection.school_id,
+            schoolName: connection.school_name,
+            connectedAt: connection.connected_at,
+            lastSync: connection.last_sync_at,
+            syncSettings: {
+              students: settings.auto_sync_students ?? true,
+              fees: settings.sync_fee_payments ?? true,
+              transport: settings.sync_transport_payments ?? true,
+              vendors: settings.enable_vendor_payments ?? true,
+            },
+            stats: {
+              studentsLinked: stats.students_linked || 0,
+              walletsActive: stats.wallets_active || 0,
+              transactionsToday: stats.transactions_today || 0,
+            },
+          });
+
+          setSchoolData({
+            name: connection.school_name || '',
+            type: settings.school_type || 'Secondary School',
+            address: settings.address || '',
+            phone: settings.phone || '',
+            email: connection.connected_by_email || '',
+            logoUrl: connection.school_logo_url,
+          });
+        }
+
+        // Also try to fetch from SaaS API for latest data
+        try {
+          const response = await fetch(`https://${domain}.gov.school.edu.sl/api/peeap/school-info`);
+          if (response.ok) {
+            const result = await response.json();
+            const saasData = result.data || result;
+            setSchoolData(prev => ({
+              ...prev,
+              name: saasData.school_name || prev.name,
+              type: saasData.school_type || prev.type,
+              address: saasData.address || prev.address,
+              phone: saasData.phone || prev.phone,
+              email: saasData.email || prev.email,
+            }));
+          }
+        } catch (e) {
+          console.log('Could not fetch from SaaS API');
+        }
+      } catch (err) {
+        console.error('Error fetching school data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSchoolData();
+  }, [schoolSlug]);
 
   const tabs = [
     { id: 'general', label: 'General', icon: Building2 },
@@ -170,33 +260,25 @@ export function SchoolSettingsPage() {
 </script>`;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center gap-4">
-            <Link to="/school" className="text-gray-500 hover:text-gray-700 dark:text-gray-400">
-              <ArrowLeft className="h-5 w-5" />
-            </Link>
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                <Settings className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900 dark:text-white">Settings</h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Manage your school's Peeap configuration
-                </p>
-              </div>
-            </div>
+    <SchoolLayout>
+      {/* Page Header */}
+      <div className="mb-6">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+            <Settings className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">Settings</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Manage your school's Peeap configuration
+            </p>
           </div>
         </div>
-      </header>
+      </div>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex flex-col lg:flex-row gap-8">
-          {/* Sidebar */}
-          <div className="lg:w-64">
+      <div className="flex flex-col lg:flex-row gap-8">
+        {/* Settings Tabs */}
+        <div className="lg:w-64">
             <nav className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-2">
               {tabs.map((tab) => (
                 <button
@@ -223,43 +305,85 @@ export function SchoolSettingsPage() {
                 <div className="space-y-6">
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-white">General Settings</h2>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      School Name
-                    </label>
-                    <input
-                      type="text"
-                      defaultValue="ABC Academy"
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    />
-                  </div>
+                  {loading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          School Name
+                        </label>
+                        <input
+                          type="text"
+                          value={schoolData.name}
+                          onChange={(e) => setSchoolData(prev => ({ ...prev, name: e.target.value }))}
+                          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                        />
+                      </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      School Type
-                    </label>
-                    <select className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
-                      <option>Secondary School</option>
-                      <option>Primary School</option>
-                      <option>University</option>
-                    </select>
-                  </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          School Type
+                        </label>
+                        <select
+                          value={schoolData.type}
+                          onChange={(e) => setSchoolData(prev => ({ ...prev, type: e.target.value }))}
+                          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                        >
+                          <option>Secondary School</option>
+                          <option>Primary School</option>
+                          <option>University</option>
+                          <option>Vocational School</option>
+                        </select>
+                      </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Address
-                    </label>
-                    <textarea
-                      defaultValue="123 Education Street, Freetown"
-                      rows={2}
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    />
-                  </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          Address
+                        </label>
+                        <textarea
+                          value={schoolData.address}
+                          onChange={(e) => setSchoolData(prev => ({ ...prev, address: e.target.value }))}
+                          rows={2}
+                          placeholder="Enter school address"
+                          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                        />
+                      </div>
 
-                  <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                    <Save className="h-4 w-4" />
-                    Save Changes
-                  </button>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Phone
+                          </label>
+                          <input
+                            type="tel"
+                            value={schoolData.phone}
+                            onChange={(e) => setSchoolData(prev => ({ ...prev, phone: e.target.value }))}
+                            placeholder="+232..."
+                            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Email
+                          </label>
+                          <input
+                            type="email"
+                            value={schoolData.email}
+                            onChange={(e) => setSchoolData(prev => ({ ...prev, email: e.target.value }))}
+                            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                          />
+                        </div>
+                      </div>
+
+                      <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                        <Save className="h-4 w-4" />
+                        Save Changes
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -564,8 +688,78 @@ export function SchoolSettingsPage() {
                 </div>
               )}
 
-              {/* Other tabs show placeholder */}
-              {(activeTab === 'branding' || activeTab === 'security' || activeTab === 'notifications') && (
+              {/* Branding Settings */}
+              {activeTab === 'branding' && (
+                <div className="space-y-6">
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Branding</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Customize how your school appears in Peeap
+                  </p>
+
+                  {/* School Logo */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      School Logo
+                    </label>
+                    <div className="flex items-center gap-4">
+                      <div className="w-24 h-24 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center bg-gray-50 dark:bg-gray-700">
+                        {schoolData.logoUrl ? (
+                          <img src={schoolData.logoUrl} alt="School logo" className="w-full h-full object-cover rounded-xl" />
+                        ) : (
+                          <Building2 className="h-10 w-10 text-gray-400" />
+                        )}
+                      </div>
+                      <div>
+                        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
+                          Upload Logo
+                        </button>
+                        <p className="text-xs text-gray-500 mt-1">PNG, JPG up to 2MB. 200x200px recommended.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Primary Color */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Primary Color
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="color"
+                        defaultValue="#2563eb"
+                        className="w-10 h-10 rounded border border-gray-300 cursor-pointer"
+                      />
+                      <input
+                        type="text"
+                        defaultValue="#2563eb"
+                        className="w-32 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Used for buttons and accents in the payment UI</p>
+                  </div>
+
+                  {/* Display Name */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Display Name (for receipts)
+                    </label>
+                    <input
+                      type="text"
+                      value={schoolData.name}
+                      onChange={(e) => setSchoolData(prev => ({ ...prev, name: e.target.value }))}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    />
+                  </div>
+
+                  <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    <Save className="h-4 w-4" />
+                    Save Branding
+                  </button>
+                </div>
+              )}
+
+              {/* Security & Notifications show placeholder */}
+              {(activeTab === 'security' || activeTab === 'notifications') && (
                 <div className="text-center py-12">
                   <Settings className="h-12 w-12 text-gray-300 mx-auto mb-4" />
                   <p className="text-gray-500 dark:text-gray-400">
@@ -576,7 +770,6 @@ export function SchoolSettingsPage() {
             </div>
           </div>
         </div>
-      </main>
-    </div>
+    </SchoolLayout>
   );
 }

@@ -1,19 +1,18 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import { SchoolLayout } from '@/components/school';
 import {
   Calculator,
-  ArrowLeft,
   Plus,
   Search,
-  Filter,
   Download,
   TrendingUp,
   TrendingDown,
   ArrowUpRight,
   ArrowDownRight,
-  Calendar,
   PieChart,
-  BarChart3
+  BarChart3,
+  Loader2
 } from 'lucide-react';
 
 interface Transaction {
@@ -35,6 +34,7 @@ interface CategorySummary {
 }
 
 export function SchoolAccountingPage() {
+  const { schoolSlug } = useParams<{ schoolSlug: string }>();
   const [activeTab, setActiveTab] = useState<'all' | 'income' | 'expenses'>('all');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,90 +43,53 @@ export function SchoolAccountingPage() {
   const [showAddModal, setShowAddModal] = useState(false);
 
   useEffect(() => {
-    // TODO: Fetch from API
-    setTransactions([
-      {
-        id: '1',
-        description: 'Tuition Fee Collection - January',
-        category: 'Tuition Fees',
-        type: 'income',
-        amount: 425000000,
-        date: '2024-01-31',
-        reference: 'INC-2024-001',
-        status: 'completed',
-      },
-      {
-        id: '2',
-        description: 'Teacher Salaries - January',
-        category: 'Salaries',
-        type: 'expense',
-        amount: 85000000,
-        date: '2024-01-31',
-        reference: 'EXP-2024-001',
-        status: 'completed',
-      },
-      {
-        id: '3',
-        description: 'Electricity Bill - January',
-        category: 'Utilities',
-        type: 'expense',
-        amount: 5500000,
-        date: '2024-01-28',
-        reference: 'EXP-2024-002',
-        status: 'completed',
-      },
-      {
-        id: '4',
-        description: 'Library Fee Collection',
-        category: 'Fees',
-        type: 'income',
-        amount: 31250000,
-        date: '2024-01-25',
-        reference: 'INC-2024-002',
-        status: 'completed',
-      },
-      {
-        id: '5',
-        description: 'Textbook Purchase',
-        category: 'Educational Materials',
-        type: 'expense',
-        amount: 15000000,
-        date: '2024-01-20',
-        reference: 'EXP-2024-003',
-        status: 'completed',
-      },
-      {
-        id: '6',
-        description: 'Cafeteria Revenue',
-        category: 'Cafeteria',
-        type: 'income',
-        amount: 8500000,
-        date: '2024-01-31',
-        reference: 'INC-2024-003',
-        status: 'completed',
-      },
-      {
-        id: '7',
-        description: 'Building Maintenance',
-        category: 'Maintenance',
-        type: 'expense',
-        amount: 3500000,
-        date: '2024-01-15',
-        reference: 'EXP-2024-004',
-        status: 'completed',
-      },
-      {
-        id: '8',
-        description: 'Government Grant',
-        category: 'Grants',
-        type: 'income',
-        amount: 50000000,
-        date: '2024-01-10',
-        reference: 'INC-2024-004',
-        status: 'pending',
-      },
-    ]);
-    setLoading(false);
+    const fetchTransactions = async () => {
+      setLoading(true);
+      try {
+        const schoolDomain = localStorage.getItem('school_domain');
+        if (!schoolDomain) {
+          setTransactions([]);
+          setLoading(false);
+          return;
+        }
+
+        // Try to fetch transactions from SaaS API
+        try {
+          const response = await fetch(
+            `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/accounting`,
+            { method: 'GET', headers: { 'Accept': 'application/json' } }
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+            const txnList = (data.transactions || data.data || data || []).map((t: any) => ({
+              id: t.id?.toString() || String(Math.random()),
+              description: t.description || t.title || '',
+              category: t.category || 'General',
+              type: t.type === 'expense' ? 'expense' : 'income',
+              amount: t.amount || 0,
+              date: t.date || t.created_at || new Date().toISOString(),
+              reference: t.reference || t.ref || '',
+              status: t.status === 'pending' ? 'pending' : 'completed',
+            }));
+            setTransactions(txnList);
+            return;
+          }
+        } catch (apiErr) {
+          console.log('SaaS accounting API not available:', apiErr);
+        }
+
+        // If SaaS API fails, show empty state
+        setTransactions([]);
+      } catch (err) {
+        console.error('Error fetching transactions:', err);
+        setTransactions([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTransactions();
   }, []);
 
   const totalIncome = transactions
@@ -139,19 +102,41 @@ export function SchoolAccountingPage() {
 
   const netBalance = totalIncome - totalExpenses;
 
-  const incomeCategories: CategorySummary[] = [
-    { name: 'Tuition Fees', amount: 425000000, percentage: 82, color: 'bg-blue-500' },
-    { name: 'Fees', amount: 31250000, percentage: 6, color: 'bg-green-500' },
-    { name: 'Cafeteria', amount: 8500000, percentage: 2, color: 'bg-yellow-500' },
-    { name: 'Grants', amount: 50000000, percentage: 10, color: 'bg-purple-500' },
-  ];
+  // Calculate income categories dynamically from transactions
+  const incomeCategories: CategorySummary[] = (() => {
+    const incomeByCategory: Record<string, number> = {};
+    transactions
+      .filter(t => t.type === 'income')
+      .forEach(t => {
+        incomeByCategory[t.category] = (incomeByCategory[t.category] || 0) + t.amount;
+      });
 
-  const expenseCategories: CategorySummary[] = [
-    { name: 'Salaries', amount: 85000000, percentage: 78, color: 'bg-red-500' },
-    { name: 'Educational Materials', amount: 15000000, percentage: 14, color: 'bg-orange-500' },
-    { name: 'Utilities', amount: 5500000, percentage: 5, color: 'bg-yellow-500' },
-    { name: 'Maintenance', amount: 3500000, percentage: 3, color: 'bg-gray-500' },
-  ];
+    const colors = ['bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-purple-500', 'bg-indigo-500'];
+    return Object.entries(incomeByCategory).map(([name, amount], i) => ({
+      name,
+      amount,
+      percentage: totalIncome > 0 ? Math.round((amount / totalIncome) * 100) : 0,
+      color: colors[i % colors.length],
+    }));
+  })();
+
+  // Calculate expense categories dynamically from transactions
+  const expenseCategories: CategorySummary[] = (() => {
+    const expenseByCategory: Record<string, number> = {};
+    transactions
+      .filter(t => t.type === 'expense')
+      .forEach(t => {
+        expenseByCategory[t.category] = (expenseByCategory[t.category] || 0) + t.amount;
+      });
+
+    const colors = ['bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-gray-500', 'bg-pink-500'];
+    return Object.entries(expenseByCategory).map(([name, amount], i) => ({
+      name,
+      amount,
+      percentage: totalExpenses > 0 ? Math.round((amount / totalExpenses) * 100) : 0,
+      color: colors[i % colors.length],
+    }));
+  })();
 
   const filteredTransactions = transactions.filter((txn) => {
     const matchesSearch = txn.description.toLowerCase().includes(search.toLowerCase()) ||
@@ -161,45 +146,45 @@ export function SchoolAccountingPage() {
   });
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link to="/school" className="text-gray-500 hover:text-gray-700 dark:text-gray-400">
-                <ArrowLeft className="h-5 w-5" />
-              </Link>
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-emerald-100 dark:bg-emerald-900 rounded-lg">
-                  <Calculator className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-bold text-gray-900 dark:text-white">Accounting</h1>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Income & Expenses Management
-                  </p>
-                </div>
-              </div>
+    <SchoolLayout>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-emerald-100 dark:bg-emerald-900 rounded-lg">
+              <Calculator className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
             </div>
-            <div className="flex items-center gap-2">
-              <button className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
-                <Download className="h-4 w-4" />
-                Export
-              </button>
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                <Plus className="h-4 w-4" />
-                Add Entry
-              </button>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white">Accounting</h1>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Income & Expenses Management
+              </p>
             </div>
           </div>
+          <div className="flex items-center gap-2">
+            <button className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
+              <Download className="h-4 w-4" />
+              Export
+            </button>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              <Plus className="h-4 w-4" />
+              Add Entry
+            </button>
+          </div>
         </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Loading State */}
+        {loading && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          </div>
+        )}
+
+        {!loading && (
+          <>
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm">
@@ -214,9 +199,8 @@ export function SchoolAccountingPage() {
                 <TrendingUp className="h-6 w-6 text-green-600 dark:text-green-400" />
               </div>
             </div>
-            <p className="text-sm text-green-600 mt-2 flex items-center gap-1">
-              <ArrowUpRight className="h-4 w-4" />
-              +12.5% from last month
+            <p className="text-sm text-gray-500 mt-2">
+              Total revenue this period
             </p>
           </div>
 
@@ -232,9 +216,8 @@ export function SchoolAccountingPage() {
                 <TrendingDown className="h-6 w-6 text-red-600 dark:text-red-400" />
               </div>
             </div>
-            <p className="text-sm text-red-600 mt-2 flex items-center gap-1">
-              <ArrowDownRight className="h-4 w-4" />
-              -5.2% from last month
+            <p className="text-sm text-gray-500 mt-2">
+              Total expenses this period
             </p>
           </div>
 
@@ -435,7 +418,26 @@ export function SchoolAccountingPage() {
             </tbody>
           </table>
         </div>
-      </main>
-    </div>
+
+        {/* Empty State */}
+        {transactions.length === 0 && (
+          <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl">
+            <Calculator className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No transactions yet</h3>
+            <p className="text-gray-500 dark:text-gray-400 mb-4">
+              Add income and expense entries to track your school's finances
+            </p>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Add Entry
+            </button>
+          </div>
+        )}
+        </>
+        )}
+      </div>
+    </SchoolLayout>
   );
 }

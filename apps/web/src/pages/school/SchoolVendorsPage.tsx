@@ -42,56 +42,58 @@ export function SchoolVendorsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // TODO: Fetch approved vendors from API
-    // GET /api/schools/{schoolId}/vendors
-    setVendors([
-      {
-        id: 'v2',
-        merchantId: 'merch_abc123',
-        userId: 'user_123',
-        username: 'campus_canteen',
-        merchantName: 'John\'s Enterprises',
-        businessName: 'Campus Canteen',
-        category: 'Food & Beverages',
-        logo: null,
-        status: 'active',
-        approvedAt: '2024-01-15T10:00:00Z',
-        totalSales: 15000000,
-        transactionCount: 450,
-        productCount: 2,
-      },
-      {
-        id: 'v1',
-        merchantId: 'merch_def456',
-        userId: 'user_456',
-        username: 'bookshop_edu',
-        merchantName: 'Education Supplies Ltd',
-        businessName: 'Student Bookshop',
-        category: 'Books & Stationery',
-        logo: null,
-        status: 'active',
-        approvedAt: '2024-01-10T10:00:00Z',
-        totalSales: 8500000,
-        transactionCount: 120,
-        productCount: 3,
-      },
-      {
-        id: 'v3',
-        merchantId: 'merch_ghi789',
-        userId: 'user_789',
-        username: 'school_uniforms',
-        merchantName: 'Uniforms Plus Ltd',
-        businessName: 'School Uniforms',
-        category: 'Clothing',
-        logo: null,
-        status: 'active',
-        approvedAt: '2024-01-05T10:00:00Z',
-        totalSales: 3500000,
-        transactionCount: 45,
-        productCount: 1,
-      },
-    ]);
-    setLoading(false);
+    const fetchVendors = async () => {
+      setLoading(true);
+      try {
+        const schoolDomain = localStorage.getItem('school_domain');
+        if (!schoolDomain) {
+          setVendors([]);
+          setLoading(false);
+          return;
+        }
+
+        // Try to fetch approved vendors from SaaS API
+        try {
+          const response = await fetch(
+            `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/vendors`,
+            { method: 'GET', headers: { 'Accept': 'application/json' } }
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+            const vendorList = (data.vendors || data.data || data || []).map((v: any) => ({
+              id: v.id?.toString() || String(Math.random()),
+              merchantId: v.merchant_id || v.peeap_merchant_id || '',
+              userId: v.user_id || v.peeap_user_id || '',
+              username: v.username || null,
+              merchantName: v.merchant_name || v.business_name || '',
+              businessName: v.business_name || v.name || '',
+              category: v.category || 'General',
+              logo: v.logo || null,
+              status: v.status === 'active' ? 'active' : 'suspended',
+              approvedAt: v.approved_at || v.created_at || new Date().toISOString(),
+              totalSales: v.total_sales || 0,
+              transactionCount: v.transaction_count || 0,
+              productCount: v.product_count || 0,
+            }));
+            setVendors(vendorList);
+            return;
+          }
+        } catch (apiErr) {
+          console.log('SaaS vendors API not available:', apiErr);
+        }
+
+        // If SaaS API fails, show empty state - vendors will be added manually
+        setVendors([]);
+      } catch (err) {
+        console.error('Error fetching vendors:', err);
+        setVendors([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchVendors();
   }, []);
 
   const handleUserSelect = (user: SearchResult) => {
