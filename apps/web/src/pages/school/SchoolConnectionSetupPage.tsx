@@ -232,7 +232,20 @@ export function SchoolConnectionSetupPage() {
       // Redirect back to school with success
       window.location.href = redirectUrl.toString();
     } else {
-      navigate('/school');
+      // Store the school domain for dashboard use
+      let schoolSlug = 'school'; // fallback
+      if (schoolData?.subdomain) {
+        schoolSlug = schoolData.subdomain;
+        localStorage.setItem('school_domain', schoolData.subdomain);
+      } else if (originUrl) {
+        // Extract subdomain from origin URL (e.g., samstead.gov.school.edu.sl -> samstead)
+        schoolSlug = originUrl.split('.')[0];
+        localStorage.setItem('school_domain', schoolSlug);
+      }
+      if (schoolData?.school_id) {
+        localStorage.setItem('schoolId', schoolData.school_id);
+      }
+      navigate(`/${schoolSlug}`);
     }
   };
 

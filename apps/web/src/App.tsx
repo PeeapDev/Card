@@ -211,7 +211,18 @@ import {
   SchoolAuthCallbackPage,
   SchoolConnectionSetupPage,
   QuickAccessPage,
+  SsoCallbackPage,
 } from '@/pages/school';
+
+// School home redirect - navigates to the school-specific URL based on stored domain
+function SchoolHomeRedirect() {
+  const schoolDomain = localStorage.getItem('school_domain');
+  // Redirect to school-specific URL if domain is stored, otherwise to login
+  if (schoolDomain) {
+    return <Navigate to={`/${schoolDomain}`} replace />;
+  }
+  return <Navigate to="/login" replace />;
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -318,7 +329,7 @@ function App() {
               {isSchoolMode && (
                 <>
                   {/* Public routes */}
-                  <Route path="/" element={<Navigate to="/school" replace />} />
+                  <Route path="/" element={<SchoolHomeRedirect />} />
                   <Route path="/login" element={<SchoolLoginPage />} />
                   <Route path="/register" element={<SchoolRegisterPage />} />
                   <Route path="/school/login" element={<SchoolLoginPage />} />
@@ -328,15 +339,19 @@ function App() {
                   {/* Quick Access - PIN-based login from SaaS dashboard */}
                   <Route path="/auth/quick-access" element={<QuickAccessPage />} />
 
+                  {/* SSO Callback - Receives verified user data from one-time code exchange */}
+                  <Route path="/auth/sso-callback" element={<SsoCallbackPage />} />
+
                   {/* School Connection Setup - Wizard after SSO from school SaaS */}
                   <Route path="/school/connection-setup" element={<SchoolConnectionSetupPage />} />
 
                   {/* School Onboarding - Session-based registration */}
                   <Route path="/onboard" element={<SchoolOnboardingPage />} />
 
-                  {/* School Dashboard and Management */}
+                  {/* School Dashboard and Management - Dynamic routes with school slug */}
+                  {/* Routes with school slug (e.g., /samstead, /samstead/students) */}
                   <Route
-                    path="/school"
+                    path="/:schoolSlug"
                     element={
                       <ProtectedRoute>
                         <SchoolDashboard />
@@ -344,7 +359,7 @@ function App() {
                     }
                   />
                   <Route
-                    path="/school/students"
+                    path="/:schoolSlug/students"
                     element={
                       <ProtectedRoute>
                         <SchoolStudentsPage />
@@ -352,7 +367,7 @@ function App() {
                     }
                   />
                   <Route
-                    path="/school/vendors"
+                    path="/:schoolSlug/vendors"
                     element={
                       <ProtectedRoute>
                         <SchoolVendorsPage />
@@ -360,7 +375,7 @@ function App() {
                     }
                   />
                   <Route
-                    path="/school/shop"
+                    path="/:schoolSlug/shop"
                     element={
                       <ProtectedRoute>
                         <SchoolShopPage />
@@ -368,7 +383,7 @@ function App() {
                     }
                   />
                   <Route
-                    path="/school/transactions"
+                    path="/:schoolSlug/transactions"
                     element={
                       <ProtectedRoute>
                         <SchoolTransactionsPage />
@@ -376,7 +391,7 @@ function App() {
                     }
                   />
                   <Route
-                    path="/school/settings"
+                    path="/:schoolSlug/settings"
                     element={
                       <ProtectedRoute>
                         <SchoolSettingsPage />
@@ -384,7 +399,7 @@ function App() {
                     }
                   />
                   <Route
-                    path="/school/fees"
+                    path="/:schoolSlug/fees"
                     element={
                       <ProtectedRoute>
                         <SchoolFeesPage />
@@ -392,7 +407,7 @@ function App() {
                     }
                   />
                   <Route
-                    path="/school/staff"
+                    path="/:schoolSlug/staff"
                     element={
                       <ProtectedRoute>
                         <SchoolStaffPage />
@@ -400,7 +415,7 @@ function App() {
                     }
                   />
                   <Route
-                    path="/school/accounting"
+                    path="/:schoolSlug/accounting"
                     element={
                       <ProtectedRoute>
                         <SchoolAccountingPage />
@@ -408,7 +423,7 @@ function App() {
                     }
                   />
                   <Route
-                    path="/school/salary"
+                    path="/:schoolSlug/salary"
                     element={
                       <ProtectedRoute>
                         <SchoolSalaryPage />
@@ -416,7 +431,7 @@ function App() {
                     }
                   />
                   <Route
-                    path="/school/invoices"
+                    path="/:schoolSlug/invoices"
                     element={
                       <ProtectedRoute>
                         <SchoolInvoicesPage />
@@ -424,7 +439,7 @@ function App() {
                     }
                   />
                   <Route
-                    path="/school/reports"
+                    path="/:schoolSlug/reports"
                     element={
                       <ProtectedRoute>
                         <SchoolReportsPage />
@@ -433,7 +448,7 @@ function App() {
                   />
 
                   {/* Catch-all redirect */}
-                  <Route path="*" element={<Navigate to="/school" replace />} />
+                  <Route path="*" element={<SchoolHomeRedirect />} />
                 </>
               )}
 
@@ -658,6 +673,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <CashBoxSetupWizard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/school-utilities"
+                element={
+                  <ProtectedRoute>
+                    <SchoolUtilitiesPage />
                   </ProtectedRoute>
                 }
               />

@@ -7,7 +7,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { useAuth } from './AuthContext';
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase';
 
 export interface AppConfig {
   id: string;
@@ -40,7 +40,7 @@ interface AppsContextType {
 
 const AppsContext = createContext<AppsContextType | undefined>(undefined);
 
-// List of all available apps
+// List of all available merchant apps
 const ALL_APPS = [
   'pos',
   'events',
@@ -51,6 +51,66 @@ const ALL_APPS = [
   'fuel_station',
   'transportation',
 ];
+
+// Merchant app metadata with colors (green-based palette for merchant)
+export const MERCHANT_APP_METADATA = {
+  pos: {
+    id: 'pos',
+    name: 'Point of Sale',
+    description: 'Full POS system with inventory',
+    color: 'from-emerald-500 to-green-600',  // Green for retail/sales
+    icon: 'ShoppingCart',
+  },
+  events: {
+    id: 'events',
+    name: 'Events',
+    description: 'Create and manage events',
+    color: 'from-teal-500 to-cyan-600',  // Teal for events
+    icon: 'Calendar',
+  },
+  terminal: {
+    id: 'terminal',
+    name: 'Payment Terminal',
+    description: 'Accept NFC payments',
+    color: 'from-green-500 to-emerald-600',  // Green for payments
+    icon: 'Nfc',
+  },
+  driver_wallet: {
+    id: 'driver_wallet',
+    name: 'Driver Wallet',
+    description: 'Manage driver payments',
+    color: 'from-lime-500 to-green-600',  // Lime/green for transport
+    icon: 'Wallet',
+  },
+  invoices: {
+    id: 'invoices',
+    name: 'Invoices',
+    description: 'Create and send invoices',
+    color: 'from-slate-500 to-gray-600',  // Slate for documents
+    icon: 'FileText',
+  },
+  payment_links: {
+    id: 'payment_links',
+    name: 'Payment Links',
+    description: 'Create shareable payment links',
+    color: 'from-cyan-500 to-teal-600',  // Cyan for links
+    icon: 'Link2',
+  },
+  fuel_station: {
+    id: 'fuel_station',
+    name: 'Fuel Station',
+    description: 'Fuel station management',
+    color: 'from-orange-500 to-amber-600',  // Orange for fuel
+    icon: 'Fuel',
+  },
+  transportation: {
+    id: 'transportation',
+    name: 'Transportation',
+    description: 'Transport management',
+    color: 'from-sky-500 to-blue-600',  // Sky blue for transport
+    icon: 'Car',
+  },
+};
 
 interface AppsProviderProps {
   children: ReactNode;
@@ -76,7 +136,7 @@ export function AppsProvider({ children }: AppsProviderProps) {
       const merchantId = user.id;
 
       // Fetch all app settings for this merchant
-      const { data: appSettings, error } = await supabase
+      const { data: appSettings, error } = await supabaseAdmin
         .from('merchant_app_settings')
         .select('*')
         .eq('merchant_id', merchantId);
@@ -190,7 +250,7 @@ export function AppsProvider({ children }: AppsProviderProps) {
 
     // Persist to database
     try {
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from('merchant_app_settings')
         .upsert({
           merchant_id: user.id,
@@ -233,7 +293,7 @@ export function AppsProvider({ children }: AppsProviderProps) {
 
     // Persist to database
     try {
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from('merchant_app_settings')
         .upsert({
           merchant_id: user.id,
@@ -261,11 +321,16 @@ export function AppsProvider({ children }: AppsProviderProps) {
   const completeAppSetup = async (appId: string, walletId?: string, settings?: Record<string, any>) => {
     if (!user?.id) return;
 
-    // Update local state
+    // Update local state - both enabledApps and appConfigs
+    setEnabledApps(prev => ({
+      ...prev,
+      [appId]: true,
+    }));
     setAppConfigs(prev => ({
       ...prev,
       [appId]: {
         ...prev[appId],
+        enabled: true,
         setup_completed: true,
         wallet_id: walletId,
         settings: settings,
@@ -290,7 +355,7 @@ export function AppsProvider({ children }: AppsProviderProps) {
         updateData.settings = settings;
       }
 
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from('merchant_app_settings')
         .upsert(updateData, {
           onConflict: 'merchant_id,app_id',
@@ -334,7 +399,7 @@ export function AppsProvider({ children }: AppsProviderProps) {
 
     // Persist to database
     try {
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from('merchant_app_settings')
         .upsert({
           merchant_id: user.id,
@@ -371,7 +436,7 @@ export function AppsProvider({ children }: AppsProviderProps) {
 
     // Persist to database
     try {
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from('merchant_app_settings')
         .upsert({
           merchant_id: user.id,

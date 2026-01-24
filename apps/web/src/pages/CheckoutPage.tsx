@@ -769,7 +769,7 @@ export function CheckoutPage() {
         {/* Powered by */}
         <div className="text-center mt-4">
           <a
-            href="https://peeap.com"
+            href="https://my.peeap.com"
             target="_blank"
             rel="noopener noreferrer"
             className="text-sm text-white/70 hover:text-white"

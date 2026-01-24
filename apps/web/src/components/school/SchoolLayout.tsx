@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useState, useMemo } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import {
   GraduationCap,
@@ -28,24 +28,26 @@ interface SchoolLayoutProps {
   children: React.ReactNode;
 }
 
-const navigation = [
-  { name: 'Dashboard', href: '/school', icon: LayoutDashboard },
-  { name: 'Students', href: '/school/students', icon: Users },
-  { name: 'Staff', href: '/school/staff', icon: UserCog },
-  { name: 'Fees', href: '/school/fees', icon: Receipt },
-  { name: 'Salary', href: '/school/salary', icon: Banknote },
-  { name: 'Accounting', href: '/school/accounting', icon: Calculator },
-  { name: 'Invoices', href: '/school/invoices', icon: FileText },
-  { name: 'Transactions', href: '/school/transactions', icon: CreditCard },
-  { name: 'Vendors', href: '/school/vendors', icon: Store },
-  { name: 'Shop', href: '/school/shop', icon: ShoppingBag },
-  { name: 'Reports', href: '/school/reports', icon: BarChart3 },
-  { name: 'Settings', href: '/school/settings', icon: Settings },
+// Navigation template - paths will be prefixed with school slug
+const navigationTemplate = [
+  { name: 'Dashboard', path: '', icon: LayoutDashboard },
+  { name: 'Students', path: '/students', icon: Users },
+  { name: 'Staff', path: '/staff', icon: UserCog },
+  { name: 'Fees', path: '/fees', icon: Receipt },
+  { name: 'Salary', path: '/salary', icon: Banknote },
+  { name: 'Accounting', path: '/accounting', icon: Calculator },
+  { name: 'Invoices', path: '/invoices', icon: FileText },
+  { name: 'Transactions', path: '/transactions', icon: CreditCard },
+  { name: 'Vendors', path: '/vendors', icon: Store },
+  { name: 'Shop', path: '/shop', icon: ShoppingBag },
+  { name: 'Reports', path: '/reports', icon: BarChart3 },
+  { name: 'Settings', path: '/settings', icon: Settings },
 ];
 
 export function SchoolLayout({ children }: SchoolLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { schoolSlug } = useParams<{ schoolSlug: string }>();
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(() =>
@@ -54,8 +56,21 @@ export function SchoolLayout({ children }: SchoolLayoutProps) {
 
   // Get school info from localStorage (set during login)
   const schoolId = localStorage.getItem('schoolId');
+  const schoolDomain = localStorage.getItem('school_domain');
   const schoolRole = localStorage.getItem('schoolRole') || 'admin';
   const isDemoMode = localStorage.getItem('demoMode') === 'true';
+
+  // Use school slug from URL or fallback to stored domain or 'school'
+  const currentSchoolSlug = schoolSlug || schoolDomain || 'school';
+
+  // Build navigation with dynamic school slug
+  const navigation = useMemo(() =>
+    navigationTemplate.map(item => ({
+      ...item,
+      href: `/${currentSchoolSlug}${item.path}`,
+    })),
+    [currentSchoolSlug]
+  );
 
   const handleLogout = async () => {
     // Clear school-specific data
@@ -79,8 +94,9 @@ export function SchoolLayout({ children }: SchoolLayoutProps) {
   };
 
   const isActive = (href: string) => {
-    if (href === '/school') {
-      return location.pathname === '/school';
+    // Check exact match for dashboard
+    if (href === `/${currentSchoolSlug}`) {
+      return location.pathname === `/${currentSchoolSlug}` || location.pathname === `/${currentSchoolSlug}/`;
     }
     return location.pathname.startsWith(href);
   };

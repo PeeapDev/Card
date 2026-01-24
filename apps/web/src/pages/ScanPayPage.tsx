@@ -268,59 +268,42 @@ export function ScanPayPage() {
 
     const paymentCurrency = session?.currencyCode || 'SLE';
 
-    // Fetch all wallets for the user
+    // Fetch ONLY primary/currency wallets for payments
+    // Other wallet types (savings, driver, business, cashbox) cannot be used for external payments
+    // They can only receive money or transfer to the main currency wallet
     const { data: userWallets, error: walletsError } = await supabase
       .from('wallets')
       .select('id, name, balance, wallet_type, currency, status')
-      .eq('user_id', user.id);
+      .eq('user_id', user.id)
+      .eq('wallet_type', 'primary') // Only primary/currency wallets can send payments
+      .eq('status', 'ACTIVE');
 
     if (walletsError) {
       console.error('Error fetching wallets:', walletsError);
       return;
     }
 
-    console.log('All user wallets:', userWallets);
-    console.log('Payment currency:', paymentCurrency);
-
     if (userWallets && userWallets.length > 0) {
-      // Filter for active wallets only (handle both ACTIVE and active)
-      const allActiveWallets = userWallets.filter(w =>
-        w.status?.toLowerCase() === 'active'
-      );
+      // Sort: matching currency first, then by balance
+      const sortedWallets = userWallets.sort((a, b) => {
+        // Matching currency gets priority
+        const aMatches = a.currency === paymentCurrency || (!a.currency && paymentCurrency === 'SLE');
+        const bMatches = b.currency === paymentCurrency || (!b.currency && paymentCurrency === 'SLE');
+        if (aMatches && !bMatches) return -1;
+        if (!aMatches && bMatches) return 1;
+        // Then sort by balance
+        return b.balance - a.balance;
+      });
 
-      // Separate wallets by currency match
-      const matchingCurrencyWallets = allActiveWallets.filter(w =>
-        w.currency === paymentCurrency || (!w.currency && paymentCurrency === 'SLE')
-      );
-
-      const otherWallets = allActiveWallets.filter(w =>
-        w.currency !== paymentCurrency && (w.currency || paymentCurrency !== 'SLE')
-      );
-
-      console.log('Matching currency wallets:', matchingCurrencyWallets);
-      console.log('Other wallets:', otherWallets);
-
-      // Show matching currency wallets first, sorted by balance (highest first)
-      // Then other wallets after
-      const sortedWallets = [
-        ...matchingCurrencyWallets.sort((a, b) => b.balance - a.balance),
-        ...otherWallets.sort((a, b) => b.balance - a.balance)
-      ];
-
-      if (sortedWallets.length === 0) {
-        console.error('No active wallets found');
-        return;
-      }
-
-      // Map wallet types to friendly names if name is missing
+      // Map wallet types to friendly names based on currency
       const walletsWithNames = sortedWallets.map(w => ({
         ...w,
-        name: w.name || getWalletName(w.wallet_type),
+        name: w.name || getCurrencyWalletName(w.currency),
       }));
 
       setWallets(walletsWithNames);
 
-      // Select wallet with highest balance that can afford the payment AND matches currency
+      // Select wallet that matches payment currency and can afford the payment
       const paymentAmount = session?.amount || 0;
       const affordableMatchingWallet = walletsWithNames
         .filter(w => {
@@ -329,7 +312,7 @@ export function ScanPayPage() {
         })
         .sort((a, b) => b.balance - a.balance)[0];
 
-      // If no matching wallet can afford, select first matching currency wallet (even with insufficient balance)
+      // If no matching wallet can afford, select first matching currency wallet
       const firstMatchingWallet = walletsWithNames.find(w =>
         w.currency === paymentCurrency || (!w.currency && paymentCurrency === 'SLE')
       );
@@ -341,6 +324,17 @@ export function ScanPayPage() {
       const selectedIndex = walletsWithNames.findIndex(w => w.id === selectedId);
       setCurrentWalletIndex(selectedIndex >= 0 ? selectedIndex : 0);
     }
+  };
+
+  // Get friendly wallet name based on currency
+  const getCurrencyWalletName = (currency?: string): string => {
+    const names: Record<string, string> = {
+      SLE: 'Leone Wallet',
+      USD: 'Dollar Wallet',
+      EUR: 'Euro Wallet',
+      GBP: 'Pound Wallet',
+    };
+    return names[currency || 'SLE'] || `${currency} Wallet`;
   };
 
   // Handle wallet carousel navigation

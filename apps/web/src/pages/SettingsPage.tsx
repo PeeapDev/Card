@@ -2,7 +2,7 @@
  * Settings Page
  *
  * Comprehensive settings hub for user preferences:
- * - Apps (Cash Box, Events, School Utilities)
+ * - Apps (Cash Box, Events, Fees)
  * - Bank Accounts
  * - Payment Preferences
  * - Notifications
@@ -226,6 +226,7 @@ export function SettingsPage() {
   const enabledAppsCount = [
     isAppEnabled('cashbox'),
     isAppEnabled('events'),
+    isAppEnabled('cards'),
     isAppEnabled('school_utilities'),
   ].filter(Boolean).length;
 
@@ -361,7 +362,44 @@ export function SettingsPage() {
               )}
             </div>
 
-            {/* School Utilities App */}
+            {/* Cards App */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-200 dark:border-gray-700">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-lg">
+                    <CreditCard className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-white">Cards</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Virtual & physical</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleAppToggle('cards')}
+                  disabled={appsLoading}
+                  className="flex-shrink-0"
+                >
+                  {isAppEnabled('cards') ? (
+                    <ToggleRight className="w-10 h-10 text-indigo-500" />
+                  ) : (
+                    <ToggleLeft className="w-10 h-10 text-gray-400" />
+                  )}
+                </button>
+              </div>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                Manage virtual and physical payment cards
+              </p>
+              {isAppEnabled('cards') && (
+                <Link
+                  to="/cards"
+                  className="inline-flex items-center text-sm text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
+                >
+                  Manage Cards <ChevronRight className="w-4 h-4" />
+                </Link>
+              )}
+            </div>
+
+            {/* Fees App */}
             <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-200 dark:border-gray-700">
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
@@ -369,7 +407,7 @@ export function SettingsPage() {
                     <GraduationCap className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-gray-900 dark:text-white">School Utilities</h3>
+                    <h3 className="font-semibold text-gray-900 dark:text-white">Fees</h3>
                     <p className="text-xs text-gray-500 dark:text-gray-400">School finances</p>
                   </div>
                 </div>
@@ -393,7 +431,7 @@ export function SettingsPage() {
                   to="/school-utilities"
                   className="inline-flex items-center text-sm text-blue-600 dark:text-blue-400 hover:underline font-medium"
                 >
-                  Open School Utilities <ChevronRight className="w-4 h-4" />
+                  Open Fees <ChevronRight className="w-4 h-4" />
                 </Link>
               )}
             </div>

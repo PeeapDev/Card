@@ -512,7 +512,7 @@ export class ChatWidget {
   private getPoweredByHTML(): string {
     return `
       <div class="peeap-chat-powered">
-        Powered by <a href="https://peeap.com" target="_blank" rel="noopener">Peeap</a>
+        Powered by <a href="https://my.peeap.com" target="_blank" rel="noopener">Peeap</a>
       </div>
     `;
   }

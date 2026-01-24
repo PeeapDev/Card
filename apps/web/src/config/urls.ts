@@ -16,7 +16,7 @@ export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 // App URLs
 export const APP_URL = import.meta.env.VITE_APP_URL || 'https://my.peeap.com';
 export const CHECKOUT_URL = import.meta.env.VITE_CHECKOUT_URL || 'https://checkout.peeap.com';
-export const MERCHANT_URL = import.meta.env.VITE_MERCHANT_URL || 'https://merchant.peeap.com';
+export const MERCHANT_URL = import.meta.env.VITE_MERCHANT_URL || 'https://my.peeap.com';
 export const PAY_URL = import.meta.env.VITE_PAY_URL || 'https://pay.peeap.com';
 
 // Monime Payment Gateway

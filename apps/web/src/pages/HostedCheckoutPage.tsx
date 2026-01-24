@@ -1637,7 +1637,7 @@ export function HostedCheckoutPage() {
         </div>
 
         <p className="text-center mt-4 text-sm text-gray-400">
-          Powered by <a href="https://peeap.com" target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:text-indigo-600">Peeap</a>
+          Powered by <a href="https://my.peeap.com" target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:text-indigo-600">Peeap</a>
         </p>
       </div>
     </div>

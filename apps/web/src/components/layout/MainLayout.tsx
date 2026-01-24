@@ -13,7 +13,6 @@ import {
   Send,
   QrCode,
   Package,
-  HelpCircle,
   Smartphone,
   Store,
   ShoppingBag,
@@ -48,19 +47,37 @@ interface MainLayoutProps {
   children: ReactNode;
 }
 
+// Default nav items - always visible, no need to enable
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/wallets', label: 'Wallets', icon: Wallet },
   { path: '/send', label: 'Send Money', icon: Send },
   { path: '/receive', label: 'Receive Money', icon: QrCode },
-  { path: '/payout', label: 'Mobile Money Payout', icon: Smartphone },
+  { path: '/payout', label: 'Cashout', icon: Smartphone },
   { path: '/marketplace', label: 'Shop', icon: ShoppingBag },
-  // Cash Box is added dynamically based on user settings
-  { path: '/cards', label: 'Cards', icon: CreditCard },
   { path: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
-  { path: '/messages', label: 'Messages', icon: MessageSquare },
-  { path: '/support', label: 'Help & Support', icon: HelpCircle },
+  { path: '/messages', label: 'Chat', icon: MessageSquare },
 ];
+
+// Helper to manage recent apps in sessionStorage
+const RECENT_APPS_KEY = 'personal_recent_apps';
+const MAX_RECENT_APPS = 2;
+
+function getRecentApps(): string[] {
+  try {
+    const stored = sessionStorage.getItem(RECENT_APPS_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
+
+function addRecentApp(appId: string): string[] {
+  const recent = getRecentApps().filter(id => id !== appId);
+  const updated = [appId, ...recent].slice(0, MAX_RECENT_APPS);
+  sessionStorage.setItem(RECENT_APPS_KEY, JSON.stringify(updated));
+  return updated;
+}
 
 export function MainLayout({ children }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -70,10 +87,16 @@ export function MainLayout({ children }: MainLayoutProps) {
   const [hasStaffPositions, setHasStaffPositions] = useState(false);
   const [hasEventStaffPositions, setHasEventStaffPositions] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [recentApps, setRecentApps] = useState<string[]>([]);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const appsMenuRef = useRef<HTMLDivElement>(null);
   const { user, logout, activeRole, switchRole } = useAuth();
   const { isAppEnabled } = useUserApps();
+
+  // Load recent apps on mount
+  useEffect(() => {
+    setRecentApps(getRecentApps());
+  }, []);
 
   // Sync activeRole to 'user' when on personal dashboard
   useEffect(() => {
@@ -210,13 +233,15 @@ export function MainLayout({ children }: MainLayoutProps) {
     navigate('/login');
   };
 
-  // Define all available user apps for the app launcher
+  // Optional apps for personal accounts - must be enabled by user
   // These apps are ONLY accessible via the app launcher, not the sidebar
+  // Personal account apps use blue/purple/pink color palette
+  // Note: "My Tickets" is accessed from within Events app, not a separate app
   const allUserApps = [
-    { id: 'cashbox', label: 'Cash Box', icon: Package, path: '/pots', color: 'from-amber-500 to-orange-500', enabled: isAppEnabled('cashbox') },
     { id: 'events', label: 'Events', icon: Calendar, path: '/events', color: 'from-purple-500 to-pink-500', enabled: isAppEnabled('events') },
-    { id: 'tickets', label: 'My Tickets', icon: Ticket, path: '/my-tickets', color: 'from-violet-500 to-purple-500', enabled: isAppEnabled('events') }, // Part of Events app
-    { id: 'school_utilities', label: 'School', icon: GraduationCap, path: '/school-utilities', color: 'from-blue-500 to-cyan-500', enabled: isAppEnabled('school_utilities') },
+    { id: 'cashbox', label: 'Cash Box', icon: Package, path: '/pots', color: 'from-amber-500 to-orange-500', enabled: isAppEnabled('cashbox') },
+    { id: 'cards', label: 'Cards', icon: CreditCard, path: '/cards', color: 'from-indigo-500 to-blue-500', enabled: isAppEnabled('cards') },
+    { id: 'school_utilities', label: 'School Fees', icon: GraduationCap, path: '/school-utilities', color: 'from-blue-500 to-cyan-500', enabled: isAppEnabled('school_utilities') },
   ];
 
   const enabledApps = allUserApps.filter(app => app.enabled);
@@ -325,6 +350,42 @@ export function MainLayout({ children }: MainLayoutProps) {
                 </Link>
               );
             })}
+
+            {/* Recent/Active Apps - Show up to 2 recently used apps */}
+            {recentApps.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700/50">
+                <p className="px-4 mb-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Recent
+                </p>
+                {recentApps.map((appId) => {
+                  const app = allUserApps.find(a => a.id === appId);
+                  if (!app || !app.enabled) return null;
+                  const Icon = app.icon;
+                  const isActive = location.pathname === app.path || location.pathname.startsWith(app.path + '/');
+                  return (
+                    <Link
+                      key={app.id}
+                      to={app.path}
+                      onClick={() => setRecentApps(addRecentApp(app.id))}
+                      className={clsx(
+                        'flex items-center px-4 py-2.5 rounded-lg transition-colors mb-1',
+                        isActive
+                          ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
+                          : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                      )}
+                    >
+                      <div className={clsx(
+                        'w-8 h-8 rounded-lg bg-gradient-to-br flex items-center justify-center mr-3 shadow-sm',
+                        app.color
+                      )}>
+                        <Icon className="w-4 h-4 text-white" />
+                      </div>
+                      <span className="text-sm font-medium">{app.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
           </nav>
 
           {/* App Launcher */}
@@ -355,18 +416,17 @@ export function MainLayout({ children }: MainLayoutProps) {
               {appsMenuOpen && (
                 <div
                   className={clsx(
-                    'absolute bottom-full left-0 right-0 mb-2 p-4 rounded-xl shadow-lg border z-50',
-                    !isDarkMode && 'bg-white border-gray-200'
+                    'absolute bottom-full left-0 right-0 mb-2 p-4 rounded-xl shadow-2xl border z-50',
+                    'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
                   )}
-                  style={isDarkMode ? {
-                    backgroundColor: glassColors.bg,
-                    borderColor: glassColors.border,
-                    backdropFilter: 'blur(24px)',
-                    WebkitBackdropFilter: 'blur(24px)',
-                  } : undefined}
                 >
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">Your Apps</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-900 dark:text-white">Personal Apps</span>
+                      <span className="px-2 py-0.5 text-[10px] font-medium bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 rounded-full">
+                        Personal
+                      </span>
+                    </div>
                     <Link
                       to="/settings"
                       className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
@@ -377,26 +437,31 @@ export function MainLayout({ children }: MainLayoutProps) {
                   </div>
 
                   {enabledAppsCount > 0 ? (
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-3 gap-4">
                       {enabledApps.map((app) => {
                         const Icon = app.icon;
+                        const isActive = location.pathname === app.path || location.pathname.startsWith(app.path + '/');
                         return (
                           <Link
                             key={app.id}
                             to={app.path}
                             onClick={() => {
+                              setRecentApps(addRecentApp(app.id));
                               setAppsMenuOpen(false);
                               setSidebarOpen(false);
                             }}
-                            className="flex flex-col items-center p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors group"
+                            className="flex flex-col items-center p-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-all duration-200 group"
                           >
                             <div className={clsx(
-                              'w-12 h-12 rounded-xl bg-gradient-to-br flex items-center justify-center mb-2 shadow-lg group-hover:scale-105 transition-transform',
-                              app.color
+                              'w-14 h-14 rounded-2xl bg-gradient-to-br flex items-center justify-center mb-2 transition-all duration-300 ease-out',
+                              'shadow-lg group-hover:shadow-xl group-hover:scale-110 group-active:scale-95',
+                              'group-hover:-translate-y-1',
+                              app.color,
+                              isActive && 'ring-2 ring-primary-500 ring-offset-2 dark:ring-offset-gray-800'
                             )}>
-                              <Icon className="w-6 h-6 text-white" />
+                              <Icon className="w-7 h-7 text-white drop-shadow-sm" />
                             </div>
-                            <span className="text-xs font-medium text-gray-700 dark:text-gray-300 text-center">
+                            <span className="text-[11px] font-medium text-gray-700 dark:text-gray-300 text-center leading-tight">
                               {app.label}
                             </span>
                           </Link>
@@ -429,14 +494,8 @@ export function MainLayout({ children }: MainLayoutProps) {
         <header
           className={clsx(
             'sticky top-0 z-30 h-16 border-b',
-            !isDarkMode && 'bg-white border-gray-200'
+            'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700'
           )}
-          style={isDarkMode ? {
-            backgroundColor: glassColors.bg,
-            borderColor: glassColors.border,
-            backdropFilter: 'blur(24px)',
-            WebkitBackdropFilter: 'blur(24px)',
-          } : undefined}
           role="banner"
         >
           <div className="flex items-center justify-between h-full px-4 lg:px-8">

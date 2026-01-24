@@ -64,7 +64,8 @@ export function getUserDashboard(roles: UserRole[] | undefined): string {
   }
 
   // Priority order for dashboard redirect
-  const priorityOrder: UserRole[] = ['superadmin', 'admin', 'merchant', 'developer', 'agent', 'user'];
+  // Users go to personal dashboard first, then can switch to merchant/other roles
+  const priorityOrder: UserRole[] = ['superadmin', 'admin', 'user', 'merchant', 'developer', 'agent'];
 
   for (const role of priorityOrder) {
     if (roles.includes(role)) {

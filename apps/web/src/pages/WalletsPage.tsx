@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { Wallet, Plus, ArrowDownRight, ArrowUpRight, MoreVertical, Snowflake, Send, QrCode, Copy, CheckCircle, Search, User, X, AlertCircle, Package, ChevronDown, Loader2, XCircle, ArrowLeftRight, Smartphone, Trash2, ArrowRightLeft } from 'lucide-react';
+import { Wallet, Plus, ArrowDownRight, ArrowUpRight, MoreVertical, Snowflake, Send, QrCode, Copy, CheckCircle, Search, User, X, AlertCircle, Package, ChevronDown, Loader2, XCircle, ArrowLeftRight, Smartphone, Trash2, ArrowRightLeft, Car, Store, CreditCard, PiggyBank, Banknote, DollarSign, Coins } from 'lucide-react';
 import { Card, CardHeader, CardTitle, Button } from '@/components/ui';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { CreatePotModal } from '@/components/pots';
@@ -300,7 +300,27 @@ export function WalletsPage() {
     if (wallet.walletType === 'driver') return 'Driver Wallet';
     if (wallet.walletType === 'pos') return 'POS Wallet';
     if (wallet.walletType === 'merchant') return 'Merchant Wallet';
+    if (wallet.walletType === 'savings') return 'Savings Wallet';
     return `${wallet.currency} Wallet`;
+  };
+
+  // Get wallet icon based on type and currency
+  const getWalletIcon = (wallet: any) => {
+    const walletType = wallet.walletType || wallet.wallet_type;
+    const currency = wallet.currency;
+
+    // Icon based on wallet type
+    if (walletType === 'driver') return { icon: Car, color: 'text-yellow-600', bg: 'bg-yellow-100 dark:bg-yellow-900/30' };
+    if (walletType === 'pos') return { icon: Store, color: 'text-purple-600', bg: 'bg-purple-100 dark:bg-purple-900/30' };
+    if (walletType === 'merchant' || walletType === 'business') return { icon: Store, color: 'text-green-600', bg: 'bg-green-100 dark:bg-green-900/30' };
+    if (walletType === 'savings') return { icon: PiggyBank, color: 'text-pink-600', bg: 'bg-pink-100 dark:bg-pink-900/30' };
+
+    // For primary wallets, use currency-based icons
+    if (currency === 'USD') return { icon: DollarSign, color: 'text-green-600', bg: 'bg-green-100 dark:bg-green-900/30' };
+    if (currency === 'SLE') return { icon: Coins, color: 'text-primary-600', bg: 'bg-primary-100 dark:bg-primary-900/30' };
+
+    // Default wallet icon
+    return { icon: Wallet, color: 'text-primary-600', bg: 'bg-primary-100 dark:bg-primary-900/30' };
   };
 
   // Get the main/default wallet ID from user or first wallet
@@ -598,33 +618,36 @@ export function WalletsPage() {
           <div className="text-center py-12">Loading wallets...</div>
         ) : wallets && wallets.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {wallets.map((wallet) => (
+            {wallets.map((wallet) => {
+              const walletIconData = getWalletIcon(wallet);
+              const WalletIcon = walletIconData.icon;
+              return (
               <Card key={wallet.id} className="relative">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center">
                     <div
                       className={clsx(
                         'w-12 h-12 rounded-full flex items-center justify-center',
-                        wallet.status === 'ACTIVE' ? 'bg-primary-100' : 'bg-gray-100'
+                        wallet.status === 'ACTIVE' ? walletIconData.bg : 'bg-gray-100 dark:bg-gray-700'
                       )}
                     >
-                      <Wallet
+                      <WalletIcon
                         className={clsx(
                           'w-6 h-6',
-                          wallet.status === 'ACTIVE' ? 'text-primary-600' : 'text-gray-400'
+                          wallet.status === 'ACTIVE' ? walletIconData.color : 'text-gray-400'
                         )}
                       />
                     </div>
                     <div className="ml-3">
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-gray-900">{getWalletDisplayName(wallet)}</p>
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">{getWalletDisplayName(wallet)}</p>
                         {isPrimaryWallet(wallet) && (
                           <span className="px-2 py-0.5 text-xs font-bold bg-green-500 text-white rounded-full shadow-sm">
                             Main
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-500">{wallet.currency}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{wallet.currency}</p>
                     </div>
                   </div>
                   {/* Wallet menu */}
@@ -642,7 +665,7 @@ export function WalletsPage() {
                           className="fixed inset-0 z-10"
                           onClick={() => setOpenMenuWalletId(null)}
                         />
-                        <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                        <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-20">
                           {/* Add Money option */}
                           <button
                             onClick={() => {
@@ -650,7 +673,7 @@ export function WalletsPage() {
                               setSelectedWallet(wallet);
                               setShowDepositModal(true);
                             }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
                             disabled={wallet.status !== 'ACTIVE'}
                           >
                             <ArrowDownRight className="w-4 h-4" />
@@ -665,7 +688,7 @@ export function WalletsPage() {
                                 setSelectedWallet(wallet);
                                 setShowInternalTransferModal(true);
                               }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
                               disabled={wallet.status !== 'ACTIVE'}
                             >
                               <ArrowLeftRight className="w-4 h-4" />
@@ -681,7 +704,7 @@ export function WalletsPage() {
                                 setSelectedWallet(wallet);
                                 setShowExchangeModal(true);
                               }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-purple-700 hover:bg-purple-50"
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30"
                               disabled={wallet.status !== 'ACTIVE'}
                             >
                               <ArrowRightLeft className="w-4 h-4" />
@@ -697,7 +720,7 @@ export function WalletsPage() {
                                 setSelectedWallet(wallet);
                                 setShowTransferModal(true);
                               }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
                               disabled={wallet.status !== 'ACTIVE'}
                             >
                               <Send className="w-4 h-4" />
@@ -712,7 +735,7 @@ export function WalletsPage() {
                               setSelectedWallet(wallet);
                               setShowReceiveModal(true);
                             }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
                             disabled={wallet.status !== 'ACTIVE'}
                           >
                             <QrCode className="w-4 h-4" />
@@ -723,7 +746,7 @@ export function WalletsPage() {
                           {!isPrimaryWallet(wallet) && (
                             <button
                               onClick={() => handleSetAsMain(wallet)}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
                               disabled={setMainLoading === wallet.id}
                             >
                               {setMainLoading === wallet.id ? (
@@ -741,7 +764,7 @@ export function WalletsPage() {
                               setOpenMenuWalletId(null);
                               handleFreeze(wallet);
                             }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
                           >
                             <Snowflake className={clsx('w-4 h-4', wallet.status === 'FROZEN' ? 'text-blue-500' : '')} />
                             {wallet.status === 'FROZEN' ? 'Unfreeze' : 'Freeze'}
@@ -750,14 +773,14 @@ export function WalletsPage() {
                           {/* Delete - only for non-primary wallets */}
                           {!isPrimaryWallet(wallet) && (
                             <>
-                              <div className="border-t border-gray-100 my-1" />
+                              <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
                               <button
                                 onClick={() => {
                                   setOpenMenuWalletId(null);
                                   setWalletToDelete(wallet);
                                   setShowDeleteModal(true);
                                 }}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30"
                               >
                                 <Trash2 className="w-4 h-4" />
                                 Delete Wallet
@@ -771,22 +794,22 @@ export function WalletsPage() {
                 </div>
 
                 <div className="mb-4">
-                  <p className="text-sm text-gray-500">Balance</p>
-                  <p className="text-2xl font-bold text-gray-900">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Balance</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
                     {formatCurrency(wallet.balance, wallet.currency)}
                   </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 mb-4 text-xs text-gray-500">
+                <div className="grid grid-cols-2 gap-2 mb-4 text-xs text-gray-500 dark:text-gray-400">
                   <div>
                     <p>Daily Limit</p>
-                    <p className="font-medium text-gray-900">
+                    <p className="font-medium text-gray-900 dark:text-white">
                       {formatCurrency(wallet.dailyLimit, wallet.currency)}
                     </p>
                   </div>
                   <div>
                     <p>Monthly Limit</p>
-                    <p className="font-medium text-gray-900">
+                    <p className="font-medium text-gray-900 dark:text-white">
                       {formatCurrency(wallet.monthlyLimit, wallet.currency)}
                     </p>
                   </div>
@@ -865,7 +888,8 @@ export function WalletsPage() {
                   </Button>
                 </div>
               </Card>
-            ))}
+            );
+          })}
           </div>
         ) : (
           <Card className="text-center py-12">

@@ -123,6 +123,42 @@ class TopupWalletDto {
   initiated_by: string;
 }
 
+// Student Fee Payment DTO (for student self-service inside SaaS)
+class PayFeeDto {
+  student_index_number: string;
+  fee_id: string;
+  fee_name: string;
+  amount: number;
+  currency: string;
+  pin: string;
+  school_id: number;
+  academic_year?: string;
+  term?: string;
+}
+
+class PayFeeResponse {
+  success: boolean;
+  data: {
+    transaction_id: string;
+    fee_id: string;
+    amount_paid: number;
+    currency: string;
+    balance_before: number;
+    balance_after: number;
+    completed_at: string;
+    receipt: {
+      number: string;
+      url: string;
+    };
+  };
+}
+
+// Student wallet balance for SaaS (get balance by index number without auth)
+class StudentWalletInfoDto {
+  student_index_number: string;
+  school_id: number;
+}
+
 @ApiTags('School Integration')
 @Controller('school')
 export class SchoolController {
@@ -501,6 +537,97 @@ export class SchoolController {
       paymentMethod: body.payment_method,
       reference: body.reference,
       initiatedBy: body.initiated_by,
+    });
+
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  // ============================================
+  // Student Self-Service Fee Payment (Flow 4)
+  // ============================================
+
+  /**
+   * Get student wallet info by index number
+   * Used by SaaS to show wallet balance before fee payment
+   */
+  @Post('students/wallet-info')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get student wallet info',
+    description: 'Returns student wallet balance for fee payment UI in SaaS',
+  })
+  @ApiBearerAuth()
+  async getStudentWalletInfo(
+    @Body() body: StudentWalletInfoDto,
+    @Headers('authorization') authHeader: string,
+  ): Promise<{
+    success: boolean;
+    data: {
+      wallet_id: string;
+      balance: number;
+      currency: string;
+      student_name: string;
+      username?: string;
+    };
+  }> {
+    await this.validateToken(authHeader);
+
+    const result = await this.schoolService.getStudentWalletInfo({
+      indexNumber: body.student_index_number,
+      schoolId: body.school_id,
+    });
+
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  /**
+   * Student pays fee using wallet balance
+   * Called from inside the SaaS website when student clicks "Pay with Wallet"
+   */
+  @Post('students/pay-fee')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Pay fee from student wallet',
+    description: 'Allows student to pay school fees using their PeEAP wallet balance. Requires PIN verification.',
+  })
+  @ApiBearerAuth()
+  @ApiResponse({
+    status: 200,
+    description: 'Fee paid successfully',
+    type: PayFeeResponse,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Insufficient balance',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Invalid PIN or access token',
+  })
+  async payFeeFromWallet(
+    @Body() body: PayFeeDto,
+    @Headers('authorization') authHeader: string,
+  ): Promise<PayFeeResponse> {
+    await this.validateToken(authHeader);
+
+    const result = await this.schoolService.payFeeFromWallet({
+      studentIndexNumber: body.student_index_number,
+      feeId: body.fee_id,
+      feeName: body.fee_name,
+      amount: body.amount,
+      currency: body.currency,
+      pin: body.pin,
+      schoolId: body.school_id,
+      academicYear: body.academic_year,
+      term: body.term,
     });
 
     return {

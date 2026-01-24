@@ -151,12 +151,22 @@ export function SchoolAuthCallbackPage() {
           // Store school ID for the portal
           localStorage.setItem('schoolId', data.schoolAdmin.schoolId);
           localStorage.setItem('schoolRole', data.schoolAdmin.role);
+          // Store school domain for API calls (subdomain like 'samstead')
+          let schoolSlug = 'school'; // fallback
+          if (data.schoolAdmin.subdomain) {
+            schoolSlug = data.schoolAdmin.subdomain;
+            localStorage.setItem('school_domain', data.schoolAdmin.subdomain);
+          } else if (data.schoolAdmin.domain) {
+            // If full domain provided, extract subdomain
+            schoolSlug = data.schoolAdmin.domain.split('.')[0];
+            localStorage.setItem('school_domain', schoolSlug);
+          }
 
           setMessage('Sign in successful! Redirecting...');
 
-          // Redirect to dashboard
+          // Redirect to school-specific dashboard URL
           setTimeout(() => {
-            navigate('/school');
+            navigate(`/${schoolSlug}`);
           }, 1500);
         }
 

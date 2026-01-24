@@ -29,6 +29,8 @@ export interface UserAppsSettings {
   cashbox_auto_deposit_frequency: 'daily' | 'weekly' | 'monthly';
   cashbox_pin_lock_enabled: boolean;
   cashbox_pin_hash: string | null;
+  // Cards
+  cards_enabled: boolean;
   // School Utilities
   school_utilities_enabled: boolean;
   school_utilities_setup_completed: boolean;
@@ -67,6 +69,8 @@ const DEFAULT_USER_APPS_SETTINGS: Omit<UserAppsSettings, 'user_id'> = {
   cashbox_auto_deposit_frequency: 'monthly',
   cashbox_pin_lock_enabled: false,
   cashbox_pin_hash: null,
+  // Cards
+  cards_enabled: false,
   // School Utilities
   school_utilities_enabled: false,
   school_utilities_setup_completed: false,
@@ -118,6 +122,8 @@ export const getUserAppsSettings = async (userId: string): Promise<UserAppsSetti
         cashbox_auto_deposit_frequency: data.cashbox_auto_deposit_frequency ?? 'monthly',
         cashbox_pin_lock_enabled: data.cashbox_pin_lock_enabled ?? false,
         cashbox_pin_hash: data.cashbox_pin_hash ?? null,
+        // Cards
+        cards_enabled: data.cards_enabled ?? false,
         // School Utilities
         school_utilities_enabled: data.school_utilities_enabled ?? false,
         school_utilities_setup_completed: data.school_utilities_setup_completed ?? false,
@@ -160,6 +166,8 @@ export const updateUserAppsSettings = async (
     if (updates.cashbox_auto_deposit_frequency !== undefined) dbUpdates.cashbox_auto_deposit_frequency = updates.cashbox_auto_deposit_frequency;
     if (updates.cashbox_pin_lock_enabled !== undefined) dbUpdates.cashbox_pin_lock_enabled = updates.cashbox_pin_lock_enabled;
     if (updates.cashbox_pin_hash !== undefined) dbUpdates.cashbox_pin_hash = updates.cashbox_pin_hash;
+    // Cards
+    if (updates.cards_enabled !== undefined) dbUpdates.cards_enabled = updates.cards_enabled;
     // School Utilities
     if (updates.school_utilities_enabled !== undefined) dbUpdates.school_utilities_enabled = updates.school_utilities_enabled;
     if (updates.school_utilities_setup_completed !== undefined) dbUpdates.school_utilities_setup_completed = updates.school_utilities_setup_completed;
@@ -196,6 +204,8 @@ export const updateUserAppsSettings = async (
       cashbox_auto_deposit_frequency: data.cashbox_auto_deposit_frequency ?? 'monthly',
       cashbox_pin_lock_enabled: data.cashbox_pin_lock_enabled ?? false,
       cashbox_pin_hash: data.cashbox_pin_hash ?? null,
+      // Cards
+      cards_enabled: data.cards_enabled ?? false,
       // School Utilities
       school_utilities_enabled: data.school_utilities_enabled ?? false,
       school_utilities_setup_completed: data.school_utilities_setup_completed ?? false,
@@ -215,12 +225,14 @@ export const updateUserAppsSettings = async (
 /**
  * Enable a specific app
  */
-export const enableApp = async (userId: string, appId: 'events' | 'cashbox' | 'school_utilities'): Promise<void> => {
+export const enableApp = async (userId: string, appId: 'events' | 'cashbox' | 'cards' | 'school_utilities'): Promise<void> => {
   const updates: Partial<UserAppsSettings> = {};
   if (appId === 'events') {
     updates.events_enabled = true;
   } else if (appId === 'cashbox') {
     updates.cashbox_enabled = true;
+  } else if (appId === 'cards') {
+    updates.cards_enabled = true;
   } else if (appId === 'school_utilities') {
     updates.school_utilities_enabled = true;
     updates.school_utilities_setup_completed = true; // No setup wizard needed
@@ -231,13 +243,15 @@ export const enableApp = async (userId: string, appId: 'events' | 'cashbox' | 's
 /**
  * Disable a specific app
  */
-export const disableApp = async (userId: string, appId: 'events' | 'cashbox' | 'school_utilities'): Promise<void> => {
+export const disableApp = async (userId: string, appId: 'events' | 'cashbox' | 'cards' | 'school_utilities'): Promise<void> => {
   const updates: Partial<UserAppsSettings> = {};
   if (appId === 'events') {
     updates.events_enabled = false;
   } else if (appId === 'cashbox') {
     updates.cashbox_enabled = false;
     updates.cashbox_setup_completed = false;
+  } else if (appId === 'cards') {
+    updates.cards_enabled = false;
   } else if (appId === 'school_utilities') {
     updates.school_utilities_enabled = false;
     updates.school_utilities_setup_completed = false;
@@ -272,12 +286,14 @@ export const isCashBoxSetupCompleted = async (userId: string): Promise<boolean> 
 /**
  * Check if an app is enabled
  */
-export const isAppEnabled = async (userId: string, appId: 'events' | 'cashbox' | 'school_utilities'): Promise<boolean> => {
+export const isAppEnabled = async (userId: string, appId: 'events' | 'cashbox' | 'cards' | 'school_utilities'): Promise<boolean> => {
   const settings = await getUserAppsSettings(userId);
   if (appId === 'events') {
     return settings.events_enabled;
   } else if (appId === 'cashbox') {
     return settings.cashbox_enabled && settings.cashbox_setup_completed;
+  } else if (appId === 'cards') {
+    return settings.cards_enabled;
   } else if (appId === 'school_utilities') {
     return settings.school_utilities_enabled;
   }

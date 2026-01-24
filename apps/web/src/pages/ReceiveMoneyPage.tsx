@@ -65,28 +65,54 @@ export function ReceiveMoneyPage() {
     setWalletError(null);
 
     try {
-      const { data: wallet, error } = await supabase
+      // Try to get primary wallet first, fallback to any active SLE wallet
+      let { data: wallet, error } = await supabase
         .from('wallets')
         .select('id, balance')
         .eq('user_id', user?.id)
         .eq('wallet_type', 'primary')
+        .eq('status', 'ACTIVE')
         .single();
 
-      if (error) {
-        console.error('Wallet fetch error:', error);
-        setWalletError('Failed to load wallet');
-        return;
+      // If no primary wallet found, try getting the default SLE wallet
+      if (error || !wallet) {
+        const { data: sleWallet, error: sleError } = await supabase
+          .from('wallets')
+          .select('id, balance')
+          .eq('user_id', user?.id)
+          .eq('currency', 'SLE')
+          .eq('status', 'ACTIVE')
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .single();
+
+        if (sleError || !sleWallet) {
+          // Last resort: get any active wallet
+          const { data: anyWallet, error: anyError } = await supabase
+            .from('wallets')
+            .select('id, balance')
+            .eq('user_id', user?.id)
+            .eq('status', 'ACTIVE')
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .single();
+
+          if (anyError || !anyWallet) {
+            console.error('No wallet found:', anyError);
+            setWalletError('No active wallet found. Please create a wallet first.');
+            return;
+          }
+          wallet = anyWallet;
+        } else {
+          wallet = sleWallet;
+        }
       }
 
-      if (wallet) {
-        setWalletId(wallet.id);
-        setWalletBalance(wallet.balance);
-      } else {
-        setWalletError('No wallet found');
-      }
+      setWalletId(wallet.id);
+      setWalletBalance(wallet.balance);
     } catch (err) {
       console.error('Wallet fetch exception:', err);
-      setWalletError('Failed to load wallet');
+      setWalletError('Failed to load wallet. Please try again.');
     } finally {
       setWalletLoading(false);
     }
@@ -133,8 +159,8 @@ export function ReceiveMoneyPage() {
       <div className="max-w-2xl mx-auto space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Receive Money</h1>
-          <p className="text-gray-500">Get paid via QR code, NFC, or payment link</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Receive Money</h1>
+          <p className="text-gray-500 dark:text-gray-400">Get paid via QR code, NFC, or payment link</p>
         </div>
 
         {/* Balance Card */}
@@ -155,7 +181,7 @@ export function ReceiveMoneyPage() {
         {/* Amount Input */}
         <Card className="p-4">
           <div className="flex items-center justify-between mb-4">
-            <label className="font-medium text-gray-700">Request specific amount?</label>
+            <label className="font-medium text-gray-700 dark:text-gray-200">Request specific amount?</label>
             <button
               onClick={() => setShowAmountInput(!showAmountInput)}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
@@ -173,7 +199,7 @@ export function ReceiveMoneyPage() {
           {showAmountInput && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm text-gray-600 mb-1">Amount</label>
+                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Amount</label>
                 <div className="relative">
                   <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
@@ -183,19 +209,19 @@ export function ReceiveMoneyPage() {
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                     placeholder="0.00"
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg text-xl font-semibold focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg text-xl font-semibold focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm text-gray-600 mb-1">Description (optional)</label>
+                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Description (optional)</label>
                 <input
                   type="text"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="What's this for?"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                 />
               </div>
             </div>
@@ -276,21 +302,21 @@ export function ReceiveMoneyPage() {
             <div className="space-y-6">
               <div className="text-center">
                 <Link2 className="w-16 h-16 text-primary-600 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900">Payment Link</h3>
-                <p className="text-gray-500 text-sm mt-1">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Payment Link</h3>
+                <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
                   Share this link to receive payments
                 </p>
               </div>
 
               {/* Generated Link */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-xs text-gray-500 mb-2">Your payment link:</p>
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Your payment link:</p>
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
                     readOnly
                     value={paymentLink || generatePaymentLink()}
-                    className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-mono truncate"
+                    className="flex-1 px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-mono truncate text-gray-900 dark:text-white"
                   />
                   <button
                     onClick={handleCopyLink}

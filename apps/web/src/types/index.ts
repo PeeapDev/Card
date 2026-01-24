@@ -63,6 +63,8 @@ export interface Wallet {
   monthlyLimit: number;
   createdAt: string;
   updatedAt: string;
+  walletType?: 'primary' | 'driver' | 'pot' | 'merchant' | 'pos' | 'business_plus' | 'business' | 'savings';
+  name?: string;
 }
 
 export interface Card {

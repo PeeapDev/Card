@@ -24,6 +24,8 @@ import {
   ChevronRight,
   Plus,
   Star,
+  User,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { Card, Button } from '@/components/ui';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -45,7 +47,7 @@ interface Bank {
   country: string;
 }
 
-type DestinationType = 'momo' | 'bank';
+type DestinationType = 'momo' | 'bank' | 'personal';
 type Step = 'select' | 'form' | 'processing' | 'success' | 'error';
 
 // Use relative path for same-origin API requests (avoids CORS issues and ensures correct deployment)
@@ -232,6 +234,10 @@ export function WithdrawPage() {
   const [bankAccountsLoading, setBankAccountsLoading] = useState(false);
   const [selectedBankAccount, setSelectedBankAccount] = useState<UserBankAccount | null>(null);
 
+  // Personal wallet (for merchant to personal transfers)
+  const [personalWallet, setPersonalWallet] = useState<{id: string; balance: number; currency: string} | null>(null);
+  const [hasBusinessWallet, setHasBusinessWallet] = useState(false);
+
   // Form state
   const [selectedWalletId, setSelectedWalletId] = useState<string>('');
   const [selectedProviderId, setSelectedProviderId] = useState<string>('');
@@ -281,19 +287,25 @@ export function WithdrawPage() {
     }
   }, [accountNumber, destinationType]);
 
-  // Calculate fee when amount changes
+  // Calculate fee when amount changes (no fee for personal wallet transfers)
   useEffect(() => {
     const amountNum = parseFloat(amount) || 0;
     if (amountNum > 0) {
-      // 2% fee only (no flat fee) - fees in new Leone (Le)
-      let calculatedFee = Math.round(amountNum * 0.02 * 100) / 100; // 2% fee
-      setFee(calculatedFee);
-      setTotalDeduction(amountNum + calculatedFee);
+      // No fee for internal personal wallet transfers
+      if (destinationType === 'personal') {
+        setFee(0);
+        setTotalDeduction(amountNum);
+      } else {
+        // 2% fee only (no flat fee) - fees in new Leone (Le)
+        let calculatedFee = Math.round(amountNum * 0.02 * 100) / 100; // 2% fee
+        setFee(calculatedFee);
+        setTotalDeduction(amountNum + calculatedFee);
+      }
     } else {
       setFee(0);
       setTotalDeduction(0);
     }
-  }, [amount]);
+  }, [amount, destinationType]);
 
   const loadProviders = async () => {
     try {
@@ -351,6 +363,37 @@ export function WithdrawPage() {
     setAccountName(account.accountName || '');
   };
 
+  // Load personal wallet for merchant-to-personal transfers
+  const loadPersonalWallet = async () => {
+    if (!user?.id) return;
+
+    const { data } = await (await import('@/lib/supabase')).supabase
+      .from('wallets')
+      .select('id, balance, currency, wallet_type')
+      .eq('user_id', user.id)
+      .eq('wallet_type', 'primary')
+      .eq('currency', 'SLE')
+      .eq('status', 'ACTIVE')
+      .single();
+
+    if (data) {
+      setPersonalWallet(data);
+    }
+  };
+
+  // Check if user has business wallet (merchant)
+  useEffect(() => {
+    if (wallets && wallets.length > 0) {
+      const businessWallet = wallets.find(w => w.walletType === 'business');
+      setHasBusinessWallet(!!businessWallet);
+
+      // Load personal wallet if they have a business wallet
+      if (businessWallet) {
+        loadPersonalWallet();
+      }
+    }
+  }, [wallets]);
+
   const getCurrencySymbol = (code: string): string => {
     // SLE is the new Sierra Leone Leone after redenomination - symbol is "Le"
     if (code === 'SLE') return 'Le';
@@ -371,8 +414,15 @@ export function WithdrawPage() {
       return false;
     }
 
+    // For personal wallet transfers
+    if (destinationType === 'personal') {
+      if (!personalWallet) {
+        setError('Personal wallet not found');
+        return false;
+      }
+    }
     // For bank withdrawals, check selected bank account
-    if (destinationType === 'bank') {
+    else if (destinationType === 'bank') {
       if (!selectedBankAccount) {
         setError('Please select a bank account');
         return false;
@@ -398,13 +448,14 @@ export function WithdrawPage() {
 
     const amountNum = parseFloat(amount);
     if (!amountNum || amountNum < 1) {
-      setError('Minimum withdrawal amount is Le 1');
+      setError('Minimum transfer amount is Le 1');
       return false;
     }
 
     const selectedWallet = wallets?.find(w => w.id === selectedWalletId);
     if (!selectedWallet || selectedWallet.balance < totalDeduction) {
-      setError(`Insufficient balance. You need ${formatCurrency(totalDeduction)} (including fee)`);
+      const feeText = destinationType === 'personal' ? '' : ' (including fee)';
+      setError(`Insufficient balance. You need ${formatCurrency(totalDeduction)}${feeText}`);
       return false;
     }
 
@@ -423,7 +474,65 @@ export function WithdrawPage() {
     setError('');
 
     try {
-      // Build request payload based on destination type
+      // Handle personal wallet transfer directly via Supabase (no API needed)
+      if (destinationType === 'personal' && personalWallet) {
+        const { supabase } = await import('@/lib/supabase');
+        const amountNum = parseFloat(amount);
+
+        // Deduct from source wallet (business wallet)
+        const sourceWallet = wallets?.find(w => w.id === selectedWalletId);
+        if (!sourceWallet) throw new Error('Source wallet not found');
+
+        const { error: deductError } = await supabase
+          .from('wallets')
+          .update({ balance: sourceWallet.balance - amountNum })
+          .eq('id', selectedWalletId);
+
+        if (deductError) throw new Error('Failed to deduct from source wallet');
+
+        // Credit personal wallet
+        const { error: creditError } = await supabase
+          .from('wallets')
+          .update({ balance: personalWallet.balance + amountNum })
+          .eq('id', personalWallet.id);
+
+        if (creditError) {
+          // Rollback
+          await supabase
+            .from('wallets')
+            .update({ balance: sourceWallet.balance })
+            .eq('id', selectedWalletId);
+          throw new Error('Failed to credit personal wallet');
+        }
+
+        // Create transaction record
+        const transactionRef = `TXN${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+        await supabase
+          .from('transactions')
+          .insert({
+            reference: transactionRef,
+            type: 'TRANSFER',
+            amount: amountNum,
+            currency_code: 'SLE',
+            status: 'COMPLETED',
+            description: 'Transfer to personal wallet',
+            sender_wallet_id: selectedWalletId,
+            recipient_wallet_id: personalWallet.id,
+            sender_user_id: user.id,
+            recipient_user_id: user.id,
+            metadata: {
+              transferType: 'business_to_personal',
+              instant: true,
+            },
+          });
+
+        setPayoutId(transactionRef);
+        setStep('success');
+        refetchWallets();
+        return;
+      }
+
+      // For bank/momo, use the API
       const payload: Record<string, any> = {
         userId: user.id,
         walletId: selectedWalletId,
@@ -474,7 +583,7 @@ export function WithdrawPage() {
       if (err.name === 'SyntaxError' && err.message.includes('JSON')) {
         setError('Service temporarily unavailable. Please try again later.');
       } else {
-        setError(err.message || 'Withdrawal failed. Please try again.');
+        setError(err.message || 'Transfer failed. Please try again.');
       }
       setStep('error');
     }
@@ -497,10 +606,14 @@ export function WithdrawPage() {
   const selectedWallet = wallets?.find(w => w.id === selectedWalletId);
   const providerDisplay = destinationType === 'momo' && PROVIDER_DISPLAY[selectedProviderId]
     ? PROVIDER_DISPLAY[selectedProviderId]
+    : destinationType === 'personal'
+    ? { name: 'Personal Wallet', color: 'text-purple-600', icon: 'PW', bgColor: 'bg-purple-100' }
     : { name: selectedBankAccount?.bankName || 'Bank', color: 'text-blue-600', icon: 'BK', bgColor: 'bg-blue-100' };
 
   // Check if form is ready for submission
-  const isFormValid = destinationType === 'bank'
+  const isFormValid = destinationType === 'personal'
+    ? personalWallet && parseFloat(amount) >= 1
+    : destinationType === 'bank'
     ? selectedBankAccount && parseFloat(amount) >= 1
     : selectedProviderId && accountNumber && parseFloat(amount) >= 1 &&
       /^[0-9]{8}$/.test(accountNumber.replace(/\s+/g, '').replace(/^(\+232|232)/, ''));
@@ -586,6 +699,26 @@ export function WithdrawPage() {
                   </div>
                   <ArrowRight className="w-5 h-5 text-gray-400" />
                 </button>
+
+                {/* Transfer to Personal Wallet - Only show for merchants with business wallets */}
+                {hasBusinessWallet && personalWallet && (
+                  <button
+                    onClick={() => {
+                      setDestinationType('personal');
+                      setStep('form');
+                    }}
+                    className="flex items-center gap-4 p-4 border-2 border-gray-200 dark:border-gray-700 rounded-xl hover:border-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors text-left"
+                  >
+                    <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-xl">
+                      <User className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900 dark:text-white">Personal Wallet</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Transfer to your personal PeEAP wallet</p>
+                    </div>
+                    <ArrowRight className="w-5 h-5 text-gray-400" />
+                  </button>
+                )}
               </div>
 
               {/* Info */}
@@ -716,6 +849,34 @@ export function WithdrawPage() {
                 </div>
               )}
 
+              {/* Personal Wallet Transfer Info */}
+              {destinationType === 'personal' && personalWallet && (
+                <div className="p-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-xl">
+                  <div className="flex items-start gap-3">
+                    <ArrowRightLeft className="w-5 h-5 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-purple-800 dark:text-purple-200">Transfer to Personal Wallet</p>
+                      <p className="text-sm text-purple-600 dark:text-purple-300 mt-1">
+                        Funds will be instantly transferred to your personal wallet. No fees for internal transfers.
+                      </p>
+                      <div className="mt-3 p-3 bg-white dark:bg-gray-800 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                            <Wallet className="w-5 h-5 text-green-600 dark:text-green-400" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">Personal Leone Wallet</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              Balance: Le {personalWallet.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Amount */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amount</label>
@@ -740,12 +901,20 @@ export function WithdrawPage() {
                     <span>Amount:</span>
                     <span>{formatCurrency(parseFloat(amount) || 0)}</span>
                   </div>
-                  <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                    <span>Fee (2%):</span>
-                    <span>{formatCurrency(fee)}</span>
-                  </div>
+                  {destinationType !== 'personal' && (
+                    <div className="flex justify-between text-gray-600 dark:text-gray-400">
+                      <span>Fee (2%):</span>
+                      <span>{formatCurrency(fee)}</span>
+                    </div>
+                  )}
+                  {destinationType === 'personal' && (
+                    <div className="flex justify-between text-green-600 dark:text-green-400">
+                      <span>Fee:</span>
+                      <span>Free</span>
+                    </div>
+                  )}
                   <div className="flex justify-between font-medium text-gray-900 dark:text-white pt-1 border-t border-gray-200 dark:border-gray-700">
-                    <span>Total Deduction:</span>
+                    <span>{destinationType === 'personal' ? 'Total Transfer:' : 'Total Deduction:'}</span>
                     <span className="text-green-600">{formatCurrency(totalDeduction)}</span>
                   </div>
                 </div>
@@ -796,13 +965,28 @@ export function WithdrawPage() {
 
               {/* Summary */}
               {isFormValid && (
-                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                  <p className="text-sm text-blue-700 dark:text-blue-300">
-                    <strong>Sending:</strong> {formatCurrency(parseFloat(amount))} to {providerDisplay.name}
+                <div className={`p-3 rounded-lg border ${
+                  destinationType === 'personal'
+                    ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800'
+                    : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+                }`}>
+                  <p className={`text-sm ${
+                    destinationType === 'personal'
+                      ? 'text-purple-700 dark:text-purple-300'
+                      : 'text-blue-700 dark:text-blue-300'
+                  }`}>
+                    <strong>{destinationType === 'personal' ? 'Transferring:' : 'Sending:'}</strong> {formatCurrency(parseFloat(amount))} to {providerDisplay.name}
                   </p>
-                  <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">
-                    {destinationType === 'momo' ? `+232 ${accountNumber}` : accountNumber}
-                  </p>
+                  {destinationType !== 'personal' && (
+                    <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">
+                      {destinationType === 'momo' ? `+232 ${accountNumber}` : accountNumber}
+                    </p>
+                  )}
+                  {destinationType === 'personal' && fee === 0 && (
+                    <p className="text-xs text-purple-500 dark:text-purple-400 mt-1">
+                      No fees for internal transfers
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -846,23 +1030,37 @@ export function WithdrawPage() {
         {step === 'success' && (
           <Card className="p-6">
             <div className="flex flex-col items-center justify-center py-8">
-              <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-4">
-                <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${
+                destinationType === 'personal'
+                  ? 'bg-purple-100 dark:bg-purple-900/30'
+                  : 'bg-green-100 dark:bg-green-900/30'
+              }`}>
+                <CheckCircle className={`w-8 h-8 ${
+                  destinationType === 'personal'
+                    ? 'text-purple-600 dark:text-purple-400'
+                    : 'text-green-600 dark:text-green-400'
+                }`} />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Withdrawal Initiated!</h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                {destinationType === 'personal' ? 'Transfer Complete!' : 'Withdrawal Initiated!'}
+              </h3>
               <p className="text-gray-500 dark:text-gray-400 text-center mb-2">
-                {formatCurrency(parseFloat(amount))} is being sent to {providerDisplay.name}
+                {formatCurrency(parseFloat(amount))} {destinationType === 'personal' ? 'has been transferred to' : 'is being sent to'} {providerDisplay.name}
               </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">
-                {destinationType === 'momo' ? `+232 ${accountNumber}` : accountNumber}
-              </p>
+              {destinationType !== 'personal' && (
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">
+                  {destinationType === 'momo' ? `+232 ${accountNumber}` : accountNumber}
+                </p>
+              )}
               {payoutId && (
                 <p className="text-xs text-gray-400 dark:text-gray-500 mb-6">
                   Reference: {payoutId.slice(0, 20)}...
                 </p>
               )}
               <p className="text-sm text-gray-500 text-center mb-6">
-                You will receive a notification once the transfer is complete.
+                {destinationType === 'personal'
+                  ? 'Your funds are now available in your personal wallet.'
+                  : 'You will receive a notification once the transfer is complete.'}
               </p>
               <Button onClick={handleReset} className="w-full max-w-xs">
                 Done

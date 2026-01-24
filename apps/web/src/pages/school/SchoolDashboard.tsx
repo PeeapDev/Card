@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { SchoolLayout } from '@/components/school';
 import {
@@ -48,6 +48,7 @@ interface RecentTransaction {
 
 export function SchoolDashboard() {
   const { user } = useAuth();
+  const { schoolSlug } = useParams<{ schoolSlug: string }>();
   const [stats, setStats] = useState<DashboardStats>({
     totalStudents: 0,
     activeStudents: 0,
@@ -66,8 +67,15 @@ export function SchoolDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Get school domain from localStorage (set during SSO login)
+  // Get school domain from URL params or localStorage (set during SSO login)
   const getSchoolDomain = () => {
+    // First, check URL params (school slug from dynamic route)
+    if (schoolSlug && schoolSlug !== 'school') {
+      // Store it for future use
+      localStorage.setItem('school_domain', schoolSlug);
+      return schoolSlug;
+    }
+
     // Try to get from various possible storage keys
     const schoolId = localStorage.getItem('schoolId');
     const schoolDomain = localStorage.getItem('school_domain');

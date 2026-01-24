@@ -2,7 +2,7 @@ import { supabase } from './supabase';
 import { authService } from './auth';
 
 // API base URL - use environment variable or default
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://peeap.com/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.peeap.com';
 
 export interface Contact {
   id: string;

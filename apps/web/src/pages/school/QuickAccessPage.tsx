@@ -11,6 +11,13 @@ interface TokenPayload {
   role: string;
   exp: number;
   iat: number;
+  // Added by Peeap backend after looking up the mapping
+  peeap_user_id?: string;
+  peeap_email?: string;
+  has_pin_setup?: boolean;
+  is_primary_admin?: boolean;
+  mapping_found?: boolean;
+  auto_mapped?: boolean;
 }
 
 /**
@@ -61,11 +68,24 @@ export function QuickAccessPage() {
       }
 
       const data = await response.json();
-      setUserInfo(data.payload);
+      const payload = data.payload as TokenPayload;
+
+      // Check if user has a Peeap account mapping
+      if (!payload.peeap_user_id && !payload.mapping_found) {
+        setStatus('error');
+        setError(
+          `Your school account (${payload.email}) is not linked to a Peeap account. ` +
+          'If you connected this school to Peeap, please ensure you\'re using the same email address. ' +
+          'Otherwise, contact your school administrator for access.'
+        );
+        return;
+      }
+
+      setUserInfo(payload);
       setStatus('pin');
 
       // Store for later use
-      sessionStorage.setItem('quick_access_user', JSON.stringify(data.payload));
+      sessionStorage.setItem('quick_access_user', JSON.stringify(payload));
       if (returnUrl) {
         sessionStorage.setItem('quick_access_return_url', returnUrl);
       }

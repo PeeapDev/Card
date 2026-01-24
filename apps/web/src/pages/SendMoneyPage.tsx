@@ -28,6 +28,7 @@ import {
   ArrowLeft,
   AtSign,
   Lock,
+  GraduationCap,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -53,6 +54,8 @@ interface Recipient {
   phone?: string;
   walletId: string;
   profilePicture?: string;
+  accountType?: 'user' | 'student';
+  schoolName?: string;
 }
 
 interface TransferResult {
@@ -193,20 +196,22 @@ export function SendMoneyPage() {
   const fetchWallet = async () => {
     if (!user?.id) return;
 
-    // Fetch all active wallets
+    // Only fetch primary/currency wallets for sending money
+    // Other wallet types (savings, cashbox, etc.) can receive but NOT send externally
+    // They can only transfer to the main currency wallet internally
     const { data: wallets } = await supabase
       .from('wallets')
       .select('id, balance, currency, wallet_type')
       .eq('user_id', user.id)
+      .eq('wallet_type', 'primary') // Only currency wallets can send
       .eq('status', 'ACTIVE')
-      .order('wallet_type', { ascending: true });
+      .order('currency', { ascending: true });
 
     if (wallets && wallets.length > 0) {
       setAllWallets(wallets);
-      // Prioritize: 1) SLE wallet, 2) Primary wallet, 3) First wallet
+      // Prioritize: 1) SLE wallet (default), 2) First wallet
       const sleWallet = wallets.find(w => w.currency === 'SLE');
-      const primaryWallet = wallets.find(w => w.wallet_type === 'primary');
-      const selectedWallet = sleWallet || primaryWallet || wallets[0];
+      const selectedWallet = sleWallet || wallets[0];
       setWalletId(selectedWallet.id);
       setWalletBalance(selectedWallet.balance);
       fetchRecentTransfers(selectedWallet.id);
@@ -466,7 +471,7 @@ export function SendMoneyPage() {
             </button>
           )}
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Send Money</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Send Money</h1>
             <p className="text-gray-500">Transfer money instantly</p>
           </div>
         </div>
@@ -488,7 +493,7 @@ export function SendMoneyPage() {
                   style={{ colorScheme: 'dark' }}
                 >
                   {allWallets.map((wallet) => (
-                    <option key={wallet.id} value={wallet.id} className="text-gray-900">
+                    <option key={wallet.id} value={wallet.id} className="text-gray-900 dark:text-white">
                       {wallet.currency} Wallet - {formatCurrency(wallet.balance)}
                     </option>
                   ))}
@@ -504,7 +509,7 @@ export function SendMoneyPage() {
         {/* Step: Select Method */}
         {step === 'method' && (
           <Card className="p-6 space-y-6">
-            <h2 className="font-semibold text-gray-900">How do you want to send?</h2>
+            <h2 className="font-semibold text-gray-900 dark:text-white">How do you want to send?</h2>
 
             <div className="grid grid-cols-1 gap-3">
               <button
@@ -518,7 +523,7 @@ export function SendMoneyPage() {
                   <Search className="w-6 h-6 text-blue-600" />
                 </div>
                 <div>
-                  <p className="font-medium text-gray-900">Search Recipient</p>
+                  <p className="font-medium text-gray-900 dark:text-white">Search Recipient</p>
                   <p className="text-sm text-gray-500">Find by name, email or phone</p>
                 </div>
               </button>
@@ -534,7 +539,7 @@ export function SendMoneyPage() {
                   <QrCode className="w-6 h-6 text-purple-600" />
                 </div>
                 <div>
-                  <p className="font-medium text-gray-900">Scan QR Code</p>
+                  <p className="font-medium text-gray-900 dark:text-white">Scan QR Code</p>
                   <p className="text-sm text-gray-500">Scan recipient's payment QR</p>
                 </div>
               </button>
@@ -550,7 +555,7 @@ export function SendMoneyPage() {
                   <Wifi className="w-6 h-6 text-green-600" />
                 </div>
                 <div>
-                  <p className="font-medium text-gray-900">NFC Tap to Pay</p>
+                  <p className="font-medium text-gray-900 dark:text-white">NFC Tap to Pay</p>
                   <p className="text-sm text-gray-500">Tap devices together</p>
                 </div>
               </button>
@@ -591,14 +596,34 @@ export function SendMoneyPage() {
         {/* Step: Search Recipient */}
         {step === 'recipient' && (
           <Card className="p-6 space-y-4">
-            <h2 className="font-semibold text-gray-900">Find Recipient</h2>
+            <h2 className="font-semibold text-gray-900 dark:text-white">Find Recipient</h2>
 
-            {/* Global User Search */}
+            {/* Global User Search - supports both regular users and student accounts */}
             <UserSearch
               placeholder="Search by @username, phone, or name..."
               excludeUserId={user?.id}
               autoFocus
               onSelect={async (searchResult) => {
+                // Student accounts already have wallet_id in the search result
+                if (searchResult.account_type === 'student' && searchResult.wallet_id) {
+                  setRecipient({
+                    id: searchResult.id,
+                    name: `${searchResult.first_name} ${searchResult.last_name}`,
+                    firstName: searchResult.first_name,
+                    lastName: searchResult.last_name,
+                    username: searchResult.username || undefined,
+                    email: undefined,
+                    phone: undefined,
+                    walletId: searchResult.wallet_id,
+                    profilePicture: searchResult.profile_picture || undefined,
+                    accountType: 'student',
+                    schoolName: searchResult.school_name,
+                  });
+                  setStep('amount');
+                  return;
+                }
+
+                // Regular users - need to look up their wallet
                 const { data: wallet } = await supabase
                   .from('wallets')
                   .select('id')
@@ -616,6 +641,8 @@ export function SendMoneyPage() {
                     email: searchResult.email || undefined,
                     phone: searchResult.phone || undefined,
                     walletId: wallet.id,
+                    profilePicture: searchResult.profile_picture || undefined,
+                    accountType: 'user',
                   });
                   setStep('amount');
                 } else {
@@ -629,12 +656,16 @@ export function SendMoneyPage() {
             />
 
             {/* Search Help */}
-            <div className="p-4 bg-blue-50 rounded-xl">
-              <p className="text-sm text-blue-700 font-medium mb-2">Search tips:</p>
-              <ul className="text-sm text-blue-600 space-y-1">
+            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
+              <p className="text-sm text-blue-700 dark:text-blue-300 font-medium mb-2">Search tips:</p>
+              <ul className="text-sm text-blue-600 dark:text-blue-400 space-y-1">
                 <li className="flex items-center gap-2">
                   <AtSign className="w-4 h-4" />
                   <span>Search by username: @johndoe</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <GraduationCap className="w-4 h-4" />
+                  <span>Send to students: @adams.koroma</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <Phone className="w-4 h-4" />
@@ -653,7 +684,7 @@ export function SendMoneyPage() {
         {step === 'amount' && recipient && (
           <Card className="p-6 space-y-6">
             {/* Recipient Info with Avatar */}
-            <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
+            <div className={`flex items-center gap-3 p-4 ${recipient.accountType === 'student' ? 'bg-purple-50 border border-purple-200' : 'bg-green-50 border border-green-200'} rounded-xl`}>
               <ProfileAvatar
                 firstName={recipient.firstName}
                 lastName={recipient.lastName}
@@ -661,22 +692,35 @@ export function SendMoneyPage() {
                 size="lg"
               />
               <div className="flex-1">
-                <p className="font-medium text-green-900">Sending to</p>
-                <p className="text-green-700">{recipient.name}</p>
+                <p className={`font-medium ${recipient.accountType === 'student' ? 'text-purple-900' : 'text-green-900'}`}>
+                  Sending to {recipient.accountType === 'student' && (
+                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 ml-1 rounded text-xs bg-purple-200 text-purple-700">
+                      <GraduationCap className="w-3 h-3" />
+                      Student
+                    </span>
+                  )}
+                </p>
+                <p className={recipient.accountType === 'student' ? 'text-purple-700' : 'text-green-700'}>{recipient.name}</p>
                 {recipient.username && (
-                  <p className="text-xs text-green-500 flex items-center gap-1">
+                  <p className={`text-xs flex items-center gap-1 ${recipient.accountType === 'student' ? 'text-purple-500' : 'text-green-500'}`}>
                     <AtSign className="w-3 h-3" />
                     {recipient.username}
                   </p>
                 )}
+                {recipient.schoolName && (
+                  <p className="text-xs text-purple-500 flex items-center gap-1">
+                    <GraduationCap className="w-3 h-3" />
+                    {recipient.schoolName}
+                  </p>
+                )}
                 {recipient.phone && (
-                  <p className="text-xs text-green-500 flex items-center gap-1">
+                  <p className={`text-xs flex items-center gap-1 ${recipient.accountType === 'student' ? 'text-purple-500' : 'text-green-500'}`}>
                     <Phone className="w-3 h-3" />
                     {recipient.phone}
                   </p>
                 )}
               </div>
-              <CheckCircle className="w-6 h-6 text-green-600" />
+              <CheckCircle className={`w-6 h-6 ${recipient.accountType === 'student' ? 'text-purple-600' : 'text-green-600'}`} />
             </div>
 
             {/* Amount Input */}
@@ -720,7 +764,7 @@ export function SendMoneyPage() {
                   </div>
                   <div className="flex justify-between text-sm mt-1">
                     <span className="text-gray-500">Recipient receives</span>
-                    <span className="font-medium text-gray-900">
+                    <span className="font-medium text-gray-900 dark:text-white">
                       {formatCurrency(parseFloat(amount) - fee)}
                     </span>
                   </div>
@@ -767,7 +811,7 @@ export function SendMoneyPage() {
                   size="xl"
                 />
               </div>
-              <h2 className="text-xl font-bold text-gray-900">Confirm Transfer</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Confirm Transfer</h2>
               <p className="text-gray-500">to {recipient.name}</p>
             </div>
 
@@ -853,7 +897,7 @@ export function SendMoneyPage() {
                   <CheckCircle className="w-10 h-10 text-green-600" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900">Transfer Successful!</h2>
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Transfer Successful!</h2>
                   <p className="text-gray-500 mt-2">
                     You sent {formatCurrency(parseFloat(amount))} to {recipient?.name}
                   </p>
@@ -879,7 +923,7 @@ export function SendMoneyPage() {
                   <XCircle className="w-10 h-10 text-red-600" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900">Transfer Failed</h2>
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Transfer Failed</h2>
                   <p className="text-gray-500 mt-2">{result.error}</p>
                 </div>
                 <button

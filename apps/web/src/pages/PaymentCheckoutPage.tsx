@@ -372,7 +372,7 @@ export function PaymentCheckoutPage() {
             {/* Download App Link */}
             <div className="text-center">
               <a
-                href="https://peeap.com/download"
+                href="https://my.peeap.com/download"
                 className="inline-flex items-center gap-1 text-sm text-primary-600 hover:text-primary-700"
               >
                 <Download className="w-4 h-4" />

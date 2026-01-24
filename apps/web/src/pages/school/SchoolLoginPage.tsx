@@ -17,11 +17,28 @@ export function SchoolLoginPage() {
   const { login, user } = useAuth();
   const navigate = useNavigate();
 
-  // Check if coming from school dashboard with quick_access param
+  // Check if coming from school dashboard with quick_access param or error from SSO
   useEffect(() => {
     const quickAccess = searchParams.get('quick_access');
     const userId = searchParams.get('user_id');
     const schoolId = searchParams.get('school_id');
+    const errorParam = searchParams.get('error');
+    const errorMessage = searchParams.get('message');
+
+    // Show error if redirected from SSO with error
+    if (errorParam) {
+      const errorMessages: Record<string, string> = {
+        missing_params: 'Missing required parameters. Please try again from your school system.',
+        invalid_domain: 'Invalid school domain.',
+        exchange_failed: 'Failed to verify your access. Please try again from your school system.',
+        invalid_code: 'Your access code has expired or already been used. Please try again from your school system.',
+        no_email: 'No email address found in your school account.',
+        network_error: 'Could not connect to school server.',
+        invalid_response: 'Invalid response from school server.',
+        server_error: 'A server error occurred. Please try again.',
+      };
+      setError(errorMessage || errorMessages[errorParam] || `Authentication error: ${errorParam}`);
+    }
 
     if (quickAccess === 'true' && userId) {
       setLoginMode('pin');

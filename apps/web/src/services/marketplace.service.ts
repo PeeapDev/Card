@@ -389,10 +389,16 @@ class MarketplaceService {
     featured?: boolean;
   }): Promise<MarketplaceStore[]> {
     try {
+      // Build base query - first try listed stores, then fallback to all active stores
       let query = supabase
         .from('marketplace_stores')
-        .select('*')
-        .eq('is_listed', true);
+        .select('*');
+
+      // Only filter by is_listed if not searching
+      // This allows discovery of all stores through search
+      if (!filters?.search) {
+        query = query.or('is_listed.eq.true,is_active.eq.true');
+      }
 
       if (filters?.category) {
         query = query.contains('store_categories', [filters.category]);

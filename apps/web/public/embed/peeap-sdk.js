@@ -585,4 +585,340 @@
 
   console.log('[PeeapSDK] v' + PeeapSDK.version + ' loaded');
 
+  // ============================================================
+  // PEEAP CHECKOUT - Modal-based embedded checkout
+  // ============================================================
+  // Usage:
+  //   PeeapCheckout.init({ publicKey: 'pk_xxx' });
+  //   PeeapCheckout.open({
+  //     amount: 50000,
+  //     currency: 'SLE',
+  //     onSuccess: function(result) { ... },
+  //     onError: function(error) { ... }
+  //   });
+  // ============================================================
+
+  var checkoutConfig = {
+    publicKey: null,
+    embedUrl: 'https://my.peeap.com',
+    apiUrl: 'https://api.peeap.com'
+  };
+
+  var checkoutCallbacks = {
+    onSuccess: function() {},
+    onError: function() {},
+    onClose: function() {}
+  };
+
+  var modalElement = null;
+  var iframeElement = null;
+  var currentSessionId = null;
+  var checkoutInitialized = false;
+
+  // Inject modal CSS
+  function injectModalStyles() {
+    if (document.getElementById('peeap-checkout-styles')) return;
+
+    var css = document.createElement('style');
+    css.id = 'peeap-checkout-styles';
+    css.textContent = [
+      '.peeap-modal-overlay {',
+      '  position: fixed;',
+      '  top: 0; left: 0; right: 0; bottom: 0;',
+      '  background: rgba(0, 0, 0, 0.6);',
+      '  z-index: 999999;',
+      '  display: flex;',
+      '  align-items: center;',
+      '  justify-content: center;',
+      '  opacity: 0;',
+      '  transition: opacity 0.3s ease;',
+      '}',
+      '.peeap-modal-overlay.peeap-visible {',
+      '  opacity: 1;',
+      '}',
+      '.peeap-modal-container {',
+      '  width: 100%;',
+      '  max-width: 420px;',
+      '  max-height: 90vh;',
+      '  margin: 16px;',
+      '  background: #fff;',
+      '  border-radius: 16px;',
+      '  overflow: hidden;',
+      '  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);',
+      '  transform: scale(0.95) translateY(20px);',
+      '  transition: transform 0.3s ease;',
+      '}',
+      '.peeap-modal-overlay.peeap-visible .peeap-modal-container {',
+      '  transform: scale(1) translateY(0);',
+      '}',
+      '.peeap-iframe {',
+      '  width: 100%;',
+      '  height: 600px;',
+      '  border: none;',
+      '  display: block;',
+      '}',
+      '@media (max-width: 480px) {',
+      '  .peeap-modal-container {',
+      '    max-width: 100%;',
+      '    max-height: 100%;',
+      '    margin: 0;',
+      '    border-radius: 0;',
+      '  }',
+      '  .peeap-iframe {',
+      '    height: 100vh;',
+      '  }',
+      '}'
+    ].join('\n');
+    document.head.appendChild(css);
+  }
+
+  // Handle messages from iframe
+  function handleCheckoutMessage(event) {
+    // Validate origin
+    if (!event.origin.includes('peeap.com') && !event.origin.includes('localhost')) {
+      return;
+    }
+
+    var data = event.data;
+    if (!data || !data.type || !data.type.startsWith('PEEAP_')) return;
+
+    console.log('[PeeapCheckout] Received message:', data.type);
+
+    switch (data.type) {
+      case 'PEEAP_READY':
+        console.log('[PeeapCheckout] Checkout ready');
+        break;
+
+      case 'PEEAP_HEIGHT':
+        if (iframeElement && data.height) {
+          iframeElement.style.height = Math.min(data.height, window.innerHeight * 0.9) + 'px';
+        }
+        break;
+
+      case 'PEEAP_SUCCESS':
+        console.log('[PeeapCheckout] Payment success:', data.result);
+        checkoutCallbacks.onSuccess(data.result);
+        PeeapCheckout.close();
+        break;
+
+      case 'PEEAP_ERROR':
+        console.error('[PeeapCheckout] Payment error:', data.error);
+        checkoutCallbacks.onError(data.error);
+        break;
+
+      case 'PEEAP_CLOSE':
+        PeeapCheckout.close();
+        break;
+    }
+  }
+
+  // PeeapCheckout object
+  var PeeapCheckout = {
+    version: '1.0.0',
+
+    /**
+     * Initialize PeeapCheckout
+     * @param {Object} options
+     * @param {string} options.publicKey - Your public key (pk_xxx)
+     * @param {string} [options.embedUrl] - Custom embed URL (for testing)
+     * @param {string} [options.apiUrl] - Custom API URL (for testing)
+     */
+    init: function(options) {
+      if (!options || !options.publicKey) {
+        console.error('[PeeapCheckout] init() requires publicKey');
+        return this;
+      }
+
+      checkoutConfig.publicKey = options.publicKey;
+
+      if (options.embedUrl) {
+        checkoutConfig.embedUrl = options.embedUrl;
+      }
+      if (options.apiUrl) {
+        checkoutConfig.apiUrl = options.apiUrl;
+      }
+
+      // Inject styles
+      injectModalStyles();
+
+      // Listen for messages from iframe
+      window.addEventListener('message', handleCheckoutMessage);
+
+      checkoutInitialized = true;
+      console.log('[PeeapCheckout] Initialized');
+
+      return this;
+    },
+
+    /**
+     * Open the checkout modal
+     * @param {Object} options
+     * @param {number} options.amount - Amount to charge
+     * @param {string} [options.currency='SLE'] - Currency code
+     * @param {string} [options.description] - Payment description
+     * @param {string} [options.reference] - Your order reference
+     * @param {Object} [options.customer] - Customer info (email, phone)
+     * @param {Object} [options.metadata] - Custom metadata
+     * @param {Function} [options.onSuccess] - Success callback
+     * @param {Function} [options.onError] - Error callback
+     * @param {Function} [options.onClose] - Close callback
+     */
+    open: function(options) {
+      var self = this;
+
+      if (!checkoutInitialized) {
+        console.error('[PeeapCheckout] Not initialized. Call PeeapCheckout.init() first.');
+        return;
+      }
+
+      if (!options || !options.amount) {
+        console.error('[PeeapCheckout] Amount is required');
+        return;
+      }
+
+      // Store callbacks
+      if (typeof options.onSuccess === 'function') {
+        checkoutCallbacks.onSuccess = options.onSuccess;
+      }
+      if (typeof options.onError === 'function') {
+        checkoutCallbacks.onError = options.onError;
+      }
+      if (typeof options.onClose === 'function') {
+        checkoutCallbacks.onClose = options.onClose;
+      }
+
+      // Create checkout session
+      var reference = options.reference || generateReference();
+      var idempotencyKey = generateIdempotencyKey();
+
+      console.log('[PeeapCheckout] Creating session...');
+
+      fetch(checkoutConfig.apiUrl + '/api/checkout/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          publicKey: checkoutConfig.publicKey,
+          amount: Math.round(options.amount),
+          currency: options.currency || 'SLE',
+          description: options.description || '',
+          reference: reference,
+          idempotencyKey: idempotencyKey,
+          customerEmail: options.customer ? options.customer.email : null,
+          customerPhone: options.customer ? options.customer.phone : null,
+          metadata: options.metadata || {},
+          allowedOrigin: window.location.origin
+        })
+      })
+      .then(function(response) {
+        return response.json();
+      })
+      .then(function(data) {
+        if (!data.sessionId) {
+          throw new Error(data.error || 'Failed to create checkout session');
+        }
+
+        currentSessionId = data.sessionId;
+        console.log('[PeeapCheckout] Session created:', currentSessionId);
+
+        // Create and show modal
+        self._createModal(data.sessionId);
+      })
+      .catch(function(error) {
+        console.error('[PeeapCheckout] Failed to create session:', error);
+        checkoutCallbacks.onError({
+          message: error.message || 'Failed to open checkout',
+          code: 'SESSION_ERROR'
+        });
+      });
+    },
+
+    /**
+     * Close the checkout modal
+     */
+    close: function() {
+      if (modalElement) {
+        modalElement.classList.remove('peeap-visible');
+        setTimeout(function() {
+          if (modalElement && modalElement.parentNode) {
+            modalElement.parentNode.removeChild(modalElement);
+          }
+          modalElement = null;
+          iframeElement = null;
+        }, 300);
+
+        checkoutCallbacks.onClose();
+      }
+      currentSessionId = null;
+    },
+
+    /**
+     * Create the modal element
+     * @private
+     */
+    _createModal: function(sessionId) {
+      var self = this;
+
+      // Remove existing modal if any
+      if (modalElement) {
+        this.close();
+      }
+
+      // Create modal structure
+      modalElement = document.createElement('div');
+      modalElement.className = 'peeap-modal-overlay';
+      modalElement.onclick = function(e) {
+        if (e.target === modalElement) {
+          self.close();
+        }
+      };
+
+      var container = document.createElement('div');
+      container.className = 'peeap-modal-container';
+
+      // Create iframe
+      var embedUrl = checkoutConfig.embedUrl + '/embed/checkout?session=' +
+        encodeURIComponent(sessionId) + '&origin=' +
+        encodeURIComponent(window.location.origin);
+
+      iframeElement = document.createElement('iframe');
+      iframeElement.className = 'peeap-iframe';
+      iframeElement.src = embedUrl;
+      iframeElement.allow = 'payment';
+      iframeElement.setAttribute('allowpaymentrequest', 'true');
+
+      container.appendChild(iframeElement);
+      modalElement.appendChild(container);
+      document.body.appendChild(modalElement);
+
+      // Prevent body scroll
+      document.body.style.overflow = 'hidden';
+
+      // Animate in
+      requestAnimationFrame(function() {
+        modalElement.classList.add('peeap-visible');
+      });
+
+      // Restore body scroll on close
+      var originalClose = this.close;
+      this.close = function() {
+        document.body.style.overflow = '';
+        originalClose.call(self);
+      };
+    },
+
+    /**
+     * Check if checkout is currently open
+     */
+    isOpen: function() {
+      return modalElement !== null;
+    }
+  };
+
+  // Export PeeapCheckout to global scope
+  window.PeeapCheckout = PeeapCheckout;
+
+  console.log('[PeeapCheckout] v' + PeeapCheckout.version + ' loaded');
+
 })(typeof window !== 'undefined' ? window : this);

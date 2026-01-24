@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Peeap Embedded Checkout Demo</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .demo-container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+      max-width: 500px;
+      width: 100%;
+      overflow: hidden;
+    }
+
+    .demo-header {
+      background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+      color: white;
+      padding: 30px;
+      text-align: center;
+    }
+
+    .demo-header h1 {
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+
+    .demo-header p {
+      opacity: 0.9;
+      font-size: 14px;
+    }
+
+    .demo-content {
+      padding: 30px;
+    }
+
+    .product-card {
+      display: flex;
+      gap: 16px;
+      padding: 16px;
+      background: #f9fafb;
+      border-radius: 12px;
+      margin-bottom: 24px;
+    }
+
+    .product-image {
+      width: 80px;
+      height: 80px;
+      background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+    }
+
+    .product-info {
+      flex: 1;
+    }
+
+    .product-name {
+      font-weight: 600;
+      font-size: 18px;
+      color: #1f2937;
+      margin-bottom: 4px;
+    }
+
+    .product-desc {
+      color: #6b7280;
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    .product-price {
+      font-size: 24px;
+      font-weight: 700;
+      color: #4f46e5;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      color: #374151;
+      margin-bottom: 6px;
+    }
+
+    .form-group input, .form-group select {
+      width: 100%;
+      padding: 12px 16px;
+      border: 2px solid #e5e7eb;
+      border-radius: 10px;
+      font-size: 16px;
+      transition: border-color 0.2s;
+    }
+
+    .form-group input:focus, .form-group select:focus {
+      outline: none;
+      border-color: #6366f1;
+    }
+
+    .pay-button {
+      width: 100%;
+      padding: 16px;
+      background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 18px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .pay-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(99, 102, 241, 0.3);
+    }
+
+    .pay-button:active {
+      transform: translateY(0);
+    }
+
+    .pay-button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .pay-button svg {
+      width: 24px;
+      height: 24px;
+    }
+
+    .status-message {
+      margin-top: 16px;
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-size: 14px;
+      display: none;
+    }
+
+    .status-message.success {
+      display: block;
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+    }
+
+    .status-message.error {
+      display: block;
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+
+    .status-message.info {
+      display: block;
+      background: #e0e7ff;
+      color: #3730a3;
+      border: 1px solid #c7d2fe;
+    }
+
+    .demo-footer {
+      padding: 20px 30px;
+      background: #f9fafb;
+      border-top: 1px solid #e5e7eb;
+      text-align: center;
+    }
+
+    .demo-footer p {
+      color: #6b7280;
+      font-size: 13px;
+    }
+
+    .demo-footer a {
+      color: #6366f1;
+      text-decoration: none;
+    }
+
+    .demo-footer a:hover {
+      text-decoration: underline;
+    }
+
+    .config-toggle {
+      margin-top: 20px;
+      text-align: center;
+    }
+
+    .config-toggle button {
+      background: none;
+      border: none;
+      color: #6366f1;
+      font-size: 14px;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    .config-section {
+      display: none;
+      margin-top: 20px;
+      padding: 16px;
+      background: #f3f4f6;
+      border-radius: 10px;
+    }
+
+    .config-section.visible {
+      display: block;
+    }
+
+    .config-section h4 {
+      font-size: 14px;
+      color: #374151;
+      margin-bottom: 12px;
+    }
+
+    .loading-spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="demo-container">
+    <div class="demo-header">
+      <h1>Embedded Checkout Demo</h1>
+      <p>Test the PeeapCheckout modal without redirects</p>
+    </div>
+
+    <div class="demo-content">
+      <!-- Product Card -->
+      <div class="product-card">
+        <div class="product-image">🛍️</div>
+        <div class="product-info">
+          <div class="product-name">Premium Package</div>
+          <div class="product-desc">One-time purchase</div>
+          <div class="product-price" id="priceDisplay">Le 500.00</div>
+        </div>
+      </div>
+
+      <!-- Amount Input -->
+      <div class="form-group">
+        <label for="amount">Amount (SLE)</label>
+        <input type="number" id="amount" value="500" min="1" placeholder="Enter amount">
+      </div>
+
+      <!-- Description Input -->
+      <div class="form-group">
+        <label for="description">Description</label>
+        <input type="text" id="description" value="Premium Package" placeholder="Payment description">
+      </div>
+
+      <!-- Pay Button -->
+      <button class="pay-button" id="payButton" onclick="openCheckout()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+          <line x1="1" y1="10" x2="23" y2="10"></line>
+        </svg>
+        Pay with Peeap
+      </button>
+
+      <!-- Status Message -->
+      <div class="status-message" id="statusMessage"></div>
+
+      <!-- Config Toggle -->
+      <div class="config-toggle">
+        <button onclick="toggleConfig()">Show Configuration</button>
+      </div>
+
+      <!-- Config Section -->
+      <div class="config-section" id="configSection">
+        <h4>SDK Configuration</h4>
+        <div class="form-group">
+          <label for="publicKey">Public Key</label>
+          <input type="text" id="publicKey" value="pk_live_demo123" placeholder="pk_live_xxx">
+        </div>
+        <div class="form-group">
+          <label for="embedUrl">Embed URL (for testing)</label>
+          <input type="text" id="embedUrl" value="http://localhost:5173" placeholder="https://my.peeap.com">
+        </div>
+        <div class="form-group">
+          <label for="apiUrl">API URL (for testing)</label>
+          <input type="text" id="apiUrl" value="http://localhost:3000" placeholder="https://api.peeap.com">
+        </div>
+      </div>
+    </div>
+
+    <div class="demo-footer">
+      <p>
+        Powered by <a href="https://my.peeap.com" target="_blank">Peeap</a> |
+        <a href="https://docs.peeap.com" target="_blank">Documentation</a>
+      </p>
+    </div>
+  </div>
+
+  <!-- Peeap SDK -->
+  <script src="peeap-sdk.js"></script>
+
+  <script>
+    // Update price display when amount changes
+    document.getElementById('amount').addEventListener('input', function(e) {
+      var amount = parseFloat(e.target.value) || 0;
+      document.getElementById('priceDisplay').textContent = 'Le ' + amount.toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+    });
+
+    // Toggle config section
+    function toggleConfig() {
+      var section = document.getElementById('configSection');
+      section.classList.toggle('visible');
+    }
+
+    // Show status message
+    function showStatus(type, message) {
+      var statusEl = document.getElementById('statusMessage');
+      statusEl.className = 'status-message ' + type;
+      statusEl.textContent = message;
+    }
+
+    // Clear status message
+    function clearStatus() {
+      var statusEl = document.getElementById('statusMessage');
+      statusEl.className = 'status-message';
+      statusEl.textContent = '';
+    }
+
+    // Open checkout
+    function openCheckout() {
+      var amount = parseFloat(document.getElementById('amount').value);
+      var description = document.getElementById('description').value;
+      var publicKey = document.getElementById('publicKey').value;
+      var embedUrl = document.getElementById('embedUrl').value;
+      var apiUrl = document.getElementById('apiUrl').value;
+
+      if (!amount || amount <= 0) {
+        showStatus('error', 'Please enter a valid amount');
+        return;
+      }
+
+      // Clear previous status
+      clearStatus();
+
+      // Disable button
+      var button = document.getElementById('payButton');
+      button.disabled = true;
+      button.innerHTML = '<span class="loading-spinner"></span> Opening checkout...';
+
+      // Initialize PeeapCheckout with custom URLs for testing
+      PeeapCheckout.init({
+        publicKey: publicKey,
+        embedUrl: embedUrl,
+        apiUrl: apiUrl
+      });
+
+      // Open the checkout modal
+      PeeapCheckout.open({
+        amount: amount,
+        currency: 'SLE',
+        description: description,
+        reference: 'demo_' + Date.now(),
+        customer: {
+          email: 'demo@example.com'
+        },
+        metadata: {
+          demo: true,
+          source: 'demo-page'
+        },
+        onSuccess: function(result) {
+          console.log('Payment successful:', result);
+          showStatus('success', 'Payment successful! Transaction ID: ' + (result.transactionId || result.reference));
+          resetButton();
+        },
+        onError: function(error) {
+          console.error('Payment error:', error);
+          showStatus('error', 'Payment failed: ' + error.message);
+          resetButton();
+        },
+        onClose: function() {
+          console.log('Checkout closed');
+          showStatus('info', 'Checkout was closed');
+          resetButton();
+        }
+      });
+
+      // Reset button after a delay (in case session creation fails)
+      setTimeout(function() {
+        if (button.disabled) {
+          resetButton();
+        }
+      }, 5000);
+    }
+
+    // Reset button state
+    function resetButton() {
+      var button = document.getElementById('payButton');
+      button.disabled = false;
+      button.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg> Pay with Peeap';
+    }
+
+    // Log SDK loaded
+    console.log('Demo page loaded');
+    console.log('PeeapCheckout available:', typeof PeeapCheckout !== 'undefined');
+    console.log('PeeapSDK available:', typeof PeeapSDK !== 'undefined');
+  </script>
+</body>
+</html>

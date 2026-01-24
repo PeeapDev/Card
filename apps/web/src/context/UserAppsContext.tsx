@@ -16,11 +16,52 @@ import {
   type CashBoxSetupData,
 } from '@/services/userSettings.service';
 
-// Default apps - all disabled by default
+// Optional apps for personal accounts (must be enabled by user)
+// These are NOT shown by default - user enables them in settings
 const DEFAULT_USER_APPS = {
-  events: false,
-  cashbox: false,
-  school_utilities: false,
+  events: false,           // Browse and buy event tickets
+  cashbox: false,          // Savings pots / cash box feature
+  cards: false,            // Virtual/physical cards management
+  school_utilities: false, // Pay school fees
+};
+
+// App metadata with colors for personal account
+export const USER_APP_METADATA = {
+  events: {
+    id: 'events',
+    name: 'Events',
+    description: 'Browse and buy event tickets',
+    color: 'from-purple-500 to-pink-500',  // Purple/pink for entertainment
+    icon: 'Calendar',
+  },
+  tickets: {
+    id: 'tickets',
+    name: 'My Tickets',
+    description: 'View your purchased tickets',
+    color: 'from-violet-500 to-purple-500',  // Violet/purple to match events
+    icon: 'Ticket',
+  },
+  cashbox: {
+    id: 'cashbox',
+    name: 'Cash Box',
+    description: 'Save money in digital pots',
+    color: 'from-amber-500 to-orange-500',  // Amber/orange for savings
+    icon: 'Package',
+  },
+  cards: {
+    id: 'cards',
+    name: 'Cards',
+    description: 'Manage virtual and physical cards',
+    color: 'from-indigo-500 to-blue-500',  // Indigo/blue for finance
+    icon: 'CreditCard',
+  },
+  school_utilities: {
+    id: 'school_utilities',
+    name: 'School Fees',
+    description: 'Pay school fees and utilities',
+    color: 'from-blue-500 to-cyan-500',  // Blue/cyan for education
+    icon: 'GraduationCap',
+  },
 };
 
 interface UserAppsContextType {
@@ -74,6 +115,8 @@ export function UserAppsProvider({ children }: UserAppsProviderProps) {
         events: settings.events_enabled,
         // Cash Box is only enabled if setup is completed
         cashbox: settings.cashbox_enabled && settings.cashbox_setup_completed,
+        // Cards
+        cards: settings.cards_enabled ?? false,
         // School Utilities
         school_utilities: settings.school_utilities_enabled,
       });
@@ -109,7 +152,7 @@ export function UserAppsProvider({ children }: UserAppsProviderProps) {
     if (!user?.id) return;
 
     try {
-      await userSettingsService.enableApp(user.id, appId as 'events' | 'cashbox' | 'school_utilities');
+      await userSettingsService.enableApp(user.id, appId as 'events' | 'cashbox' | 'cards' | 'school_utilities');
 
       // If enabling cashbox without setup, don't set enabled state yet
       // The setup wizard will complete the process
@@ -134,7 +177,7 @@ export function UserAppsProvider({ children }: UserAppsProviderProps) {
     if (!user?.id) return;
 
     try {
-      await userSettingsService.disableApp(user.id, appId as 'events' | 'cashbox' | 'school_utilities');
+      await userSettingsService.disableApp(user.id, appId as 'events' | 'cashbox' | 'cards' | 'school_utilities');
 
       setEnabledApps(prev => ({ ...prev, [appId]: false }));
 
@@ -143,6 +186,11 @@ export function UserAppsProvider({ children }: UserAppsProviderProps) {
           ...prev,
           cashbox_enabled: false,
           cashbox_setup_completed: false,
+        } : null);
+      } else if (appId === 'cards') {
+        setAppsSettings(prev => prev ? {
+          ...prev,
+          cards_enabled: false,
         } : null);
       } else if (appId === 'school_utilities') {
         setAppsSettings(prev => prev ? {

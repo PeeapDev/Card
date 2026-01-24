@@ -14,7 +14,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo, SyntheticEvent } from 'react';
-import { Search, Phone, AtSign, X, Loader2, CheckCircle } from 'lucide-react';
+import { Search, Phone, AtSign, X, Loader2, CheckCircle, GraduationCap } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { clsx } from 'clsx';
 import { useAuth } from '@/context/AuthContext';
@@ -35,6 +35,11 @@ export interface SearchResult {
   email: string | null;
   profile_picture: string | null;
   kyc_status?: string;
+  // Student account fields
+  account_type?: 'user' | 'student';
+  wallet_id?: string;  // Direct wallet_id for student accounts
+  school_name?: string;
+  class_name?: string;
 }
 
 interface UserSearchProps {
@@ -95,7 +100,7 @@ export function UserSearch({
     }
   }, [user?.id, user?.roles]);
 
-  // Load all users on mount for Fuse.js client-side search
+  // Load all users and student accounts on mount for Fuse.js client-side search
   // First loads from IndexedDB cache for instant display, then fetches fresh data
   useEffect(() => {
     const loadUsers = async () => {
@@ -113,6 +118,7 @@ export function UserSearch({
             phone: c.phone || null,
             email: c.email || null,
             profile_picture: c.avatar_url || null,
+            account_type: 'user' as const,
           }));
 
           // Exclude current user if specified
@@ -153,6 +159,7 @@ export function UserSearch({
             phone: u.phone || null,
             email: u.email || null,
             profile_picture: u.profile_picture || null,
+            account_type: 'user' as const,
           }));
 
           // Exclude current user if specified
@@ -160,9 +167,40 @@ export function UserSearch({
             ? mappedUsers.filter(u => u.id !== excludeUserId)
             : mappedUsers;
 
-          setAllUsers(filteredUsers);
+          // Step 3: Also fetch student accounts (they have @username for receiving money)
+          let studentAccounts: SearchResult[] = [];
+          try {
+            const { data: students, error: studentsError } = await supabase
+              .from('student_accounts')
+              .select('id, first_name, last_name, username, wallet_id, school_name, class_name, profile_photo_url, status')
+              .eq('status', 'active')
+              .limit(500);
 
-          // Step 3: Cache all user avatars to IndexedDB for offline access
+            if (!studentsError && students) {
+              console.log(`[UserSearch] Loaded ${students.length} student accounts`);
+              studentAccounts = students.map((s: any) => ({
+                id: s.id,
+                first_name: s.first_name || '',
+                last_name: s.last_name || '',
+                username: s.username || null,
+                phone: null, // Students don't have phone
+                email: null, // Students don't have email
+                profile_picture: s.profile_photo_url || null,
+                account_type: 'student' as const,
+                wallet_id: s.wallet_id,
+                school_name: s.school_name,
+                class_name: s.class_name,
+              }));
+            }
+          } catch (studentErr) {
+            console.warn('Student accounts table may not exist yet:', studentErr);
+          }
+
+          // Combine users and student accounts
+          const allAccounts = [...filteredUsers, ...studentAccounts];
+          setAllUsers(allAccounts);
+
+          // Step 4: Cache all user avatars to IndexedDB for offline access
           const avatarsToCache = (data || []).map((u: any) => ({
             user_id: u.id,
             avatar_url: u.profile_picture || null,
@@ -392,18 +430,33 @@ export function UserSearch({
                           <p className="font-medium text-gray-900 truncate flex items-center gap-1">
                             <AtSign className="w-4 h-4 text-primary-500" />
                             {resultUser.username}
+                            {resultUser.account_type === 'student' && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs bg-purple-100 text-purple-700">
+                                <GraduationCap className="w-3 h-3" />
+                                Student
+                              </span>
+                            )}
                             {resultUser.kyc_status === 'approved' && (
                               <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" fill="currentColor" stroke="white" strokeWidth={2} />
                             )}
                           </p>
                           <p className="text-sm text-gray-500 truncate">
                             {resultUser.first_name} {resultUser.last_name}
+                            {resultUser.account_type === 'student' && resultUser.school_name && (
+                              <span className="text-purple-500"> • {resultUser.school_name}</span>
+                            )}
                           </p>
                         </>
                       ) : (
                         <>
                           <p className="font-medium text-gray-900 truncate flex items-center gap-1">
                             {resultUser.first_name} {resultUser.last_name}
+                            {resultUser.account_type === 'student' && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs bg-purple-100 text-purple-700">
+                                <GraduationCap className="w-3 h-3" />
+                                Student
+                              </span>
+                            )}
                             {resultUser.kyc_status === 'approved' && (
                               <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" fill="currentColor" stroke="white" strokeWidth={2} />
                             )}
@@ -412,6 +465,12 @@ export function UserSearch({
                             <p className="text-sm text-gray-500 flex items-center gap-1">
                               <Phone className="w-3 h-3" />
                               {resultUser.phone}
+                            </p>
+                          )}
+                          {resultUser.account_type === 'student' && resultUser.school_name && (
+                            <p className="text-sm text-purple-500 truncate">
+                              {resultUser.school_name}
+                              {resultUser.class_name && ` • ${resultUser.class_name}`}
                             </p>
                           )}
                         </>

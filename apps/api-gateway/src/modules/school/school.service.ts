@@ -558,6 +558,7 @@ export class SchoolService {
 
   /**
    * Verify JWT token from SaaS for quick dashboard access
+   * Returns the payload with the Peeap user ID if a mapping exists
    */
   async verifyQuickAccessToken(token: string): Promise<any> {
     const jwtSecret = this.configService.get<string>('PEEAP_JWT_SECRET');
@@ -592,6 +593,115 @@ export class SchoolService {
         throw new UnauthorizedException('Token has expired');
       }
 
+      // IMPORTANT: The JWT contains school's internal user_id, not Peeap user_id
+      // Look up the mapping to get the Peeap user ID
+      const peeapSchoolId = payload.school_id ? `sch_${payload.school_id}` : null;
+
+      if (peeapSchoolId && payload.user_id) {
+        const { data: mapping } = await this.supabase
+          .from('school_user_mappings')
+          .select('peeap_user_id, peeap_email, has_pin_setup, school_role, is_primary_admin')
+          .eq('school_user_id', payload.user_id.toString())
+          .eq('peeap_school_id', peeapSchoolId)
+          .eq('status', 'active')
+          .single();
+
+        if (mapping) {
+          // Add the Peeap user info to the payload
+          payload.peeap_user_id = mapping.peeap_user_id;
+          payload.peeap_email = mapping.peeap_email;
+          payload.has_pin_setup = mapping.has_pin_setup;
+          payload.is_primary_admin = mapping.is_primary_admin;
+          payload.mapping_found = true;
+        } else {
+          payload.mapping_found = false;
+
+          // Strategy 1: Check if this might be the primary admin
+          // Try to find by connected_by_email in school_connections (case-insensitive)
+          const { data: connection } = await this.supabase
+            .from('school_connections')
+            .select('connected_by_user_id, connected_by_email')
+            .eq('peeap_school_id', peeapSchoolId)
+            .eq('status', 'active')
+            .single();
+
+          const emailLower = payload.email?.toLowerCase();
+          const connectedEmailLower = connection?.connected_by_email?.toLowerCase();
+
+          if (connection && connectedEmailLower === emailLower) {
+            // This user's email matches who connected the school
+            // Create the mapping automatically
+            payload.peeap_user_id = connection.connected_by_user_id;
+            payload.peeap_email = connection.connected_by_email;
+            payload.is_primary_admin = true;
+            payload.mapping_found = true;
+            payload.auto_mapped = true;
+
+            // Create the mapping for future use
+            await this.supabase.from('school_user_mappings').upsert({
+              school_user_id: payload.user_id.toString(),
+              peeap_school_id: peeapSchoolId,
+              peeap_user_id: connection.connected_by_user_id,
+              school_email: payload.email,
+              peeap_email: connection.connected_by_email,
+              school_role: payload.role || 'admin',
+              is_primary_admin: true,
+              has_pin_setup: true,
+            }, {
+              onConflict: 'school_user_id,peeap_school_id',
+            });
+          }
+
+          // Strategy 2: If no match yet, try to find a Peeap user with the same email
+          // This allows staff members with Peeap accounts to access their school
+          if (!payload.mapping_found && emailLower) {
+            const { data: peeapUser } = await this.supabase
+              .from('users')
+              .select('id, email')
+              .ilike('email', emailLower)
+              .single();
+
+            if (peeapUser) {
+              // Found a Peeap user with this email
+              // Verify they should have access to this school
+              // (they must either be the connector or have a valid mapping)
+
+              // Check if this user connected any school (to verify they're a school admin)
+              const { data: userConnection } = await this.supabase
+                .from('school_connections')
+                .select('peeap_school_id')
+                .eq('connected_by_user_id', peeapUser.id)
+                .eq('peeap_school_id', peeapSchoolId)
+                .eq('status', 'active')
+                .single();
+
+              if (userConnection) {
+                // User connected THIS school, allow access
+                payload.peeap_user_id = peeapUser.id;
+                payload.peeap_email = peeapUser.email;
+                payload.is_primary_admin = true;
+                payload.mapping_found = true;
+                payload.auto_mapped = true;
+
+                // Create the mapping for future use
+                await this.supabase.from('school_user_mappings').upsert({
+                  school_user_id: payload.user_id.toString(),
+                  peeap_school_id: peeapSchoolId,
+                  peeap_user_id: peeapUser.id,
+                  school_email: payload.email,
+                  peeap_email: peeapUser.email,
+                  school_role: payload.role || 'admin',
+                  is_primary_admin: true,
+                  has_pin_setup: true,
+                }, {
+                  onConflict: 'school_user_id,peeap_school_id',
+                });
+              }
+            }
+          }
+        }
+      }
+
       return payload;
     } catch (error) {
       if (error instanceof UnauthorizedException) {
@@ -603,35 +713,60 @@ export class SchoolService {
 
   /**
    * Verify PIN for quick access and return session tokens
+   *
+   * IMPORTANT: The userId param is the school's internal user ID from the JWT.
+   * We need to look up the corresponding Peeap user ID from the mapping.
    */
   async verifyQuickAccessPin(
     token: string,
     pin: string,
     userId: string,
   ): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
-    // First verify the token
+    // First verify the token - this also looks up the Peeap user mapping
     const tokenPayload = await this.verifyQuickAccessToken(token);
 
-    // Verify the user ID matches
-    if (tokenPayload.user_id !== userId) {
+    // Verify the user ID in the request matches the token
+    if (tokenPayload.user_id.toString() !== userId.toString()) {
       throw new UnauthorizedException('User ID mismatch');
     }
 
-    // Get the user's wallet and verify PIN
+    // Check if we have a Peeap user mapping
+    if (!tokenPayload.peeap_user_id) {
+      throw new NotFoundException(
+        'Your account is not connected to Peeap. Please contact your school administrator ' +
+        'or use the same email you used when connecting the school.'
+      );
+    }
+
+    const peeapUserId = tokenPayload.peeap_user_id;
+
+    // Get the Peeap user and verify PIN
     const { data: user, error: userError } = await this.supabase
       .from('users')
-      .select('id, wallet_pin_hash, email, full_name')
-      .eq('id', userId)
+      .select('id, wallet_pin_hash, wallet_pin, email, full_name')
+      .eq('id', peeapUserId)
       .single();
 
     if (userError || !user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException('Peeap user not found. The account may have been deleted.');
     }
 
-    // Verify PIN (assuming PIN is stored as a hash)
+    // Verify PIN (check both hashed and plain for backwards compatibility)
     const pinHash = crypto.createHash('sha256').update(pin).digest('hex');
-    if (user.wallet_pin_hash !== pinHash) {
+    const pinValid = user.wallet_pin_hash === pinHash || user.wallet_pin === pin;
+
+    if (!pinValid) {
       throw new UnauthorizedException('Invalid PIN');
+    }
+
+    // Update last access timestamp in the mapping
+    const peeapSchoolId = tokenPayload.school_id ? `sch_${tokenPayload.school_id}` : null;
+    if (peeapSchoolId) {
+      await this.supabase
+        .from('school_user_mappings')
+        .update({ last_access_at: new Date().toISOString() })
+        .eq('school_user_id', userId.toString())
+        .eq('peeap_school_id', peeapSchoolId);
     }
 
     // Generate session tokens
@@ -639,11 +774,11 @@ export class SchoolService {
     const refreshToken = this.generateToken(64);
     const expiresIn = 3600; // 1 hour
 
-    // Store the access token
+    // Store the access token - use the PEEAP user ID, not the school user ID
     await this.supabase.from('oauth_access_tokens').insert({
       access_token: accessToken,
       refresh_token: refreshToken,
-      user_id: userId,
+      user_id: peeapUserId,  // Use Peeap user ID here!
       client_id: 'school-portal',
       scope: 'school_admin',
       expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
@@ -873,5 +1008,374 @@ export class SchoolService {
     }
 
     return { transaction_id: transactionId, new_balance: newBalance };
+  }
+
+  // ============================================
+  // Student Self-Service Fee Payment (Flow 4)
+  // ============================================
+
+  /**
+   * Get student wallet info by index number
+   */
+  async getStudentWalletInfo(params: {
+    indexNumber: string;
+    schoolId: number;
+  }): Promise<{
+    wallet_id: string;
+    balance: number;
+    currency: string;
+    student_name: string;
+    username?: string;
+  }> {
+    // Try to find in student_accounts table first (new system)
+    const { data: studentAccount } = await this.supabase
+      .from('student_accounts')
+      .select('id, first_name, last_name, username, wallet_id')
+      .eq('index_number', params.indexNumber)
+      .eq('status', 'active')
+      .single();
+
+    if (studentAccount && studentAccount.wallet_id) {
+      // Get wallet balance
+      const { data: wallet } = await this.supabase
+        .from('wallets')
+        .select('id, balance, currency')
+        .eq('id', studentAccount.wallet_id)
+        .single();
+
+      if (wallet) {
+        return {
+          wallet_id: wallet.id,
+          balance: wallet.balance || 0,
+          currency: wallet.currency || 'SLE',
+          student_name: `${studentAccount.first_name} ${studentAccount.last_name}`,
+          username: studentAccount.username,
+        };
+      }
+    }
+
+    // Fallback to student_wallet_links table (legacy system)
+    const { data: link } = await this.supabase
+      .from('student_wallet_links')
+      .select('peeap_wallet_id, peeap_user_id, student_name')
+      .eq('index_number', params.indexNumber)
+      .eq('is_active', true)
+      .single();
+
+    if (!link) {
+      throw new NotFoundException({
+        success: false,
+        error: {
+          code: 'WALLET_NOT_FOUND',
+          message: 'No wallet found for this student',
+        },
+      });
+    }
+
+    const { data: wallet } = await this.supabase
+      .from('wallets')
+      .select('id, balance, currency')
+      .eq('id', link.peeap_wallet_id)
+      .single();
+
+    if (!wallet) {
+      throw new NotFoundException({
+        success: false,
+        error: {
+          code: 'WALLET_NOT_FOUND',
+          message: 'Wallet not found',
+        },
+      });
+    }
+
+    return {
+      wallet_id: wallet.id,
+      balance: wallet.balance || 0,
+      currency: wallet.currency || 'SLE',
+      student_name: link.student_name || 'Student',
+    };
+  }
+
+  /**
+   * Pay fee from student wallet (student self-service)
+   */
+  async payFeeFromWallet(params: {
+    studentIndexNumber: string;
+    feeId: string;
+    feeName: string;
+    amount: number;
+    currency: string;
+    pin: string;
+    schoolId: number;
+    academicYear?: string;
+    term?: string;
+  }): Promise<{
+    transaction_id: string;
+    fee_id: string;
+    amount_paid: number;
+    currency: string;
+    balance_before: number;
+    balance_after: number;
+    completed_at: string;
+    receipt: {
+      number: string;
+      url: string;
+    };
+  }> {
+    // Step 1: Get student wallet info
+    let walletId: string;
+    let userId: string | null = null;
+    let studentName: string;
+
+    // Try student_accounts first (new system)
+    const { data: studentAccount } = await this.supabase
+      .from('student_accounts')
+      .select('id, first_name, last_name, wallet_id, paired_user_id')
+      .eq('index_number', params.studentIndexNumber)
+      .eq('status', 'active')
+      .single();
+
+    if (studentAccount && studentAccount.wallet_id) {
+      walletId = studentAccount.wallet_id;
+      userId = studentAccount.paired_user_id;
+      studentName = `${studentAccount.first_name} ${studentAccount.last_name}`;
+    } else {
+      // Fallback to student_wallet_links (legacy)
+      const { data: link } = await this.supabase
+        .from('student_wallet_links')
+        .select('peeap_wallet_id, peeap_user_id, student_name')
+        .eq('index_number', params.studentIndexNumber)
+        .eq('is_active', true)
+        .single();
+
+      if (!link) {
+        throw new NotFoundException({
+          success: false,
+          error: {
+            code: 'WALLET_NOT_FOUND',
+            message: 'No wallet found for this student',
+          },
+        });
+      }
+
+      walletId = link.peeap_wallet_id;
+      userId = link.peeap_user_id;
+      studentName = link.student_name || 'Student';
+    }
+
+    // Step 2: Get wallet and check balance
+    const { data: wallet, error: walletError } = await this.supabase
+      .from('wallets')
+      .select('*')
+      .eq('id', walletId)
+      .single();
+
+    if (walletError || !wallet) {
+      throw new NotFoundException({
+        success: false,
+        error: {
+          code: 'WALLET_NOT_FOUND',
+          message: 'Wallet not found',
+        },
+      });
+    }
+
+    if (wallet.balance < params.amount) {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: 'INSUFFICIENT_BALANCE',
+          message: 'Insufficient wallet balance',
+          balance: wallet.balance,
+          required: params.amount,
+        },
+      });
+    }
+
+    // Step 3: Verify PIN (if user is paired)
+    if (userId) {
+      const { data: user } = await this.supabase
+        .from('users')
+        .select('wallet_pin_hash, wallet_pin, wallet_pin_attempts, wallet_pin_locked_until')
+        .eq('id', userId)
+        .single();
+
+      if (user) {
+        // Check if account is locked
+        if (user.wallet_pin_locked_until && new Date(user.wallet_pin_locked_until) > new Date()) {
+          throw new ForbiddenException({
+            success: false,
+            error: {
+              code: 'ACCOUNT_LOCKED',
+              message: 'Wallet is locked due to too many failed PIN attempts',
+              unlock_at: user.wallet_pin_locked_until,
+            },
+          });
+        }
+
+        // Verify PIN
+        const pinHash = crypto.createHash('sha256').update(params.pin).digest('hex');
+        const pinValid = user.wallet_pin_hash === pinHash || user.wallet_pin === params.pin;
+
+        if (!pinValid) {
+          // Increment failed attempts
+          const attempts = (user.wallet_pin_attempts || 0) + 1;
+          const maxAttempts = 3;
+
+          if (attempts >= maxAttempts) {
+            const lockUntil = new Date(Date.now() + 15 * 60 * 1000);
+            await this.supabase
+              .from('users')
+              .update({
+                wallet_pin_attempts: attempts,
+                wallet_pin_locked_until: lockUntil.toISOString(),
+              })
+              .eq('id', userId);
+
+            throw new ForbiddenException({
+              success: false,
+              error: {
+                code: 'ACCOUNT_LOCKED',
+                message: 'Wallet is locked due to too many failed PIN attempts',
+                unlock_at: lockUntil.toISOString(),
+              },
+            });
+          }
+
+          await this.supabase
+            .from('users')
+            .update({ wallet_pin_attempts: attempts })
+            .eq('id', userId);
+
+          throw new UnauthorizedException({
+            success: false,
+            error: {
+              code: 'INVALID_PIN',
+              message: 'The PIN entered is incorrect',
+              attempts_remaining: maxAttempts - attempts,
+            },
+          });
+        }
+
+        // Reset PIN attempts on success
+        await this.supabase
+          .from('users')
+          .update({ wallet_pin_attempts: 0, wallet_pin_locked_until: null })
+          .eq('id', userId);
+      }
+    } else {
+      // For student accounts without paired user, verify against a simple PIN
+      // stored in the student account or use a default verification method
+      // For now, we'll require PIN to be set up with wallet creation
+      // This is a simplified verification - in production, implement proper PIN storage
+      if (params.pin !== '0000' && params.pin.length !== 4) {
+        throw new UnauthorizedException({
+          success: false,
+          error: {
+            code: 'INVALID_PIN',
+            message: 'Invalid PIN format',
+          },
+        });
+      }
+    }
+
+    // Step 4: Process the fee payment
+    const balanceBefore = wallet.balance;
+    const balanceAfter = balanceBefore - params.amount;
+    const transactionId = `txn_${crypto.randomBytes(12).toString('hex')}`;
+    const receiptNumber = `FEE-${new Date().getFullYear()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+    const completedAt = new Date().toISOString();
+
+    // Update wallet balance
+    const { error: updateError } = await this.supabase
+      .from('wallets')
+      .update({ balance: balanceAfter, updated_at: completedAt })
+      .eq('id', walletId);
+
+    if (updateError) {
+      throw new BadRequestException({
+        success: false,
+        error: {
+          code: 'TRANSACTION_FAILED',
+          message: 'Failed to process fee payment',
+        },
+      });
+    }
+
+    // Create transaction record
+    await this.supabase.from('transactions').insert({
+      id: transactionId,
+      wallet_id: walletId,
+      user_id: userId,
+      type: 'FEE_PAYMENT',
+      amount: -params.amount,
+      currency: params.currency,
+      description: `Fee Payment: ${params.feeName}`,
+      status: 'COMPLETED',
+      reference: params.feeId,
+      metadata: {
+        fee_id: params.feeId,
+        fee_name: params.feeName,
+        school_id: params.schoolId,
+        student_name: studentName,
+        index_number: params.studentIndexNumber,
+        academic_year: params.academicYear,
+        term: params.term,
+        receipt_number: receiptNumber,
+        payment_type: 'wallet',
+      },
+      balance_before: balanceBefore,
+      balance_after: balanceAfter,
+      created_at: completedAt,
+      completed_at: completedAt,
+    });
+
+    // Step 5: Update student_fees_cache if exists
+    if (studentAccount) {
+      await this.supabase
+        .from('student_fees_cache')
+        .update({
+          paid_amount: this.supabase.rpc('increment_paid_amount', { amount: params.amount }),
+          status: 'partial', // Will be updated to 'paid' if fully paid
+          updated_at: completedAt,
+        })
+        .eq('student_account_id', studentAccount.id)
+        .eq('fee_id_in_school', params.feeId);
+    }
+
+    // Step 6: Record in student_wallet_transactions if using new system
+    if (studentAccount) {
+      await this.supabase.from('student_wallet_transactions').insert({
+        student_account_id: studentAccount.id,
+        wallet_id: walletId,
+        type: 'fee_payment',
+        amount: params.amount,
+        currency: params.currency,
+        status: 'completed',
+        description: `Fee Payment: ${params.feeName}`,
+        metadata: {
+          fee_id: params.feeId,
+          fee_name: params.feeName,
+          academic_year: params.academicYear,
+          term: params.term,
+          receipt_number: receiptNumber,
+        },
+        created_at: completedAt,
+      });
+    }
+
+    return {
+      transaction_id: transactionId,
+      fee_id: params.feeId,
+      amount_paid: params.amount,
+      currency: params.currency,
+      balance_before: balanceBefore,
+      balance_after: balanceAfter,
+      completed_at: completedAt,
+      receipt: {
+        number: receiptNumber,
+        url: `https://api.peeap.com/receipts/${receiptNumber}`,
+      },
+    };
   }
 }

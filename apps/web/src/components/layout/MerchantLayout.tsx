@@ -12,7 +12,6 @@ import {
   DollarSign,
   RefreshCw,
   BarChart3,
-  HelpCircle,
   Code2,
   ExternalLink,
   Link2,
@@ -653,23 +652,38 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
 
                   {/* Apps Grid Popup - Like mobile phone app icons */}
                   {appsMenuOpen && (
-                    <div className="absolute bottom-full left-0 right-0 mb-2 p-4 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 z-50">
-                      <div className="grid grid-cols-3 gap-3">
+                    <div className="absolute bottom-full left-0 right-0 mb-2 p-4 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 z-50 backdrop-blur-none">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-gray-900 dark:text-white">Business Apps</span>
+                          <span className="px-2 py-0.5 text-[10px] font-medium bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full">
+                            Merchant
+                          </span>
+                        </div>
+                        <Link
+                          to="/merchant/settings?tab=apps"
+                          className="text-xs text-green-600 dark:text-green-400 hover:underline"
+                          onClick={() => setAppsMenuOpen(false)}
+                        >
+                          Manage
+                        </Link>
+                      </div>
+                      <div className="grid grid-cols-3 gap-4">
                         {enabledApps.map((app) => {
                           const AppIcon = app.icon;
                           const isActive = location.pathname === app.path ||
                             (app.path !== '/merchant' && location.pathname.startsWith(app.path));
 
-                          // Color mapping for app icons
+                          // Color mapping for merchant app icons (green-based palette)
                           const iconColors: Record<string, string> = {
-                            terminal: 'from-indigo-500 to-purple-600',
-                            'driver-wallet': 'from-teal-500 to-emerald-600',
-                            'payment-links': 'from-cyan-500 to-blue-600',
+                            terminal: 'from-green-500 to-emerald-600',
+                            'driver-wallet': 'from-lime-500 to-green-600',
+                            'payment-links': 'from-cyan-500 to-teal-600',
                             invoices: 'from-slate-500 to-gray-600',
-                            pos: 'from-green-500 to-emerald-600',
-                            'fuel-station': 'from-orange-500 to-red-600',
-                            transportation: 'from-blue-500 to-indigo-600',
-                            events: 'from-purple-500 to-pink-600',
+                            pos: 'from-emerald-500 to-green-600',
+                            'fuel-station': 'from-orange-500 to-amber-600',
+                            transportation: 'from-sky-500 to-blue-600',
+                            events: 'from-teal-500 to-cyan-600',
                           };
 
                           return (
@@ -677,17 +691,19 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
                               key={app.id}
                               to={app.path}
                               onClick={() => setAppsMenuOpen(false)}
-                              className="flex flex-col items-center gap-1.5 p-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors group"
+                              className="flex flex-col items-center gap-1.5 p-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-all duration-200 group"
                             >
                               <div className={clsx(
-                                'w-12 h-12 rounded-2xl flex items-center justify-center bg-gradient-to-br shadow-lg transition-transform group-hover:scale-110',
+                                'w-14 h-14 rounded-2xl flex items-center justify-center bg-gradient-to-br transition-all duration-300 ease-out',
+                                'shadow-lg group-hover:shadow-xl group-hover:scale-110 group-active:scale-95',
+                                'group-hover:-translate-y-1',
                                 iconColors[app.id] || 'from-gray-500 to-gray-600',
                                 isActive && 'ring-2 ring-green-500 ring-offset-2 dark:ring-offset-gray-800'
                               )}>
-                                <AppIcon className="w-6 h-6 text-white" />
+                                <AppIcon className="w-7 h-7 text-white drop-shadow-sm" />
                               </div>
-                              <span className="text-[10px] font-medium text-gray-600 dark:text-gray-400 text-center leading-tight max-w-[60px] truncate">
-                                {app.label.replace(' ', '\n').split(' ')[0]}
+                              <span className="text-[11px] font-medium text-gray-600 dark:text-gray-400 text-center leading-tight">
+                                {app.label.split(' ')[0]}
                               </span>
                             </Link>
                           );
@@ -861,14 +877,6 @@ export function MerchantLayout({ children }: MerchantLayoutProps) {
                       >
                         <Settings className="w-4 h-4" />
                         Settings
-                      </Link>
-                      <Link
-                        to="/merchant/support"
-                        onClick={() => setUserMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                      >
-                        <HelpCircle className="w-4 h-4" />
-                        Help & Support
                       </Link>
                     </div>
 
