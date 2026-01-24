@@ -63,11 +63,11 @@ export function SchoolStaffPage() {
   const departments = ['Administration', 'Teaching', 'Finance', 'IT', 'Maintenance', 'Security'];
   const roles = ['Teacher', 'Administrator', 'Accountant', 'IT Support', 'Security Guard', 'Cleaner', 'Principal', 'Vice Principal'];
 
-  // Get school domain from localStorage
-  const getSchoolDomain = () => {
+  // Get school info from localStorage
+  const getSchoolInfo = () => {
     const schoolDomain = localStorage.getItem('school_domain');
-    const schoolId = localStorage.getItem('schoolId');
-    return schoolDomain || schoolId || null;
+    const schoolId = localStorage.getItem('school_id') || localStorage.getItem('schoolId');
+    return { domain: schoolDomain, id: schoolId };
   };
 
   const fetchStaff = async () => {
@@ -75,20 +75,29 @@ export function SchoolStaffPage() {
     setError(null);
 
     try {
-      const schoolDomain = getSchoolDomain();
+      const { domain: schoolDomain, id: schoolId } = getSchoolInfo();
       if (!schoolDomain) {
         setError('School information not found. Please log in again.');
         setLoading(false);
         return;
       }
 
-      // Try to fetch staff from SDSL2 sync API
+      // Try to fetch staff from SaaS sync API with school_id parameter
       try {
+        const params = new URLSearchParams();
+        if (schoolId) params.append('school_id', schoolId);
+        params.append('page', '1');
+        params.append('per_page', '500');
+
         const response = await fetch(
-          `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/staff`,
+          `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/staff?${params.toString()}`,
           {
             method: 'GET',
-            headers: { 'Accept': 'application/json' },
+            headers: {
+              'Accept': 'application/json',
+              'X-School-Domain': schoolDomain,
+              ...(schoolId ? { 'X-School-ID': schoolId } : {}),
+            },
           }
         );
 

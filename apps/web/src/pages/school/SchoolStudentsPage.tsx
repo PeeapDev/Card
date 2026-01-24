@@ -39,11 +39,11 @@ export function SchoolStudentsPage() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'linked' | 'pending' | 'unlinked'>('all');
 
-  // Get school domain from localStorage
-  const getSchoolDomain = () => {
+  // Get school info from localStorage
+  const getSchoolInfo = () => {
     const schoolDomain = localStorage.getItem('school_domain');
-    const schoolId = localStorage.getItem('schoolId');
-    return schoolDomain || schoolId || null;
+    const schoolId = localStorage.getItem('school_id') || localStorage.getItem('schoolId');
+    return { domain: schoolDomain, id: schoolId };
   };
 
   const fetchStudents = async () => {
@@ -51,35 +51,44 @@ export function SchoolStudentsPage() {
     setError(null);
 
     try {
-      const schoolDomain = getSchoolDomain();
+      const { domain: schoolDomain, id: schoolId } = getSchoolInfo();
       if (!schoolDomain) {
         setError('School information not found. Please log in again.');
         setLoading(false);
         return;
       }
 
-      // Try to fetch students from SDSL2 sync API
+      // Try to fetch students from SaaS sync API with school_id parameter
       try {
+        const params = new URLSearchParams();
+        if (schoolId) params.append('school_id', schoolId);
+        params.append('page', '1');
+        params.append('per_page', '500');
+
         const response = await fetch(
-          `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/students`,
+          `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/students?${params.toString()}`,
           {
             method: 'GET',
-            headers: { 'Accept': 'application/json' },
+            headers: {
+              'Accept': 'application/json',
+              'X-School-Domain': schoolDomain,
+              ...(schoolId ? { 'X-School-ID': schoolId } : {}),
+            },
           }
         );
 
         if (response.ok) {
           const data = await response.json();
           const studentList = (data.students || data.data || data || []).map((s: any) => ({
-            id: s.id?.toString() || String(Math.random()),
-            externalId: s.index_number || s.admission_number || s.student_id || '',
-            name: s.name || `${s.first_name || ''} ${s.last_name || ''}`.trim() || 'Unknown',
+            id: s.id?.toString() || s.student_id?.toString() || String(Math.random()),
+            externalId: s.index_number || s.admission_no || s.admission_number || s.student_id || '',
+            name: s.name || s.student_name || `${s.first_name || ''} ${s.last_name || ''}`.trim() || 'Unknown',
             email: s.email || '',
-            phone: s.phone || s.phone_number || '',
-            class_name: s.class_name || s.grade || s.class || '',
-            walletId: s.peeap_wallet_id || null,
+            phone: s.phone || s.phone_number || s.guardian_phone || '',
+            class_name: s.class_name || s.class || s.grade || '',
+            walletId: s.peeap_wallet_id || s.wallet_id || null,
             walletBalance: s.wallet_balance || 0,
-            status: s.peeap_wallet_id ? 'linked' : (s.peeap_user_id ? 'pending' : 'unlinked'),
+            status: (s.peeap_wallet_id || s.wallet_id) ? 'linked' : (s.peeap_user_id ? 'pending' : 'unlinked'),
             linkedAt: s.peeap_linked_at || s.wallet_linked_at || null,
             createdAt: s.created_at || s.enrolled_at || new Date().toISOString(),
           }));
@@ -87,11 +96,10 @@ export function SchoolStudentsPage() {
           return;
         }
       } catch (apiErr) {
-        console.log('SaaS API not available, using local data:', apiErr);
+        console.log('SaaS API not available:', apiErr);
       }
 
-      // If SaaS API fails, try to get linked students from Peeap database
-      // For now, show empty state - students will appear as they link their wallets
+      // If SaaS API fails, show empty state
       setStudents([]);
 
     } catch (err) {

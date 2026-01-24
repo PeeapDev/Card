@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams, Link } from 'react-router-dom';
 import {
   GraduationCap,
   Search,
@@ -10,9 +11,17 @@ import {
   X,
   CreditCard,
   RefreshCw,
+  Users,
+  ChevronRight,
+  History,
+  ArrowDownRight,
+  ArrowUpRight,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { parentStudentService, LinkedChild } from '@/services/parentStudent.service';
+import { walletService } from '@/services/wallet.service';
+import { supabaseAdmin } from '@/lib/supabase';
 
 // API base URL - use api.peeap.com proxy for reliable JSON responses
 const API_BASE = 'https://api.peeap.com/school/peeap';
@@ -81,6 +90,7 @@ interface FinancialData {
 
 export function SchoolUtilitiesPage() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
 
   // Search state
   const [indexNumber, setIndexNumber] = useState('');
@@ -92,6 +102,18 @@ export function SchoolUtilitiesPage() {
   const [financials, setFinancials] = useState<FinancialData | null>(null);
   const [loadingFinancials, setLoadingFinancials] = useState(false);
 
+  // Linked children
+  const [linkedChildren, setLinkedChildren] = useState<LinkedChild[]>([]);
+  const [loadingChildren, setLoadingChildren] = useState(true);
+
+  // User wallets
+  const [userWallets, setUserWallets] = useState<{ id: string; balance: number; name?: string; walletType?: string }[]>([]);
+  const [selectedWalletId, setSelectedWalletId] = useState<string>('');
+  const [loadingWallet, setLoadingWallet] = useState(true);
+
+  // Get selected wallet
+  const userWallet = userWallets.find(w => w.id === selectedWalletId) || null;
+
   // Payment modal
   const [showPayModal, setShowPayModal] = useState(false);
   const [selectedFee, setSelectedFee] = useState<FeeItem | null>(null);
@@ -99,6 +121,108 @@ export function SchoolUtilitiesPage() {
   const [processing, setProcessing] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+
+  // Payment history
+  const [showPaymentHistory, setShowPaymentHistory] = useState(false);
+  const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // Load index from URL params
+  useEffect(() => {
+    const indexFromUrl = searchParams.get('index');
+    if (indexFromUrl) {
+      setIndexNumber(indexFromUrl);
+      // Auto-search when index is provided
+      setTimeout(() => {
+        const searchBtn = document.getElementById('search-student-btn');
+        if (searchBtn) searchBtn.click();
+      }, 100);
+    }
+  }, [searchParams]);
+
+  // Load linked children
+  useEffect(() => {
+    async function loadChildren() {
+      if (!user?.id) {
+        setLoadingChildren(false);
+        return;
+      }
+      try {
+        const children = await parentStudentService.getLinkedChildren(user.id);
+        setLinkedChildren(children);
+      } catch (err) {
+        console.error('Error loading children:', err);
+      } finally {
+        setLoadingChildren(false);
+      }
+    }
+    loadChildren();
+  }, [user?.id]);
+
+  // Load user's SLE wallets
+  useEffect(() => {
+    async function loadWallets() {
+      if (!user?.id) {
+        setLoadingWallet(false);
+        return;
+      }
+      try {
+        // Get all user's wallets
+        const allWallets = await walletService.getWallets(user.id);
+        if (!allWallets || allWallets.length === 0) {
+          setLoadingWallet(false);
+          return;
+        }
+
+        // Filter to only active SLE wallets (exclude special types like school, student)
+        const sleWallets = allWallets.filter(w =>
+          w.currency === 'SLE' &&
+          w.status === 'ACTIVE' &&
+          !['school', 'student'].includes((w as any).walletType || '')
+        ).map(w => ({
+          id: w.id,
+          balance: w.balance,
+          name: (w as any).name,
+          walletType: (w as any).walletType,
+        }));
+
+        setUserWallets(sleWallets);
+
+        // Find main wallet to pre-select
+        const userWithDefault = user as any;
+        let mainWalletId = '';
+
+        // 1. Check user's default_wallet_id
+        if (userWithDefault?.defaultWalletId || userWithDefault?.default_wallet_id) {
+          const defaultId = userWithDefault.defaultWalletId || userWithDefault.default_wallet_id;
+          if (sleWallets.find(w => w.id === defaultId)) {
+            mainWalletId = defaultId;
+          }
+        }
+
+        // 2. Check for wallet_type === 'primary'
+        if (!mainWalletId) {
+          const primaryWallet = sleWallets.find(w => w.walletType === 'primary');
+          if (primaryWallet) mainWalletId = primaryWallet.id;
+        }
+
+        // 3. Get wallet with highest balance (most likely the main one)
+        if (!mainWalletId && sleWallets.length > 0) {
+          const highestBalance = sleWallets.reduce((prev, curr) =>
+            curr.balance > prev.balance ? curr : prev
+          );
+          mainWalletId = highestBalance.id;
+        }
+
+        setSelectedWalletId(mainWalletId);
+      } catch (err) {
+        console.error('Error loading wallets:', err);
+      } finally {
+        setLoadingWallet(false);
+      }
+    }
+    loadWallets();
+  }, [user?.id]);
 
   // Auto-format index number: SL-YYYY-MM-NNNNN
   const formatIndexNumber = (value: string): string => {
@@ -202,6 +326,29 @@ export function SchoolUtilitiesPage() {
     }
   };
 
+  // Fetch payment history for a student
+  const fetchPaymentHistory = async (indexNumber: string) => {
+    setLoadingHistory(true);
+    try {
+      // Get payments from transactions table where metadata contains this student
+      const { data, error } = await supabaseAdmin
+        .from('transactions')
+        .select('*')
+        .eq('type', 'SCHOOL_FEE')
+        .contains('metadata', { student_index: indexNumber })
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+      setPaymentHistory(data || []);
+    } catch (err) {
+      console.error('Error fetching payment history:', err);
+      setPaymentHistory([]);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
   // Open payment modal
   const openPayModal = (fee: FeeItem) => {
     setSelectedFee(fee);
@@ -211,9 +358,9 @@ export function SchoolUtilitiesPage() {
     setShowPayModal(true);
   };
 
-  // Process payment
+  // Process payment from user's wallet
   const processPayment = async () => {
-    if (!student || !selectedFee || !user?.email) return;
+    if (!student || !selectedFee || !user?.id) return;
 
     const amount = parseFloat(paymentAmount);
     if (isNaN(amount) || amount <= 0) {
@@ -225,42 +372,49 @@ export function SchoolUtilitiesPage() {
       return;
     }
 
+    // Check wallet
+    if (!userWallet) {
+      setPaymentError('No wallet found. Please set up your wallet first.');
+      return;
+    }
+    if (userWallet.balance < amount) {
+      setPaymentError(`Insufficient balance. Available: ${formatCurrency(userWallet.balance)}`);
+      return;
+    }
+
     setProcessing(true);
     setPaymentError(null);
 
     try {
-      const transactionId = `TXN-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-
-      const res = await fetch(`${API_BASE}/pay-fee`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          student_id: student.student_id,
-          fee_id: selectedFee.id,
-          amount: amount,
-          transaction_id: transactionId,
-          payer_email: user.email,
-          school_id: student.school_id,
-        }),
+      // Use the parentStudentService to process payment
+      const result = await parentStudentService.paySchoolFee({
+        parentWalletId: userWallet.id,
+        studentIndexNumber: student.index_number,
+        feeId: selectedFee.id.toString(),
+        amount: amount,
+        schoolId: student.school_id.toString(),
       });
 
-      const result = await res.json();
-
-      if (res.ok && result.success) {
+      if (result.success) {
         setPaymentSuccess(true);
+        // Update local wallet balance in the userWallets array
+        setUserWallets(prev => prev.map(w =>
+          w.id === selectedWalletId ? { ...w, balance: w.balance - amount } : w
+        ));
+        // Close modal after 3 seconds
         setTimeout(() => {
           setShowPayModal(false);
           setPaymentSuccess(false);
           setSelectedFee(null);
           setPaymentAmount('');
           refreshFinancials();
-        }, 2000);
+        }, 3000);
       } else {
-        setPaymentError(result.message || 'Payment failed. Please try again.');
+        setPaymentError('Payment failed. Please try again.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Payment error:', err);
-      setPaymentError('Could not process payment. Please try again.');
+      setPaymentError(err.message || 'Could not process payment. Please try again.');
     } finally {
       setProcessing(false);
     }
@@ -301,54 +455,163 @@ export function SchoolUtilitiesPage() {
           </div>
         </div>
 
-        {!student ? (
-          /* Search Form */
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6">
-            <div className="max-w-md mx-auto space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Student Index Number
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={indexNumber}
-                    onChange={(e) => {
-                      setIndexNumber(formatIndexNumber(e.target.value));
-                      setSearchError(null);
-                    }}
-                    onKeyDown={(e) => e.key === 'Enter' && searchStudent()}
-                    placeholder="SL-2025-02-00050"
-                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 font-mono text-lg"
-                    autoFocus
-                  />
+        {/* Wallet Balance Banner - SLE Wallet Selector */}
+        {!loadingWallet && userWallets.length > 0 && (
+          <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl p-4 mb-6 text-white">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Wallet className="h-5 w-5" />
+                <div>
+                  {userWallets.length > 1 ? (
+                    <select
+                      value={selectedWalletId}
+                      onChange={(e) => setSelectedWalletId(e.target.value)}
+                      className="bg-white/20 border border-white/30 rounded-lg px-2 py-1 text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/50"
+                    >
+                      {userWallets.map((w) => (
+                        <option key={w.id} value={w.id} className="text-gray-900">
+                          {w.name || (w.walletType === 'primary' ? 'Main Wallet' : 'SLE Wallet')} - {formatCurrency(w.balance)}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-sm opacity-90">
+                      {userWallet?.name || 'Leones Wallet'}
+                    </span>
+                  )}
+                  <p className="text-xs opacity-70 mt-1">Payments will be made from this wallet</p>
                 </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Enter the student's index number (e.g., SL-2025-02-00050)
-                </p>
               </div>
+              <p className="text-xl font-bold">{formatCurrency(userWallet?.balance || 0)}</p>
+            </div>
+          </div>
+        )}
+        {!loadingWallet && userWallets.length === 0 && (
+          <div className="bg-amber-50 dark:bg-amber-900/20 rounded-2xl p-4 mb-6 border border-amber-200 dark:border-amber-800">
+            <div className="flex items-center gap-3 text-amber-700 dark:text-amber-300">
+              <AlertCircle className="h-5 w-5" />
+              <div>
+                <p className="font-medium">No SLE wallet found</p>
+                <p className="text-sm opacity-80">You need a Leones wallet to pay school fees</p>
+              </div>
+            </div>
+          </div>
+        )}
 
-              {searchError && (
-                <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-xl flex items-center gap-2 text-red-700 dark:text-red-300">
-                  <AlertCircle className="h-5 w-5 flex-shrink-0" />
-                  <span className="text-sm">{searchError}</span>
+        {!student ? (
+          <div className="space-y-6">
+            {/* Linked Children Quick Select */}
+            {!loadingChildren && linkedChildren.length > 0 && (
+              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-5 w-5 text-purple-600" />
+                    <h2 className="font-semibold text-gray-900 dark:text-white">Your Children</h2>
+                  </div>
+                  <Link
+                    to="/my-children"
+                    className="text-sm text-purple-600 hover:text-purple-700 flex items-center gap-1"
+                  >
+                    Manage
+                    <ChevronRight className="h-4 w-4" />
+                  </Link>
                 </div>
-              )}
+                <div className="grid gap-3">
+                  {linkedChildren.map((child) => (
+                    <button
+                      key={child.id}
+                      onClick={() => {
+                        setIndexNumber(child.student.indexNumber);
+                        setTimeout(() => searchStudent(), 100);
+                      }}
+                      className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors text-left"
+                    >
+                      {child.student.profilePhotoUrl ? (
+                        <img
+                          src={child.student.profilePhotoUrl}
+                          alt={child.student.fullName}
+                          className="w-10 h-10 rounded-lg object-cover"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center text-white font-bold">
+                          {child.student.firstName.charAt(0)}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 dark:text-white truncate">
+                          {child.student.fullName}
+                        </p>
+                        <p className="text-sm text-gray-500 truncate">
+                          {child.student.schoolName} - {child.student.className}
+                        </p>
+                      </div>
+                      <ChevronRight className="h-5 w-5 text-gray-400" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
-              <button
-                onClick={searchStudent}
-                disabled={searching || !indexNumber.trim()}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {searching ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  <>
-                    <Search className="h-5 w-5" />
-                    Search Student
-                  </>
+            {/* Search Form */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6">
+              <div className="max-w-md mx-auto space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Student Index Number
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={indexNumber}
+                      onChange={(e) => {
+                        setIndexNumber(formatIndexNumber(e.target.value));
+                        setSearchError(null);
+                      }}
+                      onKeyDown={(e) => e.key === 'Enter' && searchStudent()}
+                      placeholder="SL-2025-02-00050"
+                      className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 font-mono text-lg"
+                      autoFocus
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Enter the student's index number (e.g., SL-2025-02-00050)
+                  </p>
+                </div>
+
+                {searchError && (
+                  <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-xl flex items-center gap-2 text-red-700 dark:text-red-300">
+                    <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                    <span className="text-sm">{searchError}</span>
+                  </div>
                 )}
-              </button>
+
+                <button
+                  id="search-student-btn"
+                  onClick={searchStudent}
+                  disabled={searching || !indexNumber.trim()}
+                  className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {searching ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <>
+                      <Search className="h-5 w-5" />
+                      Search Student
+                    </>
+                  )}
+                </button>
+
+                {/* Link to manage children */}
+                <div className="text-center pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <Link
+                    to="/my-children"
+                    className="text-sm text-purple-600 hover:text-purple-700 inline-flex items-center gap-1"
+                  >
+                    <Users className="h-4 w-4" />
+                    Add child to your account for quick access
+                  </Link>
+                </div>
+              </div>
             </div>
           </div>
         ) : (
@@ -381,13 +644,26 @@ export function SchoolUtilitiesPage() {
                     </div>
                   </div>
                 </div>
-                <button
-                  onClick={clearStudent}
-                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                  title="Search another student"
-                >
-                  <X className="h-5 w-5" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      fetchPaymentHistory(student.index_number);
+                      setShowPaymentHistory(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors text-sm font-medium"
+                    title="View payment history"
+                  >
+                    <History className="h-4 w-4" />
+                    Payment History
+                  </button>
+                  <button
+                    onClick={clearStudent}
+                    className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                    title="Search another student"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -556,16 +832,43 @@ export function SchoolUtilitiesPage() {
 
               <div className="p-6 space-y-6">
                 {paymentSuccess ? (
-                  <div className="text-center py-8">
+                  <div className="text-center py-6">
                     <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                       <CheckCircle className="h-8 w-8 text-green-600" />
                     </div>
                     <h4 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
                       Payment Successful!
                     </h4>
-                    <p className="text-gray-500">
+                    <p className="text-gray-600 dark:text-gray-300 mb-1">
                       {formatCurrency(parseFloat(paymentAmount))} paid for {selectedFee.name}
                     </p>
+                    <p className="text-sm text-gray-500 mb-4">
+                      For: {student?.student_name} at {student?.school_name}
+                    </p>
+                    <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 text-left mb-4">
+                      <p className="text-xs text-green-700 dark:text-green-300 font-medium mb-1">Payment Details:</p>
+                      <p className="text-sm text-green-600 dark:text-green-400">
+                        • Deducted from your wallet
+                      </p>
+                      <p className="text-sm text-green-600 dark:text-green-400">
+                        • Credited to school's Peeap wallet
+                      </p>
+                      <p className="text-sm text-green-600 dark:text-green-400">
+                        • School system notified
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setShowPayModal(false);
+                        setPaymentSuccess(false);
+                        setSelectedFee(null);
+                        setPaymentAmount('');
+                        refreshFinancials();
+                      }}
+                      className="w-full py-2.5 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700"
+                    >
+                      Done
+                    </button>
                   </div>
                 ) : (
                   <>
@@ -604,6 +907,19 @@ export function SchoolUtilitiesPage() {
                         </div>
                       </div>
                     </div>
+
+                    {/* Wallet Balance */}
+                    {userWallet && (
+                      <div className="bg-blue-50 dark:bg-blue-900/30 rounded-xl p-3 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Wallet className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                          <span className="text-sm text-blue-700 dark:text-blue-300">Your Wallet</span>
+                        </div>
+                        <span className="font-semibold text-blue-700 dark:text-blue-300">
+                          {formatCurrency(userWallet.balance)}
+                        </span>
+                      </div>
+                    )}
 
                     {/* Amount Input */}
                     <div>
@@ -664,6 +980,105 @@ export function SchoolUtilitiesPage() {
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Payment History Modal */}
+        {showPaymentHistory && student && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
+              <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
+                    <History className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      Payment History
+                    </h3>
+                    <p className="text-sm text-gray-500">{student.student_name}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowPaymentHistory(false)}
+                  className="p-2 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4">
+                {loadingHistory ? (
+                  <div className="text-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
+                    <p className="text-gray-500">Loading payment history...</p>
+                  </div>
+                ) : paymentHistory.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Receipt className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-500">No payments found for this student</p>
+                    <p className="text-sm text-gray-400 mt-1">Payments made through Peeap will appear here</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {paymentHistory.map((payment) => (
+                      <div
+                        key={payment.id}
+                        className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                              <ArrowUpRight className="h-4 w-4 text-green-600" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-900 dark:text-white">
+                                {payment.description || 'School Fee Payment'}
+                              </p>
+                              <p className="text-sm text-gray-500">
+                                {new Date(payment.created_at).toLocaleDateString('en-US', {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold text-green-600">
+                              {formatCurrency(Math.abs(payment.amount))}
+                            </p>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${
+                              payment.status === 'COMPLETED'
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-yellow-100 text-yellow-700'
+                            }`}>
+                              {payment.status}
+                            </span>
+                          </div>
+                        </div>
+                        {payment.reference && (
+                          <p className="text-xs text-gray-400 mt-2 font-mono">
+                            Ref: {payment.reference}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  onClick={() => setShowPaymentHistory(false)}
+                  className="w-full py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-200 dark:hover:bg-gray-600"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         )}

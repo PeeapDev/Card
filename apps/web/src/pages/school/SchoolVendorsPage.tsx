@@ -46,17 +46,29 @@ export function SchoolVendorsPage() {
       setLoading(true);
       try {
         const schoolDomain = localStorage.getItem('school_domain');
+        const schoolId = localStorage.getItem('school_id') || localStorage.getItem('schoolId');
         if (!schoolDomain) {
           setVendors([]);
           setLoading(false);
           return;
         }
 
-        // Try to fetch approved vendors from SaaS API
+        // Try to fetch approved vendors from SaaS API with school_id parameter
         try {
+          const params = new URLSearchParams();
+          if (schoolId) params.append('school_id', schoolId);
+          params.append('page', '1');
+
           const response = await fetch(
-            `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/vendors`,
-            { method: 'GET', headers: { 'Accept': 'application/json' } }
+            `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/vendors?${params.toString()}`,
+            {
+              method: 'GET',
+              headers: {
+                'Accept': 'application/json',
+                'X-School-Domain': schoolDomain,
+                ...(schoolId ? { 'X-School-ID': schoolId } : {}),
+              },
+            }
           );
 
           if (response.ok) {

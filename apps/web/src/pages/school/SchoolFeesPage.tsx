@@ -56,11 +56,11 @@ export function SchoolFeesPage() {
   const [search, setSearch] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  // Get school domain from localStorage
-  const getSchoolDomain = () => {
+  // Get school info from localStorage
+  const getSchoolInfo = () => {
     const schoolDomain = localStorage.getItem('school_domain');
-    const schoolId = localStorage.getItem('schoolId');
-    return schoolDomain || schoolId || null;
+    const schoolId = localStorage.getItem('school_id') || localStorage.getItem('schoolId');
+    return { domain: schoolDomain, id: schoolId };
   };
 
   const fetchFees = async () => {
@@ -68,20 +68,28 @@ export function SchoolFeesPage() {
     setError(null);
 
     try {
-      const schoolDomain = getSchoolDomain();
+      const { domain: schoolDomain, id: schoolId } = getSchoolInfo();
       if (!schoolDomain) {
         setError('School information not found. Please log in again.');
         setLoading(false);
         return;
       }
 
-      // Try to fetch invoices/fees from SDSL2 sync API
+      // Try to fetch invoices/fees from SaaS sync API with school_id parameter
       try {
+        const params = new URLSearchParams();
+        if (schoolId) params.append('school_id', schoolId);
+        params.append('page', '1');
+
         const response = await fetch(
-          `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/invoices`,
+          `https://${schoolDomain}.gov.school.edu.sl/api/peeap/sync/invoices?${params.toString()}`,
           {
             method: 'GET',
-            headers: { 'Accept': 'application/json' },
+            headers: {
+              'Accept': 'application/json',
+              'X-School-Domain': schoolDomain,
+              ...(schoolId ? { 'X-School-ID': schoolId } : {}),
+            },
           }
         );
 

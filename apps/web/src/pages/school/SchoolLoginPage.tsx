@@ -251,6 +251,7 @@ export function SchoolLoginPage() {
       if (connection) {
         const schoolDomain = connection.peeap_school_id || connection.school_id;
         localStorage.setItem('schoolId', connection.school_id);
+        localStorage.setItem('school_id', connection.school_id);
         localStorage.setItem('school_domain', schoolDomain);
         localStorage.setItem('schoolName', connection.school_name);
         navigate(`/${schoolDomain}`);
