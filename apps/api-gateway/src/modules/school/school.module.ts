@@ -5,6 +5,10 @@ import { SchoolController, PaymentsController } from './school.controller';
 import { SchoolService } from './school.service';
 import { OAuthController } from './oauth.controller';
 import { OAuthService } from './oauth.service';
+import { SchoolWalletController } from './school-wallet.controller';
+import { SchoolWalletService } from './school-wallet.service';
+import { MessagingController, WebhookController } from './messaging.controller';
+import { MessagingService } from './messaging.service';
 
 @Module({
   imports: [
@@ -14,8 +18,25 @@ import { OAuthService } from './oauth.service';
     }),
     ConfigModule,
   ],
-  controllers: [SchoolController, PaymentsController, OAuthController],
-  providers: [SchoolService, OAuthService],
-  exports: [SchoolService, OAuthService],
+  controllers: [
+    SchoolController,
+    PaymentsController,
+    OAuthController,
+    SchoolWalletController,
+    MessagingController,
+    WebhookController,
+  ],
+  providers: [
+    SchoolService,
+    OAuthService,
+    SchoolWalletService,
+    MessagingService,
+  ],
+  exports: [
+    SchoolService,
+    OAuthService,
+    SchoolWalletService,
+    MessagingService,
+  ],
 })
 export class SchoolModule {}
