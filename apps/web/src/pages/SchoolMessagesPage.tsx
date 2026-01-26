@@ -79,14 +79,12 @@ export function SchoolMessagesPage() {
     switch (message.type) {
       case 'receipt':
         return `Payment Receipt #${metadata.receipt_number || 'N/A'}`;
-      case 'invoice':
-        return `Invoice #${metadata.invoice_number || 'N/A'}`;
       case 'fee_notice':
         return `Fee Notice - ${metadata.student_name || 'Student'}`;
       case 'salary_slip':
         return `Salary Slip - ${metadata.month || 'N/A'}`;
       case 'reminder':
-        return `Payment Reminder - Invoice #${metadata.invoice_number || 'N/A'}`;
+        return `Payment Reminder #${metadata.invoice_number || 'N/A'}`;
       default:
         return 'School Message';
     }
@@ -274,14 +272,14 @@ export function SchoolMessagesPage() {
                   {selectedMessage.content}
                 </div>
 
-                {/* Action button for invoices */}
-                {selectedMessage.type === 'invoice' && selectedMessage.metadata?.invoice_id && (
+                {/* Action button for fee notices */}
+                {selectedMessage.type === 'fee_notice' && selectedMessage.metadata?.invoice_id && (
                   <Link
                     to={`/my-children`}
                     className="mt-4 w-full flex items-center justify-center gap-2 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700"
                   >
                     <CreditCard className="h-5 w-5" />
-                    Pay Invoice
+                    Pay Fee
                   </Link>
                 )}
 

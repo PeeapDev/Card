@@ -800,16 +800,16 @@ export function SchoolDashboard() {
                       <div className="flex items-center gap-3">
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                           msg.type === 'receipt' ? 'bg-green-100 dark:bg-green-900' :
-                          msg.type === 'invoice' ? 'bg-blue-100 dark:bg-blue-900' :
                           msg.type === 'reminder' ? 'bg-red-100 dark:bg-red-900' :
+                          msg.type === 'fee_notice' ? 'bg-orange-100 dark:bg-orange-900' :
                           'bg-purple-100 dark:bg-purple-900'
                         }`}>
                           {msg.type === 'receipt' ? (
                             <Receipt className="h-5 w-5 text-green-600 dark:text-green-400" />
-                          ) : msg.type === 'invoice' ? (
-                            <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                           ) : msg.type === 'reminder' ? (
                             <Clock className="h-5 w-5 text-red-600 dark:text-red-400" />
+                          ) : msg.type === 'fee_notice' ? (
+                            <FileText className="h-5 w-5 text-orange-600 dark:text-orange-400" />
                           ) : (
                             <Send className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                           )}
@@ -817,8 +817,8 @@ export function SchoolDashboard() {
                         <div>
                           <p className="font-medium text-gray-900 dark:text-white text-sm">
                             {msg.type === 'receipt' ? 'Payment Receipt' :
-                             msg.type === 'invoice' ? 'Invoice Sent' :
                              msg.type === 'reminder' ? 'Payment Reminder' :
+                             msg.type === 'fee_notice' ? 'Fee Notice' :
                              msg.type === 'salary_slip' ? 'Salary Slip' : 'Message'}
                             {msg.metadata?.student_name && ` - ${msg.metadata.student_name}`}
                             {msg.metadata?.staff_name && ` - ${msg.metadata.staff_name}`}
