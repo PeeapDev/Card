@@ -2,7 +2,13 @@
 -- This migration creates the tables needed for the School Shared Wallet API
 
 -- ============================================
--- 1. School Wallets Table
+-- 1. Drop existing functions if they exist (for clean re-run)
+-- ============================================
+DROP FUNCTION IF EXISTS get_school_wallet_balance(TEXT);
+DROP FUNCTION IF EXISTS credit_school_wallet(TEXT, BIGINT, TEXT, TEXT, JSONB);
+
+-- ============================================
+-- 2. School Wallets Table
 -- ============================================
 CREATE TABLE IF NOT EXISTS school_wallets (
   id TEXT PRIMARY KEY,
@@ -19,7 +25,7 @@ CREATE INDEX IF NOT EXISTS idx_school_wallets_school_id ON school_wallets(school
 CREATE INDEX IF NOT EXISTS idx_school_wallets_status ON school_wallets(status);
 
 -- ============================================
--- 2. School Wallet Permissions Table
+-- 3. School Wallet Permissions Table
 -- ============================================
 CREATE TABLE IF NOT EXISTS school_wallet_permissions (
   id TEXT PRIMARY KEY,
@@ -37,7 +43,7 @@ CREATE INDEX IF NOT EXISTS idx_school_wallet_permissions_wallet ON school_wallet
 CREATE INDEX IF NOT EXISTS idx_school_wallet_permissions_user ON school_wallet_permissions(user_id);
 
 -- ============================================
--- 3. School Wallet Transactions Table
+-- 4. School Wallet Transactions Table
 -- ============================================
 CREATE TABLE IF NOT EXISTS school_wallet_transactions (
   id TEXT PRIMARY KEY,
@@ -59,7 +65,7 @@ CREATE INDEX IF NOT EXISTS idx_school_wallet_txns_status ON school_wallet_transa
 CREATE INDEX IF NOT EXISTS idx_school_wallet_txns_created ON school_wallet_transactions(created_at DESC);
 
 -- ============================================
--- 4. School Chat Messages Table
+-- 5. School Chat Messages Table
 -- ============================================
 CREATE TABLE IF NOT EXISTS school_chat_messages (
   id TEXT PRIMARY KEY,
@@ -80,7 +86,7 @@ CREATE INDEX IF NOT EXISTS idx_school_chat_status ON school_chat_messages(status
 CREATE INDEX IF NOT EXISTS idx_school_chat_created ON school_chat_messages(created_at DESC);
 
 -- ============================================
--- 5. School Webhooks Table
+-- 6. School Webhooks Table
 -- ============================================
 CREATE TABLE IF NOT EXISTS school_webhooks (
   id TEXT PRIMARY KEY,
@@ -98,7 +104,7 @@ CREATE INDEX IF NOT EXISTS idx_school_webhooks_school ON school_webhooks(school_
 CREATE INDEX IF NOT EXISTS idx_school_webhooks_status ON school_webhooks(status);
 
 -- ============================================
--- 6. Webhook Deliveries Table (for logging)
+-- 7. Webhook Deliveries Table (for logging)
 -- ============================================
 CREATE TABLE IF NOT EXISTS webhook_deliveries (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -115,7 +121,7 @@ CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_event ON webhook_deliveries(ev
 CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_delivered ON webhook_deliveries(delivered_at DESC);
 
 -- ============================================
--- 7. Enable Row Level Security
+-- 8. Enable Row Level Security
 -- ============================================
 ALTER TABLE school_wallets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE school_wallet_permissions ENABLE ROW LEVEL SECURITY;
@@ -125,82 +131,107 @@ ALTER TABLE school_webhooks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE webhook_deliveries ENABLE ROW LEVEL SECURITY;
 
 -- ============================================
--- 8. RLS Policies
+-- 9. RLS Policies (wrapped in DO block for idempotency)
 -- ============================================
 
--- School Wallets: Users can only view wallets they have permission for
-CREATE POLICY "Users can view wallets they have permission for"
-  ON school_wallets FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM school_wallet_permissions
-      WHERE wallet_id = school_wallets.id
-      AND user_id = auth.uid()::TEXT
-    )
-  );
+DO $$
+BEGIN
+  -- School Wallets: Users can only view wallets they have permission for
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users can view wallets they have permission for' AND tablename = 'school_wallets') THEN
+    CREATE POLICY "Users can view wallets they have permission for"
+      ON school_wallets FOR SELECT
+      USING (
+        EXISTS (
+          SELECT 1 FROM school_wallet_permissions swp
+          WHERE swp.wallet_id = school_wallets.id
+          AND swp.user_id = auth.uid()::TEXT
+        )
+      );
+  END IF;
 
--- School Wallet Permissions: Users can view permissions for wallets they have access to
-CREATE POLICY "Users can view permissions for their wallets"
-  ON school_wallet_permissions FOR SELECT
-  USING (
-    user_id = auth.uid()::TEXT
-    OR EXISTS (
-      SELECT 1 FROM school_wallet_permissions swp
-      WHERE swp.wallet_id = school_wallet_permissions.wallet_id
-      AND swp.user_id = auth.uid()::TEXT
-      AND swp.role = 'owner'
-    )
-  );
+  -- School Wallet Permissions
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users can view permissions for their wallets' AND tablename = 'school_wallet_permissions') THEN
+    CREATE POLICY "Users can view permissions for their wallets"
+      ON school_wallet_permissions FOR SELECT
+      USING (
+        user_id = auth.uid()::TEXT
+        OR EXISTS (
+          SELECT 1 FROM school_wallet_permissions swp2
+          WHERE swp2.wallet_id = school_wallet_permissions.wallet_id
+          AND swp2.user_id = auth.uid()::TEXT
+          AND swp2.role = 'owner'
+        )
+      );
+  END IF;
 
--- School Wallet Transactions: Users can view transactions for wallets they have permission for
-CREATE POLICY "Users can view transactions for their wallets"
-  ON school_wallet_transactions FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM school_wallet_permissions
-      WHERE wallet_id = school_wallet_transactions.wallet_id
-      AND user_id = auth.uid()::TEXT
-      AND 'view_transactions' = ANY(permissions)
-    )
-  );
+  -- School Wallet Transactions
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users can view transactions for their wallets' AND tablename = 'school_wallet_transactions') THEN
+    CREATE POLICY "Users can view transactions for their wallets"
+      ON school_wallet_transactions FOR SELECT
+      USING (
+        EXISTS (
+          SELECT 1 FROM school_wallet_permissions swp
+          WHERE swp.wallet_id = school_wallet_transactions.wallet_id
+          AND swp.user_id = auth.uid()::TEXT
+          AND 'view_transactions' = ANY(swp.permissions)
+        )
+      );
+  END IF;
 
--- School Chat Messages: Users can only see their own messages
-CREATE POLICY "Users can view their own messages"
-  ON school_chat_messages FOR SELECT
-  USING (recipient_user_id = auth.uid()::TEXT);
+  -- School Chat Messages
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users can view their own messages' AND tablename = 'school_chat_messages') THEN
+    CREATE POLICY "Users can view their own messages"
+      ON school_chat_messages FOR SELECT
+      USING (recipient_user_id = auth.uid()::TEXT);
+  END IF;
 
--- School Webhooks: Users can manage webhooks for schools they administer
-CREATE POLICY "Users can view webhooks they created"
-  ON school_webhooks FOR SELECT
-  USING (created_by = auth.uid()::TEXT);
+  -- School Webhooks
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users can view webhooks they created' AND tablename = 'school_webhooks') THEN
+    CREATE POLICY "Users can view webhooks they created"
+      ON school_webhooks FOR SELECT
+      USING (created_by = auth.uid()::TEXT);
+  END IF;
 
--- Service role bypass for all tables (for API access)
-CREATE POLICY "Service role can access school_wallets"
-  ON school_wallets FOR ALL
-  USING (auth.role() = 'service_role');
+  -- Service role bypass policies
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role can access school_wallets' AND tablename = 'school_wallets') THEN
+    CREATE POLICY "Service role can access school_wallets"
+      ON school_wallets FOR ALL
+      USING (auth.role() = 'service_role');
+  END IF;
 
-CREATE POLICY "Service role can access school_wallet_permissions"
-  ON school_wallet_permissions FOR ALL
-  USING (auth.role() = 'service_role');
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role can access school_wallet_permissions' AND tablename = 'school_wallet_permissions') THEN
+    CREATE POLICY "Service role can access school_wallet_permissions"
+      ON school_wallet_permissions FOR ALL
+      USING (auth.role() = 'service_role');
+  END IF;
 
-CREATE POLICY "Service role can access school_wallet_transactions"
-  ON school_wallet_transactions FOR ALL
-  USING (auth.role() = 'service_role');
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role can access school_wallet_transactions' AND tablename = 'school_wallet_transactions') THEN
+    CREATE POLICY "Service role can access school_wallet_transactions"
+      ON school_wallet_transactions FOR ALL
+      USING (auth.role() = 'service_role');
+  END IF;
 
-CREATE POLICY "Service role can access school_chat_messages"
-  ON school_chat_messages FOR ALL
-  USING (auth.role() = 'service_role');
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role can access school_chat_messages' AND tablename = 'school_chat_messages') THEN
+    CREATE POLICY "Service role can access school_chat_messages"
+      ON school_chat_messages FOR ALL
+      USING (auth.role() = 'service_role');
+  END IF;
 
-CREATE POLICY "Service role can access school_webhooks"
-  ON school_webhooks FOR ALL
-  USING (auth.role() = 'service_role');
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role can access school_webhooks' AND tablename = 'school_webhooks') THEN
+    CREATE POLICY "Service role can access school_webhooks"
+      ON school_webhooks FOR ALL
+      USING (auth.role() = 'service_role');
+  END IF;
 
-CREATE POLICY "Service role can access webhook_deliveries"
-  ON webhook_deliveries FOR ALL
-  USING (auth.role() = 'service_role');
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Service role can access webhook_deliveries' AND tablename = 'webhook_deliveries') THEN
+    CREATE POLICY "Service role can access webhook_deliveries"
+      ON webhook_deliveries FOR ALL
+      USING (auth.role() = 'service_role');
+  END IF;
+END $$;
 
 -- ============================================
--- 9. Helper Functions
+-- 10. Helper Functions
 -- ============================================
 
 -- Function to get school wallet balance
@@ -213,7 +244,7 @@ RETURNS TABLE (
 ) AS $$
 BEGIN
   RETURN QUERY
-  SELECT sw.id, sw.balance, sw.currency, sw.status
+  SELECT sw.id AS wallet_id, sw.balance, sw.currency, sw.status
   FROM school_wallets sw
   WHERE sw.school_id = p_school_id;
 END;
@@ -234,9 +265,9 @@ DECLARE
   v_current_balance BIGINT;
 BEGIN
   -- Get wallet
-  SELECT id, balance INTO v_wallet_id, v_current_balance
-  FROM school_wallets
-  WHERE school_id = p_school_id
+  SELECT sw.id, sw.balance INTO v_wallet_id, v_current_balance
+  FROM school_wallets sw
+  WHERE sw.school_id = p_school_id
   FOR UPDATE;
 
   IF v_wallet_id IS NULL THEN
@@ -247,10 +278,10 @@ BEGIN
   v_transaction_id := 'swtxn_' || encode(gen_random_bytes(12), 'hex');
 
   -- Update balance
-  UPDATE school_wallets
-  SET balance = balance + p_amount,
+  UPDATE school_wallets sw
+  SET balance = sw.balance + p_amount,
       updated_at = NOW()
-  WHERE id = v_wallet_id;
+  WHERE sw.id = v_wallet_id;
 
   -- Create transaction record
   INSERT INTO school_wallet_transactions (
