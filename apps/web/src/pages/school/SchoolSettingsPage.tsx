@@ -177,31 +177,30 @@ export function SchoolSettingsPage() {
 
   const handleConnectPeeap = async () => {
     setConnecting(true);
-    // In real app, redirect to Peeap OAuth
-    // window.location.href = 'https://peeap.com/oauth/authorize?client_id=SCHOOL_CLIENT&redirect_uri=...';
 
-    // Mock: simulate OAuth callback
-    setTimeout(() => {
-      setPeeapConnection({
-        connected: true,
-        schoolId: 'school_001',
-        schoolName: 'Government Secondary School',
-        connectedAt: new Date().toISOString(),
-        lastSync: new Date().toISOString(),
-        syncSettings: {
-          students: true,
-          fees: true,
-          transport: true,
-          vendors: true,
-        },
-        stats: {
-          studentsLinked: 0,
-          walletsActive: 0,
-          transactionsToday: 0,
-        },
-      });
-      setConnecting(false);
-    }, 2000);
+    // Generate CSRF state token
+    const state = crypto.randomUUID();
+    sessionStorage.setItem('peeap_oauth_state', state);
+
+    // Get school domain for redirect
+    const domain = schoolSlug || localStorage.getItem('school_domain') || '';
+
+    // Build OAuth authorization URL
+    const params = new URLSearchParams({
+      client_id: 'school-portal',
+      redirect_uri: `${window.location.origin}/auth/callback`,
+      response_type: 'code',
+      scope: 'school_admin school:connect school:manage',
+      state: state,
+    });
+
+    // Add school context
+    if (domain) {
+      params.set('school_domain', domain);
+    }
+
+    // Redirect to Peeap OAuth authorization
+    window.location.href = `https://my.peeap.com/auth/authorize?${params.toString()}`;
   };
 
   const handleDisconnect = () => {
