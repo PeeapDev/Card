@@ -26,7 +26,6 @@ import {
   ChevronRight,
   Plus,
   Star,
-  ArrowRightLeft,
   Banknote,
   CreditCard,
 } from 'lucide-react';
@@ -203,13 +202,8 @@ export function WithdrawPage() {
   const [step, setStep] = useState<Step>('wallet');
   const [destinationType, setDestinationType] = useState<DestinationType | null>(null);
 
-  // Main wallet state
+  // Main wallet state (only primary wallet for cashout)
   const [mainWallet, setMainWallet] = useState<ExtendedWallet | null>(null);
-  const [otherWallets, setOtherWallets] = useState<ExtendedWallet[]>([]);
-  const [selectedTransferWallet, setSelectedTransferWallet] = useState<ExtendedWallet | null>(null);
-  const [showTransferModal, setShowTransferModal] = useState(false);
-  const [transferAmount, setTransferAmount] = useState('');
-  const [transferLoading, setTransferLoading] = useState(false);
 
   // Connected bank accounts
   const [connectedBankAccounts, setConnectedBankAccounts] = useState<UserBankAccount[]>([]);
@@ -239,7 +233,7 @@ export function WithdrawPage() {
     currencyService.getCurrencies().then(setCurrencies);
   }, []);
 
-  // Identify main wallet and other wallets
+  // Identify main wallet only (primary SLE wallet for cashout)
   useEffect(() => {
     if (wallets && wallets.length > 0) {
       // Main wallet is the primary SLE wallet
@@ -252,14 +246,7 @@ export function WithdrawPage() {
         (w) => w.status === 'ACTIVE' && w.currency === 'SLE'
       ) as ExtendedWallet;
 
-      const main = primary || fallback;
-      setMainWallet(main || null);
-
-      // Other wallets with balance that can transfer to main
-      const others = wallets.filter(
-        (w) => w.id !== main?.id && w.status === 'ACTIVE' && w.balance > 0
-      ) as ExtendedWallet[];
-      setOtherWallets(others);
+      setMainWallet(primary || fallback || null);
     }
   }, [wallets]);
 
@@ -313,35 +300,6 @@ export function WithdrawPage() {
   const formatCurrency = (amt: number, currencyCode: string = 'SLE'): string => {
     const symbol = getCurrencySymbol(currencyCode);
     return `${symbol} ${amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
-  // Transfer from other wallet to main wallet
-  const handleTransferToMain = async () => {
-    if (!selectedTransferWallet || !mainWallet || !transferAmount) return;
-
-    const amountNum = parseFloat(transferAmount);
-    if (amountNum <= 0 || amountNum > selectedTransferWallet.balance) {
-      setError('Invalid transfer amount');
-      return;
-    }
-
-    setTransferLoading(true);
-    try {
-      await walletService.transferBetweenOwnWallets(
-        selectedTransferWallet.id,
-        mainWallet.id,
-        amountNum,
-        'Transfer to main wallet for cashout'
-      );
-      await refetchWallets();
-      setShowTransferModal(false);
-      setTransferAmount('');
-      setSelectedTransferWallet(null);
-    } catch (err: any) {
-      setError(err.message || 'Transfer failed');
-    } finally {
-      setTransferLoading(false);
-    }
   };
 
   const validateForm = (): boolean => {
@@ -540,66 +498,8 @@ export function WithdrawPage() {
               </div>
             </motion.div>
 
-            {/* Info Banner */}
-            <div className="flex items-start gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl">
-              <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium text-blue-800 dark:text-blue-200">Cashout from Main Wallet Only</p>
-                <p className="text-sm text-blue-600 dark:text-blue-300 mt-1">
-                  Withdrawals can only be made from your main wallet. Transfer funds from other wallets below before cashing out.
-                </p>
-              </div>
-            </div>
-
-            {/* Other Wallets */}
-            {otherWallets.length > 0 && (
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Other Wallets</h3>
-                <div className="space-y-3">
-                  {otherWallets.map((wallet) => (
-                    <motion.div
-                      key={wallet.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                          (wallet.walletType === 'merchant' || wallet.walletType === 'business_plus') ? 'bg-purple-100 text-purple-600' :
-                          wallet.walletType === 'driver' ? 'bg-yellow-100 text-yellow-600' :
-                          'bg-gray-100 text-gray-600'
-                        }`}>
-                          <Wallet className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900 dark:text-white">
-                            {wallet.name || `${wallet.walletType || 'Other'} Wallet`}
-                          </p>
-                          <p className="text-sm text-gray-500 dark:text-gray-400">
-                            {formatCurrency(wallet.balance, wallet.currency)}
-                          </p>
-                        </div>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedTransferWallet(wallet);
-                          setTransferAmount(wallet.balance.toString());
-                          setShowTransferModal(true);
-                        }}
-                      >
-                        <ArrowRightLeft className="w-4 h-4 mr-1" />
-                        Transfer
-                      </Button>
-                    </motion.div>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* No balance warning */}
-            {mainWallet && mainWallet.balance <= 0 && otherWallets.length === 0 && (
+            {mainWallet && mainWallet.balance <= 0 && (
               <div className="text-center py-8">
                 <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Wallet className="w-8 h-8 text-gray-400" />
@@ -971,116 +871,6 @@ export function WithdrawPage() {
           </motion.div>
         )}
 
-        {/* Transfer Modal */}
-        {showTransferModal && selectedTransferWallet && mainWallet && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md"
-            >
-              <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Transfer to Main Wallet</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                  Transfer funds before cashing out
-                </p>
-              </div>
-
-              <div className="p-6 space-y-4">
-                {/* From Wallet */}
-                <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center">
-                        <Wallet className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">From</p>
-                        <p className="font-medium text-gray-900 dark:text-white">
-                          {selectedTransferWallet.name || 'Other Wallet'}
-                        </p>
-                      </div>
-                    </div>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      {formatCurrency(selectedTransferWallet.balance)}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex justify-center">
-                  <ArrowDownToLine className="w-6 h-6 text-gray-400" />
-                </div>
-
-                {/* To Wallet */}
-                <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
-                      <Wallet className="w-5 h-5 text-green-600 dark:text-green-400" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">To</p>
-                      <p className="font-medium text-gray-900 dark:text-white">Main Wallet</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Amount */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Amount</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">Le</span>
-                    <input
-                      type="number"
-                      value={transferAmount}
-                      onChange={(e) => setTransferAmount(e.target.value)}
-                      max={selectedTransferWallet.balance}
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                    />
-                  </div>
-                  <button
-                    onClick={() => setTransferAmount(selectedTransferWallet.balance.toString())}
-                    className="text-sm text-green-600 hover:text-green-700 mt-1"
-                  >
-                    Transfer all ({formatCurrency(selectedTransferWallet.balance)})
-                  </button>
-                </div>
-
-                {error && (
-                  <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-400">
-                    {error}
-                  </div>
-                )}
-              </div>
-
-              <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => {
-                    setShowTransferModal(false);
-                    setSelectedTransferWallet(null);
-                    setTransferAmount('');
-                    setError('');
-                  }}
-                  disabled={transferLoading}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  className="flex-1"
-                  onClick={handleTransferToMain}
-                  disabled={transferLoading || !transferAmount || parseFloat(transferAmount) <= 0}
-                >
-                  {transferLoading ? (
-                    <><Loader2 className="w-4 h-4 animate-spin mr-2" />Transferring...</>
-                  ) : (
-                    'Transfer'
-                  )}
-                </Button>
-              </div>
-            </motion.div>
-          </div>
-        )}
       </div>
     </MainLayout>
   );
