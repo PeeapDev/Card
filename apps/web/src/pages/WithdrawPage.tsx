@@ -1,9 +1,11 @@
 /**
- * Withdraw Page - Withdraw money from Peeap wallet to Bank or Mobile Money
+ * Withdraw/Cashout Page - Modern Redesign
  *
- * Users can withdraw their balance to:
- * - Mobile Money (Orange Money, Africell)
- * - Bank Account (from user's connected bank accounts)
+ * Features:
+ * - Only main wallet for cashout (other wallets must transfer to main first)
+ * - Bank and Mobile Money payout options
+ * - Modern card-based design (not list view)
+ * - Proper authentication token handling
  */
 
 import { useState, useEffect, useRef } from 'react';
@@ -24,8 +26,9 @@ import {
   ChevronRight,
   Plus,
   Star,
-  User,
   ArrowRightLeft,
+  Banknote,
+  CreditCard,
 } from 'lucide-react';
 import { Card, Button } from '@/components/ui';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -33,49 +36,49 @@ import { useWallets } from '@/hooks/useWallets';
 import { useAuth } from '@/context/AuthContext';
 import { currencyService, Currency } from '@/services/currency.service';
 import { bankAccountService, UserBankAccount } from '@/services/bankAccount.service';
+import { walletService, ExtendedWallet } from '@/services/wallet.service';
+import { sessionService } from '@/services/session.service';
 
-interface MobileMoneyProvider {
-  providerId: string;
-  name: string;
-  country: string;
-  canPayout: boolean;
-}
+type DestinationType = 'momo' | 'bank';
+type Step = 'wallet' | 'method' | 'amount' | 'processing' | 'success' | 'error';
 
-interface Bank {
-  id: string;
-  name: string;
-  country: string;
-}
-
-type DestinationType = 'momo' | 'bank' | 'personal';
-type Step = 'select' | 'form' | 'processing' | 'success' | 'error';
-
-// Use relative path for same-origin API requests (avoids CORS issues and ensures correct deployment)
+// Use relative path for same-origin API requests
 const API_BASE = '/api';
 
-const PROVIDER_DISPLAY: Record<string, { name: string; color: string; icon: string; bgColor: string }> = {
-  'm17': { name: 'Orange Money', color: 'text-orange-600', icon: 'OM', bgColor: 'bg-orange-100' },
-  'm18': { name: 'Africell Money', color: 'text-blue-600', icon: 'AF', bgColor: 'bg-blue-100' },
-};
-
-// Phone number prefixes for provider detection (Sierra Leone)
-// Orange: 72-76, 78-79
-// Africell: 30, 33, 77, 80, 88, 90, 99
-const ORANGE_PREFIXES = ['72', '73', '74', '75', '76', '78', '79'];
-const AFRICELL_PREFIXES = ['30', '33', '77', '80', '88', '90', '99'];
+// Mobile Money Provider Cards
+const MOMO_PROVIDERS = [
+  {
+    id: 'm17',
+    name: 'Orange Money',
+    color: 'from-orange-500 to-orange-600',
+    textColor: 'text-orange-600',
+    bgColor: 'bg-orange-50',
+    borderColor: 'border-orange-200',
+    icon: 'OM',
+    prefixes: ['72', '73', '74', '75', '76', '78', '79'],
+  },
+  {
+    id: 'm18',
+    name: 'Africell Money',
+    color: 'from-blue-500 to-blue-600',
+    textColor: 'text-blue-600',
+    bgColor: 'bg-blue-50',
+    borderColor: 'border-blue-200',
+    icon: 'AF',
+    prefixes: ['30', '33', '77', '80', '88', '90', '99'],
+  },
+];
 
 // Auto-detect provider from phone number
 function detectProvider(phone: string): string | null {
   const normalized = phone.replace(/\s+/g, '').replace(/^(\+232|232|0)/, '');
   if (normalized.length < 2) return null;
-
   const prefix = normalized.substring(0, 2);
 
-  if (ORANGE_PREFIXES.includes(prefix)) {
-    return 'm17'; // Orange Money
-  }
-  if (AFRICELL_PREFIXES.includes(prefix)) {
-    return 'm18'; // Africell Money
+  for (const provider of MOMO_PROVIDERS) {
+    if (provider.prefixes.includes(prefix)) {
+      return provider.id;
+    }
   }
   return null;
 }
@@ -86,11 +89,13 @@ function SlideToPayButton({
   disabled,
   walletPin,
   onPinChange,
+  label = 'Slide to Withdraw',
 }: {
   onComplete: () => void;
   disabled: boolean;
   walletPin: string;
   onPinChange: (pin: string) => void;
+  label?: string;
 }) {
   const constraintsRef = useRef<HTMLDivElement>(null);
   const x = useMotionValue(0);
@@ -99,7 +104,7 @@ function SlideToPayButton({
 
   useEffect(() => {
     if (constraintsRef.current) {
-      setSliderWidth(constraintsRef.current.offsetWidth - 64); // 64 = button width
+      setSliderWidth(constraintsRef.current.offsetWidth - 64);
     }
   }, []);
 
@@ -109,23 +114,15 @@ function SlideToPayButton({
     ['rgb(22, 163, 74)', 'rgb(21, 128, 61)']
   );
 
-  const textOpacity = useTransform(
-    x,
-    [0, sliderWidth * 0.3],
-    [1, 0]
-  );
+  const textOpacity = useTransform(x, [0, sliderWidth * 0.3], [1, 0]);
 
   const handleDragEnd = () => {
     const currentX = x.get();
     if (currentX >= sliderWidth * 0.85) {
-      // Complete the slide
       animate(x, sliderWidth, { duration: 0.2 });
       setIsCompleted(true);
-      setTimeout(() => {
-        onComplete();
-      }, 300);
+      setTimeout(() => onComplete(), 300);
     } else {
-      // Reset
       animate(x, 0, { duration: 0.3 });
     }
   };
@@ -134,7 +131,7 @@ function SlideToPayButton({
   const canSlide = !disabled && isPinValid && !isCompleted;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {/* PIN Input */}
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -148,25 +145,19 @@ function SlideToPayButton({
             value={walletPin}
             onChange={(e) => onPinChange(e.target.value.replace(/\D/g, '').slice(0, 4))}
             placeholder="••••"
-            className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-center text-xl tracking-[0.5em] font-mono"
+            className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-center text-xl tracking-[0.5em] font-mono"
           />
         </div>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          Use your 4-digit wallet PIN
-        </p>
       </div>
 
       {/* Slide to Pay */}
       <motion.div
         ref={constraintsRef}
         className={`relative h-16 rounded-xl overflow-hidden ${
-          canSlide
-            ? 'bg-green-600'
-            : 'bg-gray-300 dark:bg-gray-700'
+          canSlide ? 'bg-green-600' : 'bg-gray-300 dark:bg-gray-700'
         }`}
         style={{ background: canSlide ? background : undefined }}
       >
-        {/* Text */}
         <motion.div
           className="absolute inset-0 flex items-center justify-center"
           style={{ opacity: textOpacity }}
@@ -174,24 +165,14 @@ function SlideToPayButton({
           <span className={`text-sm font-medium flex items-center gap-2 ${
             canSlide ? 'text-white' : 'text-gray-500 dark:text-gray-400'
           }`}>
-            {!isPinValid ? (
-              'Enter PIN to enable'
-            ) : isCompleted ? (
-              <>
-                <CheckCircle className="w-5 h-5" />
-                Processing...
-              </>
+            {!isPinValid ? 'Enter PIN to enable' : isCompleted ? (
+              <><CheckCircle className="w-5 h-5" />Processing...</>
             ) : (
-              <>
-                Slide to Withdraw
-                <ChevronRight className="w-5 h-5" />
-                <ChevronRight className="w-5 h-5 -ml-3" />
-              </>
+              <>{label}<ChevronRight className="w-5 h-5" /><ChevronRight className="w-5 h-5 -ml-3" /></>
             )}
           </span>
         </motion.div>
 
-        {/* Slider Button */}
         <motion.div
           drag={canSlide ? 'x' : false}
           dragConstraints={constraintsRef}
@@ -200,9 +181,7 @@ function SlideToPayButton({
           onDragEnd={handleDragEnd}
           style={{ x }}
           className={`absolute left-1 top-1 bottom-1 w-14 rounded-lg flex items-center justify-center shadow-lg ${
-            canSlide
-              ? 'bg-white cursor-grab active:cursor-grabbing'
-              : 'bg-gray-200 dark:bg-gray-600 cursor-not-allowed'
+            canSlide ? 'bg-white cursor-grab active:cursor-grabbing' : 'bg-gray-200 dark:bg-gray-600 cursor-not-allowed'
           }`}
         >
           {isCompleted ? (
@@ -221,28 +200,27 @@ export function WithdrawPage() {
   const navigate = useNavigate();
   const { data: wallets, isLoading: walletsLoading, refetch: refetchWallets } = useWallets();
 
-  const [step, setStep] = useState<Step>('select');
+  const [step, setStep] = useState<Step>('wallet');
   const [destinationType, setDestinationType] = useState<DestinationType | null>(null);
 
-  // Providers and Banks
-  const [momoProviders, setMomoProviders] = useState<MobileMoneyProvider[]>([]);
-  const [banks, setBanks] = useState<Bank[]>([]);
-  const [providersLoading, setProvidersLoading] = useState(true);
+  // Main wallet state
+  const [mainWallet, setMainWallet] = useState<ExtendedWallet | null>(null);
+  const [otherWallets, setOtherWallets] = useState<ExtendedWallet[]>([]);
+  const [selectedTransferWallet, setSelectedTransferWallet] = useState<ExtendedWallet | null>(null);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferAmount, setTransferAmount] = useState('');
+  const [transferLoading, setTransferLoading] = useState(false);
 
   // Connected bank accounts
   const [connectedBankAccounts, setConnectedBankAccounts] = useState<UserBankAccount[]>([]);
   const [bankAccountsLoading, setBankAccountsLoading] = useState(false);
   const [selectedBankAccount, setSelectedBankAccount] = useState<UserBankAccount | null>(null);
 
-  // Personal wallet (for merchant to personal transfers)
-  const [personalWallet, setPersonalWallet] = useState<{id: string; balance: number; currency: string} | null>(null);
-  const [hasBusinessWallet, setHasBusinessWallet] = useState(false);
+  // Mobile Money state
+  const [selectedProviderId, setSelectedProviderId] = useState<string>('');
+  const [phoneNumber, setPhoneNumber] = useState('');
 
   // Form state
-  const [selectedWalletId, setSelectedWalletId] = useState<string>('');
-  const [selectedProviderId, setSelectedProviderId] = useState<string>('');
-  const [accountNumber, setAccountNumber] = useState('');
-  const [accountName, setAccountName] = useState('');
   const [amount, setAmount] = useState('');
   const [walletPin, setWalletPin] = useState('');
 
@@ -261,92 +239,64 @@ export function WithdrawPage() {
     currencyService.getCurrencies().then(setCurrencies);
   }, []);
 
-  // Load providers on mount
+  // Identify main wallet and other wallets
   useEffect(() => {
-    loadProviders();
-    loadBanks();
-  }, []);
+    if (wallets && wallets.length > 0) {
+      // Main wallet is the primary SLE wallet
+      const primary = wallets.find(
+        (w) => w.status === 'ACTIVE' && w.currency === 'SLE' && (w as ExtendedWallet).walletType === 'primary'
+      ) as ExtendedWallet;
 
-  // Set default wallet when wallets load
-  useEffect(() => {
-    if (wallets && wallets.length > 0 && !selectedWalletId) {
-      const sleWallet = wallets.find(w => w.status === 'ACTIVE' && w.currency === 'SLE');
-      const activeWallet = wallets.find(w => w.status === 'ACTIVE');
-      const defaultWallet = sleWallet || activeWallet || wallets[0];
-      setSelectedWalletId(defaultWallet.id);
+      // Fallback: first active SLE wallet
+      const fallback = wallets.find(
+        (w) => w.status === 'ACTIVE' && w.currency === 'SLE'
+      ) as ExtendedWallet;
+
+      const main = primary || fallback;
+      setMainWallet(main || null);
+
+      // Other wallets with balance that can transfer to main
+      const others = wallets.filter(
+        (w) => w.id !== main?.id && w.status === 'ACTIVE' && w.balance > 0
+      ) as ExtendedWallet[];
+      setOtherWallets(others);
     }
-  }, [wallets, selectedWalletId]);
+  }, [wallets]);
 
-  // Auto-detect provider when phone number changes (mobile money only)
+  // Auto-detect provider when phone number changes
   useEffect(() => {
     if (destinationType === 'momo') {
-      const detected = detectProvider(accountNumber);
+      const detected = detectProvider(phoneNumber);
       if (detected) {
         setSelectedProviderId(detected);
       }
     }
-  }, [accountNumber, destinationType]);
+  }, [phoneNumber, destinationType]);
 
-  // Calculate fee when amount changes (no fee for personal wallet transfers)
+  // Calculate fee when amount changes
   useEffect(() => {
     const amountNum = parseFloat(amount) || 0;
     if (amountNum > 0) {
-      // No fee for internal personal wallet transfers
-      if (destinationType === 'personal') {
-        setFee(0);
-        setTotalDeduction(amountNum);
-      } else {
-        // 2% fee only (no flat fee) - fees in new Leone (Le)
-        let calculatedFee = Math.round(amountNum * 0.02 * 100) / 100; // 2% fee
-        setFee(calculatedFee);
-        setTotalDeduction(amountNum + calculatedFee);
-      }
+      const calculatedFee = Math.round(amountNum * 0.02 * 100) / 100; // 2% fee
+      setFee(calculatedFee);
+      setTotalDeduction(amountNum + calculatedFee);
     } else {
       setFee(0);
       setTotalDeduction(0);
     }
-  }, [amount, destinationType]);
+  }, [amount]);
 
-  const loadProviders = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/router/mobile-money/providers`);
-      const data = await response.json();
-      if (data.success && data.providers) {
-        setMomoProviders(data.providers.filter((p: MobileMoneyProvider) => p.canPayout));
-      }
-    } catch (err) {
-      console.error('Failed to load providers:', err);
-      setMomoProviders([
-        { providerId: 'm17', name: 'Orange Money', country: 'SL', canPayout: true },
-        { providerId: 'm18', name: 'Africell Money', country: 'SL', canPayout: true },
-      ]);
-    } finally {
-      setProvidersLoading(false);
-    }
-  };
-
-  // Load available banks from Monime API
-  const loadBanks = async () => {
-    try {
-      const bankList = await bankAccountService.getAvailableBanks('SL');
-      setBanks(bankList.map(b => ({ id: b.providerId, name: b.name, country: b.country })));
-    } catch (err) {
-      console.error('Failed to load banks:', err);
-    }
-  };
-
-  // Load user's connected bank accounts
+  // Load connected bank accounts
   const loadConnectedBankAccounts = async () => {
     setBankAccountsLoading(true);
     try {
       const accounts = await bankAccountService.getUserBankAccounts();
       setConnectedBankAccounts(accounts);
-      // Auto-select default account if exists
-      const defaultAccount = accounts.find(a => a.isDefault);
+      const defaultAccount = accounts.find((a) => a.isDefault);
       if (defaultAccount) {
-        selectBankAccount(defaultAccount);
+        setSelectedBankAccount(defaultAccount);
       } else if (accounts.length > 0) {
-        selectBankAccount(accounts[0]);
+        setSelectedBankAccount(accounts[0]);
       }
     } catch (err) {
       console.error('Failed to load connected bank accounts:', err);
@@ -355,91 +305,68 @@ export function WithdrawPage() {
     }
   };
 
-  // Select a bank account
-  const selectBankAccount = (account: UserBankAccount) => {
-    setSelectedBankAccount(account);
-    setSelectedProviderId(account.bankProviderId);
-    setAccountNumber(account.accountNumber);
-    setAccountName(account.accountName || '');
-  };
-
-  // Load personal wallet for merchant-to-personal transfers
-  const loadPersonalWallet = async () => {
-    if (!user?.id) return;
-
-    const { data } = await (await import('@/lib/supabase')).supabase
-      .from('wallets')
-      .select('id, balance, currency, wallet_type')
-      .eq('user_id', user.id)
-      .eq('wallet_type', 'primary')
-      .eq('currency', 'SLE')
-      .eq('status', 'ACTIVE')
-      .single();
-
-    if (data) {
-      setPersonalWallet(data);
-    }
-  };
-
-  // Check if user has business wallet (merchant)
-  useEffect(() => {
-    if (wallets && wallets.length > 0) {
-      const businessWallet = wallets.find(w => w.walletType === 'business');
-      setHasBusinessWallet(!!businessWallet);
-
-      // Load personal wallet if they have a business wallet
-      if (businessWallet) {
-        loadPersonalWallet();
-      }
-    }
-  }, [wallets]);
-
   const getCurrencySymbol = (code: string): string => {
-    // SLE is the new Sierra Leone Leone after redenomination - symbol is "Le"
     if (code === 'SLE') return 'Le';
-    return currencies.find(c => c.code === code)?.symbol || code;
+    return currencies.find((c) => c.code === code)?.symbol || code;
   };
 
   const formatCurrency = (amt: number, currencyCode: string = 'SLE'): string => {
     const symbol = getCurrencySymbol(currencyCode);
-    // Show 2 decimal places for new Leone (Le)
     return `${symbol} ${amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  // Transfer from other wallet to main wallet
+  const handleTransferToMain = async () => {
+    if (!selectedTransferWallet || !mainWallet || !transferAmount) return;
+
+    const amountNum = parseFloat(transferAmount);
+    if (amountNum <= 0 || amountNum > selectedTransferWallet.balance) {
+      setError('Invalid transfer amount');
+      return;
+    }
+
+    setTransferLoading(true);
+    try {
+      await walletService.transferBetweenOwnWallets(
+        selectedTransferWallet.id,
+        mainWallet.id,
+        amountNum,
+        'Transfer to main wallet for cashout'
+      );
+      await refetchWallets();
+      setShowTransferModal(false);
+      setTransferAmount('');
+      setSelectedTransferWallet(null);
+    } catch (err: any) {
+      setError(err.message || 'Transfer failed');
+    } finally {
+      setTransferLoading(false);
+    }
   };
 
   const validateForm = (): boolean => {
     setError('');
 
-    if (!selectedWalletId) {
-      setError('Please select a wallet');
+    if (!mainWallet) {
+      setError('Main wallet not found');
       return false;
     }
 
-    // For personal wallet transfers
-    if (destinationType === 'personal') {
-      if (!personalWallet) {
-        setError('Personal wallet not found');
-        return false;
-      }
-    }
-    // For bank withdrawals, check selected bank account
-    else if (destinationType === 'bank') {
+    if (destinationType === 'bank') {
       if (!selectedBankAccount) {
         setError('Please select a bank account');
         return false;
       }
-    } else {
-      // For mobile money
+    } else if (destinationType === 'momo') {
       if (!selectedProviderId) {
-        setError('Please select a provider');
+        setError('Please select a mobile money provider');
         return false;
       }
-
-      if (!accountNumber) {
+      if (!phoneNumber) {
         setError('Please enter a phone number');
         return false;
       }
-
-      const normalized = accountNumber.replace(/\s+/g, '').replace(/^(\+232|232)/, '');
+      const normalized = phoneNumber.replace(/\s+/g, '').replace(/^(\+232|232)/, '');
       if (!/^[0-9]{8}$/.test(normalized)) {
         setError('Please enter a valid 8-digit phone number');
         return false;
@@ -448,14 +375,12 @@ export function WithdrawPage() {
 
     const amountNum = parseFloat(amount);
     if (!amountNum || amountNum < 1) {
-      setError('Minimum transfer amount is Le 1');
+      setError('Minimum withdrawal amount is Le 1');
       return false;
     }
 
-    const selectedWallet = wallets?.find(w => w.id === selectedWalletId);
-    if (!selectedWallet || selectedWallet.balance < totalDeduction) {
-      const feeText = destinationType === 'personal' ? '' : ' (including fee)';
-      setError(`Insufficient balance. You need ${formatCurrency(totalDeduction)}${feeText}`);
+    if (mainWallet.balance < totalDeduction) {
+      setError(`Insufficient balance. You need ${formatCurrency(totalDeduction)} (including fee)`);
       return false;
     }
 
@@ -474,68 +399,12 @@ export function WithdrawPage() {
     setError('');
 
     try {
-      // Handle personal wallet transfer directly via Supabase (no API needed)
-      if (destinationType === 'personal' && personalWallet) {
-        const { supabase } = await import('@/lib/supabase');
-        const amountNum = parseFloat(amount);
+      // Get session token for authentication
+      const sessionToken = sessionService.getSessionToken();
 
-        // Deduct from source wallet (business wallet)
-        const sourceWallet = wallets?.find(w => w.id === selectedWalletId);
-        if (!sourceWallet) throw new Error('Source wallet not found');
-
-        const { error: deductError } = await supabase
-          .from('wallets')
-          .update({ balance: sourceWallet.balance - amountNum })
-          .eq('id', selectedWalletId);
-
-        if (deductError) throw new Error('Failed to deduct from source wallet');
-
-        // Credit personal wallet
-        const { error: creditError } = await supabase
-          .from('wallets')
-          .update({ balance: personalWallet.balance + amountNum })
-          .eq('id', personalWallet.id);
-
-        if (creditError) {
-          // Rollback
-          await supabase
-            .from('wallets')
-            .update({ balance: sourceWallet.balance })
-            .eq('id', selectedWalletId);
-          throw new Error('Failed to credit personal wallet');
-        }
-
-        // Create transaction record
-        const transactionRef = `TXN${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-        await supabase
-          .from('transactions')
-          .insert({
-            reference: transactionRef,
-            type: 'TRANSFER',
-            amount: amountNum,
-            currency_code: 'SLE',
-            status: 'COMPLETED',
-            description: 'Transfer to personal wallet',
-            sender_wallet_id: selectedWalletId,
-            recipient_wallet_id: personalWallet.id,
-            sender_user_id: user.id,
-            recipient_user_id: user.id,
-            metadata: {
-              transferType: 'business_to_personal',
-              instant: true,
-            },
-          });
-
-        setPayoutId(transactionRef);
-        setStep('success');
-        refetchWallets();
-        return;
-      }
-
-      // For bank/momo, use the API
       const payload: Record<string, any> = {
         userId: user.id,
-        walletId: selectedWalletId,
+        walletId: mainWallet!.id,
         amount: parseFloat(amount),
         currency: 'SLE',
         destinationType,
@@ -543,24 +412,24 @@ export function WithdrawPage() {
       };
 
       if (destinationType === 'bank' && selectedBankAccount) {
-        // Use selected bank account details
         payload.providerId = selectedBankAccount.bankProviderId;
         payload.accountNumber = selectedBankAccount.accountNumber;
         payload.accountName = selectedBankAccount.accountName || undefined;
         payload.bankAccountId = selectedBankAccount.id;
-      } else {
-        // Mobile money
+      } else if (destinationType === 'momo') {
         payload.providerId = selectedProviderId;
-        payload.accountNumber = accountNumber;
+        payload.accountNumber = phoneNumber;
       }
 
       const response = await fetch(`${API_BASE}/router/payouts/user/cashout`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(sessionToken ? { 'Authorization': `Bearer ${sessionToken}` } : {}),
+        },
         body: JSON.stringify(payload),
       });
 
-      // Check if response is JSON
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         const text = await response.text();
@@ -579,7 +448,6 @@ export function WithdrawPage() {
       refetchWallets();
     } catch (err: any) {
       console.error('Withdraw error:', err);
-      // Handle JSON parse errors specifically
       if (err.name === 'SyntaxError' && err.message.includes('JSON')) {
         setError('Service temporarily unavailable. Please try again later.');
       } else {
@@ -590,162 +458,315 @@ export function WithdrawPage() {
   };
 
   const handleReset = () => {
-    setStep('select');
+    setStep('wallet');
     setDestinationType(null);
     setSelectedProviderId('');
-    setAccountNumber('');
-    setAccountName('');
+    setPhoneNumber('');
     setAmount('');
     setWalletPin('');
     setError('');
     setPayoutId(null);
     setSelectedBankAccount(null);
-    setConnectedBankAccounts([]);
   };
 
-  const selectedWallet = wallets?.find(w => w.id === selectedWalletId);
-  const providerDisplay = destinationType === 'momo' && PROVIDER_DISPLAY[selectedProviderId]
-    ? PROVIDER_DISPLAY[selectedProviderId]
-    : destinationType === 'personal'
-    ? { name: 'Personal Wallet', color: 'text-purple-600', icon: 'PW', bgColor: 'bg-purple-100' }
-    : { name: selectedBankAccount?.bankName || 'Bank', color: 'text-blue-600', icon: 'BK', bgColor: 'bg-blue-100' };
+  const selectedProvider = MOMO_PROVIDERS.find((p) => p.id === selectedProviderId);
 
-  // Check if form is ready for submission
-  const isFormValid = destinationType === 'personal'
-    ? personalWallet && parseFloat(amount) >= 1
-    : destinationType === 'bank'
-    ? selectedBankAccount && parseFloat(amount) >= 1
-    : selectedProviderId && accountNumber && parseFloat(amount) >= 1 &&
-      /^[0-9]{8}$/.test(accountNumber.replace(/\s+/g, '').replace(/^(\+232|232)/, ''));
+  const isFormValid =
+    destinationType === 'bank'
+      ? selectedBankAccount && parseFloat(amount) >= 1
+      : destinationType === 'momo'
+      ? selectedProviderId && phoneNumber.length >= 8 && parseFloat(amount) >= 1
+      : false;
+
+  if (walletsLoading) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-2xl mx-auto space-y-6 pb-8">
         {/* Header */}
         <div className="flex items-center gap-4">
-          {step !== 'select' && step !== 'success' && step !== 'error' && (
+          {step !== 'wallet' && step !== 'success' && step !== 'error' && (
             <button
-              onClick={() => setStep('select')}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+              onClick={() => setStep(step === 'amount' ? 'method' : step === 'method' ? 'wallet' : 'wallet')}
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
           )}
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Withdraw</h1>
-            <p className="text-gray-500 dark:text-gray-400">Send to bank or mobile money</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Cashout</h1>
+            <p className="text-gray-500 dark:text-gray-400">Withdraw to bank or mobile money</p>
           </div>
         </div>
 
-        {/* Step: Select Destination Type */}
-        {step === 'select' && (
-          <>
-            {/* Balance Card */}
-            {selectedWallet && (
-              <Card className="p-4 bg-gradient-to-r from-green-600 to-green-500 text-white">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-green-100">Available Balance</p>
-                    <p className="text-3xl font-bold">
-                      {formatCurrency(selectedWallet.balance, selectedWallet.currency)}
-                    </p>
-                  </div>
-                  <div className="p-3 bg-white/20 rounded-xl">
-                    <Wallet className="w-8 h-8" />
-                  </div>
+        {/* Step: Wallet Overview */}
+        {step === 'wallet' && (
+          <div className="space-y-6">
+            {/* Main Wallet Card */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-green-600 via-green-500 to-emerald-500 p-6 text-white shadow-xl"
+            >
+              <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+              <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
+
+              <div className="relative">
+                <div className="flex items-center gap-2 mb-1">
+                  <Wallet className="w-5 h-5 text-green-100" />
+                  <span className="text-sm font-medium text-green-100">Main Wallet</span>
+                  <span className="px-2 py-0.5 text-xs bg-white/20 rounded-full">For Cashout</span>
                 </div>
-              </Card>
+                <p className="text-4xl font-bold mb-4">
+                  {mainWallet ? formatCurrency(mainWallet.balance, mainWallet.currency) : 'Le 0.00'}
+                </p>
+
+                <Button
+                  onClick={() => setStep('method')}
+                  disabled={!mainWallet || mainWallet.balance <= 0}
+                  className="bg-white text-green-600 hover:bg-green-50 font-semibold shadow-lg"
+                >
+                  <ArrowDownToLine className="w-4 h-4 mr-2" />
+                  Withdraw Funds
+                </Button>
+              </div>
+            </motion.div>
+
+            {/* Info Banner */}
+            <div className="flex items-start gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl">
+              <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-blue-800 dark:text-blue-200">Cashout from Main Wallet Only</p>
+                <p className="text-sm text-blue-600 dark:text-blue-300 mt-1">
+                  Withdrawals can only be made from your main wallet. Transfer funds from other wallets below before cashing out.
+                </p>
+              </div>
+            </div>
+
+            {/* Other Wallets */}
+            {otherWallets.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Other Wallets</h3>
+                <div className="space-y-3">
+                  {otherWallets.map((wallet) => (
+                    <motion.div
+                      key={wallet.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                          (wallet.walletType === 'merchant' || wallet.walletType === 'business_plus') ? 'bg-purple-100 text-purple-600' :
+                          wallet.walletType === 'driver' ? 'bg-yellow-100 text-yellow-600' :
+                          'bg-gray-100 text-gray-600'
+                        }`}>
+                          <Wallet className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900 dark:text-white">
+                            {wallet.name || `${wallet.walletType || 'Other'} Wallet`}
+                          </p>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">
+                            {formatCurrency(wallet.balance, wallet.currency)}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedTransferWallet(wallet);
+                          setTransferAmount(wallet.balance.toString());
+                          setShowTransferModal(true);
+                        }}
+                      >
+                        <ArrowRightLeft className="w-4 h-4 mr-1" />
+                        Transfer
+                      </Button>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
             )}
 
-            <Card className="p-6 space-y-6">
-              <h2 className="font-semibold text-gray-900 dark:text-white">Where do you want to withdraw to?</h2>
-
-              <div className="grid grid-cols-1 gap-4">
-                <button
-                  onClick={() => {
-                    setDestinationType('momo');
-                    if (momoProviders.length > 0) {
-                      setSelectedProviderId(momoProviders[0].providerId);
-                    }
-                    setStep('form');
-                  }}
-                  className="flex items-center gap-4 p-4 border-2 border-gray-200 dark:border-gray-700 rounded-xl hover:border-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors text-left"
-                >
-                  <div className="p-3 bg-orange-100 dark:bg-orange-900/30 rounded-xl">
-                    <Smartphone className="w-6 h-6 text-orange-600 dark:text-orange-400" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-900 dark:text-white">Mobile Money</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Orange Money, Africell</p>
-                  </div>
-                  <ArrowRight className="w-5 h-5 text-gray-400" />
-                </button>
-
-                <button
-                  onClick={async () => {
-                    setDestinationType('bank');
-                    // Load user's connected bank accounts
-                    await loadConnectedBankAccounts();
-                    setStep('form');
-                  }}
-                  className="flex items-center gap-4 p-4 border-2 border-gray-200 dark:border-gray-700 rounded-xl hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors text-left"
-                >
-                  <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
-                    <Building2 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-900 dark:text-white">Bank Account</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Transfer to your connected bank accounts</p>
-                  </div>
-                  <ArrowRight className="w-5 h-5 text-gray-400" />
-                </button>
-
-                {/* Transfer to Personal Wallet - Only show for merchants with business wallets */}
-                {hasBusinessWallet && personalWallet && (
-                  <button
-                    onClick={() => {
-                      setDestinationType('personal');
-                      setStep('form');
-                    }}
-                    className="flex items-center gap-4 p-4 border-2 border-gray-200 dark:border-gray-700 rounded-xl hover:border-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors text-left"
-                  >
-                    <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-xl">
-                      <User className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-gray-900 dark:text-white">Personal Wallet</p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">Transfer to your personal PeEAP wallet</p>
-                    </div>
-                    <ArrowRight className="w-5 h-5 text-gray-400" />
-                  </button>
-                )}
+            {/* No balance warning */}
+            {mainWallet && mainWallet.balance <= 0 && otherWallets.length === 0 && (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Wallet className="w-8 h-8 text-gray-400" />
+                </div>
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-2">No Balance to Withdraw</h3>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">
+                  Add funds to your wallet before making a withdrawal.
+                </p>
               </div>
-
-              {/* Info */}
-              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg flex items-start gap-2">
-                <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-                <span className="text-sm text-blue-700 dark:text-blue-300">
-                  Withdrawals typically complete within 1-24 hours depending on the provider.
-                </span>
-              </div>
-            </Card>
-          </>
+            )}
+          </div>
         )}
 
-        {/* Step: Form - Two Column Layout */}
-        {step === 'form' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Left Column: Amount & Recipient Details */}
-            <Card className="p-6 space-y-4">
-              <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                <ArrowDownToLine className="w-5 h-5 text-green-600" />
-                Amount & Recipient
-              </h2>
+        {/* Step: Select Method */}
+        {step === 'method' && (
+          <div className="space-y-6">
+            {/* Balance Reminder */}
+            <div className="flex items-center justify-between p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl">
+              <div className="flex items-center gap-3">
+                <Wallet className="w-5 h-5 text-green-600" />
+                <span className="text-sm text-green-700 dark:text-green-300">Available Balance</span>
+              </div>
+              <span className="font-bold text-green-700 dark:text-green-300">
+                {mainWallet ? formatCurrency(mainWallet.balance, mainWallet.currency) : 'Le 0.00'}
+              </span>
+            </div>
 
-              {/* Connected Bank Accounts (for bank withdrawals) */}
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Where do you want to withdraw?</h2>
+
+            {/* Method Cards - Grid Layout */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Mobile Money Card */}
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  setDestinationType('momo');
+                  setStep('amount');
+                }}
+                className="relative overflow-hidden p-6 rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 text-white text-left shadow-lg hover:shadow-xl transition-shadow"
+              >
+                <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                <Smartphone className="w-10 h-10 mb-4" />
+                <h3 className="text-xl font-bold mb-1">Mobile Money</h3>
+                <p className="text-sm text-orange-100">Orange Money, Africell</p>
+                <ArrowRight className="absolute bottom-6 right-6 w-6 h-6 text-orange-200" />
+              </motion.button>
+
+              {/* Bank Card */}
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={async () => {
+                  setDestinationType('bank');
+                  await loadConnectedBankAccounts();
+                  setStep('amount');
+                }}
+                className="relative overflow-hidden p-6 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 text-white text-left shadow-lg hover:shadow-xl transition-shadow"
+              >
+                <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                <Building2 className="w-10 h-10 mb-4" />
+                <h3 className="text-xl font-bold mb-1">Bank Account</h3>
+                <p className="text-sm text-blue-100">Transfer to bank</p>
+                <ArrowRight className="absolute bottom-6 right-6 w-6 h-6 text-blue-200" />
+              </motion.button>
+            </div>
+
+            {/* Fees Info */}
+            <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
+              <div className="flex items-center gap-2 mb-2">
+                <Banknote className="w-4 h-4 text-gray-500" />
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Withdrawal Fees</span>
+              </div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                A 2% transaction fee applies to all withdrawals. Minimum withdrawal is Le 1.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Step: Amount & Details */}
+        {step === 'amount' && (
+          <div className="space-y-6">
+            {/* Method Header */}
+            <div className={`p-4 rounded-xl ${
+              destinationType === 'momo' ? 'bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800' :
+              'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800'
+            }`}>
+              <div className="flex items-center gap-3">
+                {destinationType === 'momo' ? (
+                  <Smartphone className="w-6 h-6 text-orange-600" />
+                ) : (
+                  <Building2 className="w-6 h-6 text-blue-600" />
+                )}
+                <div>
+                  <h3 className={`font-semibold ${
+                    destinationType === 'momo' ? 'text-orange-800 dark:text-orange-200' : 'text-blue-800 dark:text-blue-200'
+                  }`}>
+                    {destinationType === 'momo' ? 'Mobile Money Withdrawal' : 'Bank Withdrawal'}
+                  </h3>
+                  <p className={`text-sm ${
+                    destinationType === 'momo' ? 'text-orange-600 dark:text-orange-300' : 'text-blue-600 dark:text-blue-300'
+                  }`}>
+                    Enter withdrawal details below
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <Card className="p-6 space-y-6">
+              {/* Mobile Money: Provider Selection */}
+              {destinationType === 'momo' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                      Select Provider
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      {MOMO_PROVIDERS.map((provider) => (
+                        <motion.button
+                          key={provider.id}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => setSelectedProviderId(provider.id)}
+                          className={`relative p-4 rounded-xl border-2 transition-all ${
+                            selectedProviderId === provider.id
+                              ? `${provider.borderColor} ${provider.bgColor} border-2`
+                              : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                          }`}
+                        >
+                          <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${provider.color} flex items-center justify-center text-white font-bold text-lg mb-2`}>
+                            {provider.icon}
+                          </div>
+                          <p className={`font-medium ${selectedProviderId === provider.id ? provider.textColor : 'text-gray-900 dark:text-white'}`}>
+                            {provider.name}
+                          </p>
+                          {selectedProviderId === provider.id && (
+                            <CheckCircle className={`absolute top-3 right-3 w-5 h-5 ${provider.textColor}`} />
+                          )}
+                        </motion.button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Phone Number
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">+232</span>
+                      <input
+                        type="tel"
+                        value={phoneNumber}
+                        onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                        placeholder="XX XXX XXXX"
+                        className="w-full pl-14 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Enter 8-digit phone number without country code</p>
+                  </div>
+                </>
+              )}
+
+              {/* Bank: Account Selection */}
               {destinationType === 'bank' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
                     Select Bank Account
                   </label>
 
@@ -754,46 +775,34 @@ export function WithdrawPage() {
                       <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
                     </div>
                   ) : connectedBankAccounts.length === 0 ? (
-                    // No connected bank accounts - prompt to add one
                     <div className="p-6 bg-gray-50 dark:bg-gray-800 rounded-xl text-center">
                       <Building2 className="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
-                      <p className="font-medium text-gray-900 dark:text-white mb-2">
-                        No Bank Accounts Connected
-                      </p>
+                      <p className="font-medium text-gray-900 dark:text-white mb-2">No Bank Accounts Connected</p>
                       <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                         Add a bank account in settings to enable bank withdrawals
                       </p>
-                      <Button
-                        onClick={() => navigate('/settings')}
-                        className="inline-flex items-center gap-2"
-                      >
-                        <Plus className="w-4 h-4" />
-                        Add Bank Account
+                      <Button onClick={() => navigate('/settings')}>
+                        <Plus className="w-4 h-4 mr-2" />Add Bank Account
                       </Button>
                     </div>
                   ) : (
-                    // Show connected bank accounts
                     <div className="space-y-2">
                       {connectedBankAccounts.map((account) => (
-                        <button
+                        <motion.button
                           key={account.id}
-                          type="button"
-                          onClick={() => selectBankAccount(account)}
+                          whileHover={{ scale: 1.01 }}
+                          onClick={() => setSelectedBankAccount(account)}
                           className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-left ${
                             selectedBankAccount?.id === account.id
                               ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                              : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                              : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
                           }`}
                         >
                           <div className={`p-2 rounded-lg ${
-                            selectedBankAccount?.id === account.id
-                              ? 'bg-blue-200 dark:bg-blue-800'
-                              : 'bg-gray-100 dark:bg-gray-800'
+                            selectedBankAccount?.id === account.id ? 'bg-blue-200 dark:bg-blue-800' : 'bg-gray-100 dark:bg-gray-800'
                           }`}>
                             <Building2 className={`w-5 h-5 ${
-                              selectedBankAccount?.id === account.id
-                                ? 'text-blue-700 dark:text-blue-300'
-                                : 'text-gray-600 dark:text-gray-400'
+                              selectedBankAccount?.id === account.id ? 'text-blue-700 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'
                             }`} />
                           </div>
                           <div className="flex-1 min-w-0">
@@ -806,187 +815,67 @@ export function WithdrawPage() {
                               )}
                             </div>
                             <p className="text-sm text-gray-500 dark:text-gray-400">
-                              {account.bankName} • {bankAccountService.formatAccountNumber(account.accountNumber)}
+                              {bankAccountService.formatAccountNumber(account.accountNumber)}
                             </p>
-                            {account.accountName && (
-                              <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
-                                {account.accountName}
-                              </p>
-                            )}
                           </div>
                           {selectedBankAccount?.id === account.id && (
                             <CheckCircle className="w-5 h-5 text-blue-600 flex-shrink-0" />
                           )}
-                        </button>
+                        </motion.button>
                       ))}
-
-                      {/* Add new bank account button */}
-                      <button
-                        type="button"
-                        onClick={() => navigate('/settings')}
-                        className="w-full flex items-center justify-center gap-2 p-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl text-gray-500 dark:text-gray-400 hover:border-blue-500 hover:text-blue-600 transition-colors"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span className="text-sm font-medium">Add Another Bank Account</span>
-                      </button>
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Mobile Money Info */}
-              {destinationType === 'momo' && (
-                <div className="p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl">
-                  <div className="flex items-start gap-3">
-                    <Smartphone className="w-5 h-5 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-medium text-orange-800 dark:text-orange-200">Mobile Money Withdrawal</p>
-                      <p className="text-sm text-orange-600 dark:text-orange-300 mt-1">
-                        You'll be redirected to Monime to enter your phone number and complete the withdrawal.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Personal Wallet Transfer Info */}
-              {destinationType === 'personal' && personalWallet && (
-                <div className="p-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-xl">
-                  <div className="flex items-start gap-3">
-                    <ArrowRightLeft className="w-5 h-5 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-medium text-purple-800 dark:text-purple-200">Transfer to Personal Wallet</p>
-                      <p className="text-sm text-purple-600 dark:text-purple-300 mt-1">
-                        Funds will be instantly transferred to your personal wallet. No fees for internal transfers.
-                      </p>
-                      <div className="mt-3 p-3 bg-white dark:bg-gray-800 rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                            <Wallet className="w-5 h-5 text-green-600 dark:text-green-400" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-gray-900 dark:text-white">Personal Leone Wallet</p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
-                              Balance: Le {personalWallet.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Amount */}
+              {/* Amount Input */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amount</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Amount to Withdraw
+                </label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">Le</span>
+                  <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500 text-lg font-medium">Le</span>
                   <input
                     type="number"
                     min="1"
                     step="0.01"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    placeholder="10"
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-lg font-semibold"
+                    placeholder="0.00"
+                    className="w-full pl-12 pr-4 py-4 border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-2xl font-semibold"
                   />
+                </div>
+                <div className="flex justify-between mt-2 text-sm">
+                  <span className="text-gray-500">Available: {mainWallet ? formatCurrency(mainWallet.balance) : 'Le 0.00'}</span>
+                  <button
+                    onClick={() => {
+                      if (mainWallet && mainWallet.balance > 0) {
+                        const maxWithdraw = mainWallet.balance / 1.02; // Account for 2% fee
+                        setAmount(maxWithdraw.toFixed(2));
+                      }
+                    }}
+                    className="text-green-600 hover:text-green-700 font-medium"
+                  >
+                    Max
+                  </button>
                 </div>
               </div>
 
               {/* Fee Breakdown */}
               {totalDeduction > 0 && (
-                <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg text-sm space-y-1">
-                  <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                    <span>Amount:</span>
+                <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl space-y-2">
+                  <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
+                    <span>Amount</span>
                     <span>{formatCurrency(parseFloat(amount) || 0)}</span>
                   </div>
-                  {destinationType !== 'personal' && (
-                    <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                      <span>Fee (2%):</span>
-                      <span>{formatCurrency(fee)}</span>
-                    </div>
-                  )}
-                  {destinationType === 'personal' && (
-                    <div className="flex justify-between text-green-600 dark:text-green-400">
-                      <span>Fee:</span>
-                      <span>Free</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between font-medium text-gray-900 dark:text-white pt-1 border-t border-gray-200 dark:border-gray-700">
-                    <span>{destinationType === 'personal' ? 'Total Transfer:' : 'Total Deduction:'}</span>
+                  <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
+                    <span>Fee (2%)</span>
+                    <span>{formatCurrency(fee)}</span>
+                  </div>
+                  <div className="flex justify-between font-semibold text-gray-900 dark:text-white pt-2 border-t border-gray-200 dark:border-gray-600">
+                    <span>Total Deduction</span>
                     <span className="text-green-600">{formatCurrency(totalDeduction)}</span>
                   </div>
-                </div>
-              )}
-            </Card>
-
-            {/* Right Column: Wallet & Slide to Pay */}
-            <Card className="p-6 space-y-4">
-              <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                <Wallet className="w-5 h-5 text-green-600" />
-                Pay from Wallet
-              </h2>
-
-              {/* Wallet Info */}
-              {selectedWallet && (
-                <div className="p-4 bg-gradient-to-r from-green-600 to-green-500 text-white rounded-xl">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-green-100">Available Balance</p>
-                      <p className="text-2xl font-bold">
-                        {formatCurrency(selectedWallet.balance, selectedWallet.currency)}
-                      </p>
-                    </div>
-                    <div className="p-2 bg-white/20 rounded-lg">
-                      <Wallet className="w-6 h-6" />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Wallet Selection (if multiple wallets) */}
-              {wallets && wallets.length > 1 && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Select Wallet</label>
-                  <select
-                    value={selectedWalletId}
-                    onChange={(e) => setSelectedWalletId(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                  >
-                    {wallets.map((wallet) => (
-                      <option key={wallet.id} value={wallet.id}>
-                        {wallet.currency} Wallet - {formatCurrency(wallet.balance, wallet.currency)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Summary */}
-              {isFormValid && (
-                <div className={`p-3 rounded-lg border ${
-                  destinationType === 'personal'
-                    ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800'
-                    : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
-                }`}>
-                  <p className={`text-sm ${
-                    destinationType === 'personal'
-                      ? 'text-purple-700 dark:text-purple-300'
-                      : 'text-blue-700 dark:text-blue-300'
-                  }`}>
-                    <strong>{destinationType === 'personal' ? 'Transferring:' : 'Sending:'}</strong> {formatCurrency(parseFloat(amount))} to {providerDisplay.name}
-                  </p>
-                  {destinationType !== 'personal' && (
-                    <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">
-                      {destinationType === 'momo' ? `+232 ${accountNumber}` : accountNumber}
-                    </p>
-                  )}
-                  {destinationType === 'personal' && fee === 0 && (
-                    <p className="text-xs text-purple-500 dark:text-purple-400 mt-1">
-                      No fees for internal transfers
-                    </p>
-                  )}
                 </div>
               )}
 
@@ -1005,91 +894,192 @@ export function WithdrawPage() {
                 walletPin={walletPin}
                 onPinChange={setWalletPin}
               />
-
-              {/* Back Button */}
-              <Button variant="outline" className="w-full" onClick={() => setStep('select')}>
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back
-              </Button>
             </Card>
           </div>
         )}
 
         {/* Step: Processing */}
         {step === 'processing' && (
-          <Card className="p-6">
+          <Card className="p-8">
             <div className="flex flex-col items-center justify-center py-12">
-              <Loader2 className="w-12 h-12 text-green-600 animate-spin mb-4" />
-              <p className="text-gray-600 dark:text-gray-400">Processing your withdrawal...</p>
-              <p className="text-sm text-gray-500 mt-2">Please wait, do not close this page.</p>
+              <div className="relative">
+                <Loader2 className="w-16 h-16 text-green-600 animate-spin" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-8 h-8 bg-green-100 rounded-full" />
+                </div>
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mt-6 mb-2">Processing Withdrawal</h3>
+              <p className="text-gray-500 dark:text-gray-400 text-center">
+                Please wait while we process your request...
+              </p>
             </div>
           </Card>
         )}
 
         {/* Step: Success */}
         {step === 'success' && (
-          <Card className="p-6">
-            <div className="flex flex-col items-center justify-center py-8">
-              <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${
-                destinationType === 'personal'
-                  ? 'bg-purple-100 dark:bg-purple-900/30'
-                  : 'bg-green-100 dark:bg-green-900/30'
-              }`}>
-                <CheckCircle className={`w-8 h-8 ${
-                  destinationType === 'personal'
-                    ? 'text-purple-600 dark:text-purple-400'
-                    : 'text-green-600 dark:text-green-400'
-                }`} />
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
+            <Card className="p-8">
+              <div className="flex flex-col items-center justify-center py-8">
+                <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-6">
+                  <CheckCircle className="w-10 h-10 text-green-600 dark:text-green-400" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Withdrawal Initiated!</h3>
+                <p className="text-gray-500 dark:text-gray-400 text-center mb-4">
+                  {formatCurrency(parseFloat(amount))} is being sent to {
+                    destinationType === 'momo' ? selectedProvider?.name : selectedBankAccount?.bankName
+                  }
+                </p>
+                {payoutId && (
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mb-6">
+                    Reference: {payoutId.slice(0, 24)}...
+                  </p>
+                )}
+                <p className="text-sm text-gray-500 text-center mb-8">
+                  You will receive a notification once the transfer is complete. This typically takes 1-24 hours.
+                </p>
+                <Button onClick={handleReset} className="w-full max-w-xs">
+                  Done
+                </Button>
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                {destinationType === 'personal' ? 'Transfer Complete!' : 'Withdrawal Initiated!'}
-              </h3>
-              <p className="text-gray-500 dark:text-gray-400 text-center mb-2">
-                {formatCurrency(parseFloat(amount))} {destinationType === 'personal' ? 'has been transferred to' : 'is being sent to'} {providerDisplay.name}
-              </p>
-              {destinationType !== 'personal' && (
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">
-                  {destinationType === 'momo' ? `+232 ${accountNumber}` : accountNumber}
-                </p>
-              )}
-              {payoutId && (
-                <p className="text-xs text-gray-400 dark:text-gray-500 mb-6">
-                  Reference: {payoutId.slice(0, 20)}...
-                </p>
-              )}
-              <p className="text-sm text-gray-500 text-center mb-6">
-                {destinationType === 'personal'
-                  ? 'Your funds are now available in your personal wallet.'
-                  : 'You will receive a notification once the transfer is complete.'}
-              </p>
-              <Button onClick={handleReset} className="w-full max-w-xs">
-                Done
-              </Button>
-            </div>
-          </Card>
+            </Card>
+          </motion.div>
         )}
 
         {/* Step: Error */}
         {step === 'error' && (
-          <Card className="p-6">
-            <div className="flex flex-col items-center justify-center py-8">
-              <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mb-4">
-                <AlertCircle className="w-8 h-8 text-red-600 dark:text-red-400" />
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
+            <Card className="p-8">
+              <div className="flex flex-col items-center justify-center py-8">
+                <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mb-6">
+                  <AlertCircle className="w-10 h-10 text-red-600 dark:text-red-400" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Withdrawal Failed</h3>
+                <p className="text-gray-500 dark:text-gray-400 text-center mb-8">
+                  {error || 'Something went wrong. Please try again.'}
+                </p>
+                <div className="flex gap-3 w-full max-w-xs">
+                  <Button variant="outline" className="flex-1" onClick={handleReset}>
+                    Cancel
+                  </Button>
+                  <Button className="flex-1" onClick={() => { setError(''); setStep('amount'); }}>
+                    Try Again
+                  </Button>
+                </div>
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Withdrawal Failed</h3>
-              <p className="text-gray-500 dark:text-gray-400 text-center mb-6">
-                {error || 'Something went wrong. Please try again.'}
-              </p>
-              <div className="flex gap-3 w-full max-w-xs">
-                <Button variant="outline" className="flex-1" onClick={handleReset}>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Transfer Modal */}
+        {showTransferModal && selectedTransferWallet && mainWallet && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md"
+            >
+              <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Transfer to Main Wallet</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  Transfer funds before cashing out
+                </p>
+              </div>
+
+              <div className="p-6 space-y-4">
+                {/* From Wallet */}
+                <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center">
+                        <Wallet className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">From</p>
+                        <p className="font-medium text-gray-900 dark:text-white">
+                          {selectedTransferWallet.name || 'Other Wallet'}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="font-semibold text-gray-900 dark:text-white">
+                      {formatCurrency(selectedTransferWallet.balance)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex justify-center">
+                  <ArrowDownToLine className="w-6 h-6 text-gray-400" />
+                </div>
+
+                {/* To Wallet */}
+                <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+                      <Wallet className="w-5 h-5 text-green-600 dark:text-green-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">To</p>
+                      <p className="font-medium text-gray-900 dark:text-white">Main Wallet</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Amount */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Amount</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">Le</span>
+                    <input
+                      type="number"
+                      value={transferAmount}
+                      onChange={(e) => setTransferAmount(e.target.value)}
+                      max={selectedTransferWallet.balance}
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                    />
+                  </div>
+                  <button
+                    onClick={() => setTransferAmount(selectedTransferWallet.balance.toString())}
+                    className="text-sm text-green-600 hover:text-green-700 mt-1"
+                  >
+                    Transfer all ({formatCurrency(selectedTransferWallet.balance)})
+                  </button>
+                </div>
+
+                {error && (
+                  <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-400">
+                    {error}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => {
+                    setShowTransferModal(false);
+                    setSelectedTransferWallet(null);
+                    setTransferAmount('');
+                    setError('');
+                  }}
+                  disabled={transferLoading}
+                >
                   Cancel
                 </Button>
-                <Button className="flex-1" onClick={() => { setError(''); setStep('form'); }}>
-                  Try Again
+                <Button
+                  className="flex-1"
+                  onClick={handleTransferToMain}
+                  disabled={transferLoading || !transferAmount || parseFloat(transferAmount) <= 0}
+                >
+                  {transferLoading ? (
+                    <><Loader2 className="w-4 h-4 animate-spin mr-2" />Transferring...</>
+                  ) : (
+                    'Transfer'
+                  )}
                 </Button>
               </div>
-            </div>
-          </Card>
+            </motion.div>
+          </div>
         )}
       </div>
     </MainLayout>

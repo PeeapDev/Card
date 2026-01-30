@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowUpRight, ArrowDownRight, Search, Filter, Download, AlertTriangle, X, Loader2, MoreVertical, Flag, Clock } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowUpRight, ArrowDownRight, Search, Filter, Download, AlertTriangle, X, Loader2, MoreVertical, Flag, Clock, ChevronLeft } from 'lucide-react';
 import { Card, CardHeader, CardTitle, Button, Input } from '@/components/ui';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useWallets, useWalletTransactions } from '@/hooks/useWallets';
@@ -14,10 +14,22 @@ import { disputeService, DISPUTE_REASONS } from '@/services/dispute.service';
 export function TransactionsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { data: wallets } = useWallets();
+  const [searchParams] = useSearchParams();
+  const { data: wallets, isLoading: walletsLoading } = useWallets();
   const [selectedWallet, setSelectedWallet] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
+
+  // Set wallet from URL params or default to first wallet
+  useEffect(() => {
+    const walletFromUrl = searchParams.get('wallet');
+    if (walletFromUrl) {
+      setSelectedWallet(walletFromUrl);
+    } else if (wallets && wallets.length > 0 && !selectedWallet) {
+      // Set first wallet as default when wallets load
+      setSelectedWallet(wallets[0].id);
+    }
+  }, [searchParams, wallets, selectedWallet]);
 
   // Dispute state
   const [showDisputeModal, setShowDisputeModal] = useState(false);
@@ -27,8 +39,11 @@ export function TransactionsPage() {
   const [disputeLoading, setDisputeLoading] = useState(false);
   const [disputeSuccess, setDisputeSuccess] = useState(false);
 
+  // Only fetch transactions when we have a selected wallet
+  const walletIdToFetch = selectedWallet || (wallets && wallets.length > 0 ? wallets[0].id : '');
+
   const { data: transactionsData, isLoading } = useWalletTransactions(
-    selectedWallet || wallets?.[0]?.id || '',
+    walletIdToFetch,
     page,
     10
   );
@@ -178,9 +193,27 @@ export function TransactionsPage() {
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Transactions</h1>
-            <p className="text-gray-500 mt-1">View your transaction history</p>
+          <div className="flex items-center gap-3">
+            {searchParams.get('wallet') && (
+              <button
+                onClick={() => navigate('/wallets')}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+              >
+                <ChevronLeft className="w-5 h-5 text-gray-500" />
+              </button>
+            )}
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                {selectedWallet && wallets
+                  ? `${wallets.find(w => w.id === selectedWallet)?.currency || ''} Wallet Transactions`
+                  : 'Transactions'}
+              </h1>
+              <p className="text-gray-500 mt-1">
+                {selectedWallet && wallets
+                  ? `Transaction history for your ${wallets.find(w => w.id === selectedWallet)?.currency || ''} wallet`
+                  : 'View your transaction history'}
+              </p>
+            </div>
           </div>
           <Button variant="outline">
             <Download className="w-4 h-4 mr-2" />
@@ -232,8 +265,15 @@ export function TransactionsPage() {
 
         {/* Transactions list */}
         <Card padding="none">
-          {isLoading ? (
-            <div className="text-center py-12">Loading transactions...</div>
+          {walletsLoading || isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin text-green-600 mr-2" />
+              <span className="text-gray-500">Loading transactions...</span>
+            </div>
+          ) : !walletIdToFetch ? (
+            <div className="text-center py-12">
+              <p className="text-gray-500">No wallets found. Create a wallet to see transactions.</p>
+            </div>
           ) : filteredTransactions.length > 0 ? (
             <>
               <div className="divide-y divide-gray-100">
@@ -273,7 +313,8 @@ export function TransactionsPage() {
                         <p
                           className={clsx('text-sm font-medium', getAmountColor(transaction.type))}
                         >
-                          {getAmountPrefix(transaction.type)}$
+                          {getAmountPrefix(transaction.type)}
+                          {transaction.currency === 'USD' ? '$' : 'Le '}
                           {Math.abs(transaction.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                         </p>
                         <p

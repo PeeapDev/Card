@@ -25,7 +25,7 @@ interface AuthContextType {
   refreshUser: () => Promise<void>;
   hasRole: (role: UserRole) => boolean;
   hasAnyRole: (roles: UserRole[]) => boolean;
-  // New role switching functionality
+  // Role switching functionality
   activeRole: UserRole;
   availableRoles: UserRole[];
   switchRole: (role: UserRole) => void;
