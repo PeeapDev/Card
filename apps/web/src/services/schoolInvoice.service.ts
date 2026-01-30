@@ -20,6 +20,7 @@ export interface InvoiceItem {
 export interface InvoiceRecipient {
   type: 'student' | 'parent' | 'vendor' | 'other';
   studentId?: string;
+  nsi?: string;  // National Student Identifier
   parentUserId?: string;
   name: string;
   email?: string;

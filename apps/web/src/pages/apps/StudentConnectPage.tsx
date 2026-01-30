@@ -3,7 +3,7 @@
  *
  * Allows parents to:
  * - Search and link to schools
- * - Add students by index number
+ * - Add students by NSI (National Student Identifier)
  * - View and top up student wallets
  * - View student transactions
  * - Pay school fees
@@ -40,7 +40,7 @@ import { useAuth } from '@/context/AuthContext';
 
 interface Student {
   id: string;
-  indexNumber: string;
+  nsi: string;  // National Student Identifier
   firstName: string;
   lastName: string;
   schoolName: string;
@@ -87,7 +87,7 @@ export function StudentConnectPage() {
   const [schoolSearch, setSchoolSearch] = useState('');
   const [schoolResults, setSchoolResults] = useState<SchoolResult[]>([]);
   const [selectedSchool, setSelectedSchool] = useState<SchoolResult | null>(null);
-  const [indexNumber, setIndexNumber] = useState('');
+  const [nsi, setNsi] = useState('');  // National Student Identifier
   const [searchingSchools, setSearchingSchools] = useState(false);
   const [addingStudent, setAddingStudent] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
@@ -114,7 +114,7 @@ export function StudentConnectPage() {
       setStudents([
         {
           id: '1',
-          indexNumber: 'STU-2024-001',
+          nsi: 'SL-2024-01-00001',
           firstName: 'John',
           lastName: 'Doe',
           schoolName: 'Freetown Secondary School',
@@ -126,7 +126,7 @@ export function StudentConnectPage() {
         },
         {
           id: '2',
-          indexNumber: 'STU-2024-002',
+          nsi: 'SL-2024-01-00002',
           firstName: 'Jane',
           lastName: 'Doe',
           schoolName: 'Freetown Secondary School',
@@ -172,8 +172,8 @@ export function StudentConnectPage() {
   };
 
   const handleAddStudent = async () => {
-    if (!selectedSchool || !indexNumber.trim()) {
-      setAddError('Please select a school and enter student index number');
+    if (!selectedSchool || !nsi.trim()) {
+      setAddError('Please select a school and enter student NSI');
       return;
     }
 
@@ -183,12 +183,12 @@ export function StudentConnectPage() {
     try {
       // TODO: Call API to link student
       // POST /api/parent-students
-      // { parentId, schoolId, indexNumber }
+      // { parentId, schoolId, nsi }
 
       // Mock success
       const newStudent: Student = {
         id: `new_${Date.now()}`,
-        indexNumber: indexNumber.trim().toUpperCase(),
+        nsi: nsi.trim().toUpperCase(),
         firstName: 'New',
         lastName: 'Student',
         schoolName: selectedSchool.name,
@@ -202,7 +202,7 @@ export function StudentConnectPage() {
       setStudents(prev => [...prev, newStudent]);
       setActiveModal('none');
       setSelectedSchool(null);
-      setIndexNumber('');
+      setNsi('');
       setSchoolSearch('');
     } catch (error: any) {
       setAddError(error.message || 'Failed to add student. Please try again.');
@@ -414,7 +414,7 @@ export function StudentConnectPage() {
                         {student.firstName} {student.lastName}
                       </h4>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
-                        {student.indexNumber} • {student.class}
+                        {student.nsi} • {student.class}
                       </p>
                       <div className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 mt-1">
                         <School className="w-3 h-3" />
@@ -522,7 +522,7 @@ export function StudentConnectPage() {
                   onClick={() => {
                     setActiveModal('none');
                     setSelectedSchool(null);
-                    setIndexNumber('');
+                    setNsi('');
                     setSchoolSearch('');
                     setAddError(null);
                   }}
@@ -605,20 +605,20 @@ export function StudentConnectPage() {
                   )}
                 </div>
 
-                {/* Student Index Number */}
+                {/* Student NSI (National Student Identifier) */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Student Index Number
+                    National Student ID (NSI)
                   </label>
                   <input
                     type="text"
-                    value={indexNumber}
-                    onChange={(e) => setIndexNumber(e.target.value.toUpperCase())}
-                    placeholder="e.g., STU-2024-001"
+                    value={nsi}
+                    onChange={(e) => setNsi(e.target.value.toUpperCase())}
+                    placeholder="e.g., SL-2024-01-00001"
                     className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   />
                   <p className="mt-1 text-xs text-gray-500">
-                    Enter the student ID number provided by the school
+                    Enter the student's National Student Identifier
                   </p>
                 </div>
 
@@ -636,7 +636,7 @@ export function StudentConnectPage() {
                   onClick={() => {
                     setActiveModal('none');
                     setSelectedSchool(null);
-                    setIndexNumber('');
+                    setNsi('');
                     setSchoolSearch('');
                     setAddError(null);
                   }}
@@ -646,7 +646,7 @@ export function StudentConnectPage() {
                 </button>
                 <button
                   onClick={handleAddStudent}
-                  disabled={!selectedSchool || !indexNumber.trim() || addingStudent}
+                  disabled={!selectedSchool || !nsi.trim() || addingStudent}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {addingStudent ? (

@@ -24,9 +24,26 @@ interface OAuthAuthorizationCode {
   used_at?: string;
   metadata?: {
     school_id?: number | string;
-    index_number?: string;
+    nsi?: string;  // National Student Identifier
+    index_number?: string;  // Kept for backward compatibility
     student_name?: string;
-    user_type?: string;
+    user_type?: string;  // 'student', 'parent', 'admin', 'staff'
+    parent_id?: string;  // Parent's ID in school system
+    parent_name?: string;
+    parent_email?: string;
+    parent_phone?: string;
+    school_name?: string;
+    school_logo_url?: string;
+    children?: Array<{
+      nsi: string;
+      name: string;
+      student_id?: string;
+      class_id?: string;
+      class_name?: string;
+      section_name?: string;
+      profile_photo_url?: string;
+      peeap_wallet_id?: string;
+    }>;
   };
 }
 
@@ -220,6 +237,81 @@ export class OAuthService {
 
     const user = userData?.[0];
 
+    // Extract school domain from redirect_uri (e.g., https://ses.gov.school.edu.sl/... -> ses)
+    let schoolSlug: string | null = null;
+    try {
+      const redirectUrl = new URL(params.redirectUri);
+      const hostParts = redirectUrl.hostname.split('.');
+      if (hostParts.length > 0 && redirectUrl.hostname.includes('gov.school.edu.sl')) {
+        schoolSlug = hostParts[0]; // e.g., 'ses' from 'ses.gov.school.edu.sl'
+      }
+    } catch (e) {
+      console.error('[OAuth] Failed to parse redirect URI:', e);
+    }
+
+    // Save school connection if this is a school SaaS connection
+    if (schoolSlug && params.clientId === 'school_saas') {
+      console.log('[OAuth] Creating school connection for:', schoolSlug);
+
+      // Check if connection already exists
+      const { data: existingConnection } = await this.supabase
+        .from('school_connections')
+        .select('*')
+        .eq('peeap_school_id', schoolSlug)
+        .maybeSingle();
+
+      if (!existingConnection) {
+        // Create wallet for the school
+        const { data: wallet, error: walletError } = await this.supabase
+          .from('wallets')
+          .insert({
+            currency: 'SLE',
+            balance: 0,
+            status: 'ACTIVE',
+            wallet_type: 'school',
+            name: `${schoolSlug.charAt(0).toUpperCase() + schoolSlug.slice(1)} School Wallet`,
+            external_id: `SCH-${schoolSlug}`,
+          })
+          .select()
+          .single();
+
+        if (walletError) {
+          console.error('[OAuth] Failed to create school wallet:', walletError);
+        } else {
+          console.log('[OAuth] Created school wallet:', wallet.id);
+
+          // Create school connection
+          const { data: newConnection, error: connectionError } = await this.supabase
+            .from('school_connections')
+            .insert({
+              school_id: authCode.metadata?.school_id?.toString() || schoolSlug,
+              school_name: `${schoolSlug.charAt(0).toUpperCase() + schoolSlug.slice(1)} School`,
+              peeap_school_id: schoolSlug,
+              school_domain: `${schoolSlug}.gov.school.edu.sl`,
+              connected_by_user_id: authCode.user_id,
+              connected_by_email: user?.email || null,
+              wallet_id: wallet.id,
+              status: 'active',
+              saas_origin: `${schoolSlug}.gov.school.edu.sl`,
+              connected_at: new Date().toISOString(),
+              access_token_id: null, // Will be updated after token is stored
+            })
+            .select()
+            .single();
+
+          if (connectionError) {
+            console.error('[OAuth] Failed to create school connection:', connectionError);
+            // Clean up wallet
+            await this.supabase.from('wallets').delete().eq('id', wallet.id);
+          } else {
+            console.log('[OAuth] Created school connection:', newConnection.id);
+          }
+        }
+      } else {
+        console.log('[OAuth] School connection already exists:', existingConnection.id);
+      }
+    }
+
     // Build response
     const response: any = {
       access_token: accessToken,
@@ -236,14 +328,277 @@ export class OAuthService {
       };
     }
 
-    // Include school connection info if present in metadata
-    if (authCode.metadata?.school_id) {
+    // Include school connection info if present
+    if (schoolSlug) {
+      response.school_connection = {
+        peeap_school_id: schoolSlug,
+      };
+    } else if (authCode.metadata?.school_id) {
       response.school_connection = {
         peeap_school_id: `sch_${authCode.metadata.school_id}`,
       };
     }
 
+    // Include student NSI info if present
+    if (authCode.metadata?.nsi || authCode.metadata?.index_number) {
+      response.student = {
+        nsi: authCode.metadata.nsi || authCode.metadata.index_number,
+        name: authCode.metadata.student_name,
+      };
+    }
+
+    // Include children array for parent users
+    if (authCode.metadata?.children) {
+      response.children = authCode.metadata.children;
+    }
+
+    // Create parent connection if this is a parent SSO from school
+    if (authCode.metadata?.user_type === 'parent' && authCode.metadata?.children) {
+      const parentConnection = await this.createParentConnectionFromOAuth({
+        peeapUserId: authCode.user_id,
+        schoolId: authCode.metadata.school_id?.toString() || schoolSlug || '',
+        peeapSchoolId: schoolSlug || `sch_${authCode.metadata.school_id}`,
+        schoolName: authCode.metadata.school_name || `${schoolSlug?.charAt(0).toUpperCase()}${schoolSlug?.slice(1)} School`,
+        schoolLogoUrl: authCode.metadata.school_logo_url,
+        schoolDomain: schoolSlug ? `${schoolSlug}.gov.school.edu.sl` : undefined,
+        schoolParentId: authCode.metadata.parent_id || authCode.user_id,
+        parentName: authCode.metadata.parent_name,
+        parentEmail: authCode.metadata.parent_email || user?.email,
+        parentPhone: authCode.metadata.parent_phone,
+        children: authCode.metadata.children,
+      });
+
+      if (parentConnection) {
+        response.parent_connection = {
+          connection_id: parentConnection.connection_id,
+          chat_enabled: parentConnection.chat_enabled,
+          thread_id: parentConnection.thread_id,
+          children: parentConnection.children,
+        };
+      }
+    }
+
     return response;
+  }
+
+  /**
+   * Create parent connection from OAuth flow
+   */
+  private async createParentConnectionFromOAuth(params: {
+    peeapUserId: string;
+    schoolId: string;
+    peeapSchoolId?: string;
+    schoolName: string;
+    schoolLogoUrl?: string;
+    schoolDomain?: string;
+    schoolParentId: string;
+    parentName?: string;
+    parentEmail?: string;
+    parentPhone?: string;
+    children: Array<{
+      nsi: string;
+      name: string;
+      student_id?: string;
+      class_id?: string;
+      class_name?: string;
+      section_name?: string;
+      profile_photo_url?: string;
+      peeap_wallet_id?: string;
+    }>;
+  }): Promise<{
+    connection_id: string;
+    chat_enabled: boolean;
+    thread_id?: string;
+    children: Array<{ nsi: string; name: string; wallet_id?: string }>;
+  } | null> {
+    try {
+      console.log('[OAuth] Creating parent connection for user:', params.peeapUserId);
+
+      // Get user's wallet
+      const { data: wallet } = await this.supabase
+        .from('wallets')
+        .select('id')
+        .eq('user_id', params.peeapUserId)
+        .eq('status', 'ACTIVE')
+        .limit(1)
+        .single();
+
+      // Check if connection already exists
+      const { data: existingConnection } = await this.supabase
+        .from('school_parent_connections')
+        .select('id, chat_enabled')
+        .eq('peeap_user_id', params.peeapUserId)
+        .eq('school_id', params.schoolId)
+        .eq('school_parent_id', params.schoolParentId)
+        .single();
+
+      let connectionId: string;
+
+      if (existingConnection) {
+        connectionId = existingConnection.id;
+        console.log('[OAuth] Updating existing parent connection:', connectionId);
+
+        await this.supabase
+          .from('school_parent_connections')
+          .update({
+            peeap_wallet_id: wallet?.id,
+            peeap_school_id: params.peeapSchoolId,
+            school_name: params.schoolName,
+            school_logo_url: params.schoolLogoUrl,
+            school_domain: params.schoolDomain,
+            parent_name: params.parentName,
+            parent_email: params.parentEmail,
+            parent_phone: params.parentPhone,
+            status: 'active',
+            last_activity_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', connectionId);
+      } else {
+        console.log('[OAuth] Creating new parent connection');
+
+        const { data: newConnection, error: createError } = await this.supabase
+          .from('school_parent_connections')
+          .insert({
+            peeap_user_id: params.peeapUserId,
+            peeap_wallet_id: wallet?.id,
+            school_id: params.schoolId,
+            peeap_school_id: params.peeapSchoolId,
+            school_name: params.schoolName,
+            school_logo_url: params.schoolLogoUrl,
+            school_domain: params.schoolDomain,
+            school_parent_id: params.schoolParentId,
+            parent_name: params.parentName,
+            parent_email: params.parentEmail,
+            parent_phone: params.parentPhone,
+            status: 'active',
+            is_verified: true,
+            chat_enabled: true,
+          })
+          .select('id')
+          .single();
+
+        if (createError) {
+          console.error('[OAuth] Failed to create parent connection:', createError);
+          return null;
+        }
+
+        connectionId = newConnection.id;
+        console.log('[OAuth] Created parent connection:', connectionId);
+      }
+
+      // Create/update children
+      const childrenResult: Array<{ nsi: string; name: string; wallet_id?: string }> = [];
+
+      for (const child of params.children) {
+        const { data: existingChild } = await this.supabase
+          .from('school_parent_children')
+          .select('id, student_wallet_id')
+          .eq('connection_id', connectionId)
+          .eq('nsi', child.nsi)
+          .single();
+
+        if (existingChild) {
+          await this.supabase
+            .from('school_parent_children')
+            .update({
+              student_name: child.name,
+              student_id_in_school: child.student_id,
+              class_id: child.class_id,
+              class_name: child.class_name,
+              section_name: child.section_name,
+              profile_photo_url: child.profile_photo_url,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', existingChild.id);
+
+          childrenResult.push({
+            nsi: child.nsi,
+            name: child.name,
+            wallet_id: existingChild.student_wallet_id || child.peeap_wallet_id,
+          });
+        } else {
+          const { data: newChild } = await this.supabase
+            .from('school_parent_children')
+            .insert({
+              connection_id: connectionId,
+              nsi: child.nsi,
+              student_name: child.name,
+              student_id_in_school: child.student_id,
+              class_id: child.class_id,
+              class_name: child.class_name,
+              section_name: child.section_name,
+              profile_photo_url: child.profile_photo_url,
+              student_wallet_id: child.peeap_wallet_id,
+            })
+            .select('id, student_wallet_id')
+            .single();
+
+          if (newChild) {
+            childrenResult.push({
+              nsi: child.nsi,
+              name: child.name,
+              wallet_id: newChild.student_wallet_id,
+            });
+          }
+        }
+      }
+
+      // Create initial chat thread if doesn't exist
+      let threadId: string | undefined;
+      const { data: existingThread } = await this.supabase
+        .from('school_chat_threads')
+        .select('id')
+        .eq('parent_connection_id', connectionId)
+        .eq('thread_type', 'direct')
+        .eq('status', 'active')
+        .single();
+
+      if (!existingThread) {
+        const { data: newThread } = await this.supabase
+          .from('school_chat_threads')
+          .insert({
+            school_id: params.schoolId,
+            peeap_school_id: params.peeapSchoolId,
+            school_name: params.schoolName,
+            school_logo_url: params.schoolLogoUrl,
+            thread_type: 'direct',
+            parent_connection_id: connectionId,
+            parent_user_id: params.peeapUserId,
+            parent_name: params.parentName,
+            status: 'active',
+          })
+          .select('id')
+          .single();
+
+        if (newThread) {
+          threadId = newThread.id;
+
+          // Send welcome message
+          await this.supabase.from('school_chat_messages').insert({
+            thread_id: threadId,
+            sender_type: 'system',
+            message_type: 'system',
+            content: `Welcome to ${params.schoolName}'s chat! You can now receive notifications and communicate with the school directly.`,
+            status: 'sent',
+          });
+
+          console.log('[OAuth] Created chat thread:', threadId);
+        }
+      } else {
+        threadId = existingThread.id;
+      }
+
+      return {
+        connection_id: connectionId,
+        chat_enabled: true,
+        thread_id: threadId,
+        children: childrenResult,
+      };
+    } catch (error) {
+      console.error('[OAuth] Error creating parent connection:', error);
+      return null;
+    }
   }
 
   /**

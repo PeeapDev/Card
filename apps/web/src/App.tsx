@@ -184,6 +184,7 @@ import { CashBoxSetupWizard } from '@/components/cashbox/CashBoxSetupWizard';
 import { StudentConnectPage } from '@/pages/apps/StudentConnectPage';
 import { SchoolUtilitiesPage } from '@/pages/SchoolUtilitiesPage';
 import { MyChildrenPage } from '@/pages/MyChildrenPage';
+import { SchoolChatPage } from '@/pages/SchoolChatPage';
 import { SchoolMessagesPage } from '@/pages/SchoolMessagesPage';
 // Agent Pages
 import { AgentDashboard } from '@/pages/agent/AgentDashboard';
@@ -1749,6 +1750,8 @@ function App() {
                   <Route path="/student-connect" element={<ProtectedRoute><StudentConnectPage /></ProtectedRoute>} />
                   <Route path="/school-utilities" element={<ProtectedRoute><SchoolUtilitiesPage /></ProtectedRoute>} />
                   <Route path="/my-children" element={<ProtectedRoute><MyChildrenPage /></ProtectedRoute>} />
+                  <Route path="/school-chat" element={<ProtectedRoute><SchoolChatPage /></ProtectedRoute>} />
+                  <Route path="/school-chat/:threadId" element={<ProtectedRoute><SchoolChatPage /></ProtectedRoute>} />
                   <Route path="/school-messages" element={<ProtectedRoute><SchoolMessagesPage /></ProtectedRoute>} />
                   <Route path="/support" element={<ProtectedRoute><SupportPage /></ProtectedRoute>} />
                   <Route path="/disputes" element={<ProtectedRoute><UserDisputesPage /></ProtectedRoute>} />

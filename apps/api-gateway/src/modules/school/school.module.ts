@@ -9,6 +9,8 @@ import { SchoolWalletController } from './school-wallet.controller';
 import { SchoolWalletService } from './school-wallet.service';
 import { MessagingController, WebhookController } from './messaging.controller';
 import { MessagingService } from './messaging.service';
+import { SchoolChatParentController, SchoolChatSchoolController } from './school-chat.controller';
+import { SchoolChatService } from './school-chat.service';
 
 @Module({
   imports: [
@@ -25,18 +27,22 @@ import { MessagingService } from './messaging.service';
     SchoolWalletController,
     MessagingController,
     WebhookController,
+    SchoolChatParentController,
+    SchoolChatSchoolController,
   ],
   providers: [
     SchoolService,
     OAuthService,
     SchoolWalletService,
     MessagingService,
+    SchoolChatService,
   ],
   exports: [
     SchoolService,
     OAuthService,
     SchoolWalletService,
     MessagingService,
+    SchoolChatService,
   ],
 })
 export class SchoolModule {}
