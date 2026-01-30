@@ -283,6 +283,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleNotificationUsers(req, res);
     } else if (path === 'notifications/stats' || path === 'notifications/stats/') {
       return await handleNotificationStats(req, res);
+    // ========== MERCHANT ENDPOINTS ==========
+    } else if (path === 'merchant/transactions' || path === 'merchant/transactions/') {
+      return await handleMerchantTransactions(req, res);
+    } else if (path === 'merchant/stats' || path === 'merchant/stats/') {
+      return await handleMerchantStats(req, res);
     } else if (path === 'debug/transactions' || path.startsWith('debug/transactions')) {
       // Debug endpoint to check transactions
       const ref = req.query.ref as string;
@@ -4890,6 +4895,146 @@ async function handleNotificationStats(req: VercelRequest, res: VercelResponse) 
     });
   } catch (error: any) {
     console.error('[NotificationStats] Error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to fetch stats' });
+  }
+}
+
+// ============================================================================
+// MERCHANT HANDLERS
+// ============================================================================
+
+/**
+ * Get merchant transactions from checkout sessions
+ * GET /merchant/transactions?merchantId=XXX&limit=100&offset=0&status=completed
+ */
+async function handleMerchantTransactions(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const merchantId = req.query.merchantId as string;
+    const limit = parseInt(req.query.limit as string) || 100;
+    const offset = parseInt(req.query.offset as string) || 0;
+    const status = req.query.status as string;
+
+    if (!merchantId) {
+      return res.status(400).json({ error: 'merchantId is required' });
+    }
+
+    // Build query for checkout sessions
+    let query = supabase
+      .from('checkout_sessions')
+      .select('*', { count: 'exact' })
+      .eq('merchant_id', merchantId)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    // Map frontend status to database status
+    if (status && status !== 'all') {
+      const statusMap: Record<string, string> = {
+        'completed': 'PAID',
+        'pending': 'OPEN',
+        'failed': 'CANCELLED',
+        'expired': 'EXPIRED',
+      };
+      const dbStatus = statusMap[status] || status.toUpperCase();
+      query = query.eq('status', dbStatus);
+    }
+
+    const { data, count, error } = await query;
+
+    if (error) {
+      console.error('[MerchantTransactions] DB error:', error);
+      return res.status(500).json({ error: 'Failed to fetch transactions' });
+    }
+
+    // Transform checkout sessions to transaction format
+    const transactions = (data || []).map((session: any) => ({
+      id: session.id,
+      amount: parseFloat(session.amount) || 0,
+      currency: session.currency || 'SLE',
+      status: session.status === 'PAID' ? 'completed' :
+              session.status === 'OPEN' ? 'pending' :
+              session.status === 'CANCELLED' ? 'failed' :
+              session.status === 'EXPIRED' ? 'expired' : session.status?.toLowerCase(),
+      type: 'credit',
+      customer_email: session.customer_email,
+      customer_name: session.customer_name,
+      reference: session.reference || session.id,
+      payment_method: session.payment_method || 'wallet',
+      created_at: session.created_at,
+      completed_at: session.paid_at || session.updated_at,
+      description: session.description || `Payment for ${session.reference || session.id}`,
+      metadata: session.metadata,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      transactions,
+      total: count || 0,
+    });
+  } catch (error: any) {
+    console.error('[MerchantTransactions] Error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to fetch transactions' });
+  }
+}
+
+/**
+ * Get merchant statistics
+ * GET /merchant/stats?merchantId=XXX
+ */
+async function handleMerchantStats(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const merchantId = req.query.merchantId as string;
+
+    if (!merchantId) {
+      return res.status(400).json({ error: 'merchantId is required' });
+    }
+
+    // Get all checkout sessions for this merchant
+    const { data: sessions, error } = await supabase
+      .from('checkout_sessions')
+      .select('status, amount')
+      .eq('merchant_id', merchantId);
+
+    if (error) {
+      console.error('[MerchantStats] DB error:', error);
+      return res.status(500).json({ error: 'Failed to fetch stats' });
+    }
+
+    const allSessions = sessions || [];
+
+    // Get wallet balance
+    const { data: wallet } = await supabase
+      .from('wallets')
+      .select('balance, pending_balance')
+      .eq('user_id', merchantId)
+      .eq('wallet_type', 'primary')
+      .single();
+
+    const stats = {
+      totalTransactions: allSessions.length,
+      totalVolume: allSessions
+        .filter(s => s.status === 'PAID')
+        .reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0),
+      completedTransactions: allSessions.filter(s => s.status === 'PAID').length,
+      pendingTransactions: allSessions.filter(s => s.status === 'OPEN').length,
+      failedTransactions: allSessions.filter(s => s.status === 'CANCELLED' || s.status === 'EXPIRED').length,
+      availableBalance: wallet?.balance || 0,
+      pendingBalance: wallet?.pending_balance || 0,
+    };
+
+    return res.status(200).json({
+      success: true,
+      ...stats,
+    });
+  } catch (error: any) {
+    console.error('[MerchantStats] Error:', error);
     return res.status(500).json({ error: error.message || 'Failed to fetch stats' });
   }
 }
