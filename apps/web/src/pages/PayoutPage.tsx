@@ -108,14 +108,21 @@ export function PayoutPage() {
     currencyService.getCurrencies().then(setCurrencies);
   }, []);
 
-  // Set default wallet when wallets load - prioritize SLE wallet for mobile money
+  // Set default wallet when wallets load - ONLY use primary SLE wallet for payout
   useEffect(() => {
     if (wallets && wallets.length > 0 && !selectedWalletId) {
-      // Prioritize: 1) Active SLE wallet, 2) Any active wallet, 3) First wallet
+      // Only use the primary SLE wallet for mobile money payout
+      const primaryWallet = wallets.find(w =>
+        w.status === 'ACTIVE' &&
+        w.currency === 'SLE' &&
+        (w as any).walletType === 'primary'
+      );
+      // Fallback to first active SLE wallet if no primary found
       const sleWallet = wallets.find(w => w.status === 'ACTIVE' && w.currency === 'SLE');
-      const activeWallet = wallets.find(w => w.status === 'ACTIVE');
-      const defaultWallet = sleWallet || activeWallet || wallets[0];
-      setSelectedWalletId(defaultWallet.id);
+      const defaultWallet = primaryWallet || sleWallet;
+      if (defaultWallet) {
+        setSelectedWalletId(defaultWallet.id);
+      }
     }
   }, [wallets, selectedWalletId]);
 
@@ -479,57 +486,31 @@ export function PayoutPage() {
                 <div className="flex items-center justify-center py-4">
                   <Loader2 className="w-5 h-5 animate-spin text-primary-600" />
                 </div>
-              ) : wallets && wallets.length > 0 ? (
-                <div className="space-y-2 max-h-40 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
-                  {/* Filter to only show SLE wallets - USD wallets can only payout to bank accounts */}
-                  {wallets.filter(w => w.status === 'ACTIVE' && w.currency === 'SLE').length === 0 ? (
-                    <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl">
-                      <div className="flex items-start gap-3">
-                        <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
-                        <div className="text-sm text-yellow-800 dark:text-yellow-200">
-                          <p className="font-medium">No SLE Wallet Available</p>
-                          <p className="mt-1">Mobile money payouts only support SLE currency. USD wallets can only payout to bank accounts.</p>
-                        </div>
-                      </div>
+              ) : selectedWallet ? (
+                <div className="p-4 rounded-xl border-2 border-orange-500 bg-orange-50 dark:bg-orange-900/20">
+                  <div className="flex items-center gap-3">
+                    <Wallet className="w-5 h-5 text-orange-600" />
+                    <div className="flex-1">
+                      <p className="font-medium text-orange-700 dark:text-orange-300">
+                        Main Wallet
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {formatCurrency(selectedWallet.balance, selectedWallet.currency)}
+                      </p>
                     </div>
-                  ) : wallets.filter(w => w.status === 'ACTIVE' && w.currency === 'SLE').map((wallet) => (
-                    <button
-                      key={wallet.id}
-                      type="button"
-                      onClick={() => setSelectedWalletId(wallet.id)}
-                      className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${
-                        selectedWalletId === wallet.id
-                          ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20'
-                          : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
-                      }`}
-                    >
-                      <Wallet className={`w-5 h-5 ${selectedWalletId === wallet.id ? 'text-orange-600' : 'text-gray-500'}`} />
-                      <div className="flex-1 text-left">
-                        <p className={`font-medium ${selectedWalletId === wallet.id ? 'text-orange-700 dark:text-orange-300' : 'text-gray-900 dark:text-white'}`}>
-                          {wallet.currency} Wallet
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {formatCurrency(wallet.balance, wallet.currency)}
-                        </p>
-                      </div>
-                      {selectedWalletId === wallet.id && (
-                        <CheckCircle className="w-5 h-5 text-orange-600" />
-                      )}
-                    </button>
-                  ))}
+                    <CheckCircle className="w-5 h-5 text-orange-600" />
+                  </div>
                 </div>
-              ) : wallets && wallets.some(w => w.currency === 'USD') ? (
+              ) : (
                 <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl">
                   <div className="flex items-start gap-3">
                     <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
                     <div className="text-sm text-yellow-800 dark:text-yellow-200">
-                      <p className="font-medium">USD Wallets Not Supported</p>
-                      <p className="mt-1">Mobile money payouts only support SLE currency. To withdraw USD, please use bank transfer.</p>
+                      <p className="font-medium">No SLE Wallet Available</p>
+                      <p className="mt-1">Mobile money payouts require an SLE wallet.</p>
                     </div>
                   </div>
                 </div>
-              ) : (
-                <p className="text-sm text-gray-500 text-center py-4">No wallets available</p>
               )}
             </div>
 
