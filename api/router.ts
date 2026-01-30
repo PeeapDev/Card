@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
-import { createMonimeService, getMonimeCredentials, MonimeError } from './services/monime';
+import { createMonimeService, getMonimeCredentials, MonimeError, toMonimeAmount } from './services/monime';
 import { sendEmailWithConfig, SmtpConfig } from './services/email';
 import { sendNotification, storeNotification, getNotificationHistory, getUsersWithTokens, getTokenStats, SendNotificationRequest } from './services/push-notification';
 import { readFileSync } from 'fs';
@@ -6060,7 +6060,7 @@ async function handleUserCashout(req: VercelRequest, res: VercelResponse) {
       const monimeResult = await monimeService.createPayout({
         amount: {
           currency,
-          value: Math.round(amount * 100), // Monime uses minor units
+          value: toMonimeAmount(amount, currency), // Use proper currency-aware conversion (SLE: x10, USD: x100)
         },
         destination,
         source: {
@@ -6449,7 +6449,7 @@ async function handleMerchantWithdraw(req: VercelRequest, res: VercelResponse) {
       const monimeResult = await monimeService.createPayout({
         amount: {
           currency,
-          value: Math.round(amount * 100), // Monime uses minor units
+          value: toMonimeAmount(amount, currency), // Use proper currency-aware conversion (SLE: x10, USD: x100)
         },
         destination: merchantDestination,
         source: {
@@ -7889,12 +7889,17 @@ async function handleOAuthToken(req: VercelRequest, res: VercelResponse) {
           const metadata = typeof authCode.metadata === 'string'
             ? JSON.parse(authCode.metadata)
             : authCode.metadata;
-          if (metadata.index_number || metadata.school_id) {
+          if (metadata.nsi || metadata.index_number || metadata.school_id) {
             response.link = {
-              index_number: metadata.index_number,
+              nsi: metadata.nsi || metadata.index_number,
+              index_number: metadata.index_number,  // Kept for backward compatibility
               school_id: metadata.school_id,
               linked_at: new Date().toISOString(),
             };
+          }
+          // Include children array for parent users
+          if (metadata.children) {
+            response.children = metadata.children;
           }
           // For school admin connection
           if (metadata.user_type === 'admin') {

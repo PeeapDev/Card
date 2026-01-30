@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import {
   GraduationCap,
@@ -14,8 +14,17 @@ import {
   Users,
   ChevronRight,
   History,
-  ArrowDownRight,
   ArrowUpRight,
+  Clock,
+  Sparkles,
+  BookOpen,
+  Building2,
+  TrendingUp,
+  Calendar,
+  ArrowRight,
+  CircleDollarSign,
+  BadgeCheck,
+  ChevronDown,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -32,7 +41,8 @@ interface StudentData {
   first_name: string;
   last_name: string;
   admission_no: number;
-  index_number: string;
+  nsi: string;
+  index_number?: string;
   class_name: string;
   section_name?: string;
   gender: string;
@@ -63,7 +73,8 @@ interface FinancialData {
     id: number;
     name: string;
     admission_no: number;
-    index_number: string;
+    nsi: string;
+    index_number?: string;
     class: string;
     section?: string;
   };
@@ -93,7 +104,7 @@ export function SchoolUtilitiesPage() {
   const [searchParams] = useSearchParams();
 
   // Search state
-  const [indexNumber, setIndexNumber] = useState('');
+  const [nsi, setNsi] = useState('');
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
@@ -110,6 +121,7 @@ export function SchoolUtilitiesPage() {
   const [userWallets, setUserWallets] = useState<{ id: string; balance: number; name?: string; walletType?: string }[]>([]);
   const [selectedWalletId, setSelectedWalletId] = useState<string>('');
   const [loadingWallet, setLoadingWallet] = useState(true);
+  const [showWalletDropdown, setShowWalletDropdown] = useState(false);
 
   // Get selected wallet
   const userWallet = userWallets.find(w => w.id === selectedWalletId) || null;
@@ -127,12 +139,19 @@ export function SchoolUtilitiesPage() {
   const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
-  // Load index from URL params
+  // Calculate payment progress
+  const paymentProgress = useMemo(() => {
+    if (!financials?.fees_summary) return 0;
+    const { total_fees, total_paid } = financials.fees_summary;
+    if (total_fees === 0) return 100;
+    return Math.round((total_paid / total_fees) * 100);
+  }, [financials]);
+
+  // Load NSI from URL params
   useEffect(() => {
-    const indexFromUrl = searchParams.get('index');
-    if (indexFromUrl) {
-      setIndexNumber(indexFromUrl);
-      // Auto-search when index is provided
+    const nsiFromUrl = searchParams.get('nsi') || searchParams.get('index');
+    if (nsiFromUrl) {
+      setNsi(nsiFromUrl);
       setTimeout(() => {
         const searchBtn = document.getElementById('search-student-btn');
         if (searchBtn) searchBtn.click();
@@ -167,14 +186,12 @@ export function SchoolUtilitiesPage() {
         return;
       }
       try {
-        // Get all user's wallets
         const allWallets = await walletService.getWallets(user.id);
         if (!allWallets || allWallets.length === 0) {
           setLoadingWallet(false);
           return;
         }
 
-        // Filter to only active SLE wallets (exclude special types like school, student)
         const sleWallets = allWallets.filter(w =>
           w.currency === 'SLE' &&
           w.status === 'ACTIVE' &&
@@ -188,11 +205,9 @@ export function SchoolUtilitiesPage() {
 
         setUserWallets(sleWallets);
 
-        // Find main wallet to pre-select
         const userWithDefault = user as any;
         let mainWalletId = '';
 
-        // 1. Check user's default_wallet_id
         if (userWithDefault?.defaultWalletId || userWithDefault?.default_wallet_id) {
           const defaultId = userWithDefault.defaultWalletId || userWithDefault.default_wallet_id;
           if (sleWallets.find(w => w.id === defaultId)) {
@@ -200,13 +215,11 @@ export function SchoolUtilitiesPage() {
           }
         }
 
-        // 2. Check for wallet_type === 'primary'
         if (!mainWalletId) {
           const primaryWallet = sleWallets.find(w => w.walletType === 'primary');
           if (primaryWallet) mainWalletId = primaryWallet.id;
         }
 
-        // 3. Get wallet with highest balance (most likely the main one)
         if (!mainWalletId && sleWallets.length > 0) {
           const highestBalance = sleWallets.reduce((prev, curr) =>
             curr.balance > prev.balance ? curr : prev
@@ -224,8 +237,8 @@ export function SchoolUtilitiesPage() {
     loadWallets();
   }, [user?.id]);
 
-  // Auto-format index number: SL-YYYY-MM-NNNNN
-  const formatIndexNumber = (value: string): string => {
+  // Auto-format NSI
+  const formatNsi = (value: string): string => {
     let cleaned = value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
     if (cleaned.startsWith('SL')) {
       cleaned = cleaned.slice(2);
@@ -238,10 +251,10 @@ export function SchoolUtilitiesPage() {
     return formatted;
   };
 
-  // Search for student
+  // Search for student by NSI
   const searchStudent = async () => {
-    if (!indexNumber.trim() || indexNumber.length < 10) {
-      setSearchError('Please enter a valid index number');
+    if (!nsi.trim() || nsi.length < 10) {
+      setSearchError('Please enter a valid NSI');
       return;
     }
 
@@ -251,17 +264,16 @@ export function SchoolUtilitiesPage() {
     setFinancials(null);
 
     try {
-      // Step 1: Verify student (index_number is globally unique, school_id is optional)
       const verifyRes = await fetch(`${API_BASE}/verify-student`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ index_number: indexNumber.trim() }),
+        body: JSON.stringify({ nsi: nsi.trim(), index_number: nsi.trim() }),
       });
 
       const verifyData = await verifyRes.json();
 
       if (!verifyRes.ok || !verifyData.success || !verifyData.found) {
-        setSearchError(verifyData.message || 'Student not found. Please check the index number.');
+        setSearchError(verifyData.message || 'Student not found. Please check the NSI.');
         return;
       }
 
@@ -271,6 +283,7 @@ export function SchoolUtilitiesPage() {
         first_name: verifyData.data.first_name,
         last_name: verifyData.data.last_name,
         admission_no: verifyData.data.admission_no,
+        nsi: verifyData.data.nsi || verifyData.data.index_number,
         index_number: verifyData.data.index_number,
         class_name: verifyData.data.class_name,
         section_name: verifyData.data.section_name,
@@ -284,14 +297,10 @@ export function SchoolUtilitiesPage() {
       };
 
       setStudent(studentData);
-
-      // Step 2: Fetch financials
       await fetchFinancials(studentData.student_id, studentData.school_id);
-
     } catch (err: any) {
       console.error('Search error:', err);
-      const errorMessage = err?.message || 'Unknown error';
-      setSearchError(`Could not connect to school system: ${errorMessage}`);
+      setSearchError(`Could not connect to school system: ${err?.message || 'Unknown error'}`);
     } finally {
       setSearching(false);
     }
@@ -326,16 +335,15 @@ export function SchoolUtilitiesPage() {
     }
   };
 
-  // Fetch payment history for a student
-  const fetchPaymentHistory = async (indexNumber: string) => {
+  // Fetch payment history
+  const fetchPaymentHistory = async (studentNsi: string) => {
     setLoadingHistory(true);
     try {
-      // Get payments from transactions table where metadata contains this student
       const { data, error } = await supabaseAdmin
         .from('transactions')
         .select('*')
         .eq('type', 'SCHOOL_FEE')
-        .contains('metadata', { student_index: indexNumber })
+        .contains('metadata', { student_index: studentNsi })
         .order('created_at', { ascending: false })
         .limit(20);
 
@@ -358,7 +366,7 @@ export function SchoolUtilitiesPage() {
     setShowPayModal(true);
   };
 
-  // Process payment from user's wallet
+  // Process payment
   const processPayment = async () => {
     if (!student || !selectedFee || !user?.id) return;
 
@@ -372,7 +380,6 @@ export function SchoolUtilitiesPage() {
       return;
     }
 
-    // Check wallet
     if (!userWallet) {
       setPaymentError('No wallet found. Please set up your wallet first.');
       return;
@@ -386,10 +393,9 @@ export function SchoolUtilitiesPage() {
     setPaymentError(null);
 
     try {
-      // Use the parentStudentService to process payment
       const result = await parentStudentService.paySchoolFee({
         parentWalletId: userWallet.id,
-        studentIndexNumber: student.index_number,
+        studentNsi: student.nsi,
         feeId: selectedFee.id.toString(),
         amount: amount,
         schoolId: student.school_id.toString(),
@@ -397,11 +403,9 @@ export function SchoolUtilitiesPage() {
 
       if (result.success) {
         setPaymentSuccess(true);
-        // Update local wallet balance in the userWallets array
         setUserWallets(prev => prev.map(w =>
           w.id === selectedWalletId ? { ...w, balance: w.balance - amount } : w
         ));
-        // Close modal after 3 seconds
         setTimeout(() => {
           setShowPayModal(false);
           setPaymentSuccess(false);
@@ -424,13 +428,18 @@ export function SchoolUtilitiesPage() {
     return `NLE ${amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusConfig = (status: string) => {
     switch (status) {
-      case 'paid': return 'bg-green-100 text-green-700';
-      case 'partial': return 'bg-amber-100 text-amber-700';
-      case 'unpaid': return 'bg-red-100 text-red-700';
-      case 'overdue': return 'bg-red-100 text-red-700';
-      default: return 'bg-gray-100 text-gray-700';
+      case 'paid':
+        return { bg: 'bg-emerald-50 dark:bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400', label: 'Paid' };
+      case 'partial':
+        return { bg: 'bg-amber-50 dark:bg-amber-500/10', text: 'text-amber-600 dark:text-amber-400', label: 'Partial' };
+      case 'unpaid':
+        return { bg: 'bg-rose-50 dark:bg-rose-500/10', text: 'text-rose-600 dark:text-rose-400', label: 'Unpaid' };
+      case 'overdue':
+        return { bg: 'bg-red-50 dark:bg-red-500/10', text: 'text-red-600 dark:text-red-400', label: 'Overdue' };
+      default:
+        return { bg: 'bg-gray-50 dark:bg-gray-500/10', text: 'text-gray-600 dark:text-gray-400', label: status };
     }
   };
 
@@ -438,650 +447,769 @@ export function SchoolUtilitiesPage() {
   const clearStudent = () => {
     setStudent(null);
     setFinancials(null);
-    setIndexNumber('');
+    setNsi('');
   };
 
   return (
     <MainLayout>
-      <div className="max-w-4xl mx-auto px-4 py-6">
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-xl">
-            <GraduationCap className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Pay School Fees</h1>
-            <p className="text-gray-500 dark:text-gray-400 text-sm">Search for a student and pay their fees</p>
-          </div>
-        </div>
-
-        {/* Wallet Balance Banner - SLE Wallet Selector */}
-        {!loadingWallet && userWallets.length > 0 && (
-          <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl p-4 mb-6 text-white">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Wallet className="h-5 w-5" />
-                <div>
-                  {userWallets.length > 1 ? (
-                    <select
-                      value={selectedWalletId}
-                      onChange={(e) => setSelectedWalletId(e.target.value)}
-                      className="bg-white/20 border border-white/30 rounded-lg px-2 py-1 text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/50"
-                    >
-                      {userWallets.map((w) => (
-                        <option key={w.id} value={w.id} className="text-gray-900">
-                          {w.name || (w.walletType === 'primary' ? 'Main Wallet' : 'SLE Wallet')} - {formatCurrency(w.balance)}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span className="text-sm opacity-90">
-                      {userWallet?.name || 'Leones Wallet'}
-                    </span>
-                  )}
-                  <p className="text-xs opacity-70 mt-1">Payments will be made from this wallet</p>
-                </div>
-              </div>
-              <p className="text-xl font-bold">{formatCurrency(userWallet?.balance || 0)}</p>
+      <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white dark:from-gray-900 dark:to-gray-800">
+        <div className="max-w-5xl mx-auto px-4 py-8">
+          {/* Hero Section */}
+          <div className="text-center mb-10">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-lg shadow-blue-500/30 mb-4">
+              <GraduationCap className="h-8 w-8 text-white" />
             </div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+              School Fee Payment
+            </h1>
+            <p className="text-gray-500 dark:text-gray-400 max-w-md mx-auto">
+              Pay school fees instantly and securely for any student in Sierra Leone
+            </p>
           </div>
-        )}
-        {!loadingWallet && userWallets.length === 0 && (
-          <div className="bg-amber-50 dark:bg-amber-900/20 rounded-2xl p-4 mb-6 border border-amber-200 dark:border-amber-800">
-            <div className="flex items-center gap-3 text-amber-700 dark:text-amber-300">
-              <AlertCircle className="h-5 w-5" />
-              <div>
-                <p className="font-medium">No SLE wallet found</p>
-                <p className="text-sm opacity-80">You need a Leones wallet to pay school fees</p>
-              </div>
-            </div>
-          </div>
-        )}
 
-        {!student ? (
-          <div className="space-y-6">
-            {/* Linked Children Quick Select */}
-            {!loadingChildren && linkedChildren.length > 0 && (
-              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Users className="h-5 w-5 text-purple-600" />
-                    <h2 className="font-semibold text-gray-900 dark:text-white">Your Children</h2>
-                  </div>
-                  <Link
-                    to="/my-children"
-                    className="text-sm text-purple-600 hover:text-purple-700 flex items-center gap-1"
-                  >
-                    Manage
-                    <ChevronRight className="h-4 w-4" />
-                  </Link>
-                </div>
-                <div className="grid gap-3">
-                  {linkedChildren.map((child) => (
-                    <button
-                      key={child.id}
-                      onClick={() => {
-                        setIndexNumber(child.student.indexNumber);
-                        setTimeout(() => searchStudent(), 100);
-                      }}
-                      className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors text-left"
-                    >
-                      {child.student.profilePhotoUrl ? (
-                        <img
-                          src={child.student.profilePhotoUrl}
-                          alt={child.student.fullName}
-                          className="w-10 h-10 rounded-lg object-cover"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center text-white font-bold">
-                          {child.student.firstName.charAt(0)}
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-900 dark:text-white truncate">
-                          {child.student.fullName}
-                        </p>
-                        <p className="text-sm text-gray-500 truncate">
-                          {child.student.schoolName} - {child.student.className}
-                        </p>
+          {/* Wallet Card - Floating Style */}
+          {!loadingWallet && userWallets.length > 0 && (
+            <div className="relative mb-8">
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-3xl blur-xl opacity-30" />
+              <div className="relative bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 rounded-3xl p-6 text-white overflow-hidden">
+                {/* Decorative elements */}
+                <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-32 translate-x-32" />
+                <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-24 -translate-x-24" />
+
+                <div className="relative flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Wallet className="h-4 w-4 opacity-80" />
+                      <span className="text-sm opacity-80">Payment Wallet</span>
+                    </div>
+                    <p className="text-3xl font-bold tracking-tight">
+                      {formatCurrency(userWallet?.balance || 0)}
+                    </p>
+                    {userWallets.length > 1 && (
+                      <div className="relative mt-3">
+                        <button
+                          onClick={() => setShowWalletDropdown(!showWalletDropdown)}
+                          className="flex items-center gap-2 text-sm bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition-colors"
+                        >
+                          <span>{userWallet?.name || 'Main Wallet'}</span>
+                          <ChevronDown className="h-4 w-4" />
+                        </button>
+                        {showWalletDropdown && (
+                          <div className="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 py-2 z-50">
+                            {userWallets.map((w) => (
+                              <button
+                                key={w.id}
+                                onClick={() => {
+                                  setSelectedWalletId(w.id);
+                                  setShowWalletDropdown(false);
+                                }}
+                                className={`w-full px-4 py-2.5 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+                                  w.id === selectedWalletId ? 'bg-blue-50 dark:bg-blue-900/30' : ''
+                                }`}
+                              >
+                                <span className="text-gray-900 dark:text-white font-medium">
+                                  {w.name || 'SLE Wallet'}
+                                </span>
+                                <span className="text-gray-500 dark:text-gray-400 text-sm">
+                                  {formatCurrency(w.balance)}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <ChevronRight className="h-5 w-5 text-gray-400" />
-                    </button>
-                  ))}
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center backdrop-blur-sm">
+                      <CircleDollarSign className="h-6 w-6" />
+                    </div>
+                  </div>
                 </div>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Search Form */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6">
-              <div className="max-w-md mx-auto space-y-4">
+          {/* No Wallet Warning */}
+          {!loadingWallet && userWallets.length === 0 && (
+            <div className="mb-8 p-5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl">
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-10 h-10 bg-amber-100 dark:bg-amber-900/50 rounded-xl flex items-center justify-center">
+                  <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Student Index Number
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={indexNumber}
-                      onChange={(e) => {
-                        setIndexNumber(formatIndexNumber(e.target.value));
-                        setSearchError(null);
-                      }}
-                      onKeyDown={(e) => e.key === 'Enter' && searchStudent()}
-                      placeholder="SL-2025-02-00050"
-                      className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 font-mono text-lg"
-                      autoFocus
-                    />
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2">
-                    Enter the student's index number (e.g., SL-2025-02-00050)
+                  <h3 className="font-semibold text-amber-800 dark:text-amber-200">Wallet Required</h3>
+                  <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                    You need a Leones wallet to pay school fees. Add funds to your wallet to get started.
                   </p>
                 </div>
-
-                {searchError && (
-                  <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-xl flex items-center gap-2 text-red-700 dark:text-red-300">
-                    <AlertCircle className="h-5 w-5 flex-shrink-0" />
-                    <span className="text-sm">{searchError}</span>
-                  </div>
-                )}
-
-                <button
-                  id="search-student-btn"
-                  onClick={searchStudent}
-                  disabled={searching || !indexNumber.trim()}
-                  className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {searching ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  ) : (
-                    <>
-                      <Search className="h-5 w-5" />
-                      Search Student
-                    </>
-                  )}
-                </button>
-
-                {/* Link to manage children */}
-                <div className="text-center pt-4 border-t border-gray-200 dark:border-gray-700">
-                  <Link
-                    to="/my-children"
-                    className="text-sm text-purple-600 hover:text-purple-700 inline-flex items-center gap-1"
-                  >
-                    <Users className="h-4 w-4" />
-                    Add child to your account for quick access
-                  </Link>
-                </div>
               </div>
             </div>
-          </div>
-        ) : (
-          /* Student Details & Fees */
-          <div className="space-y-6">
-            {/* Student Card */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-4">
-                  {student.profile_photo_url ? (
-                    <img
-                      src={student.profile_photo_url}
-                      alt={student.student_name}
-                      className="w-16 h-16 rounded-xl object-cover"
-                    />
-                  ) : (
-                    <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-500 rounded-xl flex items-center justify-center text-white text-2xl font-bold">
-                      {student.first_name.charAt(0)}
-                    </div>
-                  )}
-                  <div>
-                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                      {student.student_name}
-                    </h2>
-                    <p className="text-gray-500">{student.school_name}</p>
-                    <div className="flex items-center gap-3 mt-1 text-sm text-gray-400">
-                      <span>{student.class_name}</span>
-                      <span>|</span>
-                      <span>ID: {student.index_number}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      fetchPaymentHistory(student.index_number);
-                      setShowPaymentHistory(true);
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors text-sm font-medium"
-                    title="View payment history"
-                  >
-                    <History className="h-4 w-4" />
-                    Payment History
-                  </button>
-                  <button
-                    onClick={clearStudent}
-                    className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                    title="Search another student"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
-                </div>
-              </div>
-            </div>
+          )}
 
-            {loadingFinancials ? (
-              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-12 text-center">
-                <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
-                <p className="text-gray-500">Loading fees...</p>
-              </div>
-            ) : financials ? (
-              <>
-                {/* Summary Cards */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4">
-                    <div className="flex items-center gap-2 text-gray-500 mb-2">
-                      <Receipt className="h-4 w-4" />
-                      <span className="text-sm">Total Fees</span>
-                    </div>
-                    <p className="text-xl font-bold text-gray-900 dark:text-white">
-                      {formatCurrency(financials.fees_summary.total_fees)}
-                    </p>
-                  </div>
-                  <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4">
-                    <div className="flex items-center gap-2 text-gray-500 mb-2">
-                      <CheckCircle className="h-4 w-4" />
-                      <span className="text-sm">Paid</span>
-                    </div>
-                    <p className="text-xl font-bold text-green-600">
-                      {formatCurrency(financials.fees_summary.total_paid)}
-                    </p>
-                  </div>
-                  <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4">
-                    <div className="flex items-center gap-2 text-gray-500 mb-2">
-                      <AlertCircle className="h-4 w-4" />
-                      <span className="text-sm">Balance Due</span>
-                    </div>
-                    <p className="text-xl font-bold text-red-600">
-                      {formatCurrency(financials.fees_summary.balance_due)}
-                    </p>
-                  </div>
-                  <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4">
-                    <div className="flex items-center gap-2 text-gray-500 mb-2">
-                      <Wallet className="h-4 w-4" />
-                      <span className="text-sm">Wallet</span>
-                    </div>
-                    <p className="text-xl font-bold text-gray-900 dark:text-white">
-                      {formatCurrency(financials.wallet_balance)}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Fees List */}
-                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
-                  <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                    <h3 className="font-semibold text-gray-900 dark:text-white">Fees</h3>
-                    <button
-                      onClick={refreshFinancials}
-                      className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
-                      title="Refresh"
-                    >
-                      <RefreshCw className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {financials.fees.length > 0 ? (
-                      financials.fees.map((fee) => (
-                        <div key={fee.id} className="p-4 flex items-center justify-between">
-                          <div>
-                            <p className="font-medium text-gray-900 dark:text-white">{fee.name}</p>
-                            {fee.term && (
-                              <p className="text-sm text-gray-500">{fee.term}</p>
-                            )}
-                            {fee.due_date && fee.due_date !== '1970-01-01' && (
-                              <p className="text-xs text-gray-400">Due: {fee.due_date}</p>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <div className="text-right">
-                              <p className="font-semibold text-gray-900 dark:text-white">
-                                {formatCurrency(fee.amount)}
-                              </p>
-                              {fee.paid > 0 && (
-                                <p className="text-xs text-green-600">
-                                  Paid: {formatCurrency(fee.paid)}
-                                </p>
-                              )}
-                              <span className={`inline-block mt-1 text-xs px-2 py-0.5 rounded-full ${getStatusColor(fee.status)}`}>
-                                {fee.status === 'unpaid' ? `${formatCurrency(fee.balance)} due` : fee.status}
-                              </span>
-                            </div>
-                            {fee.balance > 0 && (
-                              <button
-                                onClick={() => openPayModal(fee)}
-                                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
-                              >
-                                Pay
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="p-8 text-center">
-                        <Receipt className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                        <p className="text-gray-500">No fees found</p>
+          {!student ? (
+            <div className="space-y-6">
+              {/* Linked Children Section */}
+              {!loadingChildren && linkedChildren.length > 0 && (
+                <div className="bg-white dark:bg-gray-800/50 backdrop-blur-sm rounded-3xl shadow-sm shadow-gray-200/50 dark:shadow-none border border-gray-100 dark:border-gray-700/50 overflow-hidden">
+                  <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700/50 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center">
+                        <Users className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                       </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Recent Transactions */}
-                {financials.recent_transactions.length > 0 && (
-                  <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
-                    <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-                      <h3 className="font-semibold text-gray-900 dark:text-white">Recent Payments</h3>
+                      <div>
+                        <h2 className="font-semibold text-gray-900 dark:text-white">Your Children</h2>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Quick access to linked students</p>
+                      </div>
                     </div>
-                    <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                      {financials.recent_transactions.map((tx) => (
-                        <div key={tx.id} className="p-4 flex items-center justify-between">
-                          <div>
-                            <p className="font-medium text-gray-900 dark:text-white">
-                              {tx.description || tx.narration || tx.type}
+                    <Link
+                      to="/my-children"
+                      className="text-sm text-purple-600 hover:text-purple-700 dark:text-purple-400 flex items-center gap-1 font-medium"
+                    >
+                      Manage
+                      <ChevronRight className="h-4 w-4" />
+                    </Link>
+                  </div>
+                  <div className="p-4">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {linkedChildren.map((child) => (
+                        <button
+                          key={child.id}
+                          onClick={() => {
+                            setNsi(child.student.nsi);
+                            setTimeout(() => searchStudent(), 100);
+                          }}
+                          className="group flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-2xl hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:border-purple-200 dark:hover:border-purple-800 border border-transparent transition-all text-left"
+                        >
+                          {child.student.profilePhotoUrl ? (
+                            <img
+                              src={child.student.profilePhotoUrl}
+                              alt={child.student.fullName}
+                              className="w-12 h-12 rounded-xl object-cover ring-2 ring-white dark:ring-gray-700 shadow-sm"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-sm">
+                              {child.student.firstName.charAt(0)}
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-gray-900 dark:text-white truncate group-hover:text-purple-700 dark:group-hover:text-purple-300 transition-colors">
+                              {child.student.fullName}
                             </p>
-                            <p className="text-sm text-gray-500">
-                              {tx.date || tx.created_at}
+                            <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                              {child.student.schoolName}
+                            </p>
+                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                              {child.student.className}
                             </p>
                           </div>
-                          <p className={`font-semibold ${tx.amount < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                            {tx.amount < 0 ? '-' : '+'}{formatCurrency(Math.abs(tx.amount))}
-                          </p>
-                        </div>
+                          <ArrowRight className="h-5 w-5 text-gray-300 dark:text-gray-600 group-hover:text-purple-500 dark:group-hover:text-purple-400 group-hover:translate-x-1 transition-all" />
+                        </button>
                       ))}
                     </div>
                   </div>
-                )}
-              </>
-            ) : (
-              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-12 text-center">
-                <AlertCircle className="h-12 w-12 text-amber-500 mx-auto mb-4" />
-                <p className="text-gray-500">Could not load fees</p>
-                <button
-                  onClick={refreshFinancials}
-                  className="mt-4 text-blue-600 hover:text-blue-700"
-                >
-                  Try Again
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+                </div>
+              )}
 
-        {/* Payment Modal */}
-        {showPayModal && selectedFee && student && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-              <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  Pay Fee
-                </h3>
-                <button
-                  onClick={() => setShowPayModal(false)}
-                  className="p-2 text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-
-              <div className="p-6 space-y-6">
-                {paymentSuccess ? (
-                  <div className="text-center py-6">
-                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <CheckCircle className="h-8 w-8 text-green-600" />
-                    </div>
-                    <h4 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-                      Payment Successful!
-                    </h4>
-                    <p className="text-gray-600 dark:text-gray-300 mb-1">
-                      {formatCurrency(parseFloat(paymentAmount))} paid for {selectedFee.name}
-                    </p>
-                    <p className="text-sm text-gray-500 mb-4">
-                      For: {student?.student_name} at {student?.school_name}
-                    </p>
-                    <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 text-left mb-4">
-                      <p className="text-xs text-green-700 dark:text-green-300 font-medium mb-1">Payment Details:</p>
-                      <p className="text-sm text-green-600 dark:text-green-400">
-                        • Deducted from your wallet
-                      </p>
-                      <p className="text-sm text-green-600 dark:text-green-400">
-                        • Credited to school's Peeap wallet
-                      </p>
-                      <p className="text-sm text-green-600 dark:text-green-400">
-                        • School system notified
+              {/* Search Card */}
+              <div className="bg-white dark:bg-gray-800/50 backdrop-blur-sm rounded-3xl shadow-sm shadow-gray-200/50 dark:shadow-none border border-gray-100 dark:border-gray-700/50 overflow-hidden">
+                <div className="p-8">
+                  <div className="max-w-md mx-auto">
+                    <div className="text-center mb-6">
+                      <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full text-sm font-medium mb-4">
+                        <Sparkles className="h-4 w-4" />
+                        <span>Find Any Student</span>
+                      </div>
+                      <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                        Enter Student NSI
+                      </h2>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        National Student Identifier - found on student ID card
                       </p>
                     </div>
-                    <button
-                      onClick={() => {
-                        setShowPayModal(false);
-                        setPaymentSuccess(false);
-                        setSelectedFee(null);
-                        setPaymentAmount('');
-                        refreshFinancials();
-                      }}
-                      className="w-full py-2.5 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700"
-                    >
-                      Done
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    {/* Fee Details */}
-                    <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
-                          <Receipt className="h-5 w-5 text-blue-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900 dark:text-white">{selectedFee.name}</p>
-                          <p className="text-sm text-gray-500">For: {student.student_name}</p>
-                          {selectedFee.term && (
-                            <p className="text-xs text-blue-600">{selectedFee.term}</p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-3 gap-4 text-center">
-                        <div>
-                          <p className="text-xs text-gray-500">Total</p>
-                          <p className="font-semibold text-gray-900 dark:text-white">
-                            {formatCurrency(selectedFee.amount)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Paid</p>
-                          <p className="font-semibold text-green-600">
-                            {formatCurrency(selectedFee.paid)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Balance</p>
-                          <p className="font-semibold text-red-600">
-                            {formatCurrency(selectedFee.balance)}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
 
-                    {/* Wallet Balance */}
-                    {userWallet && (
-                      <div className="bg-blue-50 dark:bg-blue-900/30 rounded-xl p-3 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Wallet className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                          <span className="text-sm text-blue-700 dark:text-blue-300">Your Wallet</span>
-                        </div>
-                        <span className="font-semibold text-blue-700 dark:text-blue-300">
-                          {formatCurrency(userWallet.balance)}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Amount Input */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Payment Amount
-                      </label>
+                    <div className="space-y-4">
                       <div className="relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">NLE</span>
                         <input
-                          type="number"
-                          value={paymentAmount}
-                          onChange={(e) => setPaymentAmount(e.target.value)}
-                          className="w-full pl-14 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 text-lg font-semibold"
-                          placeholder="0.00"
+                          type="text"
+                          value={nsi}
+                          onChange={(e) => {
+                            setNsi(formatNsi(e.target.value));
+                            setSearchError(null);
+                          }}
+                          onKeyDown={(e) => e.key === 'Enter' && searchStudent()}
+                          placeholder="SL-2025-02-00050"
+                          className="w-full px-5 py-4 bg-gray-50 dark:bg-gray-700/50 border-2 border-gray-100 dark:border-gray-600 rounded-2xl text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-lg text-center tracking-wider transition-all"
+                          autoFocus
                         />
                       </div>
-                      <div className="flex gap-2 mt-2">
-                        <button
-                          onClick={() => setPaymentAmount((selectedFee.balance / 2).toFixed(2))}
-                          className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200"
-                        >
-                          50%
-                        </button>
-                        <button
-                          onClick={() => setPaymentAmount(selectedFee.balance.toFixed(2))}
-                          className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200"
-                        >
-                          Full Balance
-                        </button>
+
+                      {searchError && (
+                        <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-2xl flex items-center gap-3 text-red-700 dark:text-red-300">
+                          <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                          <span className="text-sm">{searchError}</span>
+                        </div>
+                      )}
+
+                      <button
+                        id="search-student-btn"
+                        onClick={searchStudent}
+                        disabled={searching || !nsi.trim()}
+                        className="w-full flex items-center justify-center gap-3 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none transition-all"
+                      >
+                        {searching ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : (
+                          <>
+                            <Search className="h-5 w-5" />
+                            Search Student
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Link to manage children */}
+                    <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-700/50 text-center">
+                      <Link
+                        to="/my-children"
+                        className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-purple-600 dark:text-gray-400 dark:hover:text-purple-400 transition-colors"
+                      >
+                        <Users className="h-4 w-4" />
+                        <span>Link a child to your account for faster access</span>
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Student Details & Fees */
+            <div className="space-y-6">
+              {/* Student Profile Card */}
+              <div className="bg-white dark:bg-gray-800/50 backdrop-blur-sm rounded-3xl shadow-sm shadow-gray-200/50 dark:shadow-none border border-gray-100 dark:border-gray-700/50 overflow-hidden">
+                <div className="p-6">
+                  <div className="flex items-start gap-5">
+                    {student.profile_photo_url ? (
+                      <img
+                        src={student.profile_photo_url}
+                        alt={student.student_name}
+                        className="w-20 h-20 rounded-2xl object-cover ring-4 ring-white dark:ring-gray-700 shadow-lg"
+                      />
+                    ) : (
+                      <div className="w-20 h-20 bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-500 rounded-2xl flex items-center justify-center text-white text-3xl font-bold shadow-lg">
+                        {student.first_name.charAt(0)}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                            {student.student_name}
+                          </h2>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Building2 className="h-4 w-4 text-gray-400" />
+                            <span className="text-gray-500 dark:text-gray-400">{student.school_name}</span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-3 mt-3">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-sm font-medium">
+                              <BookOpen className="h-3.5 w-3.5" />
+                              {student.class_name}
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-100 dark:bg-gray-700/50 text-gray-600 dark:text-gray-400 rounded-lg text-sm font-mono">
+                              {student.nsi}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              fetchPaymentHistory(student.nsi);
+                              setShowPaymentHistory(true);
+                            }}
+                            className="flex items-center gap-2 px-4 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors text-sm font-medium"
+                          >
+                            <History className="h-4 w-4" />
+                            <span className="hidden sm:inline">History</span>
+                          </button>
+                          <button
+                            onClick={clearStudent}
+                            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors"
+                          >
+                            <X className="h-5 w-5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {loadingFinancials ? (
+                <div className="bg-white dark:bg-gray-800/50 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700/50 p-16 text-center">
+                  <Loader2 className="h-10 w-10 animate-spin text-blue-600 mx-auto mb-4" />
+                  <p className="text-gray-500 dark:text-gray-400">Loading fee information...</p>
+                </div>
+              ) : financials ? (
+                <>
+                  {/* Payment Progress */}
+                  <div className="bg-white dark:bg-gray-800/50 backdrop-blur-sm rounded-3xl shadow-sm shadow-gray-200/50 dark:shadow-none border border-gray-100 dark:border-gray-700/50 p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl flex items-center justify-center">
+                          <TrendingUp className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-900 dark:text-white">Payment Progress</h3>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">{paymentProgress}% of total fees paid</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Balance Due</p>
+                        <p className="text-xl font-bold text-gray-900 dark:text-white">
+                          {formatCurrency(financials.fees_summary.balance_due)}
+                        </p>
                       </div>
                     </div>
 
-                    {paymentError && (
-                      <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg flex items-center gap-2 text-red-700 dark:text-red-300">
-                        <AlertCircle className="h-5 w-5" />
-                        <span className="text-sm">{paymentError}</span>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
+                    {/* Progress Bar */}
+                    <div className="relative h-3 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                      <div
+                        className="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500"
+                        style={{ width: `${paymentProgress}%` }}
+                      />
+                    </div>
 
-              {!paymentSuccess && (
-                <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+                    {/* Stats Row */}
+                    <div className="grid grid-cols-3 gap-4 mt-6">
+                      <div className="text-center p-4 bg-gray-50 dark:bg-gray-700/30 rounded-2xl">
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Fees</p>
+                        <p className="text-lg font-bold text-gray-900 dark:text-white">
+                          {formatCurrency(financials.fees_summary.total_fees)}
+                        </p>
+                      </div>
+                      <div className="text-center p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl">
+                        <p className="text-sm text-emerald-600 dark:text-emerald-400 mb-1">Paid</p>
+                        <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                          {formatCurrency(financials.fees_summary.total_paid)}
+                        </p>
+                      </div>
+                      <div className="text-center p-4 bg-rose-50 dark:bg-rose-900/20 rounded-2xl">
+                        <p className="text-sm text-rose-600 dark:text-rose-400 mb-1">Outstanding</p>
+                        <p className="text-lg font-bold text-rose-600 dark:text-rose-400">
+                          {formatCurrency(financials.fees_summary.balance_due)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Fees List */}
+                  <div className="bg-white dark:bg-gray-800/50 backdrop-blur-sm rounded-3xl shadow-sm shadow-gray-200/50 dark:shadow-none border border-gray-100 dark:border-gray-700/50 overflow-hidden">
+                    <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700/50 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
+                          <Receipt className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-900 dark:text-white">Fee Breakdown</h3>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">{financials.fees.length} fee items</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={refreshFinancials}
+                        className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors"
+                      >
+                        <RefreshCw className="h-5 w-5" />
+                      </button>
+                    </div>
+
+                    <div className="divide-y divide-gray-100 dark:divide-gray-700/50">
+                      {financials.fees.length > 0 ? (
+                        financials.fees.map((fee) => {
+                          const status = getStatusConfig(fee.status);
+                          return (
+                            <div key={fee.id} className="p-5 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-3 mb-2">
+                                    <h4 className="font-semibold text-gray-900 dark:text-white">{fee.name}</h4>
+                                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${status.bg} ${status.text}`}>
+                                      {status.label}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500 dark:text-gray-400">
+                                    {fee.term && (
+                                      <span className="flex items-center gap-1">
+                                        <Calendar className="h-3.5 w-3.5" />
+                                        {fee.term}
+                                      </span>
+                                    )}
+                                    {fee.due_date && fee.due_date !== '1970-01-01' && (
+                                      <span className="flex items-center gap-1">
+                                        <Clock className="h-3.5 w-3.5" />
+                                        Due: {fee.due_date}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {fee.paid > 0 && (
+                                    <div className="mt-2">
+                                      <div className="flex items-center gap-2 text-sm">
+                                        <span className="text-gray-500">Paid: </span>
+                                        <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                                          {formatCurrency(fee.paid)}
+                                        </span>
+                                        <span className="text-gray-400">of</span>
+                                        <span className="font-medium text-gray-700 dark:text-gray-300">
+                                          {formatCurrency(fee.amount)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-4">
+                                  <div className="text-right">
+                                    {fee.balance > 0 ? (
+                                      <>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Balance</p>
+                                        <p className="text-xl font-bold text-gray-900 dark:text-white">
+                                          {formatCurrency(fee.balance)}
+                                        </p>
+                                      </>
+                                    ) : (
+                                      <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                                        <BadgeCheck className="h-5 w-5" />
+                                        <span className="font-semibold">Paid</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  {fee.balance > 0 && (
+                                    <button
+                                      onClick={() => openPayModal(fee)}
+                                      className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-semibold rounded-xl shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all"
+                                    >
+                                      Pay Now
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="p-16 text-center">
+                          <Receipt className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+                          <p className="text-gray-500 dark:text-gray-400 font-medium">No fees found</p>
+                          <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">This student has no pending fees</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Recent Transactions */}
+                  {financials.recent_transactions.length > 0 && (
+                    <div className="bg-white dark:bg-gray-800/50 backdrop-blur-sm rounded-3xl shadow-sm shadow-gray-200/50 dark:shadow-none border border-gray-100 dark:border-gray-700/50 overflow-hidden">
+                      <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700/50">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center">
+                            <History className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-gray-900 dark:text-white">Recent Activity</h3>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">School-side payment records</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="divide-y divide-gray-100 dark:divide-gray-700/50">
+                        {financials.recent_transactions.map((tx) => (
+                          <div key={tx.id} className="p-4 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl flex items-center justify-center">
+                                <ArrowUpRight className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                              </div>
+                              <div>
+                                <p className="font-medium text-gray-900 dark:text-white">
+                                  {tx.description || tx.narration || tx.type}
+                                </p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                  {tx.date || tx.created_at}
+                                </p>
+                              </div>
+                            </div>
+                            <p className="font-semibold text-emerald-600 dark:text-emerald-400">
+                              +{formatCurrency(Math.abs(tx.amount))}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="bg-white dark:bg-gray-800/50 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700/50 p-16 text-center">
+                  <AlertCircle className="h-12 w-12 text-amber-500 mx-auto mb-4" />
+                  <p className="text-gray-600 dark:text-gray-300 font-medium">Could not load fee information</p>
                   <button
-                    onClick={processPayment}
-                    disabled={processing || !paymentAmount}
-                    className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={refreshFinancials}
+                    className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium"
                   >
-                    {processing ? (
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                    ) : (
-                      <>
-                        <CreditCard className="h-5 w-5" />
-                        Pay {paymentAmount ? formatCurrency(parseFloat(paymentAmount)) : 'Now'}
-                      </>
-                    )}
+                    Try Again
                   </button>
                 </div>
               )}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Payment History Modal */}
-        {showPaymentHistory && student && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
-              <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
-                    <History className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                      Payment History
+          {/* Payment Modal */}
+          {showPayModal && selectedFee && student && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+                <div className="p-5 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30">
+                      <CreditCard className="h-5 w-5 text-white" />
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                      Pay Fee
                     </h3>
-                    <p className="text-sm text-gray-500">{student.student_name}</p>
                   </div>
+                  <button
+                    onClick={() => setShowPayModal(false)}
+                    className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-white/50 rounded-xl transition-colors"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
                 </div>
-                <button
-                  onClick={() => setShowPaymentHistory(false)}
-                  className="p-2 text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
 
-              <div className="flex-1 overflow-y-auto p-4">
-                {loadingHistory ? (
-                  <div className="text-center py-8">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
-                    <p className="text-gray-500">Loading payment history...</p>
-                  </div>
-                ) : paymentHistory.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Receipt className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                    <p className="text-gray-500">No payments found for this student</p>
-                    <p className="text-sm text-gray-400 mt-1">Payments made through Peeap will appear here</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {paymentHistory.map((payment) => (
-                      <div
-                        key={payment.id}
-                        className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl"
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                              <ArrowUpRight className="h-4 w-4 text-green-600" />
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-900 dark:text-white">
-                                {payment.description || 'School Fee Payment'}
-                              </p>
-                              <p className="text-sm text-gray-500">
-                                {new Date(payment.created_at).toLocaleDateString('en-US', {
-                                  year: 'numeric',
-                                  month: 'short',
-                                  day: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })}
-                              </p>
-                            </div>
+                <div className="p-6">
+                  {paymentSuccess ? (
+                    <div className="text-center py-8">
+                      <div className="w-20 h-20 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-emerald-500/30 animate-in zoom-in">
+                        <CheckCircle className="h-10 w-10 text-white" />
+                      </div>
+                      <h4 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                        Payment Successful!
+                      </h4>
+                      <p className="text-gray-600 dark:text-gray-300 mb-1">
+                        {formatCurrency(parseFloat(paymentAmount))} paid for {selectedFee.name}
+                      </p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                        For: {student?.student_name}
+                      </p>
+                      <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl p-4 text-left space-y-2">
+                        <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300">
+                          <CheckCircle className="h-4 w-4" />
+                          <span>Deducted from your wallet</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300">
+                          <CheckCircle className="h-4 w-4" />
+                          <span>Credited to school</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300">
+                          <CheckCircle className="h-4 w-4" />
+                          <span>School system updated</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-5">
+                      {/* Fee Details */}
+                      <div className="bg-gray-50 dark:bg-gray-700/50 rounded-2xl p-4">
+                        <div className="flex items-center gap-4 mb-4">
+                          <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+                            <Receipt className="h-6 w-6 text-white" />
                           </div>
-                          <div className="text-right">
-                            <p className="font-bold text-green-600">
-                              {formatCurrency(Math.abs(payment.amount))}
-                            </p>
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${
-                              payment.status === 'COMPLETED'
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-yellow-100 text-yellow-700'
-                            }`}>
-                              {payment.status}
-                            </span>
+                          <div>
+                            <p className="font-semibold text-gray-900 dark:text-white">{selectedFee.name}</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{student.student_name}</p>
                           </div>
                         </div>
-                        {payment.reference && (
-                          <p className="text-xs text-gray-400 mt-2 font-mono">
-                            Ref: {payment.reference}
-                          </p>
-                        )}
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="text-center p-3 bg-white dark:bg-gray-800 rounded-xl">
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Total</p>
+                            <p className="font-bold text-gray-900 dark:text-white">{formatCurrency(selectedFee.amount)}</p>
+                          </div>
+                          <div className="text-center p-3 bg-white dark:bg-gray-800 rounded-xl">
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Paid</p>
+                            <p className="font-bold text-emerald-600">{formatCurrency(selectedFee.paid)}</p>
+                          </div>
+                          <div className="text-center p-3 bg-white dark:bg-gray-800 rounded-xl">
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Due</p>
+                            <p className="font-bold text-rose-600">{formatCurrency(selectedFee.balance)}</p>
+                          </div>
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
 
-              <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-                <button
-                  onClick={() => setShowPaymentHistory(false)}
-                  className="w-full py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-200 dark:hover:bg-gray-600"
-                >
-                  Close
-                </button>
+                      {/* Wallet Balance */}
+                      {userWallet && (
+                        <div className="flex items-center justify-between p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-800">
+                          <div className="flex items-center gap-3">
+                            <Wallet className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                            <span className="text-sm font-medium text-blue-700 dark:text-blue-300">Your Wallet</span>
+                          </div>
+                          <span className="font-bold text-blue-700 dark:text-blue-300">
+                            {formatCurrency(userWallet.balance)}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Amount Input */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Payment Amount
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 font-medium">NLE</span>
+                          <input
+                            type="number"
+                            value={paymentAmount}
+                            onChange={(e) => setPaymentAmount(e.target.value)}
+                            className="w-full pl-14 pr-4 py-4 bg-gray-50 dark:bg-gray-700/50 border-2 border-gray-100 dark:border-gray-600 rounded-2xl text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xl font-bold"
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <div className="flex gap-2 mt-3">
+                          <button
+                            onClick={() => setPaymentAmount((selectedFee.balance / 2).toFixed(2))}
+                            className="flex-1 px-3 py-2 text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                          >
+                            50%
+                          </button>
+                          <button
+                            onClick={() => setPaymentAmount(selectedFee.balance.toFixed(2))}
+                            className="flex-1 px-3 py-2 text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                          >
+                            Full Balance
+                          </button>
+                        </div>
+                      </div>
+
+                      {paymentError && (
+                        <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-2xl flex items-center gap-3 text-red-700 dark:text-red-300">
+                          <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                          <span className="text-sm">{paymentError}</span>
+                        </div>
+                      )}
+
+                      <button
+                        onClick={processPayment}
+                        disabled={processing || !paymentAmount}
+                        className="w-full flex items-center justify-center gap-3 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none transition-all"
+                      >
+                        {processing ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : (
+                          <>
+                            <CreditCard className="h-5 w-5" />
+                            Pay {paymentAmount ? formatCurrency(parseFloat(paymentAmount)) : 'Now'}
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+
+          {/* Payment History Modal */}
+          {showPaymentHistory && student && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col animate-in fade-in zoom-in duration-200">
+                <div className="p-5 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/30 dark:to-pink-900/30">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/30">
+                      <History className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                        Payment History
+                      </h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">{student.student_name}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowPaymentHistory(false)}
+                    className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-white/50 rounded-xl transition-colors"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4">
+                  {loadingHistory ? (
+                    <div className="text-center py-12">
+                      <Loader2 className="h-10 w-10 animate-spin text-purple-600 mx-auto mb-4" />
+                      <p className="text-gray-500 dark:text-gray-400">Loading payment history...</p>
+                    </div>
+                  ) : paymentHistory.length === 0 ? (
+                    <div className="text-center py-12">
+                      <Receipt className="h-16 w-16 text-gray-200 dark:text-gray-600 mx-auto mb-4" />
+                      <p className="text-gray-600 dark:text-gray-300 font-medium">No payments found</p>
+                      <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">Payments made through Peeap will appear here</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {paymentHistory.map((payment) => (
+                        <div
+                          key={payment.id}
+                          className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-2xl"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl flex items-center justify-center">
+                                <ArrowUpRight className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                              </div>
+                              <div>
+                                <p className="font-medium text-gray-900 dark:text-white">
+                                  {payment.description || 'School Fee Payment'}
+                                </p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                  {new Date(payment.created_at).toLocaleDateString('en-US', {
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-bold text-emerald-600 dark:text-emerald-400">
+                                {formatCurrency(Math.abs(payment.amount))}
+                              </p>
+                              <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                payment.status === 'COMPLETED'
+                                  ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
+                                  : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
+                              }`}>
+                                {payment.status}
+                              </span>
+                            </div>
+                          </div>
+                          {payment.reference && (
+                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-3 font-mono bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded inline-block">
+                              Ref: {payment.reference}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-4 border-t border-gray-100 dark:border-gray-700">
+                  <button
+                    onClick={() => setShowPaymentHistory(false)}
+                    className="w-full py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-2xl font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </MainLayout>
   );
