@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { SchoolLayout } from '@/components/school';
 import { UserSearch, type SearchResult } from '@/components/ui/UserSearch';
 import {
@@ -34,6 +34,7 @@ interface ApprovedVendor {
 
 export function SchoolVendorsPage() {
   const navigate = useNavigate();
+  const { schoolSlug } = useParams<{ schoolSlug: string }>();
   const [vendors, setVendors] = useState<ApprovedVendor[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -45,18 +46,17 @@ export function SchoolVendorsPage() {
     const fetchVendors = async () => {
       setLoading(true);
       try {
-        const schoolDomain = localStorage.getItem('school_domain');
-        const schoolId = localStorage.getItem('school_id') || localStorage.getItem('schoolId');
+        // Use URL param first, then localStorage as fallback
+        const schoolDomain = schoolSlug || localStorage.getItem('school_domain');
         if (!schoolDomain) {
           setVendors([]);
           setLoading(false);
           return;
         }
 
-        // Try to fetch approved vendors from SaaS API with school_id parameter
+        // Try to fetch approved vendors from SaaS API
         try {
           const params = new URLSearchParams();
-          if (schoolId) params.append('school_id', schoolId);
           params.append('page', '1');
 
           const response = await fetch(
@@ -65,8 +65,6 @@ export function SchoolVendorsPage() {
               method: 'GET',
               headers: {
                 'Accept': 'application/json',
-                'X-School-Domain': schoolDomain,
-                ...(schoolId ? { 'X-School-ID': schoolId } : {}),
               },
             }
           );

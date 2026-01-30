@@ -21,7 +21,8 @@ export interface LinkedChild {
   createdAt: string;
   student: {
     id: string;
-    indexNumber: string;
+    nsi: string;  // National Student Identifier
+    indexNumber?: string;  // Kept for backward compatibility
     firstName: string;
     lastName: string;
     fullName: string;
@@ -39,13 +40,13 @@ export interface LinkedChild {
 }
 
 export interface LinkChildRequest {
-  indexNumber: string;
+  nsi: string;  // National Student Identifier
   relationship?: 'parent' | 'guardian' | 'sponsor' | 'other';
 }
 
 export interface SchoolFeePaymentRequest {
   parentWalletId: string;
-  studentIndexNumber: string;
+  studentNsi: string;  // National Student Identifier
   feeId: string;
   amount: number;
   schoolId: string;
@@ -72,6 +73,7 @@ export const parentStudentService = {
         student_account_id,
         student_accounts (
           id,
+          nsi,
           index_number,
           first_name,
           last_name,
@@ -112,6 +114,7 @@ export const parentStudentService = {
         createdAt: link.created_at,
         student: {
           id: link.student_accounts.id,
+          nsi: link.student_accounts.nsi || link.student_accounts.index_number,
           indexNumber: link.student_accounts.index_number,
           firstName: link.student_accounts.first_name,
           lastName: link.student_accounts.last_name,
@@ -130,17 +133,17 @@ export const parentStudentService = {
   },
 
   /**
-   * Link a child to the current user by index number
+   * Link a child to the current user by NSI (National Student Identifier)
    * First verifies the student exists in the school system
    */
   async linkChild(userId: string, request: LinkChildRequest): Promise<LinkedChild> {
-    const { indexNumber, relationship = 'parent' } = request;
+    const { nsi, relationship = 'parent' } = request;
 
     // Step 1: Verify student exists in school system
     const verifyRes = await fetch(`${SCHOOL_API_BASE}/verify-student`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ index_number: indexNumber }),
+      body: JSON.stringify({ nsi, index_number: nsi }),  // Send both for compatibility
     });
 
     const verifyData = await verifyRes.json();
@@ -155,7 +158,7 @@ export const parentStudentService = {
     let { data: studentAccount, error: findError } = await supabaseAdmin
       .from('student_accounts')
       .select('*')
-      .eq('index_number', indexNumber)
+      .or(`nsi.eq.${nsi},index_number.eq.${nsi}`)
       .maybeSingle();
 
     if (findError && findError.code !== 'PGRST116') {
@@ -197,7 +200,8 @@ export const parentStudentService = {
           school_id: studentData.school_id.toString(),
           school_name: studentData.school_name,
           student_id_in_school: studentData.student_id.toString(),
-          index_number: indexNumber,
+          nsi: nsi,  // Use nsi as primary
+          index_number: nsi,  // Also set index_number for backward compatibility
           admission_number: studentData.admission_no?.toString(),
           first_name: studentData.first_name,
           last_name: studentData.last_name,
@@ -281,6 +285,7 @@ export const parentStudentService = {
       createdAt: link.created_at,
       student: {
         id: studentAccount.id,
+        nsi: studentAccount.nsi || studentAccount.index_number,
         indexNumber: studentAccount.index_number,
         firstName: studentAccount.first_name,
         lastName: studentAccount.last_name,
@@ -323,7 +328,7 @@ export const parentStudentService = {
     transactionId: string;
     message: string;
   }> {
-    const { parentWalletId, studentIndexNumber, feeId, amount, schoolId } = request;
+    const { parentWalletId, studentNsi, feeId, amount, schoolId } = request;
 
     // Step 1: Check parent wallet balance
     const { data: parentWallet, error: walletError } = await supabaseAdmin
@@ -396,7 +401,7 @@ export const parentStudentService = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        student_id: studentIndexNumber,
+        student_id: studentNsi,
         fee_id: feeId,
         amount: amount,
         transaction_id: transactionId,
@@ -442,7 +447,7 @@ export const parentStudentService = {
           amount: amount,
           currency: 'SLE',
           status: 'COMPLETED',
-          description: `Fee received from student ${studentIndexNumber}`,
+          description: `Fee received from student ${studentNsi}`,
           reference: transactionId,
         });
     }
@@ -456,11 +461,11 @@ export const parentStudentService = {
         amount: -amount,
         currency: 'SLE',
         status: 'COMPLETED',
-        description: `School fee payment for ${studentIndexNumber}`,
+        description: `School fee payment for ${studentNsi}`,
         reference: transactionId,
         merchant_name: 'School Fee',
         metadata: {
-          student_index: studentIndexNumber,
+          student_index: studentNsi,
           fee_id: feeId,
           school_id: schoolId,
           school_notified: schoolNotified,
@@ -472,7 +477,7 @@ export const parentStudentService = {
     const { data: studentAccount } = await supabaseAdmin
       .from('student_accounts')
       .select('id, wallet_id')
-      .eq('index_number', studentIndexNumber)
+      .eq('index_number', studentNsi)
       .maybeSingle();
 
     if (studentAccount) {

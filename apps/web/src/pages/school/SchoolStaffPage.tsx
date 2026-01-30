@@ -63,9 +63,11 @@ export function SchoolStaffPage() {
   const departments = ['Administration', 'Teaching', 'Finance', 'IT', 'Maintenance', 'Security'];
   const roles = ['Teacher', 'Administrator', 'Accountant', 'IT Support', 'Security Guard', 'Cleaner', 'Principal', 'Vice Principal'];
 
-  // Get school info from localStorage
+  const { schoolSlug } = useParams<{ schoolSlug: string }>();
+
+  // Get school info from URL params first, then localStorage as fallback
   const getSchoolInfo = () => {
-    const schoolDomain = localStorage.getItem('school_domain');
+    const schoolDomain = schoolSlug || localStorage.getItem('school_domain');
     const schoolId = localStorage.getItem('school_id') || localStorage.getItem('schoolId');
     return { domain: schoolDomain, id: schoolId };
   };
@@ -95,7 +97,6 @@ export function SchoolStaffPage() {
             method: 'GET',
             headers: {
               'Accept': 'application/json',
-              'X-School-Domain': schoolDomain,
             },
           }
         );
@@ -229,8 +230,6 @@ export function SchoolStaffPage() {
 
   const totalSalary = staff.filter(s => s.status === 'active').reduce((sum, s) => sum + s.salary, 0);
 
-  const { schoolSlug } = useParams<{ schoolSlug: string }>();
-
   return (
     <SchoolLayout>
       {/* Page Header */}
@@ -350,8 +349,19 @@ export function SchoolStaffPage() {
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center">
-                    <span className="text-lg font-semibold text-gray-600 dark:text-gray-400">
+                  {member.avatar ? (
+                    <img
+                      src={member.avatar}
+                      alt={member.name}
+                      className="w-12 h-12 rounded-full object-cover border-2 border-gray-200 dark:border-gray-600"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                        (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                      }}
+                    />
+                  ) : null}
+                  <div className={`w-12 h-12 bg-indigo-100 dark:bg-indigo-900 rounded-full flex items-center justify-center ${member.avatar ? 'hidden' : ''}`}>
+                    <span className="text-lg font-semibold text-indigo-600 dark:text-indigo-400">
                       {member.name.charAt(0)}
                     </span>
                   </div>

@@ -56,9 +56,11 @@ export function SchoolFeesPage() {
   const [search, setSearch] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  // Get school info from localStorage
+  const { schoolSlug } = useParams<{ schoolSlug: string }>();
+
+  // Get school info from URL params first, then localStorage as fallback
   const getSchoolInfo = () => {
-    const schoolDomain = localStorage.getItem('school_domain');
+    const schoolDomain = schoolSlug || localStorage.getItem('school_domain');
     const schoolId = localStorage.getItem('school_id') || localStorage.getItem('schoolId');
     return { domain: schoolDomain, id: schoolId };
   };
@@ -87,7 +89,6 @@ export function SchoolFeesPage() {
             method: 'GET',
             headers: {
               'Accept': 'application/json',
-              'X-School-Domain': schoolDomain,
             },
           }
         );
@@ -218,8 +219,6 @@ export function SchoolFeesPage() {
     totalCollected: feeStructures.reduce((sum, f) => sum + f.amount * f.paidCount, 0),
     pendingAmount: feeStructures.reduce((sum, f) => sum + f.amount * f.pendingCount, 0),
   };
-
-  const { schoolSlug } = useParams<{ schoolSlug: string }>();
 
   return (
     <SchoolLayout>

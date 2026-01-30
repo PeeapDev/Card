@@ -66,6 +66,19 @@ const SCOPE_DESCRIPTIONS: Record<string, { name: string; description: string }> 
     name: 'Pay Fees',
     description: 'Pay school fees on behalf of students',
   },
+  // Parent-specific scopes
+  'parent:connect': {
+    name: 'Connect as Parent',
+    description: 'Link your account as a parent to receive school notifications',
+  },
+  'parent:chat': {
+    name: 'School Chat',
+    description: 'Receive messages and notifications from your child\'s school',
+  },
+  'parent:topup': {
+    name: 'Top Up Student Wallet',
+    description: 'Add funds to your child\'s student wallet',
+  },
 };
 
 export function OAuthAuthorizePage() {
@@ -89,7 +102,8 @@ export function OAuthAuthorizePage() {
   // Extract school-specific metadata
   const schoolId = searchParams.get('school_id');
   const userType = searchParams.get('user_type') as 'admin' | 'student' | 'parent' | null;
-  const indexNumber = searchParams.get('index_number');
+  const nsi = searchParams.get('nsi') || searchParams.get('index_number');  // Support both
+  const children = searchParams.get('children');  // JSON string for parent users
   const studentName = searchParams.get('student_name');
   const studentPhone = searchParams.get('student_phone');
 
@@ -98,6 +112,12 @@ export function OAuthAuthorizePage() {
   const schoolName = searchParams.get('school_name');
   const schoolLogoUrl = searchParams.get('school_logo_url');
   const schoolDomain = searchParams.get('school_domain');
+
+  // Parent-specific parameters from School SaaS
+  const parentId = searchParams.get('parent_id');
+  const parentName = searchParams.get('parent_name');
+  const parentEmail = searchParams.get('parent_email');
+  const parentPhone = searchParams.get('parent_phone');
 
   // Extract pass-through params for school SaaS integration
   // These need to be forwarded to the redirect_uri so school.peeap.com knows where to redirect back
@@ -168,9 +188,23 @@ export function OAuthAuthorizePage() {
       if (schoolDomain) metadata.school_domain = schoolDomain;
       if (origin) metadata.origin = origin;
       if (userType) metadata.user_type = userType;
-      if (indexNumber) metadata.index_number = indexNumber;
+      if (nsi) metadata.nsi = nsi;  // National Student Identifier
       if (studentName) metadata.student_name = studentName;
       if (studentPhone) metadata.student_phone = studentPhone;
+
+      // Parent-specific metadata
+      if (parentId) metadata.parent_id = parentId;
+      if (parentName) metadata.parent_name = parentName;
+      if (parentEmail) metadata.parent_email = parentEmail;
+      if (parentPhone) metadata.parent_phone = parentPhone;
+
+      if (children) {
+        try {
+          metadata.children = JSON.parse(children);
+        } catch (e) {
+          // Ignore parsing errors
+        }
+      }
 
       // Generate authorization code
       const { code } = await ssoService.generateAuthorizationCode({

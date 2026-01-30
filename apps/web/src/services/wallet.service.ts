@@ -146,6 +146,69 @@ export const walletService = {
   },
 
   /**
+   * Get primary wallet by currency (SLE or USD)
+   * Returns the user's main personal wallet for the specified currency
+   * Priority: 1) User's default_wallet_id, 2) wallet_type='primary', 3) oldest SLE wallet
+   */
+  async getPrimaryWalletByCurrency(userId: string, currency: 'SLE' | 'USD' = 'SLE'): Promise<ExtendedWallet | null> {
+    // First, check if user has a default wallet set
+    const { data: userData } = await supabaseAdmin
+      .from('users')
+      .select('default_wallet_id')
+      .eq('id', userId)
+      .single();
+
+    if (userData?.default_wallet_id) {
+      // Get the default wallet if it matches the currency
+      const { data: defaultWallet } = await supabaseAdmin
+        .from('wallets')
+        .select('*')
+        .eq('id', userData.default_wallet_id)
+        .eq('currency', currency)
+        .eq('status', 'ACTIVE')
+        .single();
+
+      if (defaultWallet) {
+        return mapWallet(defaultWallet);
+      }
+    }
+
+    // Second, look for wallet explicitly marked as 'primary' with this currency
+    const { data: primaryWallet } = await supabaseAdmin
+      .from('wallets')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('currency', currency)
+      .eq('status', 'ACTIVE')
+      .eq('wallet_type', 'primary')
+      .limit(1)
+      .maybeSingle();
+
+    if (primaryWallet) {
+      return mapWallet(primaryWallet);
+    }
+
+    // Third, get any personal wallet with this currency (exclude special types)
+    const { data, error } = await supabaseAdmin
+      .from('wallets')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('currency', currency)
+      .eq('status', 'ACTIVE')
+      .or('wallet_type.is.null,wallet_type.eq.primary')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error fetching primary wallet by currency:', error);
+      return null;
+    }
+
+    return data ? mapWallet(data) : null;
+  },
+
+  /**
    * Create a new wallet for the current user
    */
   async createWallet(userId: string, data: CreateWalletRequest): Promise<ExtendedWallet> {

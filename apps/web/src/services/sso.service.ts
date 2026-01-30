@@ -465,10 +465,12 @@ export const ssoService = {
     scope: string;
     metadata?: {
       school_id?: number | string;
-      index_number?: string;
+      nsi?: string;  // National Student Identifier
+      index_number?: string;  // Kept for backward compatibility
       student_name?: string;
       student_phone?: string;
       user_type?: 'admin' | 'student' | 'parent';
+      children?: Array<{ nsi: string; name: string; peeap_wallet_id?: string }>;
     };
   }): Promise<{ code: string; expiresAt: Date }> {
     const code = generateSecureToken(48);

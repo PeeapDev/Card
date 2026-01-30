@@ -96,7 +96,7 @@ export function SchoolStudentsPage() {
 
           const studentList = studentsData.map((s: any) => ({
             id: s.id?.toString() || s.student_id?.toString() || String(Math.random()),
-            externalId: s.index_number || s.admission_number || s.admission_no || '',
+            externalId: s.nsi || s.index_number || s.admission_number || s.admission_no || '',
             name: s.full_name || s.name || s.student_name || `${s.first_name || ''} ${s.last_name || ''}`.trim() || 'Unknown',
             email: s.email || '',
             phone: s.phone || s.guardian_phone || s.parent?.guardian_phone || '',
