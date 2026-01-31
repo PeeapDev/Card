@@ -154,6 +154,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleMonimeAnalytics(req, res);
     } else if (path === 'monime/transactions' || path === 'monime/transactions/') {
       return await handleMonimeTransactions(req, res);
+    } else if (path === 'transactions/status' || path === 'transactions/status/') {
+      return await handleTransactionStatus(req, res);
     } else if (path === 'monime/webhook' || path === 'monime/webhook/') {
       return await handleMonimeWebhook(req, res);
     } else if (path === 'monime/setup-webhook' || path === 'monime/setup-webhook/') {
@@ -6085,6 +6087,53 @@ async function handleMonimeAnalytics(req: VercelRequest, res: VercelResponse) {
 }
 
 /**
+ * Check transaction status by reference (for polling deposit status)
+ */
+async function handleTransactionStatus(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const reference = req.query.reference as string;
+
+    if (!reference) {
+      return res.status(400).json({ error: 'reference parameter is required' });
+    }
+
+    // Look up transaction by reference (Monime session ID)
+    const { data: transaction, error } = await supabase
+      .from('transactions')
+      .select('id, status, amount, currency, type, created_at, updated_at')
+      .eq('reference', reference)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.error('[TransactionStatus] Error:', error);
+      return res.status(500).json({ error: 'Database error' });
+    }
+
+    if (!transaction) {
+      // Transaction not found yet - could still be pending webhook
+      return res.status(200).json({ status: 'PENDING', message: 'Transaction pending' });
+    }
+
+    return res.status(200).json({
+      status: transaction.status,
+      amount: transaction.amount,
+      currency: transaction.currency,
+      type: transaction.type,
+      updatedAt: transaction.updated_at,
+    });
+  } catch (error: any) {
+    console.error('[TransactionStatus] Error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to check status' });
+  }
+}
+
+/**
  * Get Monime transactions - fetches raw transaction list from Monime API
  */
 async function handleMonimeTransactions(req: VercelRequest, res: VercelResponse) {
@@ -8546,6 +8595,9 @@ async function handleSchoolWalletsCreate(req: VercelRequest, res: VercelResponse
     const lastName = nameParts.slice(1).join(' ') || '';
 
     // Create user account (student user doesn't need real email/phone)
+    // Generate a placeholder password hash for PIN-only student accounts
+    const placeholderPasswordHash = crypto.createHash('sha256').update(`PIN_ONLY_${userId}_${Date.now()}`).digest('hex');
+
     const { data: newUser, error: userError } = await supabase
       .from('users')
       .insert({
@@ -8556,11 +8608,12 @@ async function handleSchoolWalletsCreate(req: VercelRequest, res: VercelResponse
         full_name: student_name,
         first_name: firstName,
         last_name: lastName,
+        password_hash: placeholderPasswordHash,
         wallet_pin_hash: pinHash,
         wallet_pin: pin, // Also store plain for backward compatibility
         account_type: 'student',
         status: 'ACTIVE',
-        roles: 'student',
+        roles: ['student'],
         is_verified: true,
         email_verified: true,
         created_at: new Date().toISOString(),

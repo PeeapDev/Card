@@ -4,12 +4,12 @@
  * Allows parents to:
  * - Search and link to schools
  * - Add students by NSI (National Student Identifier)
- * - View and top up student wallets
+ * - View and top up student wallets via Monime USSD
  * - View student transactions
  * - Pay school fees
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -32,11 +32,18 @@ import {
   Eye,
   EyeOff,
   Send,
-  Building2
+  Building2,
+  Smartphone,
+  Phone,
+  Copy,
+  Clock,
+  CheckCircle2,
+  XCircle
 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { MotionCard } from '@/components/ui/Card';
 import { useAuth } from '@/context/AuthContext';
+import { api } from '@/lib/api';
 
 interface Student {
   id: string;
@@ -95,6 +102,16 @@ export function StudentConnectPage() {
   // Top-up State
   const [topupAmount, setTopupAmount] = useState('');
   const [topupLoading, setTopupLoading] = useState(false);
+  const [topupError, setTopupError] = useState<string | null>(null);
+
+  // USSD Deposit State
+  const [showUssdModal, setShowUssdModal] = useState(false);
+  const [ussdCode, setUssdCode] = useState('');
+  const [ussdExpiry, setUssdExpiry] = useState<Date | null>(null);
+  const [paymentCodeId, setPaymentCodeId] = useState('');
+  const [ussdPolling, setUssdPolling] = useState(false);
+  const [ussdStatus, setUssdStatus] = useState<'pending' | 'completed' | 'failed' | 'expired'>('pending');
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Transactions State
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -214,32 +231,156 @@ export function StudentConnectPage() {
   const handleTopup = async () => {
     if (!selectedStudent || !topupAmount) return;
 
-    const amount = parseFloat(topupAmount) * 100; // Convert to cents
+    const amount = parseFloat(topupAmount);
     if (isNaN(amount) || amount <= 0) {
+      setTopupError('Please enter a valid amount');
       return;
     }
 
     setTopupLoading(true);
+    setTopupError(null);
+
     try {
-      // TODO: Call API to top up student wallet
-      // POST /api/parent-students/{studentId}/topup
-      // { amount, parentWalletId }
+      // Call API to create Monime deposit session for student wallet
+      const response = await api.post('/monime/deposit', {
+        walletId: selectedStudent.walletId,
+        amount: amount,
+        currency: 'SLE',
+        description: `Top-up for ${selectedStudent.firstName} ${selectedStudent.lastName}`,
+      });
 
-      // Mock success
-      setStudents(prev =>
-        prev.map(s =>
-          s.id === selectedStudent.id
-            ? { ...s, balance: s.balance + amount }
-            : s
-        )
-      );
+      // Check if we got a USSD code (direct display) or payment URL (redirect to Monime checkout)
+      if (response.ussdCode) {
+        // Show USSD modal with the code
+        setUssdCode(response.ussdCode);
+        setPaymentCodeId(response.paymentCodeId || response.monimeSessionId);
+        setUssdExpiry(new Date(response.expiresAt));
+        setUssdStatus('pending');
+        setActiveModal('none');
+        setShowUssdModal(true);
 
-      setActiveModal('none');
-      setTopupAmount('');
-      setSelectedStudent(null);
+        // Start polling for payment status
+        startPaymentPolling(response.paymentCodeId || response.monimeSessionId);
+      } else if (response.paymentUrl) {
+        // Redirect to Monime checkout page where user can see USSD code or pay with mobile money
+        // Store the session info for when user returns
+        sessionStorage.setItem('pendingTopup', JSON.stringify({
+          studentId: selectedStudent.id,
+          walletId: selectedStudent.walletId,
+          amount: amount,
+          monimeSessionId: response.monimeSessionId,
+        }));
+
+        // Open Monime checkout in new tab (so user doesn't lose their place)
+        window.open(response.paymentUrl, '_blank');
+
+        // Show info modal about completing payment
+        setUssdCode('');
+        setPaymentCodeId(response.monimeSessionId);
+        setUssdExpiry(new Date(response.expiresAt));
+        setUssdStatus('pending');
+        setActiveModal('none');
+        setShowUssdModal(true);
+
+        // Start polling for payment completion
+        startPaymentPolling(response.monimeSessionId);
+      } else {
+        setTopupError('Failed to generate payment session. Please try again.');
+      }
+    } catch (error: any) {
+      console.error('Topup error:', error);
+      setTopupError(error.message || 'Failed to initiate top-up. Please try again.');
     } finally {
       setTopupLoading(false);
     }
+  };
+
+  // Start polling for USSD payment status
+  const startPaymentPolling = (sessionId: string) => {
+    setUssdPolling(true);
+
+    // Clear any existing interval
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+
+    // Poll our transactions table for status updates
+    // The deposit gets completed via webhook or redirect callback
+    pollingIntervalRef.current = setInterval(async () => {
+      try {
+        // Check transaction status by looking for a completed transaction with this reference
+        const response = await api.get(`/transactions/status?reference=${sessionId}`);
+
+        if (response.status === 'COMPLETED' || response.status === 'completed') {
+          setUssdStatus('completed');
+          stopPolling();
+          // Refresh student data to show updated balance
+          loadStudents();
+        } else if (response.status === 'FAILED' || response.status === 'failed') {
+          setUssdStatus('failed');
+          stopPolling();
+        } else if (response.status === 'EXPIRED' || response.status === 'expired') {
+          setUssdStatus('expired');
+          stopPolling();
+        }
+      } catch (error) {
+        // If endpoint doesn't exist or returns error, continue polling
+        console.log('Polling - waiting for payment confirmation...');
+      }
+    }, 4000); // Poll every 4 seconds
+
+    // Auto-stop after 10 minutes (Monime sessions typically expire in 15 mins)
+    setTimeout(() => {
+      if (ussdPolling) {
+        setUssdStatus('expired');
+        stopPolling();
+      }
+    }, 10 * 60 * 1000);
+  };
+
+  const stopPolling = () => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    setUssdPolling(false);
+  };
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Copy USSD code to clipboard
+  const copyUssdCode = async () => {
+    try {
+      await navigator.clipboard.writeText(ussdCode);
+      // Could add a toast notification here
+    } catch (error) {
+      console.error('Failed to copy:', error);
+    }
+  };
+
+  // Dial USSD code (mobile only)
+  const dialUssdCode = () => {
+    const formatted = ussdCode.replace('#', '%23'); // URL encode hash
+    window.location.href = `tel:${formatted}`;
+  };
+
+  // Close USSD modal
+  const closeUssdModal = () => {
+    stopPolling();
+    setShowUssdModal(false);
+    setUssdCode('');
+    setPaymentCodeId('');
+    setUssdExpiry(null);
+    setUssdStatus('pending');
+    setTopupAmount('');
+    setSelectedStudent(null);
   };
 
   const handleViewTransactions = async (student: Student) => {
@@ -688,6 +829,7 @@ export function StudentConnectPage() {
                   onClick={() => {
                     setActiveModal('none');
                     setTopupAmount('');
+                    setTopupError(null);
                     setSelectedStudent(null);
                   }}
                   className="p-1 text-gray-400 hover:text-gray-600"
@@ -747,6 +889,25 @@ export function StudentConnectPage() {
                     </button>
                   ))}
                 </div>
+
+                {/* Payment Method Info */}
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300">
+                    <Smartphone className="w-4 h-4" />
+                    <span className="text-sm font-medium">Mobile Money (USSD)</span>
+                  </div>
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                    You'll receive a USSD code to dial on your phone to complete the deposit
+                  </p>
+                </div>
+
+                {/* Error Message */}
+                {topupError && (
+                  <div className="p-3 bg-red-50 dark:bg-red-900/30 rounded-lg border border-red-200 dark:border-red-800 flex items-center gap-2 text-red-700 dark:text-red-400">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    <p className="text-sm">{topupError}</p>
+                  </div>
+                )}
               </div>
 
               <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
@@ -754,6 +915,7 @@ export function StudentConnectPage() {
                   onClick={() => {
                     setActiveModal('none');
                     setTopupAmount('');
+                    setTopupError(null);
                     setSelectedStudent(null);
                   }}
                   className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
@@ -768,12 +930,12 @@ export function StudentConnectPage() {
                   {topupLoading ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Processing...
+                      Generating Code...
                     </>
                   ) : (
                     <>
-                      <Send className="w-4 h-4" />
-                      Top Up
+                      <Smartphone className="w-4 h-4" />
+                      Get USSD Code
                     </>
                   )}
                 </button>
@@ -866,6 +1028,216 @@ export function StudentConnectPage() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* USSD Deposit Modal */}
+      <AnimatePresence>
+        {showUssdModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full"
+            >
+              <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                    <Smartphone className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Mobile Money Deposit</h2>
+                    <p className="text-sm text-gray-500">Dial to complete payment</p>
+                  </div>
+                </div>
+                <button
+                  onClick={closeUssdModal}
+                  className="p-1 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                {/* Status Indicator */}
+                <div className="text-center">
+                  {ussdStatus === 'pending' && (
+                    <div className="flex items-center justify-center gap-2 text-amber-600 dark:text-amber-400">
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span className="font-medium">Waiting for payment...</span>
+                    </div>
+                  )}
+                  {ussdStatus === 'completed' && (
+                    <div className="flex items-center justify-center gap-2 text-green-600 dark:text-green-400">
+                      <CheckCircle2 className="w-5 h-5" />
+                      <span className="font-medium">Payment Successful!</span>
+                    </div>
+                  )}
+                  {ussdStatus === 'failed' && (
+                    <div className="flex items-center justify-center gap-2 text-red-600 dark:text-red-400">
+                      <XCircle className="w-5 h-5" />
+                      <span className="font-medium">Payment Failed</span>
+                    </div>
+                  )}
+                  {ussdStatus === 'expired' && (
+                    <div className="flex items-center justify-center gap-2 text-gray-600 dark:text-gray-400">
+                      <Clock className="w-5 h-5" />
+                      <span className="font-medium">Code Expired</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Amount Display */}
+                <div className="text-center">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Amount to deposit</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                    SLE {topupAmount ? parseFloat(topupAmount).toLocaleString() : '0'}
+                  </p>
+                </div>
+
+                {/* USSD Code Display or Payment Instructions */}
+                {ussdStatus === 'pending' && (
+                  <>
+                    {ussdCode ? (
+                      // Direct USSD code display
+                      <>
+                        <div className="p-6 bg-gray-50 dark:bg-gray-700/50 rounded-xl text-center border-2 border-dashed border-gray-300 dark:border-gray-600">
+                          <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">Dial this code on your phone</p>
+                          <p className="text-2xl font-mono font-bold text-gray-900 dark:text-white tracking-wider">
+                            {ussdCode}
+                          </p>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-3">
+                          <button
+                            onClick={copyUssdCode}
+                            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                          >
+                            <Copy className="w-4 h-4" />
+                            Copy Code
+                          </button>
+                          <button
+                            onClick={dialUssdCode}
+                            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+                          >
+                            <Phone className="w-4 h-4" />
+                            Dial Now
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      // Monime checkout opened in new tab
+                      <div className="p-6 bg-blue-50 dark:bg-blue-900/30 rounded-xl text-center">
+                        <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <Smartphone className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+                        </div>
+                        <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
+                          Complete Payment in New Tab
+                        </h4>
+                        <p className="text-sm text-blue-700 dark:text-blue-300">
+                          A payment page has opened in a new tab. Please complete the payment there using mobile money.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Expiry Timer */}
+                    {ussdExpiry && (
+                      <div className="flex items-center justify-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                        <Clock className="w-4 h-4" />
+                        <span>
+                          Expires at {ussdExpiry.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Polling indicator */}
+                    <div className="flex items-center justify-center gap-2 py-2">
+                      <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
+                        Waiting for payment confirmation...
+                      </span>
+                    </div>
+
+                    {/* Instructions */}
+                    <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
+                      <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">Instructions</h4>
+                      <ol className="text-sm text-gray-600 dark:text-gray-300 space-y-1 list-decimal list-inside">
+                        {ussdCode ? (
+                          <>
+                            <li>Dial the USSD code above on your mobile phone</li>
+                            <li>Follow the prompts to authorize the payment</li>
+                            <li>Enter your mobile money PIN when prompted</li>
+                          </>
+                        ) : (
+                          <>
+                            <li>Go to the payment page that opened in a new tab</li>
+                            <li>Select your mobile money provider (Orange Money, Africell, etc.)</li>
+                            <li>Enter your phone number and confirm the payment</li>
+                          </>
+                        )}
+                        <li>This page will update automatically when payment is complete</li>
+                      </ol>
+                    </div>
+                  </>
+                )}
+
+                {/* Success State */}
+                {ussdStatus === 'completed' && (
+                  <div className="text-center space-y-4">
+                    <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto">
+                      <CheckCircle2 className="w-8 h-8 text-green-600 dark:text-green-400" />
+                    </div>
+                    <p className="text-gray-600 dark:text-gray-300">
+                      The funds have been added to the student's wallet.
+                    </p>
+                    <button
+                      onClick={closeUssdModal}
+                      className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                    >
+                      Done
+                    </button>
+                  </div>
+                )}
+
+                {/* Failed/Expired State */}
+                {(ussdStatus === 'failed' || ussdStatus === 'expired') && (
+                  <div className="text-center space-y-4">
+                    <p className="text-gray-600 dark:text-gray-300">
+                      {ussdStatus === 'failed'
+                        ? 'The payment could not be completed. Please try again.'
+                        : 'The payment code has expired. Please request a new code.'}
+                    </p>
+                    <div className="flex gap-3 justify-center">
+                      <button
+                        onClick={closeUssdModal}
+                        className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                      >
+                        Close
+                      </button>
+                      <button
+                        onClick={() => {
+                          closeUssdModal();
+                          if (selectedStudent) {
+                            openTopupModal(selectedStudent);
+                          }
+                        }}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        Try Again
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
