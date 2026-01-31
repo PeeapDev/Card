@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { Wallet, Plus, ArrowDownRight, ArrowUpRight, MoreVertical, Snowflake, Send, QrCode, Copy, CheckCircle, Search, User, X, AlertCircle, Package, ChevronDown, Loader2, XCircle, ArrowLeftRight, Smartphone, Trash2, ArrowRightLeft, Car, Store, CreditCard, PiggyBank, Banknote, DollarSign, Coins } from 'lucide-react';
@@ -72,6 +72,58 @@ export function WalletsPage() {
     }
   }, [searchParams, setSearchParams, refetch, queryClient]);
 
+  // Subscribe to real-time wallet updates
+  useEffect(() => {
+    if (!user?.id) return;
+
+    // Subscribe to wallet changes for this user
+    const walletSubscription = supabase
+      .channel('wallet-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'wallets',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log('[Realtime] Wallet updated:', payload);
+          // Refetch wallets to get updated data
+          refetch();
+          queryClient.invalidateQueries({ queryKey: ['wallets'] });
+        }
+      )
+      .subscribe();
+
+    // Subscribe to transaction changes for this user
+    const transactionSubscription = supabase
+      .channel('transaction-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'transactions',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log('[Realtime] Transaction updated:', payload);
+          // If a transaction completed, refresh wallets
+          if (payload.new && (payload.new as any).status === 'COMPLETED') {
+            refetch();
+            queryClient.invalidateQueries({ queryKey: ['wallets'] });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(walletSubscription);
+      supabase.removeChannel(transactionSubscription);
+    };
+  }, [user?.id, refetch, queryClient]);
+
   // Auto-dismiss toast after 5 seconds
   useEffect(() => {
     if (toast) {
@@ -105,6 +157,15 @@ export function WalletsPage() {
   const [depositAmount, setDepositAmount] = useState('');
   const [depositLoading, setDepositLoading] = useState(false);
   const [depositError, setDepositError] = useState('');
+
+  // USSD Deposit Modal state
+  const [showUssdModal, setShowUssdModal] = useState(false);
+  const [ussdCode, setUssdCode] = useState('');
+  const [ussdExpiry, setUssdExpiry] = useState<Date | null>(null);
+  const [paymentCodeId, setPaymentCodeId] = useState('');
+  const [ussdPolling, setUssdPolling] = useState(false);
+  const [ussdStatus, setUssdStatus] = useState<'pending' | 'completed' | 'failed' | 'expired'>('pending');
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [newWalletCurrency, setNewWalletCurrency] = useState<'USD' | 'SLE'>('SLE');
   const [newWalletName, setNewWalletName] = useState('');
   const [createWalletError, setCreateWalletError] = useState('');
@@ -116,6 +177,7 @@ export function WalletsPage() {
   const [internalTransferLoading, setInternalTransferLoading] = useState(false);
   const [internalTransferError, setInternalTransferError] = useState('');
   const [internalTransferSuccess, setInternalTransferSuccess] = useState(false);
+  const [transferToMainMode, setTransferToMainMode] = useState(false); // When true, auto-transfer to main wallet
 
   // Wallet menu state
   const [openMenuWalletId, setOpenMenuWalletId] = useState<string | null>(null);
@@ -291,16 +353,21 @@ export function WalletsPage() {
     setInternalTransferError('');
     setInternalTransferSuccess(false);
     setSelectedWallet(null);
+    setTransferToMainMode(false);
   };
 
   // Get wallet display name
   const getWalletDisplayName = (wallet: any): string => {
     if (wallet.name) return wallet.name;
-    if (wallet.walletType === 'primary' || !wallet.walletType) return 'Main Wallet';
+    // Only show "Main Wallet" if this is actually the primary wallet
+    if (isPrimaryWallet(wallet)) return 'Main Wallet';
     if (wallet.walletType === 'driver') return 'Driver Wallet';
     if (wallet.walletType === 'pos') return 'POS Wallet';
     if (wallet.walletType === 'merchant') return 'Merchant Wallet';
     if (wallet.walletType === 'savings') return 'Savings Wallet';
+    if (wallet.walletType === 'student') return 'Student Wallet';
+    if (wallet.walletType === 'school') return 'School Wallet';
+    // For untyped wallets, use currency name
     return `${wallet.currency} Wallet`;
   };
 
@@ -478,7 +545,7 @@ export function WalletsPage() {
 
     try {
       // Send display amount - backend handles conversion to Monime format
-      // Call our API endpoint to create Monime checkout session
+      // Call our API endpoint to create Monime USSD payment code
       const API_URL = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
       const response = await fetch(`${API_URL}/monime/deposit`, {
         method: 'POST',
@@ -487,9 +554,10 @@ export function WalletsPage() {
         },
         body: JSON.stringify({
           walletId: selectedWallet.id,
-          amount: amount, // Send display amount, backend converts
+          amount: amount,
           currency: 'SLE',
           userId: user?.id,
+          method: 'ussd', // Request USSD payment code
           description: `Deposit to ${selectedWallet.currency} wallet`,
         }),
       });
@@ -497,14 +565,26 @@ export function WalletsPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to create checkout session');
+        throw new Error(data.error || 'Failed to create payment code');
       }
 
-      if (data.paymentUrl) {
-        // Redirect to Monime checkout page
+      // Check if we got a USSD code (new method) or payment URL (fallback)
+      if (data.ussdCode) {
+        // Show USSD modal with the code
+        setUssdCode(data.ussdCode);
+        setPaymentCodeId(data.paymentCodeId);
+        setUssdExpiry(new Date(data.expiresAt));
+        setUssdStatus('pending');
+        setShowDepositModal(false);
+        setShowUssdModal(true);
+
+        // Start polling for payment status
+        startPaymentPolling(data.paymentCodeId);
+      } else if (data.paymentUrl) {
+        // Fallback to redirect for checkout method
         window.location.href = data.paymentUrl;
       } else {
-        setDepositError('Failed to get payment URL. Please try again.');
+        setDepositError('Failed to get payment code. Please try again.');
       }
     } catch (error: any) {
       console.error('Failed to initiate deposit:', error);
@@ -512,6 +592,102 @@ export function WalletsPage() {
     } finally {
       setDepositLoading(false);
     }
+  };
+
+  // Poll for payment status
+  const startPaymentPolling = (codeId: string) => {
+    setUssdPolling(true);
+
+    // Clear any existing interval
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+
+    pollingIntervalRef.current = setInterval(async () => {
+      try {
+        const API_URL = import.meta.env.VITE_API_URL || 'https://api.peeap.com';
+        const response = await fetch(`${API_URL}/monime/payment-code/${codeId}`);
+        const data = await response.json();
+
+        if (data.status === 'COMPLETED' || data.status === 'completed') {
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+          setUssdPolling(false);
+          setUssdStatus('completed');
+
+          // Refresh wallets after successful payment
+          refetch();
+          queryClient.invalidateQueries({ queryKey: ['wallets'] });
+
+          // Show success toast
+          setToast({
+            type: 'success',
+            message: `Deposit successful! Le ${depositAmount} added to your wallet.`
+          });
+
+          // Close modal after delay
+          setTimeout(() => {
+            closeUssdModal();
+          }, 2000);
+        } else if (data.status === 'FAILED' || data.status === 'failed') {
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+          setUssdPolling(false);
+          setUssdStatus('failed');
+        } else if (data.status === 'EXPIRED' || data.status === 'expired') {
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+          setUssdPolling(false);
+          setUssdStatus('expired');
+        }
+      } catch (error) {
+        console.error('Error polling payment status:', error);
+      }
+    }, 3000); // Poll every 3 seconds
+  };
+
+  // Close USSD modal and reset state
+  const closeUssdModal = () => {
+    // Clear polling interval
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    setShowUssdModal(false);
+    setUssdCode('');
+    setUssdExpiry(null);
+    setPaymentCodeId('');
+    setUssdPolling(false);
+    setUssdStatus('pending');
+    setDepositAmount('');
+    setSelectedWallet(null);
+  };
+
+  // Cleanup polling interval on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Copy USSD code to clipboard
+  const copyUssdCode = () => {
+    navigator.clipboard.writeText(ussdCode);
+    setToast({ type: 'success', message: 'USSD code copied to clipboard!' });
+  };
+
+  // Dial USSD code (mobile only)
+  const dialUssdCode = () => {
+    const formatted = ussdCode.replace('#', '%23'); // URL encode hash
+    window.location.href = `tel:${formatted}`;
   };
 
   const handleFreeze = async (wallet: WalletType) => {
@@ -622,7 +798,11 @@ export function WalletsPage() {
               const walletIconData = getWalletIcon(wallet);
               const WalletIcon = walletIconData.icon;
               return (
-              <Card key={wallet.id} className="relative">
+              <Card
+                key={wallet.id}
+                className="relative cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => navigate(`/transactions?wallet=${wallet.id}`)}
+              >
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center">
                     <div
@@ -651,7 +831,7 @@ export function WalletsPage() {
                     </div>
                   </div>
                   {/* Wallet menu */}
-                  <div className="relative">
+                  <div className="relative" onClick={(e) => e.stopPropagation()}>
                     <button
                       className="p-1 rounded hover:bg-gray-100"
                       onClick={() => setOpenMenuWalletId(openMenuWalletId === wallet.id ? null : wallet.id)}
@@ -686,6 +866,14 @@ export function WalletsPage() {
                               onClick={() => {
                                 setOpenMenuWalletId(null);
                                 setSelectedWallet(wallet);
+                                // If not primary wallet, auto-select main wallet as target
+                                if (!isPrimaryWallet(wallet)) {
+                                  const mainWallet = getMainWallet();
+                                  if (mainWallet) {
+                                    setInternalTransferTargetWallet(mainWallet.id);
+                                    setTransferToMainMode(true);
+                                  }
+                                }
                                 setShowInternalTransferModal(true);
                               }}
                               className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
@@ -794,7 +982,10 @@ export function WalletsPage() {
                 </div>
 
                 <div className="mb-4">
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Balance</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Balance</p>
+                    <p className="text-xs text-primary-600 dark:text-primary-400">Click to view transactions →</p>
+                  </div>
                   <p className="text-2xl font-bold text-gray-900 dark:text-white">
                     {formatCurrency(wallet.balance, wallet.currency)}
                   </p>
@@ -815,7 +1006,7 @@ export function WalletsPage() {
                   </div>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                   <Button
                     variant="outline"
                     size="sm"
@@ -1487,8 +1678,12 @@ export function WalletsPage() {
                   <ArrowLeftRight className="w-5 h-5 text-primary-600" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Transfer Between Wallets</h2>
-                  <p className="text-sm text-gray-500">Move funds between your wallets</p>
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    {transferToMainMode ? 'Transfer to Main Wallet' : 'Transfer Between Wallets'}
+                  </h2>
+                  <p className="text-sm text-gray-500">
+                    {transferToMainMode ? 'Move funds to your main wallet' : 'Move funds between your wallets'}
+                  </p>
                 </div>
               </div>
               <button
@@ -1510,6 +1705,7 @@ export function WalletsPage() {
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Transfer Successful!</h3>
                 <p className="text-gray-500">
                   {getCurrencySymbol(selectedWallet.currency)}{internalTransferAmount} has been transferred
+                  {transferToMainMode ? ' to Main Wallet' : ''}
                 </p>
               </div>
             ) : (
@@ -1532,25 +1728,46 @@ export function WalletsPage() {
                   </div>
                 </div>
 
-                {/* To Wallet Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Transfer To
-                  </label>
-                  <select
-                    value={internalTransferTargetWallet}
-                    onChange={(e) => setInternalTransferTargetWallet(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                  >
-                    <option value="">Select wallet...</option>
-                    {getOtherWallets(selectedWallet.id).map((w) => (
-                      <option key={w.id} value={w.id}>
-                        {getWalletDisplayName(w)} - {formatCurrency(w.balance, w.currency)}
-                        {isPrimaryWallet(w) ? ' (Main)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {/* To Wallet - Show selection only if NOT transferring to main */}
+                {transferToMainMode ? (
+                  // Show main wallet info (no selection needed)
+                  <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-sm text-green-700">Transfer To</p>
+                    <div className="flex items-center justify-between mt-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-green-800">Main Wallet</p>
+                        <span className="px-2 py-0.5 text-xs font-bold bg-green-500 text-white rounded-full">
+                          Main
+                        </span>
+                      </div>
+                      {getMainWallet() && (
+                        <p className="text-lg font-bold text-green-800">
+                          {formatCurrency(getMainWallet()!.balance, getMainWallet()!.currency)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  // Show wallet selection
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Transfer To
+                    </label>
+                    <select
+                      value={internalTransferTargetWallet}
+                      onChange={(e) => setInternalTransferTargetWallet(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    >
+                      <option value="">Select wallet...</option>
+                      {getOtherWallets(selectedWallet.id).map((w) => (
+                        <option key={w.id} value={w.id}>
+                          {getWalletDisplayName(w)} - {formatCurrency(w.balance, w.currency)}
+                          {isPrimaryWallet(w) ? ' (Main)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 {/* Amount */}
                 <div>
@@ -1584,13 +1801,15 @@ export function WalletsPage() {
                 </div>
 
                 {/* Info Notice */}
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm text-blue-800">
-                    {isPrimaryWallet(selectedWallet)
-                      ? 'Transfer funds from your main wallet to other wallets like Driver, POS, etc.'
-                      : 'Transfer funds back to your main wallet for general use.'}
-                  </p>
-                </div>
+                {!transferToMainMode && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-800">
+                      {isPrimaryWallet(selectedWallet)
+                        ? 'Transfer funds from your main wallet to other wallets like Driver, POS, etc.'
+                        : 'Transfer funds back to your main wallet for general use.'}
+                    </p>
+                  </div>
+                )}
 
                 {/* Error Message */}
                 {internalTransferError && (
@@ -1619,7 +1838,7 @@ export function WalletsPage() {
                     disabled={!internalTransferTargetWallet || !internalTransferAmount || parseFloat(internalTransferAmount) <= 0}
                   >
                     <ArrowLeftRight className="w-4 h-4 mr-2" />
-                    Transfer {getCurrencySymbol(selectedWallet.currency)}{internalTransferAmount || '0.00'}
+                    {transferToMainMode ? 'Transfer to Main' : 'Transfer'} {getCurrencySymbol(selectedWallet.currency)}{internalTransferAmount || '0.00'}
                   </Button>
                 </div>
               </div>
@@ -1736,6 +1955,131 @@ export function WalletsPage() {
           navigate('/pots');
         }}
       />
+
+      {/* USSD Deposit Modal */}
+      {showUssdModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <Card className="w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary-100 rounded-lg">
+                  <Smartphone className="w-5 h-5 text-primary-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Mobile Money Deposit</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Dial code to complete payment</p>
+                </div>
+              </div>
+              <button
+                onClick={closeUssdModal}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+              >
+                <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+              </button>
+            </div>
+
+            {ussdStatus === 'completed' ? (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle className="w-8 h-8 text-green-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Payment Successful!</h3>
+                <p className="text-gray-500 dark:text-gray-400">
+                  Le {depositAmount} has been added to your wallet
+                </p>
+              </div>
+            ) : ussdStatus === 'failed' ? (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <XCircle className="w-8 h-8 text-red-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Payment Failed</h3>
+                <p className="text-gray-500 dark:text-gray-400 mb-4">
+                  The payment could not be completed. Please try again.
+                </p>
+                <Button onClick={closeUssdModal}>Close</Button>
+              </div>
+            ) : ussdStatus === 'expired' ? (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <AlertCircle className="w-8 h-8 text-yellow-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Code Expired</h3>
+                <p className="text-gray-500 dark:text-gray-400 mb-4">
+                  The USSD code has expired. Please try again.
+                </p>
+                <Button onClick={closeUssdModal}>Close</Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Amount Display */}
+                <div className="p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg text-center">
+                  <p className="text-sm text-primary-700 dark:text-primary-300">Amount to Pay</p>
+                  <p className="text-3xl font-bold text-primary-900 dark:text-primary-100">
+                    Le {parseFloat(depositAmount).toLocaleString()}
+                  </p>
+                </div>
+
+                {/* USSD Code Display */}
+                <div className="p-6 bg-gray-50 dark:bg-gray-800 rounded-xl text-center border-2 border-dashed border-gray-300 dark:border-gray-600">
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">Dial this code on your phone</p>
+                  <p className="text-2xl font-mono font-bold text-gray-900 dark:text-white tracking-wider">
+                    {ussdCode}
+                  </p>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={copyUssdCode}
+                  >
+                    <Copy className="w-4 h-4 mr-2" />
+                    Copy Code
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    onClick={dialUssdCode}
+                  >
+                    <Smartphone className="w-4 h-4 mr-2" />
+                    Dial Now
+                  </Button>
+                </div>
+
+                {/* Instructions */}
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                  <h4 className="font-medium text-blue-800 dark:text-blue-200 mb-2">How to pay:</h4>
+                  <ol className="text-sm text-blue-700 dark:text-blue-300 space-y-1 list-decimal list-inside">
+                    <li>Dial the USSD code above on your phone</li>
+                    <li>Follow the prompts to complete payment</li>
+                    <li>Your wallet will be credited automatically</li>
+                  </ol>
+                </div>
+
+                {/* Status Indicator */}
+                <div className="flex items-center justify-center gap-2 py-2">
+                  {ussdPolling && (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-primary-600" />
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
+                        Waiting for payment confirmation...
+                      </span>
+                    </>
+                  )}
+                </div>
+
+                {/* Expiry Info */}
+                {ussdExpiry && (
+                  <p className="text-xs text-center text-gray-400">
+                    Code expires at {ussdExpiry.toLocaleTimeString()}
+                  </p>
+                )}
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
     </MainLayout>
   );
 }

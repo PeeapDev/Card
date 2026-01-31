@@ -46,10 +46,41 @@ export interface LinkChildRequest {
 
 export interface SchoolFeePaymentRequest {
   parentWalletId: string;
-  studentNsi: string;  // National Student Identifier
-  feeId: string;
+  studentNsi: string;      // National Student Identifier
   amount: number;
-  schoolId: string;
+  schoolId: number;        // Numeric school ID
+  installmentId?: number;  // For term-specific payments
+  feeId?: number;          // Legacy support
+}
+
+export interface FeeInstallment {
+  installment_id: number;
+  term_name: string;
+  fee_type: string;
+  amount: number;
+  paid: number;
+  balance: number;
+  due_date: string;
+  status: 'paid' | 'partial' | 'unpaid';
+  is_overdue: boolean;
+}
+
+export interface FeesBreakdown {
+  student: {
+    id: number;
+    name: string;
+    nsi: string;
+    class: string;
+    section?: string;
+  };
+  summary: {
+    total_fees: number;
+    total_paid: number;
+    balance_due: number;
+    status: 'paid' | 'partial' | 'unpaid';
+    currency: string;
+  };
+  installments: FeeInstallment[];
 }
 
 // API Base for school API
@@ -174,23 +205,44 @@ export const parentStudentService = {
       // Create student account in Peeap
       const username = `${studentData.first_name.toLowerCase()}.${studentData.last_name.toLowerCase()}`.replace(/[^a-z.]/g, '');
 
-      // Create a wallet for the student
-      const { data: wallet, error: walletError } = await supabaseAdmin
-        .from('wallets')
-        .insert({
-          currency: 'SLE',
-          balance: 0,
-          status: 'ACTIVE',
-          wallet_type: 'student',
-          name: `${studentData.first_name}'s Wallet`,
-          external_id: `STU-${studentData.school_id}-${studentData.student_id}`,
-        })
-        .select()
-        .single();
+      // Generate unique external_id with timestamp to avoid conflicts
+      const externalId = `STU-${studentData.school_id}-${studentData.student_id}-${Date.now()}`;
 
-      if (walletError) {
-        console.error('Error creating student wallet:', walletError);
-        // Continue without wallet
+      // First check if a wallet already exists for this student
+      const { data: existingWallet } = await supabaseAdmin
+        .from('wallets')
+        .select('id')
+        .like('external_id', `STU-${studentData.school_id}-${studentData.student_id}%`)
+        .maybeSingle();
+
+      let wallet = existingWallet;
+
+      if (!wallet) {
+        // Create a wallet for the student (user_id is nullable for student wallets)
+        const { data: newWallet, error: walletError } = await supabaseAdmin
+          .from('wallets')
+          .insert({
+            external_id: externalId,
+            currency: 'SLE',
+            balance: 0,
+            available_balance: 0,
+            status: 'ACTIVE',
+            wallet_type: 'student',
+            name: `${studentData.first_name}'s Wallet`,
+            daily_limit: 50000,
+            monthly_limit: 500000,
+          })
+          .select()
+          .single();
+
+        if (walletError) {
+          console.error('Error creating student wallet:', walletError);
+          console.error('Wallet error details:', JSON.stringify(walletError, null, 2));
+          // Continue without wallet - will be created later
+        } else {
+          wallet = newWallet;
+          console.log('Successfully created student wallet:', wallet.id);
+        }
       }
 
       // Create student account
@@ -320,15 +372,36 @@ export const parentStudentService = {
   },
 
   /**
+   * Get student fees breakdown with installments
+   * Returns detailed fee breakdown per term for term-specific payments
+   */
+  async getFeesBreakdown(nsi: string, schoolId: number): Promise<FeesBreakdown | null> {
+    try {
+      const res = await fetch(
+        `${SCHOOL_API_BASE}/student-fees-breakdown?nsi=${encodeURIComponent(nsi)}&school_id=${schoolId}`
+      );
+      const result = await res.json();
+      if (result.success && result.data) {
+        return result.data as FeesBreakdown;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching fees breakdown:', error);
+      return null;
+    }
+  },
+
+  /**
    * Pay school fee from parent's wallet
    * This deducts from parent's wallet, credits the school wallet, and notifies the school system
+   * Supports installment_id for term-specific payments
    */
   async paySchoolFee(request: SchoolFeePaymentRequest): Promise<{
     success: boolean;
     transactionId: string;
     message: string;
   }> {
-    const { parentWalletId, studentNsi, feeId, amount, schoolId } = request;
+    const { parentWalletId, studentNsi, amount, schoolId, installmentId, feeId } = request;
 
     // Step 1: Check parent wallet balance
     const { data: parentWallet, error: walletError } = await supabaseAdmin
@@ -397,17 +470,26 @@ export const parentStudentService = {
     }
 
     // Step 3: Notify school system about payment
+    // School API expects: student_index, amount, school_id, and either installment_id or fee_id
+    const paymentPayload: Record<string, unknown> = {
+      student_index: studentNsi,  // NSI string e.g., "SL-2025-02-00222"
+      amount: amount,
+      transaction_id: transactionId,
+      payment_method: 'peeap_wallet',
+      school_id: schoolId,
+    };
+
+    // Prefer installment_id for term-specific payments
+    if (installmentId) {
+      paymentPayload.installment_id = installmentId;
+    } else if (feeId) {
+      paymentPayload.fee_id = feeId;
+    }
+
     const payRes = await fetch(`${SCHOOL_API_BASE}/pay-fee`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        student_id: studentNsi,
-        fee_id: feeId,
-        amount: amount,
-        transaction_id: transactionId,
-        payment_method: 'peeap_wallet',
-        school_id: schoolId,
-      }),
+      body: JSON.stringify(paymentPayload),
     });
 
     const payResult = await payRes.json();

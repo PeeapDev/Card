@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
-import { createMonimeService, getMonimeCredentials, MonimeError } from './services/monime';
+import { createMonimeService, getMonimeCredentials, MonimeError, toMonimeAmount } from './services/monime';
 import { sendEmailWithConfig, SmtpConfig } from './services/email';
 import { sendNotification, storeNotification, getNotificationHistory, getUsersWithTokens, getTokenStats, SendNotificationRequest } from './services/push-notification';
 import { readFileSync } from 'fs';
@@ -175,6 +175,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleMerchantWithdraw(req, res);
     } else if (path === 'payouts/banks' || path === 'payouts/banks/') {
       return await handlePayoutBanks(req, res);
+    } else if (path === 'payouts/bank' || path === 'payouts/bank/') {
+      return await handleBankPayout(req, res);
     } else if (path.match(/^payouts\/[^/]+$/) && !path.includes('/user/') && !path.includes('/merchant/') && !path.includes('/banks')) {
       const payoutId = path.split('/')[1];
       return await handlePayoutById(req, res, payoutId);
@@ -189,17 +191,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleSchoolVerifyToken(req, res);
     } else if (path === 'school/auth/verify-pin' || path === 'school/auth/verify-pin/') {
       return await handleSchoolVerifyPin(req, res);
-    } else if (path === 'school/auth/create-session' || path === 'school/auth/create-session/') {
-      return await handleSchoolCreateSession(req, res);
     } else if (path === 'school/pay-fee' || path === 'school/pay-fee/') {
       return await handleSchoolPayFee(req, res);
-    // ========== PEEAP SCHOOL API PROXY (for my.peeap.com) ==========
+    // ========== SCHOOL WALLET MANAGEMENT ENDPOINTS ==========
+    } else if (path === 'school/wallets/create' || path === 'school/wallets/create/') {
+      return await handleSchoolWalletsCreate(req, res);
+    } else if (path === 'school/wallets/link' || path === 'school/wallets/link/') {
+      return await handleSchoolWalletsLink(req, res);
+    } else if (path === 'school/wallets/topup' || path === 'school/wallets/topup/') {
+      return await handleSchoolWalletsTopup(req, res);
+    } else if (path.match(/^school\/wallets\/[^/]+\/balance$/)) {
+      return await handleSchoolWalletsBalance(req, res);
+    // ========== SCHOOL PEEAP PROXY ENDPOINTS ==========
     } else if (path === 'school/peeap/verify-student' || path === 'school/peeap/verify-student/') {
-      return await handlePeeapVerifyStudent(req, res);
+      return await handleSchoolPeeapVerifyStudent(req, res);
     } else if (path === 'school/peeap/student-financials' || path === 'school/peeap/student-financials/') {
-      return await handlePeeapStudentFinancials(req, res);
+      return await handleSchoolPeeapStudentFinancials(req, res);
     } else if (path === 'school/peeap/pay-fee' || path === 'school/peeap/pay-fee/') {
-      return await handlePeeapPayFee(req, res);
+      return await handleSchoolPeeapPayFee(req, res);
     } else if (path === 'oauth/token' || path === 'oauth/token/') {
       return await handleOAuthToken(req, res);
     } else if (path === 'oauth/userinfo' || path === 'oauth/userinfo/') {
@@ -292,6 +301,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleNotificationUsers(req, res);
     } else if (path === 'notifications/stats' || path === 'notifications/stats/') {
       return await handleNotificationStats(req, res);
+    // ========== MERCHANT ENDPOINTS ==========
+    } else if (path === 'merchant/transactions' || path === 'merchant/transactions/') {
+      return await handleMerchantTransactions(req, res);
+    } else if (path === 'merchant/stats' || path === 'merchant/stats/') {
+      return await handleMerchantStats(req, res);
     } else if (path === 'debug/transactions' || path.startsWith('debug/transactions')) {
       // Debug endpoint to check transactions
       const ref = req.query.ref as string;
@@ -4904,6 +4918,146 @@ async function handleNotificationStats(req: VercelRequest, res: VercelResponse) 
 }
 
 // ============================================================================
+// MERCHANT HANDLERS
+// ============================================================================
+
+/**
+ * Get merchant transactions from checkout sessions
+ * GET /merchant/transactions?merchantId=XXX&limit=100&offset=0&status=completed
+ */
+async function handleMerchantTransactions(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const merchantId = req.query.merchantId as string;
+    const limit = parseInt(req.query.limit as string) || 100;
+    const offset = parseInt(req.query.offset as string) || 0;
+    const status = req.query.status as string;
+
+    if (!merchantId) {
+      return res.status(400).json({ error: 'merchantId is required' });
+    }
+
+    // Build query for checkout sessions
+    let query = supabase
+      .from('checkout_sessions')
+      .select('*', { count: 'exact' })
+      .eq('merchant_id', merchantId)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    // Map frontend status to database status
+    if (status && status !== 'all') {
+      const statusMap: Record<string, string> = {
+        'completed': 'PAID',
+        'pending': 'OPEN',
+        'failed': 'CANCELLED',
+        'expired': 'EXPIRED',
+      };
+      const dbStatus = statusMap[status] || status.toUpperCase();
+      query = query.eq('status', dbStatus);
+    }
+
+    const { data, count, error } = await query;
+
+    if (error) {
+      console.error('[MerchantTransactions] DB error:', error);
+      return res.status(500).json({ error: 'Failed to fetch transactions' });
+    }
+
+    // Transform checkout sessions to transaction format
+    const transactions = (data || []).map((session: any) => ({
+      id: session.id,
+      amount: parseFloat(session.amount) || 0,
+      currency: session.currency || 'SLE',
+      status: session.status === 'PAID' ? 'completed' :
+              session.status === 'OPEN' ? 'pending' :
+              session.status === 'CANCELLED' ? 'failed' :
+              session.status === 'EXPIRED' ? 'expired' : session.status?.toLowerCase(),
+      type: 'credit',
+      customer_email: session.customer_email,
+      customer_name: session.customer_name,
+      reference: session.reference || session.id,
+      payment_method: session.payment_method || 'wallet',
+      created_at: session.created_at,
+      completed_at: session.paid_at || session.updated_at,
+      description: session.description || `Payment for ${session.reference || session.id}`,
+      metadata: session.metadata,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      transactions,
+      total: count || 0,
+    });
+  } catch (error: any) {
+    console.error('[MerchantTransactions] Error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to fetch transactions' });
+  }
+}
+
+/**
+ * Get merchant statistics
+ * GET /merchant/stats?merchantId=XXX
+ */
+async function handleMerchantStats(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const merchantId = req.query.merchantId as string;
+
+    if (!merchantId) {
+      return res.status(400).json({ error: 'merchantId is required' });
+    }
+
+    // Get all checkout sessions for this merchant
+    const { data: sessions, error } = await supabase
+      .from('checkout_sessions')
+      .select('status, amount')
+      .eq('merchant_id', merchantId);
+
+    if (error) {
+      console.error('[MerchantStats] DB error:', error);
+      return res.status(500).json({ error: 'Failed to fetch stats' });
+    }
+
+    const allSessions = sessions || [];
+
+    // Get wallet balance
+    const { data: wallet } = await supabase
+      .from('wallets')
+      .select('balance, pending_balance')
+      .eq('user_id', merchantId)
+      .eq('wallet_type', 'primary')
+      .single();
+
+    const stats = {
+      totalTransactions: allSessions.length,
+      totalVolume: allSessions
+        .filter(s => s.status === 'PAID')
+        .reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0),
+      completedTransactions: allSessions.filter(s => s.status === 'PAID').length,
+      pendingTransactions: allSessions.filter(s => s.status === 'OPEN').length,
+      failedTransactions: allSessions.filter(s => s.status === 'CANCELLED' || s.status === 'EXPIRED').length,
+      availableBalance: wallet?.balance || 0,
+      pendingBalance: wallet?.pending_balance || 0,
+    };
+
+    return res.status(200).json({
+      success: true,
+      ...stats,
+    });
+  } catch (error: any) {
+    console.error('[MerchantStats] Error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to fetch stats' });
+  }
+}
+
+// ============================================================================
 // MOBILE MONEY HANDLERS
 // ============================================================================
 
@@ -5019,20 +5173,31 @@ async function handleMobileMoneySend(req: VercelRequest, res: VercelResponse) {
     let authenticatedUserId: string;
     try {
       // First try to verify as a session token from sso_tokens table
+      // Use maybeSingle() to avoid errors when no row is found
       const { data: session, error: sessionError } = await supabase
         .from('sso_tokens')
-        .select('user_id, expires_at')
+        .select('user_id, expires_at, target_app')
         .eq('token', token)
-        .single();
+        .maybeSingle();
+
+      console.log('[MobileMoneySend] Token lookup result:', {
+        hasSession: !!session,
+        sessionError: sessionError?.message,
+        tokenLength: token?.length,
+        tokenPrefix: token?.substring(0, 8)
+      });
 
       if (session && !sessionError) {
         // Session token found - check if expired
         if (new Date(session.expires_at) < new Date()) {
+          console.log('[MobileMoneySend] Session expired:', session.expires_at);
           return res.status(401).json({ error: 'Session expired' });
         }
         authenticatedUserId = session.user_id;
+        console.log('[MobileMoneySend] Session valid for user:', authenticatedUserId);
       } else {
         // Fallback: try to verify as legacy base64 JWT token (for backwards compatibility)
+        console.log('[MobileMoneySend] No session found, trying legacy JWT');
         try {
           const payload = JSON.parse(atob(token));
           if (!payload.userId || !payload.exp) {
@@ -5042,8 +5207,9 @@ async function handleMobileMoneySend(req: VercelRequest, res: VercelResponse) {
             return res.status(401).json({ error: 'Token expired' });
           }
           authenticatedUserId = payload.userId;
-        } catch {
-          return res.status(401).json({ error: 'Invalid token' });
+        } catch (legacyError) {
+          console.log('[MobileMoneySend] Legacy JWT parse failed:', legacyError);
+          return res.status(401).json({ error: 'Invalid token - please log in again' });
         }
       }
 
@@ -6069,7 +6235,7 @@ async function handleUserCashout(req: VercelRequest, res: VercelResponse) {
       const monimeResult = await monimeService.createPayout({
         amount: {
           currency,
-          value: Math.round(amount * 100), // Monime uses minor units
+          value: toMonimeAmount(amount, currency), // Use proper currency-aware conversion (SLE: x10, USD: x100)
         },
         destination,
         source: {
@@ -6458,7 +6624,7 @@ async function handleMerchantWithdraw(req: VercelRequest, res: VercelResponse) {
       const monimeResult = await monimeService.createPayout({
         amount: {
           currency,
-          value: Math.round(amount * 100), // Monime uses minor units
+          value: toMonimeAmount(amount, currency), // Use proper currency-aware conversion (SLE: x10, USD: x100)
         },
         destination: merchantDestination,
         source: {
@@ -6648,6 +6814,203 @@ async function handlePayoutBanks(req: VercelRequest, res: VercelResponse) {
       return res.status(error.statusCode).json({ error: error.message, code: error.code });
     }
     return res.status(500).json({ error: error.message || 'Failed to get banks' });
+  }
+}
+
+/**
+ * Handle bank payout - send money to a bank account
+ */
+async function handleBankPayout(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    // Authenticate user
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    let authenticatedUserId: string;
+
+    // Verify session token
+    const { data: session, error: sessionError } = await supabase
+      .from('sso_tokens')
+      .select('user_id, expires_at')
+      .eq('token', token)
+      .maybeSingle();
+
+    if (session && !sessionError) {
+      if (new Date(session.expires_at) < new Date()) {
+        return res.status(401).json({ error: 'Session expired' });
+      }
+      authenticatedUserId = session.user_id;
+    } else {
+      // Try legacy JWT
+      try {
+        const payload = JSON.parse(atob(token));
+        if (!payload.userId || !payload.exp || payload.exp < Date.now()) {
+          return res.status(401).json({ error: 'Invalid token' });
+        }
+        authenticatedUserId = payload.userId;
+      } catch {
+        return res.status(401).json({ error: 'Invalid token - please log in again' });
+      }
+    }
+
+    const { amount, currency = 'SLE', accountNumber, providerId, walletId, description } = req.body;
+
+    // Validate required fields
+    if (!amount || !accountNumber || !providerId || !walletId) {
+      return res.status(400).json({ error: 'Missing required fields: amount, accountNumber, providerId, walletId' });
+    }
+
+    if (amount <= 0) {
+      return res.status(400).json({ error: 'Amount must be greater than 0' });
+    }
+
+    // Get user's wallet and verify balance
+    const { data: wallet, error: walletError } = await supabase
+      .from('wallets')
+      .select('id, balance, currency, user_id, status')
+      .eq('id', walletId)
+      .eq('user_id', authenticatedUserId)
+      .single();
+
+    if (walletError || !wallet) {
+      return res.status(404).json({ error: 'Wallet not found or access denied' });
+    }
+
+    if (wallet.status !== 'ACTIVE') {
+      return res.status(400).json({ error: 'Wallet is not active' });
+    }
+
+    // Calculate fee (2%)
+    const platformFee = Math.round(amount * 0.02 * 100) / 100;
+    const totalDeduction = amount + platformFee;
+
+    if (wallet.balance < totalDeduction) {
+      return res.status(400).json({
+        error: 'Insufficient balance',
+        required: totalDeduction,
+        available: wallet.balance,
+      });
+    }
+
+    // Create Monime service
+    const monimeService = await createMonimeService(supabase, SETTINGS_ID);
+
+    // Get financial accounts
+    const financialAccounts = await monimeService.getFinancialAccounts();
+    const sleAccount = financialAccounts.find(a => a.currency === 'SLE') || financialAccounts[0];
+
+    if (!sleAccount) {
+      return res.status(500).json({ error: 'No financial account configured for payouts' });
+    }
+
+    const externalId = `bank_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+    // Create transaction record
+    const { data: transaction, error: txError } = await supabase
+      .from('transactions')
+      .insert({
+        user_id: authenticatedUserId,
+        wallet_id: walletId,
+        type: 'BANK_TRANSFER',
+        amount: -totalDeduction,
+        currency: currency,
+        status: 'PROCESSING',
+        external_id: externalId,
+        description: description || `Bank transfer to ${accountNumber}`,
+        metadata: {
+          account_number: accountNumber,
+          provider_id: providerId,
+          principal_amount: amount,
+          platform_fee: platformFee,
+        },
+      })
+      .select()
+      .single();
+
+    if (txError) {
+      throw new Error('Failed to create transaction record');
+    }
+
+    // Deduct from wallet
+    const { error: deductError } = await supabase
+      .from('wallets')
+      .update({
+        balance: wallet.balance - totalDeduction,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', walletId);
+
+    if (deductError) {
+      await supabase
+        .from('transactions')
+        .update({ status: 'FAILED' })
+        .eq('id', transaction.id);
+      throw new Error('Failed to deduct from wallet');
+    }
+
+    try {
+      // Send to bank via Monime
+      const payoutResult = await monimeService.sendToBankAccount({
+        amount,
+        currency,
+        accountNumber,
+        providerId,
+        financialAccountId: sleAccount.id,
+        userId: authenticatedUserId,
+        walletId,
+        description,
+      });
+
+      // Update transaction
+      await supabase
+        .from('transactions')
+        .update({
+          status: payoutResult.status === 'completed' ? 'COMPLETED' : 'PROCESSING',
+          reference: payoutResult.payoutId,
+          metadata: {
+            ...transaction.metadata,
+            monime_payout_id: payoutResult.payoutId,
+            payout_status: payoutResult.status,
+          },
+        })
+        .eq('id', transaction.id);
+
+      return res.status(200).json({
+        success: true,
+        transactionId: transaction.id,
+        payoutId: payoutResult.payoutId,
+        status: payoutResult.status,
+        amount,
+        fee: platformFee,
+        totalDeducted: totalDeduction,
+      });
+    } catch (payoutError: any) {
+      // Refund on failure
+      await supabase
+        .from('wallets')
+        .update({ balance: wallet.balance })
+        .eq('id', walletId);
+
+      await supabase
+        .from('transactions')
+        .update({ status: 'FAILED', metadata: { ...transaction.metadata, error: payoutError.message } })
+        .eq('id', transaction.id);
+
+      throw payoutError;
+    }
+  } catch (error: any) {
+    console.error('[BankPayout] Error:', error);
+    if (error instanceof MonimeError) {
+      return res.status(error.statusCode).json({ error: error.message, code: error.code });
+    }
+    return res.status(500).json({ error: error.message || 'Failed to send money' });
   }
 }
 
@@ -7083,146 +7446,104 @@ async function handleSchoolQuickAccessRedirect(req: VercelRequest, res: VercelRe
   }
 
   try {
-    // New secure one-time code flow
-    // Accepts: code (32-char one-time code) and domain (school SaaS domain)
-    const code = (req.query?.code as string) || '';
-    const domain = (req.query?.domain as string) || '';
+    // Handle both POST (from SDSL2 form) and GET (direct access)
+    let token = '';
 
-    console.log('[Quick Access] Code:', code ? `yes (${code.length} chars)` : 'no');
-    console.log('[Quick Access] Domain:', domain || 'none');
+    // Debug all headers to see what's being received
+    console.log('[Quick Access Redirect] Method:', req.method);
+    console.log('[Quick Access Redirect] All headers:', JSON.stringify(req.headers));
 
-    // Validate required parameters
-    if (!code || !domain) {
-      console.log('[Quick Access] Missing params - code:', !!code, 'domain:', !!domain);
-      return res.redirect(302, 'https://school.peeap.com/login?error=missing_params&message=' + encodeURIComponent('Missing code or domain parameter'));
+    const contentType = req.headers['content-type'] || '';
+    console.log('[Quick Access Redirect] Content-Type:', contentType);
+
+    // For GET requests, check query parameters
+    if (req.method === 'GET') {
+      token = (req.query?.token as string) || '';
     }
 
-    // Validate domain format (basic security check - allow subdomains)
-    if (!domain.match(/^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$/)) {
-      console.log('[Quick Access] Invalid domain format:', domain);
-      return res.redirect(302, 'https://school.peeap.com/login?error=invalid_domain&message=' + encodeURIComponent('Invalid domain: ' + domain));
+    // For POST requests, try multiple methods to extract token
+    if (req.method === 'POST') {
+      // Method 1: Try req.body (works for JSON content-type)
+      try {
+        if (req.body) {
+          console.log('[Quick Access Redirect] Body type:', typeof req.body);
+          console.log('[Quick Access Redirect] Body:', JSON.stringify(req.body).substring(0, 200));
+
+          if (typeof req.body === 'string') {
+            // Body is a raw string - parse as form data
+            const params = new URLSearchParams(req.body);
+            token = params.get('token') || '';
+          } else if (typeof req.body === 'object') {
+            token = req.body.token || '';
+          }
+        }
+      } catch (e: any) {
+        console.log('[Quick Access Redirect] Body access error:', e?.message);
+      }
+
+      // Method 2: If no token yet and content-type is form-urlencoded, try reading raw body
+      if (!token && contentType.includes('x-www-form-urlencoded')) {
+        try {
+          // For Vercel, body should be in req.body already for form data
+          // But if it's a Buffer, we need to convert it
+          if (Buffer.isBuffer(req.body)) {
+            const bodyStr = req.body.toString('utf-8');
+            console.log('[Quick Access Redirect] Buffer body:', bodyStr.substring(0, 200));
+            const params = new URLSearchParams(bodyStr);
+            token = params.get('token') || '';
+          }
+        } catch (e: any) {
+          console.log('[Quick Access Redirect] Buffer parse error:', e?.message);
+        }
+      }
+
+      // Method 3: Fallback to query string
+      if (!token) {
+        token = (req.query?.token as string) || '';
+        if (token) {
+          console.log('[Quick Access Redirect] Got token from query string fallback');
+        }
+      }
     }
 
-    // Call SDSL2 to exchange code for user data
-    const exchangeUrl = `https://${domain}/api/peeap/exchange-code?code=${encodeURIComponent(code)}`;
-    console.log('[Quick Access] Exchanging code at:', exchangeUrl);
+    console.log('[Quick Access Redirect] Token received:', token ? `yes (${token.length} chars)` : 'no');
 
-    let response;
-    try {
-      response = await fetch(exchangeUrl, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Peeap-API/1.0',
-        },
-      });
-    } catch (fetchError: any) {
-      console.log('[Quick Access] Fetch error:', fetchError.message);
-      return res.redirect(302, 'https://school.peeap.com/login?error=network_error&message=' + encodeURIComponent('Could not connect to school server: ' + fetchError.message));
+    if (!token) {
+      res.setHeader('Content-Type', 'text/html');
+      return res.status(400).send(`<!DOCTYPE html>
+<html>
+<head><title>Token Required</title></head>
+<body>
+  <h1>Token Required</h1>
+  <p>No access token was provided. Please try again from your school system.</p>
+  <p>Debug: Method=${req.method}, ContentType=${contentType}</p>
+  <p>Tip: You can pass the token as a query parameter: ?token=YOUR_TOKEN</p>
+  <a href="https://school.peeap.com/login">Go to Login</a>
+</body>
+</html>`);
     }
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unknown error');
-      console.log('[Quick Access] Exchange failed with status:', response.status, errorText.substring(0, 200));
-      return res.redirect(302, 'https://school.peeap.com/login?error=exchange_failed&message=' + encodeURIComponent('School server returned error ' + response.status));
-    }
+    // Build redirect URL
+    const redirectUrl = `https://school.peeap.com/auth/quick-access?token=${encodeURIComponent(token)}`;
 
-    let result;
-    try {
-      result = await response.json();
-    } catch (jsonError) {
-      console.log('[Quick Access] JSON parse error');
-      return res.redirect(302, 'https://school.peeap.com/login?error=invalid_response&message=' + encodeURIComponent('Invalid response from school server'));
-    }
-    console.log('[Quick Access] Exchange result:', JSON.stringify(result).substring(0, 200));
+    console.log('[Quick Access Redirect] Redirecting to:', redirectUrl.substring(0, 100) + '...');
 
-    if (!result.success || !result.data) {
-      console.log('[Quick Access] Invalid code or no data returned');
-      return res.redirect(302, 'https://school.peeap.com/login?error=invalid_code&message=' + encodeURIComponent(result.message || 'Code expired or already used'));
-    }
-
-    // Extract user data from SDSL2 response
-    const { user_id, email, name, role, school_id, school_name, is_admin } = result.data;
-
-    if (!email) {
-      console.log('[Quick Access] No email in response');
-      return res.redirect(302, 'https://school.peeap.com/login?error=no_email&message=' + encodeURIComponent('No email in school account'));
-    }
-
-    // Look up Peeap user by email
-    const emailLower = email.toLowerCase();
-    const { data: peeapUser } = await supabase
-      .from('users')
-      .select('id, email, first_name, last_name, roles')
-      .ilike('email', emailLower)
-      .single();
-
-    // If no Peeap user found, redirect to login with message
-    if (!peeapUser) {
-      console.log('[Quick Access] No Peeap user found for email:', emailLower);
-      return res.redirect(302, `https://school.peeap.com/login?error=no_account&message=${encodeURIComponent(`No Peeap account found for ${email}. Please create an account first.`)}`);
-    }
-
-    console.log('[Quick Access] Found Peeap user:', peeapUser.id);
-
-    // Create/update school user mapping
-    const peeapSchoolId = school_id ? `sch_${school_id}` : null;
-    if (peeapSchoolId && user_id) {
-      await supabase.from('school_user_mappings').upsert({
-        school_user_id: String(user_id),
-        peeap_school_id: peeapSchoolId,
-        peeap_user_id: peeapUser.id,
-        school_email: email,
-        peeap_email: peeapUser.email,
-        school_role: role || 'staff',
-        is_primary_admin: is_admin === true,
-        has_pin_setup: true,
-        status: 'active',
-      }, {
-        onConflict: 'school_user_id,peeap_school_id',
-      });
-      console.log('[Quick Access] Created/updated user mapping');
-    }
-
-    // Generate session token (same format as session.service.ts)
-    const sessionToken = generateSecureToken(64);
-    const expiresIn = 7 * 24 * 60 * 60; // 7 days in seconds
-    const expiresAt = new Date(Date.now() + expiresIn * 1000);
-
-    // Store session in sso_tokens table (same as session.service.ts)
-    const { error: sessionError } = await supabase.from('sso_tokens').insert({
-      user_id: peeapUser.id,
-      token: sessionToken,
-      expires_at: expiresAt.toISOString(),
-      target_app: 'peeap-pay',
-      source_app: 'school-sso',
-    });
-
-    if (sessionError) {
-      console.error('[Quick Access] Failed to create session:', sessionError);
-      return res.redirect(302, 'https://school.peeap.com/login?error=session_error&message=' + encodeURIComponent('Failed to create session'));
-    }
-
-    console.log('[Quick Access] Session created for user:', peeapUser.email);
-
-    // Set the peeap_session cookie (same name as session.service.ts uses)
-    // Must be on .peeap.com domain to be shared across subdomains
-    const cookieOptions = `Path=/; Domain=.peeap.com; Secure; SameSite=Lax; Max-Age=${expiresIn}`;
-    res.setHeader('Set-Cookie', [
-      `peeap_session=${sessionToken}; ${cookieOptions}`,
-      `peeap_school_id=${school_id || ''}; ${cookieOptions}`,
-      `peeap_school_name=${encodeURIComponent(school_name || '')}; ${cookieOptions}`,
-      `peeap_school_role=${role || 'staff'}; ${cookieOptions}`,
-    ]);
-
-    // Redirect directly to school dashboard
-    console.log('[Quick Access] Redirecting to dashboard with cookies set');
-    return res.redirect(302, 'https://school.peeap.com/school');
+    // Use a 302 redirect directly (simplest approach)
+    return res.redirect(302, redirectUrl);
 
   } catch (error: any) {
-    console.error('[Quick Access] Error:', error?.message || error);
-    console.error('[Quick Access] Stack:', error?.stack);
-    return res.redirect(302, `https://school.peeap.com/login?error=server_error&message=${encodeURIComponent(error?.message || 'Unknown error')}`);
+    console.error('[Quick Access Redirect] Error:', error?.message || error);
+    console.error('[Quick Access Redirect] Stack:', error?.stack);
+    res.setHeader('Content-Type', 'text/html');
+    return res.status(500).send(`<!DOCTYPE html>
+<html>
+<head><title>Error</title></head>
+<body>
+  <h1>Error</h1>
+  <p>Something went wrong: ${error?.message || 'Unknown error'}</p>
+  <a href="https://school.peeap.com/login">Go to Login</a>
+</body>
+</html>`);
   }
 }
 
@@ -7356,7 +7677,6 @@ async function handleSchoolVerifyToken(req: VercelRequest, res: VercelResponse) 
           console.log(`[School Auth] Auto-mapped admin user: ${payload.email} -> ${peeapSchoolId}`);
         } else {
           // Strategy 2: Try to find a Peeap user with the same email
-          // If school admin granted access via SDSL2, and user has Peeap account with same email, allow access
           if (emailLower) {
             const { data: peeapUser } = await supabase
               .from('users')
@@ -7365,29 +7685,38 @@ async function handleSchoolVerifyToken(req: VercelRequest, res: VercelResponse) 
               .single();
 
             if (peeapUser) {
-              // User exists with same email - create mapping and allow access
-              // The school admin has already granted this user access in SDSL2
-              payload.peeap_user_id = peeapUser.id;
-              payload.peeap_email = peeapUser.email;
-              payload.mapping_found = true;
-              payload.auto_mapped = true;
+              // Check if this user connected THIS school
+              const { data: userConnection } = await supabase
+                .from('school_connections')
+                .select('id')
+                .eq('connected_by_user_id', peeapUser.id)
+                .eq('peeap_school_id', peeapSchoolId)
+                .eq('status', 'active')
+                .single();
 
-              // Create mapping for future use
-              await supabase.from('school_user_mappings').upsert({
-                school_user_id: payload.user_id.toString(),
-                peeap_school_id: peeapSchoolId,
-                peeap_user_id: peeapUser.id,
-                school_email: payload.email,
-                peeap_email: peeapUser.email,
-                school_role: payload.role || 'staff',
-                is_primary_admin: false,
-                has_pin_setup: true,
-                status: 'active',
-              }, {
-                onConflict: 'school_user_id,peeap_school_id',
-              });
+              if (userConnection) {
+                payload.peeap_user_id = peeapUser.id;
+                payload.peeap_email = peeapUser.email;
+                payload.mapping_found = true;
+                payload.auto_mapped = true;
 
-              console.log(`[School Auth] Auto-mapped user by email: ${payload.email} -> ${peeapSchoolId}`);
+                // Create mapping
+                await supabase.from('school_user_mappings').upsert({
+                  school_user_id: payload.user_id.toString(),
+                  peeap_school_id: peeapSchoolId,
+                  peeap_user_id: peeapUser.id,
+                  school_email: payload.email,
+                  peeap_email: peeapUser.email,
+                  school_role: payload.role || 'staff',
+                  is_primary_admin: false,
+                  has_pin_setup: true,
+                  status: 'active',
+                }, {
+                  onConflict: 'school_user_id,peeap_school_id',
+                });
+
+                console.log(`[School Auth] Auto-mapped user by email: ${payload.email} -> ${peeapSchoolId}`);
+              }
             }
           }
         }
@@ -7580,113 +7909,6 @@ async function handleSchoolVerifyPin(req: VercelRequest, res: VercelResponse) {
 }
 
 /**
- * School Create Session - Create a session for verified SSO users
- * Called by school.peeap.com after receiving verified user data from one-time code exchange
- *
- * POST /api/school/auth/create-session
- * Body: { peeap_user_id, email, school_id, school_name, role, saas_user_id, domain }
- */
-async function handleSchoolCreateSession(req: VercelRequest, res: VercelResponse) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'method_not_allowed' });
-  }
-
-  try {
-    const { peeap_user_id, email, school_id, school_name, role, saas_user_id, domain } = req.body;
-
-    if (!peeap_user_id || !email) {
-      return res.status(400).json({
-        success: false,
-        message: 'peeap_user_id and email are required',
-      });
-    }
-
-    // Verify the Peeap user exists
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('id, email, first_name, last_name, phone, roles')
-      .eq('id', peeap_user_id)
-      .single();
-
-    if (userError || !user) {
-      console.log('[School CreateSession] User not found:', peeap_user_id);
-      return res.status(404).json({
-        success: false,
-        message: 'Peeap user not found',
-      });
-    }
-
-    // Verify email matches (case insensitive)
-    if (user.email.toLowerCase() !== email.toLowerCase()) {
-      console.log('[School CreateSession] Email mismatch:', user.email, 'vs', email);
-      return res.status(401).json({
-        success: false,
-        message: 'Email mismatch',
-      });
-    }
-
-    // Generate session tokens
-    const accessToken = generateSecureToken(64);
-    const refreshToken = generateSecureToken(64);
-    const expiresIn = 3600; // 1 hour
-
-    // Store the access token
-    await supabase.from('oauth_access_tokens').insert({
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      user_id: peeap_user_id,
-      client_id: 'school-portal',
-      scope: 'school_admin',
-      expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
-    });
-
-    // Update mapping last access time if school_id provided
-    if (school_id && saas_user_id) {
-      const peeapSchoolId = `sch_${school_id}`;
-      await supabase
-        .from('school_user_mappings')
-        .update({ last_access_at: new Date().toISOString() })
-        .eq('school_user_id', saas_user_id.toString())
-        .eq('peeap_school_id', peeapSchoolId);
-    }
-
-    console.log(`[School CreateSession] Session created for user: ${user.email}, school: ${school_name || school_id}`);
-
-    return res.status(200).json({
-      success: true,
-      session: {
-        accessToken,
-        refreshToken,
-        expiresIn,
-        user: {
-          id: user.id,
-          email: user.email,
-          firstName: user.first_name,
-          lastName: user.last_name,
-          phone: user.phone,
-          roles: user.roles,
-        },
-      },
-    });
-
-  } catch (error: any) {
-    console.error('[School CreateSession] Error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Internal server error',
-    });
-  }
-}
-
-/**
  * School Fee Payment Endpoint
  * Process school fee payment through Peeap wallet and notify school SaaS
  *
@@ -7867,20 +8089,18 @@ async function handleSchoolPayFee(req: VercelRequest, res: VercelResponse) {
 }
 
 // ============================================
-// PEEAP School API Proxy Handlers
-// Proxies requests to gov.school.edu.sl/api/peeap
-// Used by my.peeap.com frontend
+// School PEEAP Proxy Endpoints
 // ============================================
 
 const SCHOOL_API_BASE = 'https://gov.school.edu.sl/api/peeap';
 
 /**
- * Proxy verify-student to external school API
+ * Proxy verify-student request to external school API
  * POST /api/school/peeap/verify-student
  */
-async function handlePeeapVerifyStudent(req: VercelRequest, res: VercelResponse) {
+async function handleSchoolPeeapVerifyStudent(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ success: false, message: 'Method not allowed' });
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
@@ -7892,7 +8112,7 @@ async function handlePeeapVerifyStudent(req: VercelRequest, res: VercelResponse)
     const data = await response.json();
     return res.status(response.status).json(data);
   } catch (error: any) {
-    console.error('[Peeap Proxy] verify-student error:', error);
+    console.error('[School Peeap] verify-student error:', error);
     return res.status(500).json({
       success: false,
       found: false,
@@ -7902,12 +8122,12 @@ async function handlePeeapVerifyStudent(req: VercelRequest, res: VercelResponse)
 }
 
 /**
- * Proxy student-financials to external school API
+ * Proxy student-financials request to external school API
  * POST /api/school/peeap/student-financials
  */
-async function handlePeeapStudentFinancials(req: VercelRequest, res: VercelResponse) {
+async function handleSchoolPeeapStudentFinancials(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ success: false, message: 'Method not allowed' });
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
@@ -7919,7 +8139,7 @@ async function handlePeeapStudentFinancials(req: VercelRequest, res: VercelRespo
     const data = await response.json();
     return res.status(response.status).json(data);
   } catch (error: any) {
-    console.error('[Peeap Proxy] student-financials error:', error);
+    console.error('[School Peeap] student-financials error:', error);
     return res.status(500).json({
       success: false,
       message: `Failed to connect to school system: ${error.message}`,
@@ -7928,12 +8148,12 @@ async function handlePeeapStudentFinancials(req: VercelRequest, res: VercelRespo
 }
 
 /**
- * Proxy pay-fee to external school API
+ * Proxy pay-fee request to external school API
  * POST /api/school/peeap/pay-fee
  */
-async function handlePeeapPayFee(req: VercelRequest, res: VercelResponse) {
+async function handleSchoolPeeapPayFee(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ success: false, message: 'Method not allowed' });
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
@@ -7945,11 +8165,501 @@ async function handlePeeapPayFee(req: VercelRequest, res: VercelResponse) {
     const data = await response.json();
     return res.status(response.status).json(data);
   } catch (error: any) {
-    console.error('[Peeap Proxy] pay-fee error:', error);
+    console.error('[School Peeap] pay-fee error:', error);
     return res.status(500).json({
       success: false,
       message: `Failed to connect to school system: ${error.message}`,
     });
+  }
+}
+
+// ========== SCHOOL WALLET MANAGEMENT HANDLERS ==========
+
+/**
+ * Create Student Wallet
+ * Creates a new Peeap wallet for a student directly from school dashboard
+ *
+ * POST /api/school/wallets/create
+ * Body: { nsi, student_name, student_phone?, student_email?, school_id, pin, daily_limit?, class_name?, section? }
+ */
+async function handleSchoolWalletsCreate(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const {
+      nsi,
+      student_name,
+      student_phone,
+      student_email,
+      school_id,
+      pin,
+      daily_limit = 50000,
+      class_name,
+      section,
+      parent_phone,
+      parent_email,
+    } = req.body;
+
+    console.log('[School Wallets] Create wallet request:', { nsi, student_name, school_id });
+
+    // Validate required fields
+    if (!nsi || !student_name || !school_id || !pin) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: nsi, student_name, school_id, pin',
+      });
+    }
+
+    // Validate PIN format (4-6 digits)
+    if (!/^\d{4,6}$/.test(pin)) {
+      return res.status(400).json({
+        success: false,
+        error: 'PIN must be 4-6 digits',
+      });
+    }
+
+    // Check if wallet already exists for this NSI
+    const { data: existingLink } = await supabase
+      .from('student_wallet_links')
+      .select('id, peeap_wallet_id, peeap_user_id')
+      .or(`nsi.eq.${nsi},index_number.eq.${nsi}`)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (existingLink) {
+      return res.status(409).json({
+        success: false,
+        error: 'A wallet already exists for this student NSI',
+        existing_wallet_id: existingLink.peeap_wallet_id,
+      });
+    }
+
+    // Generate unique IDs
+    const userId = randomUUID();
+    const walletId = randomUUID();
+    const externalId = `STU-${school_id}-${nsi.replace(/[^a-zA-Z0-9]/g, '')}-${Date.now()}`;
+    const userExternalId = `USR-STU-${nsi.replace(/[^a-zA-Z0-9]/g, '')}-${Date.now()}`;
+
+    // Hash the PIN
+    const crypto = await import('crypto');
+    const pinHash = crypto.createHash('sha256').update(pin).digest('hex');
+
+    // Parse student name
+    const nameParts = student_name.trim().split(' ');
+    const firstName = nameParts[0] || student_name;
+    const lastName = nameParts.slice(1).join(' ') || '';
+
+    // Create user account (student user doesn't need real email/phone)
+    const { data: newUser, error: userError } = await supabase
+      .from('users')
+      .insert({
+        id: userId,
+        external_id: userExternalId,
+        email: student_email || `${nsi.toLowerCase().replace(/[^a-z0-9]/g, '')}@student.peeap.local`,
+        phone: student_phone || parent_phone || null,
+        full_name: student_name,
+        first_name: firstName,
+        last_name: lastName,
+        wallet_pin_hash: pinHash,
+        wallet_pin: pin,
+        account_type: 'student',
+        status: 'ACTIVE',
+        roles: 'student',
+        is_verified: true,
+        email_verified: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single();
+
+    if (userError) {
+      console.error('[School Wallets] Error creating user:', userError);
+      return res.status(500).json({
+        success: false,
+        error: `Failed to create user account: ${userError.message}`,
+      });
+    }
+
+    // Create wallet
+    const { data: newWallet, error: walletError } = await supabase
+      .from('wallets')
+      .insert({
+        id: walletId,
+        external_id: externalId,
+        user_id: userId,
+        currency: 'SLE',
+        balance: 0,
+        available_balance: 0,
+        wallet_type: 'student',
+        name: `${firstName}'s Wallet`,
+        daily_limit: daily_limit,
+        monthly_limit: 500000,
+        status: 'ACTIVE',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single();
+
+    if (walletError) {
+      console.error('[School Wallets] Error creating wallet:', walletError);
+      await supabase.from('users').delete().eq('id', userId);
+      return res.status(500).json({
+        success: false,
+        error: `Failed to create wallet: ${walletError.message}`,
+      });
+    }
+
+    // Create student wallet link
+    const { error: linkError } = await supabase
+      .from('student_wallet_links')
+      .insert({
+        nsi: nsi,
+        index_number: nsi,
+        peeap_user_id: userId,
+        peeap_wallet_id: walletId,
+        school_id: parseInt(school_id),
+        current_school_id: school_id.toString(),
+        student_name: student_name,
+        student_phone: student_phone,
+        class_name: class_name,
+        section: section,
+        daily_limit: daily_limit,
+        is_active: true,
+        status: 'active',
+        created_at: new Date().toISOString(),
+        linked_at: new Date().toISOString(),
+      });
+
+    if (linkError) {
+      console.error('[School Wallets] Error creating link:', linkError);
+      await supabase.from('wallets').delete().eq('id', walletId);
+      await supabase.from('users').delete().eq('id', userId);
+      return res.status(500).json({
+        success: false,
+        error: `Failed to link wallet: ${linkError.message}`,
+      });
+    }
+
+    console.log('[School Wallets] Successfully created wallet:', { userId, walletId, nsi });
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        peeap_user_id: userId,
+        wallet_id: walletId,
+        nsi: nsi,
+        student_name: student_name,
+        daily_limit: daily_limit,
+      },
+    });
+  } catch (error: any) {
+    console.error('[School Wallets] Create error:', error);
+    return res.status(500).json({
+      success: false,
+      error: `Failed to create wallet: ${error.message}`,
+    });
+  }
+}
+
+/**
+ * Link Existing Peeap Wallet to Student
+ *
+ * POST /api/school/wallets/link
+ */
+async function handleSchoolWalletsLink(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const { nsi, phone_or_email, pin, school_id } = req.body;
+
+    if (!nsi || !phone_or_email || !pin || !school_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: nsi, phone_or_email, pin, school_id',
+      });
+    }
+
+    // Find user by phone or email - use ilike for case-insensitive email matching
+    const isEmail = phone_or_email.includes('@');
+    let userQuery = supabase
+      .from('users')
+      .select('id, email, phone, wallet_pin_hash, wallet_pin, full_name');
+
+    if (isEmail) {
+      userQuery = userQuery.ilike('email', phone_or_email);
+    } else {
+      // For phone, try multiple formats
+      const cleanPhone = phone_or_email.replace(/\D/g, '');
+      userQuery = userQuery.or(`phone.eq.${phone_or_email},phone.eq.${cleanPhone},phone.eq.+${cleanPhone}`);
+    }
+
+    const { data: user, error: userError } = await userQuery.maybeSingle();
+
+    if (userError) {
+      console.error('[School Wallets] Link - User query error:', userError);
+      return res.status(500).json({
+        success: false,
+        error: 'Database error while looking up account',
+      });
+    }
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'No Peeap account found with this phone or email. Please make sure you have a Peeap account first.',
+      });
+    }
+
+    // Check if user has a PIN set
+    if (!user.wallet_pin_hash && !user.wallet_pin) {
+      return res.status(400).json({
+        success: false,
+        error: 'This account does not have a wallet PIN set. Please set up your PIN in the Peeap app first.',
+      });
+    }
+
+    // Verify PIN - check both hashed and plain text for backward compatibility
+    const crypto = await import('crypto');
+    const pinHash = crypto.createHash('sha256').update(pin.toString()).digest('hex');
+    const pinValid = user.wallet_pin_hash === pinHash || user.wallet_pin === pin.toString();
+
+    console.log('[School Wallets] Link - PIN verification:', {
+      userId: user.id,
+      email: user.email,
+      hasHashedPin: !!user.wallet_pin_hash,
+      hasPlainPin: !!user.wallet_pin,
+      inputPinLength: pin?.length,
+    });
+
+    if (!pinValid) {
+      return res.status(401).json({ success: false, error: 'Invalid PIN. Please check your PIN and try again.' });
+    }
+
+    // Get user's primary wallet
+    const { data: wallet } = await supabase
+      .from('wallets')
+      .select('id, balance, currency')
+      .eq('user_id', user.id)
+      .eq('status', 'ACTIVE')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .single();
+
+    if (!wallet) {
+      return res.status(404).json({ success: false, error: 'No wallet found for this account' });
+    }
+
+    // Check if NSI is already linked
+    const { data: existingLink } = await supabase
+      .from('student_wallet_links')
+      .select('id')
+      .or(`nsi.eq.${nsi},index_number.eq.${nsi}`)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (existingLink) {
+      return res.status(409).json({ success: false, error: 'This NSI is already linked to a wallet' });
+    }
+
+    // Create the link
+    const { error: linkError } = await supabase
+      .from('student_wallet_links')
+      .insert({
+        nsi: nsi,
+        index_number: nsi,
+        peeap_user_id: user.id,
+        peeap_wallet_id: wallet.id,
+        school_id: parseInt(school_id),
+        current_school_id: school_id.toString(),
+        student_name: user.full_name,
+        is_active: true,
+        status: 'active',
+        created_at: new Date().toISOString(),
+        linked_at: new Date().toISOString(),
+      });
+
+    if (linkError) {
+      return res.status(500).json({ success: false, error: `Failed to link wallet: ${linkError.message}` });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        peeap_user_id: user.id,
+        wallet_id: wallet.id,
+        nsi: nsi,
+        student_name: user.full_name,
+        balance: wallet.balance,
+        currency: wallet.currency,
+      },
+    });
+  } catch (error: any) {
+    console.error('[School Wallets] Link error:', error);
+    return res.status(500).json({ success: false, error: `Failed to link wallet: ${error.message}` });
+  }
+}
+
+/**
+ * Top Up Student Wallet
+ *
+ * POST /api/school/wallets/topup
+ */
+async function handleSchoolWalletsTopup(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const { wallet_id, amount, currency = 'SLE', source, payment_method, reference, initiated_by } = req.body;
+
+    if (!wallet_id || !amount || !source || !initiated_by) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: wallet_id, amount, source, initiated_by',
+      });
+    }
+
+    if (amount <= 0) {
+      return res.status(400).json({ success: false, error: 'Amount must be greater than 0' });
+    }
+
+    // Get wallet
+    const { data: wallet } = await supabase
+      .from('wallets')
+      .select('*')
+      .eq('id', wallet_id)
+      .single();
+
+    if (!wallet) {
+      return res.status(404).json({ success: false, error: 'Wallet not found' });
+    }
+
+    const currentBalance = parseFloat(wallet.balance) || 0;
+    const newBalance = currentBalance + parseFloat(amount);
+    const transactionId = randomUUID();
+
+    // Create transaction
+    await supabase.from('transactions').insert({
+      id: transactionId,
+      wallet_id: wallet_id,
+      user_id: wallet.user_id,
+      type: 'DEPOSIT',
+      amount: amount,
+      currency: currency,
+      balance_before: currentBalance,
+      balance_after: newBalance,
+      status: 'COMPLETED',
+      description: `Top-up from ${source}`,
+      reference: reference || `TOPUP-${Date.now()}`,
+      metadata: { source, payment_method, initiated_by },
+      created_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+    });
+
+    // Update wallet balance
+    await supabase
+      .from('wallets')
+      .update({ balance: newBalance, available_balance: newBalance, updated_at: new Date().toISOString() })
+      .eq('id', wallet_id);
+
+    return res.status(200).json({
+      success: true,
+      data: { transaction_id: transactionId, wallet_id, amount, currency, new_balance: newBalance },
+    });
+  } catch (error: any) {
+    console.error('[School Wallets] Topup error:', error);
+    return res.status(500).json({ success: false, error: `Failed to top up wallet: ${error.message}` });
+  }
+}
+
+/**
+ * Get Wallet Balance by NSI
+ *
+ * GET /api/school/wallets/:identifier/balance
+ */
+async function handleSchoolWalletsBalance(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const url = new URL(req.url || '', `http://${req.headers.host}`);
+    const path = url.pathname.replace('/api/router', '').replace('/api', '').replace(/^\//, '');
+    const pathParts = path.split('/');
+    const identifier = pathParts[2];
+
+    if (!identifier) {
+      return res.status(400).json({ success: false, error: 'Missing identifier (NSI or wallet ID)' });
+    }
+
+    // Try to find by NSI first
+    const { data: link } = await supabase
+      .from('student_wallet_links')
+      .select('peeap_wallet_id, peeap_user_id, student_name, daily_limit')
+      .or(`nsi.eq.${identifier},index_number.eq.${identifier}`)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    let walletId = link?.peeap_wallet_id || identifier;
+
+    // Get wallet
+    const { data: wallet } = await supabase
+      .from('wallets')
+      .select('id, balance, available_balance, currency, status, daily_limit, user_id')
+      .eq('id', walletId)
+      .single();
+
+    if (!wallet) {
+      return res.status(404).json({ success: false, error: 'Wallet not found' });
+    }
+
+    let ownerName = link?.student_name || 'Unknown';
+    if (!link && wallet.user_id) {
+      const { data: user } = await supabase
+        .from('users')
+        .select('full_name')
+        .eq('id', wallet.user_id)
+        .single();
+      if (user) ownerName = user.full_name || 'Unknown';
+    }
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const { data: todayTransactions } = await supabase
+      .from('transactions')
+      .select('amount')
+      .eq('wallet_id', walletId)
+      .in('type', ['PURCHASE', 'TRANSFER', 'PAYMENT', 'FEE_PAYMENT'])
+      .gte('created_at', todayStart.toISOString());
+
+    const dailySpent = todayTransactions?.reduce((sum, t) => sum + Math.abs(parseFloat(t.amount) || 0), 0) || 0;
+    const dailyLimit = link?.daily_limit || wallet.daily_limit || 50000;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        wallet_id: wallet.id,
+        owner_name: ownerName,
+        owner_type: 'student',
+        nsi: identifier,
+        balance: parseFloat(wallet.balance) || 0,
+        currency: wallet.currency || 'SLE',
+        daily_limit: dailyLimit,
+        daily_spent: dailySpent,
+        available_today: Math.min(Math.max(0, dailyLimit - dailySpent), parseFloat(wallet.balance) || 0),
+        status: wallet.status || 'active',
+      },
+    });
+  } catch (error: any) {
+    console.error('[School Wallets] Balance error:', error);
+    return res.status(500).json({ success: false, error: `Failed to get balance: ${error.message}` });
   }
 }
 
@@ -8072,82 +8782,6 @@ async function handleOAuthToken(req: VercelRequest, res: VercelResponse) {
 
       const user = userData?.[0];
 
-      // ===== SAVE SCHOOL CONNECTION =====
-      // Extract school slug from redirect_uri (e.g., https://ses.gov.school.edu.sl/... -> ses)
-      let schoolSlug: string | null = null;
-      try {
-        const redirectUrl = new URL(redirect_uri);
-        const hostParts = redirectUrl.hostname.split('.');
-        if (hostParts.length > 0 && redirectUrl.hostname.includes('gov.school.edu.sl')) {
-          schoolSlug = hostParts[0]; // e.g., 'ses' from 'ses.gov.school.edu.sl'
-        }
-      } catch (e) {
-        console.error('[OAuth] Failed to parse redirect URI:', e);
-      }
-
-      // Save school connection if this is a school SaaS connection
-      if (schoolSlug && client_id === 'school_saas') {
-        console.log('[OAuth] Creating school connection for:', schoolSlug);
-
-        // Check if connection already exists
-        const { data: existingConnection } = await supabase
-          .from('school_connections')
-          .select('*')
-          .eq('peeap_school_id', schoolSlug)
-          .maybeSingle();
-
-        if (!existingConnection) {
-          // Create wallet for the school
-          const { data: schoolWallet, error: walletError } = await supabase
-            .from('wallets')
-            .insert({
-              currency: 'SLE',
-              balance: 0,
-              status: 'ACTIVE',
-              wallet_type: 'school',
-              name: `${schoolSlug.charAt(0).toUpperCase() + schoolSlug.slice(1)} School Wallet`,
-              external_id: `SCH-${schoolSlug}`,
-            })
-            .select()
-            .single();
-
-          if (walletError) {
-            console.error('[OAuth] Failed to create school wallet:', walletError);
-          } else {
-            console.log('[OAuth] Created school wallet:', schoolWallet.id);
-
-            // Create school connection
-            const { data: newConnection, error: connectionError } = await supabase
-              .from('school_connections')
-              .insert({
-                school_id: authCode.metadata?.school_id?.toString() || schoolSlug,
-                school_name: `${schoolSlug.charAt(0).toUpperCase() + schoolSlug.slice(1)} School`,
-                peeap_school_id: schoolSlug,
-                school_domain: `${schoolSlug}.gov.school.edu.sl`,
-                connected_by_user_id: authCode.user_id,
-                connected_by_email: user?.email || null,
-                wallet_id: schoolWallet.id,
-                status: 'active',
-                saas_origin: `${schoolSlug}.gov.school.edu.sl`,
-                connected_at: new Date().toISOString(),
-              })
-              .select()
-              .single();
-
-            if (connectionError) {
-              console.error('[OAuth] Failed to create school connection:', connectionError);
-              // Clean up wallet
-              await supabase.from('wallets').delete().eq('id', schoolWallet.id);
-            } else {
-              console.log('[OAuth] Created school connection:', newConnection.id);
-            }
-          }
-        } else {
-          console.log('[OAuth] School connection already exists:', existingConnection.id);
-        }
-      }
-      // ===== END SCHOOL CONNECTION =====
-
       // Fetch wallet data if wallet scopes are requested
       let walletData = null;
       const scopes = authCode.scope.split(' ');
@@ -8202,12 +8836,17 @@ async function handleOAuthToken(req: VercelRequest, res: VercelResponse) {
           const metadata = typeof authCode.metadata === 'string'
             ? JSON.parse(authCode.metadata)
             : authCode.metadata;
-          if (metadata.index_number || metadata.school_id) {
+          if (metadata.nsi || metadata.index_number || metadata.school_id) {
             response.link = {
-              index_number: metadata.index_number,
+              nsi: metadata.nsi || metadata.index_number,
+              index_number: metadata.index_number,  // Kept for backward compatibility
               school_id: metadata.school_id,
               linked_at: new Date().toISOString(),
             };
+          }
+          // Include children array for parent users
+          if (metadata.children) {
+            response.children = metadata.children;
           }
           // For school admin connection
           if (metadata.user_type === 'admin') {

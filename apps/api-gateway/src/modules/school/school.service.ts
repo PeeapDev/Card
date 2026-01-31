@@ -13,7 +13,8 @@ interface StudentWalletLink {
   id: string;
   peeap_user_id: string;
   school_id: number;
-  index_number: string;
+  nsi: string;  // National Student Identifier (alias for index_number)
+  index_number?: string;  // Kept for backward compatibility
   peeap_wallet_id: string;
   daily_limit: number;
   is_active: boolean;
@@ -23,7 +24,8 @@ interface WalletBalance {
   wallet_id: string;
   owner_name: string;
   owner_type: string;
-  index_number?: string;
+  nsi?: string;  // National Student Identifier
+  index_number?: string;  // Kept for backward compatibility
   balance: number;
   currency: string;
   daily_limit: number;
@@ -40,7 +42,8 @@ interface PaymentSession {
   payer_type: string;
   payer_id: number;
   payer_name: string;
-  payer_index_number?: string;
+  payer_nsi?: string;  // National Student Identifier
+  payer_index_number?: string;  // Kept for backward compatibility
   payer_wallet_id: string;
   vendor_id: string;
   vendor_name: string;
@@ -117,14 +120,14 @@ export class SchoolService {
   }
 
   /**
-   * Get wallet balance by student index number
+   * Get wallet balance by student NSI (National Student Identifier)
    */
   async getWalletBalance(identifier: string, schoolId?: number): Promise<WalletBalance> {
-    // First, try to find the wallet link by index number
+    // First, try to find the wallet link by nsi (or index_number for backward compatibility)
     let query = this.supabase
       .from('student_wallet_links')
       .select('*')
-      .eq('index_number', identifier)
+      .or(`nsi.eq.${identifier},index_number.eq.${identifier}`)
       .eq('is_active', true);
 
     if (schoolId) {
@@ -205,7 +208,8 @@ export class SchoolService {
       wallet_id: link.peeap_wallet_id,
       owner_name: ownerName,
       owner_type: 'student',
-      index_number: link.index_number,
+      nsi: link.nsi || link.index_number,  // Prefer nsi, fallback to index_number
+      index_number: link.index_number,  // Kept for backward compatibility
       balance: wallet.balance || 0,
       currency: wallet.currency || 'NLE',
       daily_limit: dailyLimit,
@@ -468,7 +472,7 @@ export class SchoolService {
   async linkStudentWallet(params: {
     schoolId: number;
     studentId: number;
-    indexNumber: string;
+    nsi: string;  // National Student Identifier
     peeapUserId: string;
     walletId: string;
   }): Promise<{
@@ -478,11 +482,11 @@ export class SchoolService {
   }> {
     const linkedAt = new Date().toISOString();
 
-    // Check if link already exists
+    // Check if link already exists (check both nsi and index_number for backward compatibility)
     const { data: existing } = await this.supabase
       .from('student_wallet_links')
       .select('id')
-      .eq('index_number', params.indexNumber)
+      .or(`nsi.eq.${params.nsi},index_number.eq.${params.nsi}`)
       .eq('school_id', params.schoolId)
       .limit(1);
 
@@ -493,6 +497,7 @@ export class SchoolService {
         .update({
           peeap_user_id: params.peeapUserId,
           peeap_wallet_id: params.walletId,
+          nsi: params.nsi,  // Ensure nsi is set
           is_active: true,
           updated_at: linkedAt,
         })
@@ -502,7 +507,8 @@ export class SchoolService {
       await this.supabase.from('student_wallet_links').insert({
         school_id: params.schoolId,
         student_id: params.studentId,
-        index_number: params.indexNumber,
+        nsi: params.nsi,  // Use nsi as primary
+        index_number: params.nsi,  // Also set index_number for backward compatibility
         peeap_user_id: params.peeapUserId,
         peeap_wallet_id: params.walletId,
         daily_limit: 100,
@@ -799,7 +805,7 @@ export class SchoolService {
    * Create a new wallet for a student
    */
   async createStudentWallet(params: {
-    indexNumber: string;
+    nsi: string;  // National Student Identifier
     studentName: string;
     studentPhone?: string;
     studentEmail?: string;
@@ -811,50 +817,67 @@ export class SchoolService {
     parentPhone?: string;
     parentEmail?: string;
   }): Promise<{ peeap_user_id: string; wallet_id: string }> {
-    // Check if a wallet already exists for this index number
+    // Check if a wallet already exists for this NSI (or index_number for backward compatibility)
     const { data: existingLink } = await this.supabase
       .from('student_wallet_links')
       .select('*')
-      .eq('index_number', params.indexNumber)
-      .single();
+      .or(`nsi.eq.${params.nsi},index_number.eq.${params.nsi}`)
+      .maybeSingle();
 
     if (existingLink) {
-      throw new BadRequestException('A wallet already exists for this index number');
+      throw new BadRequestException('A wallet already exists for this NSI');
     }
 
-    // Create user account
-    const userId = `usr_${crypto.randomBytes(12).toString('hex')}`;
-    const walletId = `wal_${crypto.randomBytes(12).toString('hex')}`;
+    // Generate unique IDs
+    const userId = crypto.randomUUID();
+    const walletId = crypto.randomUUID();
+    const externalId = `STU-${params.schoolId}-${params.nsi.replace(/[^a-zA-Z0-9]/g, '')}-${Date.now()}`;
     const pinHash = crypto.createHash('sha256').update(params.pin).digest('hex');
 
-    // Create user
+    // Create user with proper Supabase auth schema compatibility
     const { error: userError } = await this.supabase.from('users').insert({
       id: userId,
-      email: params.studentEmail || `${params.indexNumber}@student.peeap.local`,
-      phone: params.studentPhone || params.parentPhone,
+      external_id: `USR-STU-${params.nsi.replace(/[^a-zA-Z0-9]/g, '')}-${Date.now()}`,
+      email: params.studentEmail || `${params.nsi.toLowerCase().replace(/[^a-z0-9]/g, '')}@student.peeap.local`,
+      phone: params.studentPhone || params.parentPhone || null,
       full_name: params.studentName,
+      first_name: params.studentName.split(' ')[0] || params.studentName,
+      last_name: params.studentName.split(' ').slice(1).join(' ') || '',
       wallet_pin_hash: pinHash,
+      wallet_pin: params.pin, // Also store plain for backward compatibility (to be removed)
       account_type: 'student',
+      status: 'ACTIVE',
+      roles: 'student',
       is_verified: true, // School-created accounts are pre-verified
+      email_verified: true,
       created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     });
 
     if (userError) {
+      console.error('Failed to create student user:', userError);
       throw new BadRequestException(`Failed to create user: ${userError.message}`);
     }
 
-    // Create wallet
+    // Create wallet with required fields
     const { error: walletError } = await this.supabase.from('wallets').insert({
       id: walletId,
+      external_id: externalId,
       user_id: userId,
       balance: 0,
+      available_balance: 0,
       currency: 'SLE',
-      daily_limit: params.dailyLimit,
-      status: 'active',
+      wallet_type: 'student',
+      name: `${params.studentName}'s Wallet`,
+      daily_limit: params.dailyLimit || 50000,
+      monthly_limit: 500000,
+      status: 'ACTIVE',
       created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     });
 
     if (walletError) {
+      console.error('Failed to create student wallet:', walletError);
       // Rollback user creation
       await this.supabase.from('users').delete().eq('id', userId);
       throw new BadRequestException(`Failed to create wallet: ${walletError.message}`);
@@ -862,17 +885,23 @@ export class SchoolService {
 
     // Create student wallet link
     const { error: linkError } = await this.supabase.from('student_wallet_links').insert({
-      index_number: params.indexNumber,
+      nsi: params.nsi,  // Use nsi as primary
+      index_number: params.nsi,  // Also set index_number for backward compatibility
       peeap_user_id: userId,
-      wallet_id: walletId,
+      peeap_wallet_id: walletId,
+      school_id: params.schoolId,
       current_school_id: params.schoolId.toString(),
       student_name: params.studentName,
       student_phone: params.studentPhone,
+      daily_limit: params.dailyLimit || 50000,
+      is_active: true,
       status: 'active',
+      created_at: new Date().toISOString(),
       linked_at: new Date().toISOString(),
     });
 
     if (linkError) {
+      console.error('Failed to create student wallet link:', linkError);
       // Rollback
       await this.supabase.from('wallets').delete().eq('id', walletId);
       await this.supabase.from('users').delete().eq('id', userId);
@@ -888,7 +917,7 @@ export class SchoolService {
   async linkExistingWallet(params: {
     phoneOrEmail: string;
     pin: string;
-    indexNumber: string;
+    nsi: string;  // National Student Identifier
     studentId: number;
     schoolId: number;
   }): Promise<{ peeap_user_id: string; wallet_id: string }> {
@@ -920,20 +949,21 @@ export class SchoolService {
       throw new NotFoundException('No wallet found for this account');
     }
 
-    // Check if already linked
+    // Check if already linked (check both nsi and index_number for backward compatibility)
     const { data: existingLink } = await this.supabase
       .from('student_wallet_links')
       .select('*')
-      .eq('index_number', params.indexNumber)
+      .or(`nsi.eq.${params.nsi},index_number.eq.${params.nsi}`)
       .single();
 
     if (existingLink) {
-      throw new BadRequestException('This index number is already linked to a wallet');
+      throw new BadRequestException('This NSI is already linked to a wallet');
     }
 
     // Create the link
     const { error: linkError } = await this.supabase.from('student_wallet_links').insert({
-      index_number: params.indexNumber,
+      nsi: params.nsi,  // Use nsi as primary
+      index_number: params.nsi,  // Also set index_number for backward compatibility
       peeap_user_id: user.id,
       wallet_id: wallet.id,
       current_school_id: params.schoolId.toString(),
@@ -1015,10 +1045,10 @@ export class SchoolService {
   // ============================================
 
   /**
-   * Get student wallet info by index number
+   * Get student wallet info by NSI (National Student Identifier)
    */
   async getStudentWalletInfo(params: {
-    indexNumber: string;
+    nsi: string;  // National Student Identifier
     schoolId: number;
   }): Promise<{
     wallet_id: string;
@@ -1027,11 +1057,11 @@ export class SchoolService {
     student_name: string;
     username?: string;
   }> {
-    // Try to find in student_accounts table first (new system)
+    // Try to find in student_accounts table first (new system) - check both nsi and index_number
     const { data: studentAccount } = await this.supabase
       .from('student_accounts')
       .select('id, first_name, last_name, username, wallet_id')
-      .eq('index_number', params.indexNumber)
+      .or(`nsi.eq.${params.nsi},index_number.eq.${params.nsi}`)
       .eq('status', 'active')
       .single();
 
@@ -1054,11 +1084,11 @@ export class SchoolService {
       }
     }
 
-    // Fallback to student_wallet_links table (legacy system)
+    // Fallback to student_wallet_links table (legacy system) - check both nsi and index_number
     const { data: link } = await this.supabase
       .from('student_wallet_links')
       .select('peeap_wallet_id, peeap_user_id, student_name')
-      .eq('index_number', params.indexNumber)
+      .or(`nsi.eq.${params.nsi},index_number.eq.${params.nsi}`)
       .eq('is_active', true)
       .single();
 
@@ -1100,7 +1130,7 @@ export class SchoolService {
    * Pay fee from student wallet (student self-service)
    */
   async payFeeFromWallet(params: {
-    studentIndexNumber: string;
+    studentNsi: string;  // National Student Identifier
     feeId: string;
     feeName: string;
     amount: number;
@@ -1127,11 +1157,11 @@ export class SchoolService {
     let userId: string | null = null;
     let studentName: string;
 
-    // Try student_accounts first (new system)
+    // Try student_accounts first (new system) - check both nsi and index_number
     const { data: studentAccount } = await this.supabase
       .from('student_accounts')
       .select('id, first_name, last_name, wallet_id, paired_user_id')
-      .eq('index_number', params.studentIndexNumber)
+      .or(`nsi.eq.${params.studentNsi},index_number.eq.${params.studentNsi}`)
       .eq('status', 'active')
       .single();
 
@@ -1140,11 +1170,11 @@ export class SchoolService {
       userId = studentAccount.paired_user_id;
       studentName = `${studentAccount.first_name} ${studentAccount.last_name}`;
     } else {
-      // Fallback to student_wallet_links (legacy)
+      // Fallback to student_wallet_links (legacy) - check both nsi and index_number
       const { data: link } = await this.supabase
         .from('student_wallet_links')
         .select('peeap_wallet_id, peeap_user_id, student_name')
-        .eq('index_number', params.studentIndexNumber)
+        .or(`nsi.eq.${params.studentNsi},index_number.eq.${params.studentNsi}`)
         .eq('is_active', true)
         .single();
 
@@ -1318,7 +1348,8 @@ export class SchoolService {
         fee_name: params.feeName,
         school_id: params.schoolId,
         student_name: studentName,
-        index_number: params.studentIndexNumber,
+        nsi: params.studentNsi,
+        index_number: params.studentNsi,  // Kept for backward compatibility
         academic_year: params.academicYear,
         term: params.term,
         receipt_number: receiptNumber,
@@ -1388,7 +1419,7 @@ export class SchoolService {
   /**
    * Proxy verify-student request to external school API
    */
-  async proxyVerifyStudent(body: { index_number?: string; admission_no?: string; school_id?: number }): Promise<any> {
+  async proxyVerifyStudent(body: { nsi?: string; index_number?: string; admission_no?: string; school_id?: number }): Promise<any> {
     try {
       const response = await fetch(`${this.SCHOOL_API_BASE}/verify-student`, {
         method: 'POST',
@@ -1425,15 +1456,38 @@ export class SchoolService {
   }
 
   /**
+   * Proxy student-fees-breakdown request to external school API
+   * Returns installment-based fee breakdown
+   */
+  async proxyStudentFeesBreakdown(params: { nsi: string; school_id: number }): Promise<any> {
+    try {
+      const response = await fetch(
+        `${this.SCHOOL_API_BASE}/student-fees-breakdown?nsi=${encodeURIComponent(params.nsi)}&school_id=${params.school_id}`,
+        {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+      return await response.json();
+    } catch (error: any) {
+      return {
+        success: false,
+        message: `Failed to connect to school system: ${error.message}`,
+      };
+    }
+  }
+
+  /**
    * Proxy pay-fee request to external school API
+   * Supports installment_id for term-specific payments
    */
   async proxyPayFee(body: {
-    student_id: number;
-    fee_id: number;
+    student_index: string;
+    school_id: number;
     amount: number;
     transaction_id: string;
-    payer_email?: string;
-    school_id: number;
+    installment_id?: number;
+    fee_id?: number;
   }): Promise<any> {
     try {
       const response = await fetch(`${this.SCHOOL_API_BASE}/pay-fee`, {
@@ -1448,5 +1502,237 @@ export class SchoolService {
         message: `Failed to connect to school system: ${error.message}`,
       };
     }
+  }
+
+  // ============================================
+  // New NSI-based Endpoints
+  // ============================================
+
+  /**
+   * Get transactions by NSI (National Student Identifier)
+   */
+  async getTransactionsByNSI(params: {
+    nsi: string;
+    schoolId?: string;
+    limit?: number;
+    offset?: number;
+    type?: string;
+    status?: string;
+  }): Promise<{ transactions: any[]; total: number }> {
+    // First find the wallet for this NSI
+    const { data: link } = await this.supabase
+      .from('student_wallet_links')
+      .select('peeap_wallet_id')
+      .or(`nsi.eq.${params.nsi},index_number.eq.${params.nsi}`)
+      .eq('is_active', true)
+      .single();
+
+    if (!link) {
+      // Try student_accounts table
+      const { data: studentAccount } = await this.supabase
+        .from('student_accounts')
+        .select('wallet_id')
+        .or(`nsi.eq.${params.nsi},index_number.eq.${params.nsi}`)
+        .eq('status', 'active')
+        .single();
+
+      if (!studentAccount?.wallet_id) {
+        throw new NotFoundException('No wallet found for this NSI');
+      }
+
+      return this.getWalletTransactions(studentAccount.wallet_id, params);
+    }
+
+    return this.getWalletTransactions(link.peeap_wallet_id, params);
+  }
+
+  private async getWalletTransactions(walletId: string, params: {
+    limit?: number;
+    offset?: number;
+    type?: string;
+    status?: string;
+  }): Promise<{ transactions: any[]; total: number }> {
+    let query = this.supabase
+      .from('transactions')
+      .select('*', { count: 'exact' })
+      .eq('wallet_id', walletId)
+      .order('created_at', { ascending: false });
+
+    if (params.type) {
+      query = query.eq('type', params.type);
+    }
+    if (params.status) {
+      query = query.eq('status', params.status);
+    }
+    if (params.limit) {
+      query = query.limit(params.limit);
+    }
+    if (params.offset) {
+      query = query.range(params.offset, params.offset + (params.limit || 20) - 1);
+    }
+
+    const { data, count, error } = await query;
+
+    if (error) {
+      throw new BadRequestException('Failed to fetch transactions');
+    }
+
+    return {
+      transactions: data || [],
+      total: count || 0,
+    };
+  }
+
+  /**
+   * Update wallet limits by NSI
+   */
+  async updateWalletLimits(params: {
+    nsi: string;
+    dailyLimit?: number;
+    transactionLimit?: number;
+  }): Promise<{ success: boolean; wallet: any }> {
+    // Find the wallet link
+    const { data: link } = await this.supabase
+      .from('student_wallet_links')
+      .select('id, peeap_wallet_id, daily_limit')
+      .or(`nsi.eq.${params.nsi},index_number.eq.${params.nsi}`)
+      .eq('is_active', true)
+      .single();
+
+    if (!link) {
+      throw new NotFoundException('No wallet found for this NSI');
+    }
+
+    const updates: any = { updated_at: new Date().toISOString() };
+    if (params.dailyLimit !== undefined) {
+      updates.daily_limit = params.dailyLimit;
+    }
+
+    // Update student_wallet_links
+    const { error: linkError } = await this.supabase
+      .from('student_wallet_links')
+      .update(updates)
+      .eq('id', link.id);
+
+    if (linkError) {
+      throw new BadRequestException('Failed to update limits');
+    }
+
+    // Also update the wallet table if transaction_limit is provided
+    if (params.transactionLimit !== undefined) {
+      await this.supabase
+        .from('wallets')
+        .update({ transaction_limit: params.transactionLimit })
+        .eq('id', link.peeap_wallet_id);
+    }
+
+    // Return updated wallet info
+    const { data: wallet } = await this.supabase
+      .from('wallets')
+      .select('*')
+      .eq('id', link.peeap_wallet_id)
+      .single();
+
+    return {
+      success: true,
+      wallet: {
+        ...wallet,
+        daily_limit: params.dailyLimit ?? (link as any).daily_limit,
+      },
+    };
+  }
+
+  /**
+   * Top up wallet by NSI
+   */
+  async topupWalletByNSI(params: {
+    nsi: string;
+    amount: number;
+    currency: string;
+    source: string;
+    reference?: string;
+  }): Promise<{ success: boolean; transaction: any }> {
+    // Find the wallet
+    const { data: link } = await this.supabase
+      .from('student_wallet_links')
+      .select('peeap_wallet_id')
+      .or(`nsi.eq.${params.nsi},index_number.eq.${params.nsi}`)
+      .eq('is_active', true)
+      .single();
+
+    if (!link) {
+      // Try student_accounts
+      const { data: studentAccount } = await this.supabase
+        .from('student_accounts')
+        .select('wallet_id')
+        .or(`nsi.eq.${params.nsi},index_number.eq.${params.nsi}`)
+        .eq('status', 'active')
+        .single();
+
+      if (!studentAccount?.wallet_id) {
+        throw new NotFoundException('No wallet found for this NSI');
+      }
+
+      return this.processTopup(studentAccount.wallet_id, params);
+    }
+
+    return this.processTopup(link.peeap_wallet_id, params);
+  }
+
+  private async processTopup(walletId: string, params: {
+    amount: number;
+    currency: string;
+    source: string;
+    reference?: string;
+  }): Promise<{ success: boolean; transaction: any }> {
+    // Get current wallet
+    const { data: wallet, error: walletError } = await this.supabase
+      .from('wallets')
+      .select('*')
+      .eq('id', walletId)
+      .single();
+
+    if (walletError || !wallet) {
+      throw new NotFoundException('Wallet not found');
+    }
+
+    const newBalance = parseFloat(wallet.balance) + params.amount;
+    const transactionId = `txn_${crypto.randomBytes(12).toString('hex')}`;
+
+    // Create transaction
+    const { error: txnError } = await this.supabase.from('transactions').insert({
+      id: transactionId,
+      wallet_id: walletId,
+      type: 'topup',
+      amount: params.amount,
+      currency: params.currency,
+      balance_before: wallet.balance,
+      balance_after: newBalance,
+      status: 'completed',
+      source: params.source,
+      reference: params.reference,
+      completed_at: new Date().toISOString(),
+    });
+
+    if (txnError) {
+      throw new BadRequestException('Failed to create transaction');
+    }
+
+    // Update wallet balance
+    await this.supabase
+      .from('wallets')
+      .update({ balance: newBalance, updated_at: new Date().toISOString() })
+      .eq('id', walletId);
+
+    return {
+      success: true,
+      transaction: {
+        id: transactionId,
+        amount: params.amount,
+        currency: params.currency,
+        new_balance: newBalance,
+        completed_at: new Date().toISOString(),
+      },
+    };
   }
 }
