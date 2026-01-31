@@ -191,6 +191,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleSchoolVerifyPin(req, res);
     } else if (path === 'school/pay-fee' || path === 'school/pay-fee/') {
       return await handleSchoolPayFee(req, res);
+    // ========== SCHOOL PEEAP PROXY ENDPOINTS ==========
+    } else if (path === 'school/peeap/verify-student' || path === 'school/peeap/verify-student/') {
+      return await handleSchoolPeeapVerifyStudent(req, res);
+    } else if (path === 'school/peeap/student-financials' || path === 'school/peeap/student-financials/') {
+      return await handleSchoolPeeapStudentFinancials(req, res);
+    } else if (path === 'school/peeap/pay-fee' || path === 'school/peeap/pay-fee/') {
+      return await handleSchoolPeeapPayFee(req, res);
     } else if (path === 'oauth/token' || path === 'oauth/token/') {
       return await handleOAuthToken(req, res);
     } else if (path === 'oauth/userinfo' || path === 'oauth/userinfo/') {
@@ -7857,6 +7864,91 @@ async function handleSchoolPayFee(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({
       success: false,
       message: error.message || 'Payment failed. Please try again.',
+    });
+  }
+}
+
+// ============================================
+// School PEEAP Proxy Endpoints
+// ============================================
+
+const SCHOOL_API_BASE = 'https://gov.school.edu.sl/api/peeap';
+
+/**
+ * Proxy verify-student request to external school API
+ * POST /api/school/peeap/verify-student
+ */
+async function handleSchoolPeeapVerifyStudent(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const response = await fetch(`${SCHOOL_API_BASE}/verify-student`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body),
+    });
+    const data = await response.json();
+    return res.status(response.status).json(data);
+  } catch (error: any) {
+    console.error('[School Peeap] verify-student error:', error);
+    return res.status(500).json({
+      success: false,
+      found: false,
+      message: `Failed to connect to school system: ${error.message}`,
+    });
+  }
+}
+
+/**
+ * Proxy student-financials request to external school API
+ * POST /api/school/peeap/student-financials
+ */
+async function handleSchoolPeeapStudentFinancials(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const response = await fetch(`${SCHOOL_API_BASE}/student-financials`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body),
+    });
+    const data = await response.json();
+    return res.status(response.status).json(data);
+  } catch (error: any) {
+    console.error('[School Peeap] student-financials error:', error);
+    return res.status(500).json({
+      success: false,
+      message: `Failed to connect to school system: ${error.message}`,
+    });
+  }
+}
+
+/**
+ * Proxy pay-fee request to external school API
+ * POST /api/school/peeap/pay-fee
+ */
+async function handleSchoolPeeapPayFee(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const response = await fetch(`${SCHOOL_API_BASE}/pay-fee`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body),
+    });
+    const data = await response.json();
+    return res.status(response.status).json(data);
+  } catch (error: any) {
+    console.error('[School Peeap] pay-fee error:', error);
+    return res.status(500).json({
+      success: false,
+      message: `Failed to connect to school system: ${error.message}`,
     });
   }
 }
