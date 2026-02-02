@@ -20,6 +20,7 @@ _$TransactionModelImpl _$$TransactionModelImplFromJson(
       receiverWalletId: json['receiverWalletId'] as String?,
       senderName: json['senderName'] as String?,
       receiverName: json['receiverName'] as String?,
+      receiverPhone: json['receiverPhone'] as String?,
       merchantName: json['merchantName'] as String?,
       merchantLogo: json['merchantLogo'] as String?,
       category: json['category'] as String?,
@@ -31,6 +32,8 @@ _$TransactionModelImpl _$$TransactionModelImplFromJson(
       updatedAt: json['updatedAt'] == null
           ? null
           : DateTime.parse(json['updatedAt'] as String),
+      syncStatus: json['syncStatus'] as String?,
+      syncError: json['syncError'] as String?,
     );
 
 Map<String, dynamic> _$$TransactionModelImplToJson(
@@ -47,6 +50,7 @@ Map<String, dynamic> _$$TransactionModelImplToJson(
       'receiverWalletId': instance.receiverWalletId,
       'senderName': instance.senderName,
       'receiverName': instance.receiverName,
+      'receiverPhone': instance.receiverPhone,
       'merchantName': instance.merchantName,
       'merchantLogo': instance.merchantLogo,
       'category': instance.category,
@@ -54,4 +58,6 @@ Map<String, dynamic> _$$TransactionModelImplToJson(
       'metadata': instance.metadata,
       'createdAt': instance.createdAt?.toIso8601String(),
       'updatedAt': instance.updatedAt?.toIso8601String(),
+      'syncStatus': instance.syncStatus,
+      'syncError': instance.syncError,
     };

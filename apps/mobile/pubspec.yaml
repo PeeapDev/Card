@@ -24,10 +24,20 @@ dependencies:
   # Supabase
   supabase_flutter: ^2.3.2
 
-  # Local Storage
+  # Local Storage (SQLite with Drift)
+  drift: ^2.22.1
+  sqlite3_flutter_libs: ^0.5.28
+  path_provider: ^2.1.5
+  path: ^1.9.0
   shared_preferences: ^2.2.2
   flutter_secure_storage: ^10.0.0
-  hive_flutter: ^1.1.0
+
+  # Encryption
+  encrypt: ^5.0.3
+  pointycastle: ^3.9.1
+
+  # Background Processing
+  workmanager: ^0.5.2
 
   # UI Components
   cupertino_icons: ^1.0.6
@@ -85,6 +95,7 @@ dev_dependencies:
   riverpod_generator: ^2.3.9
   freezed: ^2.4.6
   json_serializable: ^6.7.1
+  drift_dev: ^2.22.1
 
   # Testing
   mocktail: ^1.0.2

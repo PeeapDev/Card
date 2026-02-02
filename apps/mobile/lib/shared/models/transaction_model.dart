@@ -17,6 +17,7 @@ class TransactionModel with _$TransactionModel {
     String? receiverWalletId,
     String? senderName,
     String? receiverName,
+    String? receiverPhone,
     String? merchantName,
     String? merchantLogo,
     String? category,
@@ -24,6 +25,9 @@ class TransactionModel with _$TransactionModel {
     Map<String, dynamic>? metadata,
     DateTime? createdAt,
     DateTime? updatedAt,
+    /// Sync status for offline-first (pending, syncing, synced, failed)
+    String? syncStatus,
+    String? syncError,
   }) = _TransactionModel;
 
   factory TransactionModel.fromJson(Map<String, dynamic> json) =>
@@ -90,6 +94,31 @@ extension TransactionModelExtension on TransactionModel {
         return 'Cashback';
       default:
         return description ?? type;
+    }
+  }
+
+  /// Whether transaction is synced to server
+  bool get isSynced => syncStatus == 'synced';
+
+  /// Whether transaction is pending sync
+  bool get isPendingSync => syncStatus == 'pending' || syncStatus == 'syncing';
+
+  /// Whether sync failed
+  bool get isSyncFailed => syncStatus == 'failed';
+
+  /// Display sync status text
+  String get syncStatusText {
+    switch (syncStatus) {
+      case 'pending':
+        return 'Pending sync';
+      case 'syncing':
+        return 'Syncing...';
+      case 'synced':
+        return 'Synced';
+      case 'failed':
+        return 'Sync failed';
+      default:
+        return 'Unknown';
     }
   }
 }

@@ -31,6 +31,7 @@ mixin _$TransactionModel {
   String? get receiverWalletId => throw _privateConstructorUsedError;
   String? get senderName => throw _privateConstructorUsedError;
   String? get receiverName => throw _privateConstructorUsedError;
+  String? get receiverPhone => throw _privateConstructorUsedError;
   String? get merchantName => throw _privateConstructorUsedError;
   String? get merchantLogo => throw _privateConstructorUsedError;
   String? get category => throw _privateConstructorUsedError;
@@ -38,6 +39,10 @@ mixin _$TransactionModel {
   Map<String, dynamic>? get metadata => throw _privateConstructorUsedError;
   DateTime? get createdAt => throw _privateConstructorUsedError;
   DateTime? get updatedAt => throw _privateConstructorUsedError;
+
+  /// Sync status for offline-first (pending, syncing, synced, failed)
+  String? get syncStatus => throw _privateConstructorUsedError;
+  String? get syncError => throw _privateConstructorUsedError;
 
   /// Serializes this TransactionModel to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -67,13 +72,16 @@ abstract class $TransactionModelCopyWith<$Res> {
       String? receiverWalletId,
       String? senderName,
       String? receiverName,
+      String? receiverPhone,
       String? merchantName,
       String? merchantLogo,
       String? category,
       double? fee,
       Map<String, dynamic>? metadata,
       DateTime? createdAt,
-      DateTime? updatedAt});
+      DateTime? updatedAt,
+      String? syncStatus,
+      String? syncError});
 }
 
 /// @nodoc
@@ -102,6 +110,7 @@ class _$TransactionModelCopyWithImpl<$Res, $Val extends TransactionModel>
     Object? receiverWalletId = freezed,
     Object? senderName = freezed,
     Object? receiverName = freezed,
+    Object? receiverPhone = freezed,
     Object? merchantName = freezed,
     Object? merchantLogo = freezed,
     Object? category = freezed,
@@ -109,6 +118,8 @@ class _$TransactionModelCopyWithImpl<$Res, $Val extends TransactionModel>
     Object? metadata = freezed,
     Object? createdAt = freezed,
     Object? updatedAt = freezed,
+    Object? syncStatus = freezed,
+    Object? syncError = freezed,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -155,6 +166,10 @@ class _$TransactionModelCopyWithImpl<$Res, $Val extends TransactionModel>
           ? _value.receiverName
           : receiverName // ignore: cast_nullable_to_non_nullable
               as String?,
+      receiverPhone: freezed == receiverPhone
+          ? _value.receiverPhone
+          : receiverPhone // ignore: cast_nullable_to_non_nullable
+              as String?,
       merchantName: freezed == merchantName
           ? _value.merchantName
           : merchantName // ignore: cast_nullable_to_non_nullable
@@ -183,6 +198,14 @@ class _$TransactionModelCopyWithImpl<$Res, $Val extends TransactionModel>
           ? _value.updatedAt
           : updatedAt // ignore: cast_nullable_to_non_nullable
               as DateTime?,
+      syncStatus: freezed == syncStatus
+          ? _value.syncStatus
+          : syncStatus // ignore: cast_nullable_to_non_nullable
+              as String?,
+      syncError: freezed == syncError
+          ? _value.syncError
+          : syncError // ignore: cast_nullable_to_non_nullable
+              as String?,
     ) as $Val);
   }
 }
@@ -207,13 +230,16 @@ abstract class _$$TransactionModelImplCopyWith<$Res>
       String? receiverWalletId,
       String? senderName,
       String? receiverName,
+      String? receiverPhone,
       String? merchantName,
       String? merchantLogo,
       String? category,
       double? fee,
       Map<String, dynamic>? metadata,
       DateTime? createdAt,
-      DateTime? updatedAt});
+      DateTime? updatedAt,
+      String? syncStatus,
+      String? syncError});
 }
 
 /// @nodoc
@@ -240,6 +266,7 @@ class __$$TransactionModelImplCopyWithImpl<$Res>
     Object? receiverWalletId = freezed,
     Object? senderName = freezed,
     Object? receiverName = freezed,
+    Object? receiverPhone = freezed,
     Object? merchantName = freezed,
     Object? merchantLogo = freezed,
     Object? category = freezed,
@@ -247,6 +274,8 @@ class __$$TransactionModelImplCopyWithImpl<$Res>
     Object? metadata = freezed,
     Object? createdAt = freezed,
     Object? updatedAt = freezed,
+    Object? syncStatus = freezed,
+    Object? syncError = freezed,
   }) {
     return _then(_$TransactionModelImpl(
       id: null == id
@@ -293,6 +322,10 @@ class __$$TransactionModelImplCopyWithImpl<$Res>
           ? _value.receiverName
           : receiverName // ignore: cast_nullable_to_non_nullable
               as String?,
+      receiverPhone: freezed == receiverPhone
+          ? _value.receiverPhone
+          : receiverPhone // ignore: cast_nullable_to_non_nullable
+              as String?,
       merchantName: freezed == merchantName
           ? _value.merchantName
           : merchantName // ignore: cast_nullable_to_non_nullable
@@ -321,6 +354,14 @@ class __$$TransactionModelImplCopyWithImpl<$Res>
           ? _value.updatedAt
           : updatedAt // ignore: cast_nullable_to_non_nullable
               as DateTime?,
+      syncStatus: freezed == syncStatus
+          ? _value.syncStatus
+          : syncStatus // ignore: cast_nullable_to_non_nullable
+              as String?,
+      syncError: freezed == syncError
+          ? _value.syncError
+          : syncError // ignore: cast_nullable_to_non_nullable
+              as String?,
     ));
   }
 }
@@ -340,13 +381,16 @@ class _$TransactionModelImpl implements _TransactionModel {
       this.receiverWalletId,
       this.senderName,
       this.receiverName,
+      this.receiverPhone,
       this.merchantName,
       this.merchantLogo,
       this.category,
       this.fee,
       final Map<String, dynamic>? metadata,
       this.createdAt,
-      this.updatedAt})
+      this.updatedAt,
+      this.syncStatus,
+      this.syncError})
       : _metadata = metadata;
 
   factory _$TransactionModelImpl.fromJson(Map<String, dynamic> json) =>
@@ -375,6 +419,8 @@ class _$TransactionModelImpl implements _TransactionModel {
   @override
   final String? receiverName;
   @override
+  final String? receiverPhone;
+  @override
   final String? merchantName;
   @override
   final String? merchantLogo;
@@ -397,9 +443,15 @@ class _$TransactionModelImpl implements _TransactionModel {
   @override
   final DateTime? updatedAt;
 
+  /// Sync status for offline-first (pending, syncing, synced, failed)
+  @override
+  final String? syncStatus;
+  @override
+  final String? syncError;
+
   @override
   String toString() {
-    return 'TransactionModel(id: $id, type: $type, amount: $amount, currency: $currency, status: $status, description: $description, reference: $reference, senderWalletId: $senderWalletId, receiverWalletId: $receiverWalletId, senderName: $senderName, receiverName: $receiverName, merchantName: $merchantName, merchantLogo: $merchantLogo, category: $category, fee: $fee, metadata: $metadata, createdAt: $createdAt, updatedAt: $updatedAt)';
+    return 'TransactionModel(id: $id, type: $type, amount: $amount, currency: $currency, status: $status, description: $description, reference: $reference, senderWalletId: $senderWalletId, receiverWalletId: $receiverWalletId, senderName: $senderName, receiverName: $receiverName, receiverPhone: $receiverPhone, merchantName: $merchantName, merchantLogo: $merchantLogo, category: $category, fee: $fee, metadata: $metadata, createdAt: $createdAt, updatedAt: $updatedAt, syncStatus: $syncStatus, syncError: $syncError)';
   }
 
   @override
@@ -425,6 +477,8 @@ class _$TransactionModelImpl implements _TransactionModel {
                 other.senderName == senderName) &&
             (identical(other.receiverName, receiverName) ||
                 other.receiverName == receiverName) &&
+            (identical(other.receiverPhone, receiverPhone) ||
+                other.receiverPhone == receiverPhone) &&
             (identical(other.merchantName, merchantName) ||
                 other.merchantName == merchantName) &&
             (identical(other.merchantLogo, merchantLogo) ||
@@ -436,31 +490,39 @@ class _$TransactionModelImpl implements _TransactionModel {
             (identical(other.createdAt, createdAt) ||
                 other.createdAt == createdAt) &&
             (identical(other.updatedAt, updatedAt) ||
-                other.updatedAt == updatedAt));
+                other.updatedAt == updatedAt) &&
+            (identical(other.syncStatus, syncStatus) ||
+                other.syncStatus == syncStatus) &&
+            (identical(other.syncError, syncError) ||
+                other.syncError == syncError));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
-  int get hashCode => Object.hash(
-      runtimeType,
-      id,
-      type,
-      amount,
-      currency,
-      status,
-      description,
-      reference,
-      senderWalletId,
-      receiverWalletId,
-      senderName,
-      receiverName,
-      merchantName,
-      merchantLogo,
-      category,
-      fee,
-      const DeepCollectionEquality().hash(_metadata),
-      createdAt,
-      updatedAt);
+  int get hashCode => Object.hashAll([
+        runtimeType,
+        id,
+        type,
+        amount,
+        currency,
+        status,
+        description,
+        reference,
+        senderWalletId,
+        receiverWalletId,
+        senderName,
+        receiverName,
+        receiverPhone,
+        merchantName,
+        merchantLogo,
+        category,
+        fee,
+        const DeepCollectionEquality().hash(_metadata),
+        createdAt,
+        updatedAt,
+        syncStatus,
+        syncError
+      ]);
 
   /// Create a copy of TransactionModel
   /// with the given fields replaced by the non-null parameter values.
@@ -492,13 +554,16 @@ abstract class _TransactionModel implements TransactionModel {
       final String? receiverWalletId,
       final String? senderName,
       final String? receiverName,
+      final String? receiverPhone,
       final String? merchantName,
       final String? merchantLogo,
       final String? category,
       final double? fee,
       final Map<String, dynamic>? metadata,
       final DateTime? createdAt,
-      final DateTime? updatedAt}) = _$TransactionModelImpl;
+      final DateTime? updatedAt,
+      final String? syncStatus,
+      final String? syncError}) = _$TransactionModelImpl;
 
   factory _TransactionModel.fromJson(Map<String, dynamic> json) =
       _$TransactionModelImpl.fromJson;
@@ -526,6 +591,8 @@ abstract class _TransactionModel implements TransactionModel {
   @override
   String? get receiverName;
   @override
+  String? get receiverPhone;
+  @override
   String? get merchantName;
   @override
   String? get merchantLogo;
@@ -539,6 +606,12 @@ abstract class _TransactionModel implements TransactionModel {
   DateTime? get createdAt;
   @override
   DateTime? get updatedAt;
+
+  /// Sync status for offline-first (pending, syncing, synced, failed)
+  @override
+  String? get syncStatus;
+  @override
+  String? get syncError;
 
   /// Create a copy of TransactionModel
   /// with the given fields replaced by the non-null parameter values.

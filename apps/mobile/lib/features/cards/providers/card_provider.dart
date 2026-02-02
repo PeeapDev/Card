@@ -1,39 +1,76 @@
+import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 
+import '../../../core/database/app_database.dart';
+import '../../../core/database/tables/sync_queue_table.dart';
+import '../../../core/services/sync_service.dart';
 import '../../../shared/models/card_model.dart';
 
-// User cards list provider
+/// Stream provider for cards from local database (reactive, offline-first)
+final cardsStreamProvider = StreamProvider<List<Card>>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  final userId = Supabase.instance.client.auth.currentUser?.id;
+
+  if (userId == null) return Stream.value([]);
+
+  return db.watchCards(userId);
+});
+
+/// User cards list provider (offline-first, from local DB)
 final cardsProvider = FutureProvider<List<CardModel>>((ref) async {
-  final supabase = Supabase.instance.client;
-  final userId = supabase.auth.currentUser?.id;
+  final db = ref.watch(appDatabaseProvider);
+  final userId = Supabase.instance.client.auth.currentUser?.id;
 
   if (userId == null) return [];
 
-  final response = await supabase
-      .from('cards')
-      .select()
-      .eq('user_id', userId)
-      .order('created_at', ascending: false);
-
-  return (response as List).map((json) => CardModel.fromJson(json)).toList();
+  final cards = await db.getCards(userId);
+  return cards.map((c) => CardModel(
+    id: c.id,
+    userId: c.userId,
+    type: c.type,
+    status: c.status,
+    maskedPan: c.maskedPan,
+    cardholderName: c.cardholderName,
+    expiryMonth: c.expiryMonth,
+    expiryYear: c.expiryYear,
+    brand: c.brand,
+    walletId: c.walletId,
+    isFrozen: c.isFrozen,
+    isVirtual: c.isVirtual,
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt,
+  )).toList();
 });
 
-// Single card provider
+/// Single card provider (from local DB)
 final cardProvider =
     FutureProvider.family<CardModel?, String>((ref, cardId) async {
-  final supabase = Supabase.instance.client;
+  final db = ref.watch(appDatabaseProvider);
 
-  final response = await supabase
-      .from('cards')
-      .select()
-      .eq('id', cardId)
-      .single();
+  final card = await db.getCard(cardId);
+  if (card == null) return null;
 
-  return CardModel.fromJson(response);
+  return CardModel(
+    id: card.id,
+    userId: card.userId,
+    type: card.type,
+    status: card.status,
+    maskedPan: card.maskedPan,
+    cardholderName: card.cardholderName,
+    expiryMonth: card.expiryMonth,
+    expiryYear: card.expiryYear,
+    brand: card.brand,
+    walletId: card.walletId,
+    isFrozen: card.isFrozen,
+    isVirtual: card.isVirtual,
+    createdAt: card.createdAt,
+    updatedAt: card.updatedAt,
+  );
 });
 
-// Card products provider (for marketplace)
+/// Card products provider (for marketplace - still from server)
 final cardProductsProvider = FutureProvider<List<CardProduct>>((ref) async {
   final supabase = Supabase.instance.client;
 
@@ -46,12 +83,7 @@ final cardProductsProvider = FutureProvider<List<CardProduct>>((ref) async {
   return (response as List).map((json) => CardProduct.fromJson(json)).toList();
 });
 
-// Card operations notifier
-final cardOperationsProvider =
-    StateNotifierProvider<CardOperationsNotifier, CardOperationsState>((ref) {
-  return CardOperationsNotifier(ref);
-});
-
+/// Card operations state
 class CardOperationsState {
   final bool isLoading;
   final String? error;
@@ -76,13 +108,23 @@ class CardOperationsState {
   }
 }
 
+/// Card operations notifier (offline-first)
+final cardOperationsProvider =
+    StateNotifierProvider<CardOperationsNotifier, CardOperationsState>((ref) {
+  return CardOperationsNotifier(ref);
+});
+
 class CardOperationsNotifier extends StateNotifier<CardOperationsState> {
   final Ref _ref;
   final _supabase = Supabase.instance.client;
+  final _uuid = const Uuid();
 
   CardOperationsNotifier(this._ref) : super(const CardOperationsState());
 
-  // Create virtual card
+  AppDatabase get _db => _ref.read(appDatabaseProvider);
+  SyncService get _syncService => _ref.read(syncServiceProvider);
+
+  /// Create virtual card (offline-first)
   Future<bool> createVirtualCard({
     required String productId,
     required String walletId,
@@ -97,49 +139,80 @@ class CardOperationsNotifier extends StateNotifier<CardOperationsState> {
         return false;
       }
 
-      final response = await _supabase.rpc('create_virtual_card', params: {
-        'user_id': userId,
-        'product_id': productId,
-        'wallet_id': walletId,
-        'card_name': name,
-      });
+      final cardId = _uuid.v4();
+      final now = DateTime.now();
 
-      if (response['success'] == true) {
-        state = state.copyWith(
-          isLoading: false,
-          successMessage: 'Virtual card created successfully',
-        );
-        _ref.invalidate(cardsProvider);
-        return true;
-      }
+      // Create card locally first
+      await _db.upsertCard(CardsCompanion(
+        id: Value(cardId),
+        userId: Value(userId),
+        type: const Value('virtual'),
+        status: const Value('pending'),
+        maskedPan: const Value('**** **** **** ****'),
+        cardholderName: Value(name),
+        walletId: Value(walletId),
+        isFrozen: const Value(false),
+        isVirtual: const Value(true),
+        createdAt: Value(now),
+        updatedAt: Value(now),
+      ));
+
+      // Queue for server sync
+      await _syncService.queueSync(
+        entityType: 'cards',
+        entityId: cardId,
+        operation: SyncOperation.create,
+        payload: {
+          'id': cardId,
+          'user_id': userId,
+          'product_id': productId,
+          'wallet_id': walletId,
+          'card_name': name,
+          'created_at': now.toIso8601String(),
+        },
+        priority: 2,
+      );
 
       state = state.copyWith(
         isLoading: false,
-        error: response['message'] ?? 'Failed to create card',
+        successMessage: 'Virtual card created. Pending activation.',
       );
-      return false;
+      _ref.invalidate(cardsProvider);
+      _ref.invalidate(cardsStreamProvider);
+      return true;
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        error: 'An error occurred: ${e.toString()}',
+        error: 'Failed to create card: ${e.toString()}',
       );
       return false;
     }
   }
 
-  // Freeze card
+  /// Freeze card (offline-first)
   Future<bool> freezeCard(String cardId) async {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      await _supabase
-          .from('cards')
-          .update({'is_frozen': true})
-          .eq('id', cardId);
+      // Update locally first
+      await _db.upsertCard(CardsCompanion(
+        id: Value(cardId),
+        isFrozen: const Value(true),
+        updatedAt: Value(DateTime.now()),
+      ));
+
+      // Queue for sync
+      await _syncService.queueSync(
+        entityType: 'cards',
+        entityId: cardId,
+        operation: SyncOperation.update,
+        payload: {'is_frozen': true},
+        priority: 3,
+      );
 
       state = state.copyWith(
         isLoading: false,
-        successMessage: 'Card frozen successfully',
+        successMessage: 'Card frozen',
       );
       _ref.invalidate(cardsProvider);
       _ref.invalidate(cardProvider(cardId));
@@ -153,19 +226,30 @@ class CardOperationsNotifier extends StateNotifier<CardOperationsState> {
     }
   }
 
-  // Unfreeze card
+  /// Unfreeze card (offline-first)
   Future<bool> unfreezeCard(String cardId) async {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      await _supabase
-          .from('cards')
-          .update({'is_frozen': false})
-          .eq('id', cardId);
+      // Update locally first
+      await _db.upsertCard(CardsCompanion(
+        id: Value(cardId),
+        isFrozen: const Value(false),
+        updatedAt: Value(DateTime.now()),
+      ));
+
+      // Queue for sync
+      await _syncService.queueSync(
+        entityType: 'cards',
+        entityId: cardId,
+        operation: SyncOperation.update,
+        payload: {'is_frozen': false},
+        priority: 3,
+      );
 
       state = state.copyWith(
         isLoading: false,
-        successMessage: 'Card unfrozen successfully',
+        successMessage: 'Card unfrozen',
       );
       _ref.invalidate(cardsProvider);
       _ref.invalidate(cardProvider(cardId));
@@ -179,15 +263,26 @@ class CardOperationsNotifier extends StateNotifier<CardOperationsState> {
     }
   }
 
-  // Set spending limit
+  /// Set spending limit (offline-first)
   Future<bool> setSpendingLimit(String cardId, double limit) async {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      await _supabase
-          .from('cards')
-          .update({'spending_limit': limit})
-          .eq('id', cardId);
+      // Update locally first
+      await _db.upsertCard(CardsCompanion(
+        id: Value(cardId),
+        spendingLimit: Value(limit),
+        updatedAt: Value(DateTime.now()),
+      ));
+
+      // Queue for sync
+      await _syncService.queueSync(
+        entityType: 'cards',
+        entityId: cardId,
+        operation: SyncOperation.update,
+        payload: {'spending_limit': limit},
+        priority: 3,
+      );
 
       state = state.copyWith(
         isLoading: false,
@@ -209,7 +304,7 @@ class CardOperationsNotifier extends StateNotifier<CardOperationsState> {
   }
 }
 
-// Card product model
+/// Card product model
 class CardProduct {
   final String id;
   final String name;
