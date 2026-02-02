@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+	<dict>
+		<key>CFBundleDevelopmentRegion</key>
+		<string>$(DEVELOPMENT_LANGUAGE)</string>
+		<key>CFBundleDisplayName</key>
+		<string>Peeap</string>
+		<key>CFBundleExecutable</key>
+		<string>$(EXECUTABLE_NAME)</string>
+		<key>CFBundleIdentifier</key>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+		<key>CFBundleInfoDictionaryVersion</key>
+		<string>6.0</string>
+		<key>CFBundleName</key>
+		<string>peeap</string>
+		<key>CFBundlePackageType</key>
+		<string>APPL</string>
+		<key>CFBundleShortVersionString</key>
+		<string>$(FLUTTER_BUILD_NAME)</string>
+		<key>CFBundleSignature</key>
+		<string>????</string>
+		<key>CFBundleVersion</key>
+		<string>$(FLUTTER_BUILD_NUMBER)</string>
+		<key>LSRequiresIPhoneOS</key>
+		<true/>
+		<key>UILaunchStoryboardName</key>
+		<string>LaunchScreen</string>
+		<key>UIMainStoryboardFile</key>
+		<string>Main</string>
+		<key>UISupportedInterfaceOrientations</key>
+		<array>
+			<string>UIInterfaceOrientationPortrait</string>
+			<string>UIInterfaceOrientationLandscapeLeft</string>
+			<string>UIInterfaceOrientationLandscapeRight</string>
+		</array>
+		<key>UISupportedInterfaceOrientations~ipad</key>
+		<array>
+			<string>UIInterfaceOrientationPortrait</string>
+			<string>UIInterfaceOrientationPortraitUpsideDown</string>
+			<string>UIInterfaceOrientationLandscapeLeft</string>
+			<string>UIInterfaceOrientationLandscapeRight</string>
+		</array>
+		<key>CADisableMinimumFrameDurationOnPhone</key>
+		<true/>
+		<key>UIApplicationSupportsIndirectInputEvents</key>
+		<true/>
+		<key>UIStatusBarHidden</key>
+		<true/>
+		<key>UIViewControllerBasedStatusBarAppearance</key>
+		<false/>
+		<key>UIBackgroundModes</key>
+		<array>
+			<string>fetch</string>
+			<string>remote-notification</string>
+		</array>
+		<key>FirebaseAppDelegateProxyEnabled</key>
+		<false/>
+		<!-- Camera Permission -->
+		<key>NSCameraUsageDescription</key>
+		<string>Peeap needs camera access to scan QR codes for payments and to take photos for your profile.</string>
+		<!-- Photo Library Permissions -->
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>Peeap needs access to your photo library to let you choose a profile picture or upload documents.</string>
+		<key>NSPhotoLibraryAddUsageDescription</key>
+		<string>Peeap needs access to save receipts and QR codes to your photo library.</string>
+		<!-- Location Permissions -->
+		<key>NSLocationWhenInUseUsageDescription</key>
+		<string>Peeap uses your location to show nearby merchants and ATMs, and to verify transactions for security.</string>
+		<key>NSLocationAlwaysUsageDescription</key>
+		<string>Peeap uses your location in the background to provide location-based security for your transactions.</string>
+		<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+		<string>Peeap uses your location to show nearby merchants and ATMs, and to verify transactions for security.</string>
+		<!-- Face ID Permission -->
+		<key>NSFaceIDUsageDescription</key>
+		<string>Peeap uses Face ID to secure your account and authorize payments.</string>
+		<!-- NFC Permission -->
+		<key>NFCReaderUsageDescription</key>
+		<string>Peeap uses NFC to enable tap-to-pay functionality at supported terminals.</string>
+		<key>com.apple.developer.nfc.readersession.iso7816.select-identifiers</key>
+		<array>
+			<string>A0000000041010</string>
+			<string>A0000000031010</string>
+		</array>
+		<!-- Bluetooth Permission (for some payment terminals) -->
+		<key>NSBluetoothAlwaysUsageDescription</key>
+		<string>Peeap may use Bluetooth to connect to payment terminals.</string>
+		<key>NSBluetoothPeripheralUsageDescription</key>
+		<string>Peeap may use Bluetooth to connect to payment terminals.</string>
+		<!-- Microphone (for voice commands if needed) -->
+		<key>NSMicrophoneUsageDescription</key>
+		<string>Peeap uses the microphone for voice-enabled features.</string>
+	</dict>
+</plist>

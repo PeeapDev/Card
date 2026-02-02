@@ -1,0 +1,38 @@
+flutter_native_splash:
+  # Primary color (Peeap brand indigo)
+  color: "#6366F1"
+
+  # Dark mode color
+  color_dark: "#1E1E2E"
+
+  # Splash image
+  image: assets/icons/app_icon.png
+
+  # Branding image at the bottom
+  branding: assets/icons/app_icon.png
+  branding_mode: bottom
+
+  # Image for dark mode
+  image_dark: assets/icons/app_icon.png
+  branding_dark: assets/icons/app_icon.png
+
+  # Android 12+ splash screen configuration
+  android_12:
+    color: "#6366F1"
+    color_dark: "#1E1E2E"
+    icon_background_color: "#6366F1"
+    icon_background_color_dark: "#1E1E2E"
+    image: assets/icons/app_icon.png
+    image_dark: assets/icons/app_icon.png
+    branding: assets/icons/app_icon.png
+    branding_dark: assets/icons/app_icon.png
+
+  # iOS configuration
+  ios: true
+
+  # Web configuration
+  web: true
+  web_image_mode: center
+
+  # Full screen mode
+  fullscreen: true
