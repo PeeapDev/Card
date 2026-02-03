@@ -1,3 +1,5 @@
+import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -14,36 +16,87 @@ final transactionsStreamProvider =
   return db.watchTransactions(walletId);
 });
 
-/// Recent transactions provider (for home screen, from local DB)
+/// Recent transactions provider (hybrid: server first, cache locally)
 final recentTransactionsProvider =
     FutureProvider<List<TransactionModel>>((ref) async {
-  final repository = ref.watch(transactionRepositoryProvider);
-  final userId = Supabase.instance.client.auth.currentUser?.id;
+  final supabase = Supabase.instance.client;
+  final userId = supabase.auth.currentUser?.id;
+  final db = ref.read(appDatabaseProvider);
 
   if (userId == null) return [];
 
-  final transactions = await repository.getRecentTransactions(userId, limit: 10);
+  try {
+    // Fetch from server first
+    final response = await supabase
+        .from('transactions')
+        .select()
+        .or('sender_id.eq.$userId,receiver_id.eq.$userId')
+        .order('created_at', ascending: false)
+        .limit(10);
 
-  return transactions.map((tx) => TransactionModel(
-    id: tx.id,
-    type: tx.type,
-    amount: tx.amount,
-    currency: tx.currency,
-    status: tx.status,
-    description: tx.description,
-    reference: tx.reference,
-    senderWalletId: tx.senderWalletId,
-    receiverWalletId: tx.receiverWalletId,
-    senderName: tx.senderName,
-    receiverName: tx.receiverName,
-    fee: tx.fee,
-    createdAt: tx.createdAt,
-    updatedAt: tx.updatedAt,
-    syncStatus: tx.syncStatus,
-  )).toList();
+    final transactions = (response as List)
+        .map((json) => TransactionModel.fromJson(json))
+        .toList();
+
+    // Cache to local DB in background
+    _cacheTransactionsToLocal(db, transactions);
+
+    return transactions;
+  } catch (e) {
+    debugPrint('Server fetch failed, trying local: $e');
+    // Fallback to local DB if server fails
+    final repository = ref.read(transactionRepositoryProvider);
+    final localTx = await repository.getRecentTransactions(userId, limit: 10);
+
+    return localTx.map((tx) => TransactionModel(
+      id: tx.id,
+      type: tx.type,
+      amount: tx.amount,
+      currency: tx.currency,
+      status: tx.status,
+      description: tx.description,
+      reference: tx.reference,
+      senderWalletId: tx.senderWalletId,
+      receiverWalletId: tx.receiverWalletId,
+      senderName: tx.senderName,
+      receiverName: tx.receiverName,
+      fee: tx.fee,
+      createdAt: tx.createdAt,
+      updatedAt: tx.updatedAt,
+      syncStatus: tx.syncStatus,
+    )).toList();
+  }
 });
 
-/// All transactions with pagination (offline-first)
+/// Cache transactions to local database
+Future<void> _cacheTransactionsToLocal(AppDatabase db, List<TransactionModel> transactions) async {
+  for (final tx in transactions) {
+    try {
+      await db.insertTransaction(TransactionsCompanion(
+        id: Value(tx.id),
+        serverId: Value(tx.id),
+        type: Value(tx.type),
+        amount: Value(tx.amount),
+        currency: Value(tx.currency),
+        status: Value(tx.status),
+        description: Value(tx.description),
+        reference: Value(tx.reference),
+        senderWalletId: Value(tx.senderWalletId),
+        receiverWalletId: Value(tx.receiverWalletId),
+        senderName: Value(tx.senderName),
+        receiverName: Value(tx.receiverName),
+        fee: Value(tx.fee),
+        syncStatus: const Value(SyncStatus.synced),
+        createdAt: Value(tx.createdAt ?? DateTime.now()),
+        syncedAt: Value(DateTime.now()),
+      ));
+    } catch (_) {
+      // Ignore duplicate key errors
+    }
+  }
+}
+
+/// All transactions with pagination (hybrid approach)
 final transactionsProvider = StateNotifierProvider<TransactionsNotifier,
     AsyncValue<List<TransactionModel>>>((ref) {
   return TransactionsNotifier(ref);
@@ -52,6 +105,7 @@ final transactionsProvider = StateNotifierProvider<TransactionsNotifier,
 class TransactionsNotifier
     extends StateNotifier<AsyncValue<List<TransactionModel>>> {
   final Ref _ref;
+  final _supabase = Supabase.instance.client;
   int _page = 0;
   final int _limit = 20;
   bool _hasMore = true;
@@ -62,7 +116,6 @@ class TransactionsNotifier
     loadTransactions();
   }
 
-  TransactionRepository get _repository => _ref.read(transactionRepositoryProvider);
   AppDatabase get _db => _ref.read(appDatabaseProvider);
 
   Future<void> loadTransactions({bool refresh = false}) async {
@@ -75,61 +128,83 @@ class TransactionsNotifier
     if (!_hasMore && !refresh) return;
 
     try {
-      final userId = Supabase.instance.client.auth.currentUser?.id;
+      final userId = _supabase.auth.currentUser?.id;
       if (userId == null) {
         state = const AsyncValue.data([]);
         return;
       }
 
-      List<Transaction> transactions;
+      List<TransactionModel> transactions;
 
-      if (_walletId != null) {
-        // Get transactions for specific wallet from local DB
-        transactions = await _repository.getTransactions(
-          _walletId!,
-          limit: _limit,
-          offset: _page * _limit,
-        );
-      } else {
-        // Get all recent transactions for user
-        transactions = await _repository.getRecentTransactions(
-          userId,
-          limit: _limit,
-        );
+      try {
+        // Try server first
+        var query = _supabase
+            .from('transactions')
+            .select()
+            .or('sender_id.eq.$userId,receiver_id.eq.$userId');
+
+        // Apply wallet filter
+        if (_walletId != null) {
+          query = query.or(
+              'sender_wallet_id.eq.$_walletId,receiver_wallet_id.eq.$_walletId');
+        }
+
+        // Apply type filter
+        if (_filter != null && _filter != 'all') {
+          query = query.eq('type', _filter!);
+        }
+
+        final response = await query
+            .order('created_at', ascending: false)
+            .range(_page * _limit, (_page + 1) * _limit - 1);
+
+        transactions = (response as List)
+            .map((json) => TransactionModel.fromJson(json))
+            .toList();
+
+        // Cache to local DB
+        _cacheTransactionsToLocal(_db, transactions);
+      } catch (e) {
+        debugPrint('Server fetch failed, using local: $e');
+        // Fallback to local
+        final repository = _ref.read(transactionRepositoryProvider);
+        final localTx = _walletId != null
+            ? await repository.getTransactions(_walletId!, limit: _limit, offset: _page * _limit)
+            : await repository.getRecentTransactions(userId, limit: _limit);
+
+        transactions = localTx.map((tx) => TransactionModel(
+          id: tx.id,
+          type: tx.type,
+          amount: tx.amount,
+          currency: tx.currency,
+          status: tx.status,
+          description: tx.description,
+          reference: tx.reference,
+          senderWalletId: tx.senderWalletId,
+          receiverWalletId: tx.receiverWalletId,
+          senderName: tx.senderName,
+          receiverName: tx.receiverName,
+          fee: tx.fee,
+          createdAt: tx.createdAt,
+          updatedAt: tx.updatedAt,
+          syncStatus: tx.syncStatus,
+        )).toList();
+
+        // Apply type filter locally
+        if (_filter != null && _filter != 'all') {
+          transactions = transactions.where((tx) => tx.type == _filter).toList();
+        }
       }
 
-      // Apply type filter locally
-      if (_filter != null && _filter != 'all') {
-        transactions = transactions.where((tx) => tx.type == _filter).toList();
-      }
-
-      final transactionModels = transactions.map((tx) => TransactionModel(
-        id: tx.id,
-        type: tx.type,
-        amount: tx.amount,
-        currency: tx.currency,
-        status: tx.status,
-        description: tx.description,
-        reference: tx.reference,
-        senderWalletId: tx.senderWalletId,
-        receiverWalletId: tx.receiverWalletId,
-        senderName: tx.senderName,
-        receiverName: tx.receiverName,
-        fee: tx.fee,
-        createdAt: tx.createdAt,
-        updatedAt: tx.updatedAt,
-        syncStatus: tx.syncStatus,
-      )).toList();
-
-      _hasMore = transactionModels.length == _limit;
+      _hasMore = transactions.length == _limit;
       _page++;
 
       if (refresh || state is AsyncLoading) {
-        state = AsyncValue.data(transactionModels);
+        state = AsyncValue.data(transactions);
       } else {
         state = AsyncValue.data([
           ...state.value ?? [],
-          ...transactionModels,
+          ...transactions,
         ]);
       }
     } catch (e, st) {
@@ -150,58 +225,89 @@ class TransactionsNotifier
   bool get hasMore => _hasMore;
 }
 
-/// Single transaction provider (from local DB)
+/// Single transaction provider (hybrid)
 final transactionProvider =
     FutureProvider.family<TransactionModel?, String>((ref, transactionId) async {
-  final repository = ref.watch(transactionRepositoryProvider);
+  final supabase = Supabase.instance.client;
 
-  final tx = await repository.getTransaction(transactionId);
-  if (tx == null) return null;
+  try {
+    final response = await supabase
+        .from('transactions')
+        .select()
+        .eq('id', transactionId)
+        .single();
 
-  return TransactionModel(
-    id: tx.id,
-    type: tx.type,
-    amount: tx.amount,
-    currency: tx.currency,
-    status: tx.status,
-    description: tx.description,
-    reference: tx.reference,
-    senderWalletId: tx.senderWalletId,
-    receiverWalletId: tx.receiverWalletId,
-    senderName: tx.senderName,
-    receiverName: tx.receiverName,
-    fee: tx.fee,
-    createdAt: tx.createdAt,
-    updatedAt: tx.updatedAt,
-    syncStatus: tx.syncStatus,
-  );
+    return TransactionModel.fromJson(response);
+  } catch (e) {
+    // Fallback to local
+    final repository = ref.read(transactionRepositoryProvider);
+    final tx = await repository.getTransaction(transactionId);
+    if (tx == null) return null;
+
+    return TransactionModel(
+      id: tx.id,
+      type: tx.type,
+      amount: tx.amount,
+      currency: tx.currency,
+      status: tx.status,
+      description: tx.description,
+      reference: tx.reference,
+      senderWalletId: tx.senderWalletId,
+      receiverWalletId: tx.receiverWalletId,
+      senderName: tx.senderName,
+      receiverName: tx.receiverName,
+      fee: tx.fee,
+      createdAt: tx.createdAt,
+      updatedAt: tx.updatedAt,
+      syncStatus: tx.syncStatus,
+    );
+  }
 });
 
-/// Transaction stats provider (from local DB)
-final transactionStatsProvider =
-    FutureProvider.family<TransactionStats, String?>((ref, walletId) async {
-  final repository = ref.watch(transactionRepositoryProvider);
-  final userId = Supabase.instance.client.auth.currentUser?.id;
+/// Transaction stats provider (from server with local fallback)
+final transactionStatsProvider = FutureProvider<TransactionStats>((ref) async {
+  final supabase = Supabase.instance.client;
+  final userId = supabase.auth.currentUser?.id;
 
   if (userId == null) {
     return TransactionStats(income: 0, expense: 0, count: 0);
   }
 
-  // Get primary wallet if no wallet specified
-  final db = ref.read(appDatabaseProvider);
-  final targetWalletId = walletId ?? (await db.getPrimaryWallet(userId))?.id;
+  try {
+    // Get this month's transactions from server
+    final now = DateTime.now();
+    final startOfMonth = DateTime(now.year, now.month, 1);
 
-  if (targetWalletId == null) {
+    final response = await supabase
+        .from('transactions')
+        .select()
+        .or('sender_id.eq.$userId,receiver_id.eq.$userId')
+        .gte('created_at', startOfMonth.toIso8601String())
+        .eq('status', 'completed');
+
+    final transactions = (response as List)
+        .map((json) => TransactionModel.fromJson(json))
+        .toList();
+
+    double income = 0;
+    double expense = 0;
+
+    for (final tx in transactions) {
+      if (tx.receiverWalletId != null) {
+        income += tx.amount;
+      } else if (tx.senderWalletId != null) {
+        expense += tx.amount;
+      }
+    }
+
+    return TransactionStats(
+      income: income,
+      expense: expense,
+      count: transactions.length,
+    );
+  } catch (e) {
     return TransactionStats(income: 0, expense: 0, count: 0);
   }
-
-  final stats = await repository.getStats(targetWalletId, days: 30);
-
-  return TransactionStats(
-    income: stats.totalIn,
-    expense: stats.totalOut,
-    count: stats.transactionCount,
-  );
 });
 
 /// Pending transactions provider (for sync status UI)
