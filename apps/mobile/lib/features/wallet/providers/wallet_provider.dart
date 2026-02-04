@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,63 +9,159 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/tables/sync_queue_table.dart';
 import '../../../core/repositories/wallet_repository.dart';
 import '../../../core/services/sync_service.dart';
+import '../../../core/services/peeap_api_service.dart';
 import '../../../shared/models/wallet_model.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../../auth/providers/account_type_provider.dart';
 
 /// Stream provider for wallets from local database (reactive, offline-first)
 final walletsStreamProvider = StreamProvider<List<Wallet>>((ref) {
   final db = ref.watch(appDatabaseProvider);
-  final userId = Supabase.instance.client.auth.currentUser?.id;
+  // Use custom auth user ID (not Supabase Auth)
+  final currentUser = ref.watch(currentUserProvider);
+  final userId = currentUser?.id;
 
   if (userId == null) return Stream.value([]);
 
   return db.watchWallets(userId);
 });
 
-/// Wallets list provider (hybrid: server first, cache locally)
+/// Wallets list provider (hybrid: API first with timeout, cache locally)
+/// Uses API endpoint to bypass RLS issues
 final walletsProvider = FutureProvider<List<WalletModel>>((ref) async {
-  final supabase = Supabase.instance.client;
-  final userId = supabase.auth.currentUser?.id;
+  // Use custom auth user ID (not Supabase Auth)
+  final currentUser = ref.watch(currentUserProvider);
+  final userId = currentUser?.id;
   final db = ref.read(appDatabaseProvider);
 
-  if (userId == null) return [];
+  if (userId == null) {
+    debugPrint('walletsProvider: No user ID available');
+    return [];
+  }
 
+  debugPrint('walletsProvider: Fetching wallets for user: $userId');
+
+  // Helper to safely parse balance as double
+  double safeParseBalance(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
+  }
+
+  // First, try to load from local DB (fast, offline-friendly)
+  List<WalletModel> localWallets = [];
   try {
-    // Fetch from server first
-    final response = await supabase
-        .from('wallets')
-        .select()
-        .eq('user_id', userId)
-        .order('is_primary', ascending: false)
-        .order('created_at', ascending: true);
+    final dbWallets = await db.getWallets(userId);
+    localWallets = dbWallets.map((w) {
+      return WalletModel(
+        id: w.id,
+        userId: w.userId,
+        name: w.name,
+        type: w.type,
+        balance: safeParseBalance(w.balance),
+        currency: w.currency,
+        isActive: w.isActive,
+        isFrozen: w.isFrozen,
+        isPrimary: w.isPrimary,
+        accountNumber: w.accountNumber,
+        createdAt: w.createdAt,
+        updatedAt: w.updatedAt,
+      );
+    }).toList();
+  } catch (e) {
+    debugPrint('walletsProvider: Local DB error: $e');
+  }
 
-    final wallets = (response as List)
-        .map((json) => WalletModel.fromJson(json))
-        .toList();
+  // Try API fetch with timeout (bypasses RLS)
+  try {
+    final apiWallets = await peeapApiService.getWallets(userId)
+        .timeout(const Duration(seconds: 10));
+
+    if (apiWallets.isEmpty && localWallets.isNotEmpty) {
+      debugPrint('walletsProvider: API returned empty, using local');
+      return localWallets;
+    }
+
+    final wallets = apiWallets.map((json) {
+      // Parse wallet type - handle different field names
+      String walletType = json['wallet_type'] as String? ??
+                          json['type'] as String? ??
+                          'primary';
+
+      // Determine if primary based on wallet_type or is_primary
+      bool isPrimary = json['is_primary'] == true ||
+                       walletType == 'primary';
+
+      // Get wallet name, fallback to type-based name
+      String walletName = json['name'] as String? ??
+                          _getDefaultWalletName(walletType);
+
+      return WalletModel(
+        id: json['id'] as String,
+        userId: json['user_id'] as String,
+        name: walletName,
+        type: walletType,
+        balance: safeParseBalance(json['balance']),
+        currency: json['currency'] as String? ?? 'SLE',
+        isActive: json['is_active'] ?? json['status'] == 'ACTIVE',
+        isFrozen: json['is_frozen'] ?? false,
+        isPrimary: isPrimary,
+        accountNumber: json['external_id'] as String?,
+        createdAt: json['created_at'] != null
+            ? DateTime.parse(json['created_at'] as String)
+            : DateTime.now(),
+        updatedAt: json['updated_at'] != null
+            ? DateTime.parse(json['updated_at'] as String)
+            : null,
+      );
+    }).toList();
 
     // Cache to local DB in background
     _cacheWalletsToLocal(db, wallets);
 
+    debugPrint('walletsProvider: Loaded ${wallets.length} wallets from API');
     return wallets;
+  } on TimeoutException {
+    debugPrint('walletsProvider: Timeout - using local data');
+    return localWallets;
   } catch (e) {
-    debugPrint('Server fetch failed, trying local: $e');
-    // Fallback to local DB
-    final localWallets = await db.getWallets(userId);
-    return localWallets.map((w) => WalletModel(
-      id: w.id,
-      userId: w.userId,
-      name: w.name,
-      type: w.type,
-      balance: w.balance,
-      currency: w.currency,
-      isActive: w.isActive,
-      isFrozen: w.isFrozen,
-      isPrimary: w.isPrimary,
-      accountNumber: w.accountNumber,
-      createdAt: w.createdAt,
-      updatedAt: w.updatedAt,
-    )).toList();
+    debugPrint('walletsProvider: API error $e - using local data');
+    return localWallets;
   }
 });
+
+/// Get default wallet name based on type
+String _getDefaultWalletName(String type) {
+  switch (type.toLowerCase()) {
+    case 'primary':
+      return 'Main Wallet';
+    case 'savings':
+      return 'Savings';
+    case 'student':
+      return 'Student Wallet';
+    case 'merchant':
+      return 'Business Wallet';
+    case 'pos':
+    case 'app_pos':
+      return 'POS Wallet';
+    case 'driver':
+    case 'app_driver_wallet':
+      return 'Driver Wallet';
+    case 'app_events':
+      return 'Events Wallet';
+    case 'app_payment_links':
+      return 'Payment Links';
+    case 'app_invoices':
+      return 'Invoice Wallet';
+    case 'app_terminal':
+      return 'Terminal Wallet';
+    default:
+      return type.replaceAll('_', ' ').replaceAll('app ', '');
+  }
+}
 
 /// Cache wallets to local database
 Future<void> _cacheWalletsToLocal(AppDatabase db, List<WalletModel> wallets) async {
@@ -105,23 +202,38 @@ final walletProvider =
     return WalletModel.fromJson(response);
   } catch (e) {
     // Fallback to local
-    final wallet = await db.getWallet(walletId);
-    if (wallet == null) return null;
+    try {
+      final wallet = await db.getWallet(walletId);
+      if (wallet == null) return null;
 
-    return WalletModel(
-      id: wallet.id,
-      userId: wallet.userId,
-      name: wallet.name,
-      type: wallet.type,
-      balance: wallet.balance,
-      currency: wallet.currency,
-      isActive: wallet.isActive,
-      isFrozen: wallet.isFrozen,
-      isPrimary: wallet.isPrimary,
-      accountNumber: wallet.accountNumber,
-      createdAt: wallet.createdAt,
-      updatedAt: wallet.updatedAt,
-    );
+      // Helper to safely parse balance as double
+      double safeParseBalance(dynamic value) {
+        if (value == null) return 0.0;
+        if (value is double) return value;
+        if (value is int) return value.toDouble();
+        if (value is num) return value.toDouble();
+        if (value is String) return double.tryParse(value) ?? 0.0;
+        return 0.0;
+      }
+
+      return WalletModel(
+        id: wallet.id,
+        userId: wallet.userId,
+        name: wallet.name,
+        type: wallet.type,
+        balance: safeParseBalance(wallet.balance),
+        currency: wallet.currency,
+        isActive: wallet.isActive,
+        isFrozen: wallet.isFrozen,
+        isPrimary: wallet.isPrimary,
+        accountNumber: wallet.accountNumber,
+        createdAt: wallet.createdAt,
+        updatedAt: wallet.updatedAt,
+      );
+    } catch (localError) {
+      debugPrint('walletProvider: Local DB error: $localError');
+      return null;
+    }
   }
 });
 
@@ -134,6 +246,38 @@ final primaryWalletProvider = FutureProvider<WalletModel?>((ref) async {
     (w) => w.isPrimary,
     orElse: () => wallets.first,
   );
+});
+
+/// Filtered wallets based on account type
+final filteredWalletsProvider = FutureProvider<List<WalletModel>>((ref) async {
+  final wallets = await ref.watch(walletsProvider.future);
+  final accountType = ref.watch(currentAccountTypeProvider);
+
+  switch (accountType) {
+    case AccountType.personal:
+      // Personal: Show primary, savings, and student wallets
+      return wallets.where((w) {
+        final type = w.type.toLowerCase();
+        return type == 'primary' || type == 'savings' || type == 'student';
+      }).toList();
+
+    case AccountType.business:
+      // Business: Show business wallets
+      return wallets.where((w) {
+        final type = w.type.toLowerCase();
+        return type == 'business' || type == 'school';
+      }).toList();
+
+    case AccountType.businessPlus:
+      // Business Plus: Show all wallets
+      return wallets;
+  }
+});
+
+/// Total balance for current account type
+final accountTypeBalanceProvider = FutureProvider<double>((ref) async {
+  final wallets = await ref.watch(filteredWalletsProvider.future);
+  return wallets.fold<double>(0.0, (sum, w) => sum + w.balance);
 });
 
 /// Total balance provider (across all wallets)
@@ -339,7 +483,8 @@ class WalletOperationsNotifier extends StateNotifier<WalletOperationsState> {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final userId = Supabase.instance.client.auth.currentUser?.id;
+      // Use custom auth user ID (not Supabase Auth)
+      final userId = _ref.read(authNotifierProvider.notifier).currentUserId;
       if (userId == null) {
         state = state.copyWith(isLoading: false, error: 'Not authenticated');
         return false;
@@ -513,8 +658,11 @@ class WalletOperationsNotifier extends StateNotifier<WalletOperationsState> {
 final walletBalanceStreamProvider =
     StreamProvider.family<double, String>((ref, walletId) {
   final db = ref.watch(appDatabaseProvider);
+  // Use custom auth user ID (not Supabase Auth)
+  final currentUser = ref.watch(currentUserProvider);
+  final userId = currentUser?.id ?? '';
 
-  return db.watchWallets(Supabase.instance.client.auth.currentUser?.id ?? '')
+  return db.watchWallets(userId)
       .map((wallets) {
         final wallet = wallets.where((w) => w.id == walletId).firstOrNull;
         return wallet?.balance ?? 0.0;
